@@ -266,10 +266,13 @@ window.__ModuleLoader__.load({
       accountOAuth: '说明：harness 模型适配层目前仅支持 API Key 认证，官方 OAuth 登录流暂不在支持范围；登录后该服务商模型会立即出现在上方模型列表中，账号与模型的具体配置与「设置 → 模型」页同源。',
       accountPresets: '账号预设：',
       accountCustom: '＋ 自定义',
-      accountCustomHint: '自定义提供方：适用于未集成的服务商、第三方中转与本地部署（如 Ollama / One-API / LM Studio）。复用模型添加基座：注册后模型立即出现在共享模型列表，Agent 配置中可用「发现模型」拉取端点模型。',
-      fieldProviderId: '服务商 ID（如 my-gateway / one-api；勿与已有服务商重名）',
+      accountCustomHint: '与「设置 → 模型」模型基座同款的配置式添加：适用于未集成的服务商、第三方中转与本地部署（Ollama / One-API / LM Studio 等）。保存后服务商立即注册到共享模型列表，可在 Agent 配置中用「发现模型」拉取端点模型。',
+      fieldProviderId: '服务商 ID（如 my-gateway / one-api；已存在同名服务商时保存将覆盖其配置）',
+      accountApi: '接口类型',
+      accountModelsField: '模型（可选，逗号分隔；留空则用「发现模型」从端点拉取）',
       accountKeyOptional: 'API Key（可选：本地部署/免鉴权中转可留空）',
-      accountBaseUrlRequired: 'Base URL（自定义提供方必填，如 http://127.0.0.1:11434/v1）',
+      accountBaseUrlRequired: 'Base URL（必填，如 http://127.0.0.1:11434/v1）',
+      accountAddProvider: '添加提供方',
       accountProvider: '服务商',
       accountKey: 'API Key',
       accountBaseUrl: 'Base URL（可选，覆盖默认端点，如代理网关）',
@@ -462,10 +465,13 @@ window.__ModuleLoader__.load({
       accountOAuth: 'Note: the harness model layer currently supports API-key authentication only; official OAuth sign-in flows are not provided. Once signed in, the provider models appear in the lists above; accounts share the same storage as Settings → Models.',
       accountPresets: 'Presets:',
       accountCustom: '+ Custom',
-      accountCustomHint: 'Custom provider: for unintegrated providers, third-party relays and local deployments (e.g. Ollama / One-API / LM Studio). It reuses the model-adding foundation: models appear in the shared model lists right away, and "Discover models" fetches them from the endpoint.',
-      fieldProviderId: 'Provider id (e.g. my-gateway / one-api; must not collide)',
+      accountCustomHint: 'Configuration-style add, same as the Models foundation in Settings → Models: for unintegrated providers, third-party relays and local deployments (Ollama / One-API / LM Studio). Saving registers the provider into the shared model lists; use "Discover models" in an agent to fetch endpoint models.',
+      fieldProviderId: 'Provider id (e.g. my-gateway / one-api; saving overwrites an existing route of the same id)',
+      accountApi: 'API type',
+      accountModelsField: 'Models (optional, comma separated; empty = fetch via Discover models)',
       accountKeyOptional: 'API Key (optional: leave empty for keyless local deployments)',
-      accountBaseUrlRequired: 'Base URL (required for custom providers, e.g. http://127.0.0.1:11434/v1)',
+      accountBaseUrlRequired: 'Base URL (required, e.g. http://127.0.0.1:11434/v1)',
+      accountAddProvider: 'Add Provider',
       accountProvider: 'Provider',
       accountKey: 'API Key',
       accountBaseUrl: 'Base URL (optional, overrides the default endpoint, e.g. a proxy gateway)',
@@ -856,7 +862,7 @@ window.__ModuleLoader__.load({
         el('div', { className: 'dshrouter-row' },
           custom
             ? el('input', {
-                className: 'dshrouter-input', style: { flex: '0 0 280px' }, type: 'text',
+                className: 'dshrouter-input', style: { flex: '0 0 260px' }, type: 'text',
                 placeholder: t('fieldProviderId'), 'aria-label': t('fieldProviderId'),
                 value: account.provider, onChange: (event) => setAccount((current) => ({ ...current, provider: event.target.value })),
               })
@@ -866,6 +872,14 @@ window.__ModuleLoader__.load({
                 onChange: (event) => setAccount((current) => ({ ...current, provider: event.target.value, baseUrl: '' })),
               }, providers.filter((entry) => entry.settingsNs === 'llm-pi-ai').map((entry) =>
                 el('option', { value: entry.provider, key: entry.provider }, `${entry.displayName} (${entry.provider})`))),
+          custom ? el('select', {
+            className: 'dshrouter-select', style: { flex: '0 0 200px' },
+            value: account.api ?? 'openai-completions',
+            onChange: (event) => setAccount((current) => ({ ...current, api: event.target.value })),
+          },
+          el('option', { value: 'openai-completions' }, 'openai-completions'),
+          el('option', { value: 'openai-responses' }, 'openai-responses'),
+          el('option', { value: 'anthropic-messages' }, 'anthropic-messages')) : null,
           el('input', {
             className: 'dshrouter-input', type: 'password', autoComplete: 'off',
             placeholder: custom ? t('accountKeyOptional') : t('accountKey'), 'aria-label': t('accountKey'),
@@ -880,10 +894,17 @@ window.__ModuleLoader__.load({
             type: 'button', className: 'dshrouter-button',
             disabled: busy || !writable || (!custom && !account.key.trim()) || (custom && customInvalid),
             onClick: onLogin,
-          }, busy ? t('saving') : t('accountLogin'))),
+          }, busy ? t('saving') : (custom ? t('accountAddProvider') : t('accountLogin')))),
+        custom ? el('div', { className: 'dshrouter-field' },
+          el('span', { className: 'dshrouter-field-label' }, t('accountModelsField')),
+          el('input', {
+            className: 'dshrouter-input', type: 'text',
+            placeholder: t('accountModelsField'), 'aria-label': t('accountModelsField'),
+            value: account.models ?? '', onChange: (event) => setAccount((current) => ({ ...current, models: event.target.value })),
+          })) : null,
         custom ? el('p', { className: 'dshrouter-hint' }, t('accountCustomHint')) : null,
         custom && customInvalid ? el('p', { className: 'dshrouter-error' }, customIdEmpty ? t('fieldProviderId') : t('accountBaseUrlRequired')) : null,
-        accountProvider ? el('p', { className: 'dshrouter-meta' }, `${accountProvider.provider} · ${accountProvider.active ? t('accountActive') : t('accountDormant')}${custom ? `（同名服务商已存在：仅写入凭据，不覆盖其配置）` : ''}`) : null,
+        accountProvider ? el('p', { className: 'dshrouter-meta' }, `${accountProvider.provider} · ${accountProvider.active ? t('accountActive') : t('accountDormant')}${custom ? `（同名服务商已存在：保存将覆盖其配置）` : ''}`) : null,
         failure ? el('p', { className: 'dshrouter-error' }, failure) : null)
     }
 
@@ -1174,7 +1195,7 @@ window.__ModuleLoader__.load({
       const [notice, setNotice] = useState({})
       const [testResults, setTestResults] = useState({})
       const [discover, setDiscover] = useState(null)
-      const [account, setAccount] = useState({ provider: 'openai', baseUrl: '', key: '', custom: false, busy: false, failure: null, state: null })
+      const [account, setAccount] = useState({ provider: 'openai', baseUrl: '', key: '', custom: false, api: 'openai-completions', models: '', busy: false, failure: null, state: null })
       const [stats, setStats] = useState(null)
       const [expandedAgents, setExpandedAgents] = useState({})
       const [expandedAccounts, setExpandedAccounts] = useState({})
@@ -1387,11 +1408,34 @@ window.__ModuleLoader__.load({
           const namespaces = settingsResponse.result.value.namespaces
           const llmView = viewOf(namespaces, 'llm-pi-ai')
           if (!llmView) throw new Error('llm-pi-ai namespace 不可用：请确认该适配器已挂载')
+          if (custom) {
+            // 配置式添加（与「设置 → 模型」模型基座同款逻辑）：直接写入
+            // provider profile（覆盖同名路由），接口类型 / Base URL / 可选
+            // 凭据与模型列表全部来自表单；无凭据 = 免鉴权本地部署直连。
+            const modelIds = String(account.models ?? '').split(',').map((item) => item.trim()).filter(Boolean)
+            const profile = {
+              api: ['openai-completions', 'openai-responses', 'anthropic-messages'].includes(account.api) ? account.api : 'openai-completions',
+              ...(account.baseUrl.trim() ? { baseURL: account.baseUrl.trim() } : {}),
+              ...(key ? { apiKeyEnv: ref } : {}),
+              ...(modelIds.length > 0 ? { models: modelIds.map((id) => ({ id })) } : {}),
+            }
+            const response = await api.settings.mutate({
+              ns: 'llm-pi-ai',
+              ops: [{ op: 'set', path: ['providers', provider], value: profile }],
+            })
+            if (!response.result.ok) throw new Error(response.result.error.message)
+            if (key) {
+              const stored = await api.credentials.set({ ref, value: key })
+              if (!stored.result.ok) throw new Error(stored.result.error.message)
+            }
+            setAccount((current) => ({ ...current, busy: false, provider: '', key: '', models: '', failure: null }))
+            await load()
+            return
+          }
           const existing = llmView.value && llmView.value.providers ? llmView.value.providers[provider] : undefined
           if (existing === undefined) {
-            // 自定义提供方：无凭据的本地部署不写 apiKeyEnv（pi-ai 按未认证直连）。
             const profile = {
-              ...(key ? { apiKeyEnv: ref } : {}),
+              apiKeyEnv: ref,
               ...(account.baseUrl.trim() ? { baseURL: account.baseUrl.trim() } : {}),
             }
             const response = await api.settings.mutate({
@@ -1400,10 +1444,8 @@ window.__ModuleLoader__.load({
             })
             if (!response.result.ok) throw new Error(response.result.error.message)
           }
-          if (key) {
-            const stored = await api.credentials.set({ ref, value: key })
-            if (!stored.result.ok) throw new Error(stored.result.error.message)
-          }
+          const stored = await api.credentials.set({ ref, value: key })
+          if (!stored.result.ok) throw new Error(stored.result.error.message)
           setAccount((current) => ({ ...current, busy: false, key: '', custom: false, failure: null, state: { configured: true } }))
           await load()
         } catch (error) {
