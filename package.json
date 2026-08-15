@@ -1,6 +1,6 @@
 {
-  "name": "dsh-router",
-  "description": "DeepSeek Harness multi-model routing plugin: configurable specialist agents (vision / image / general) with per-agent provider+model, GPT account onboarding, model discovery, and real-time usage statistics",
+  "name": "dsh-agent-router",
+  "description": "DeepSeek Harness multi-model routing plugin: route tasks to custom specialist agents (vision / image generation / translation / speech / subagent) with per-agent providers & models, multimodal account sign-in, OAuth account pools, and realtime usage stats",
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
@@ -31,6 +31,9 @@
     "lib/service.js",
     "lib/schemas.js",
     "lib/rpc.js",
+    "install.ps1",
+    "install.sh",
+    "docs/images/",
     "README.md"
   ],
   "dependencies": {

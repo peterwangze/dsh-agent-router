@@ -1,5 +1,5 @@
 /**
- * dsh-router 浏览器侧包（`./client`，dual-face 下发）。
+ * dsh-agent-router 浏览器侧包（`./client`，dual-face 下发）。
  *
  * 单页签「Agent 路由」（settings.section list slot）。分级卡片布局：
  * - 总开关（唯一不折叠，置顶）；
@@ -16,7 +16,7 @@
  * 的 `remote.router` namespace（catalog/stats/test/reset/config/save）。
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-router',
+  id: 'dsh-agent-router',
   factory: (require) => {
     var module = { exports: {} }
     var exports = module.exports
@@ -29,22 +29,22 @@ window.__ModuleLoader__.load({
     function wireCheck(spec, value, path) {
       if (value === undefined || value === null) {
         if (spec.optional === true) return value
-        throw new Error(`dsh-router wire: ${path} is required`)
+        throw new Error(`dsh-agent-router wire: ${path} is required`)
       }
       if (spec.kind === 'string') {
-        if (typeof value !== 'string') throw new Error(`dsh-router wire: ${path} must be a string`)
+        if (typeof value !== 'string') throw new Error(`dsh-agent-router wire: ${path} must be a string`)
         return value
       }
       if (spec.kind === 'boolean') {
-        if (typeof value !== 'boolean') throw new Error(`dsh-router wire: ${path} must be a boolean`)
+        if (typeof value !== 'boolean') throw new Error(`dsh-agent-router wire: ${path} must be a boolean`)
         return value
       }
       if (spec.kind === 'number') {
-        if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`dsh-router wire: ${path} must be a finite number`)
+        if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`dsh-agent-router wire: ${path} must be a finite number`)
         return value
       }
       if (spec.kind === 'array') {
-        if (!Array.isArray(value)) throw new Error(`dsh-router wire: ${path} must be an array`)
+        if (!Array.isArray(value)) throw new Error(`dsh-agent-router wire: ${path} must be an array`)
         if (spec.items) for (let index = 0; index < value.length; index++) {
           const next = wireCheck(spec.items, value[index], `${path}[${index}]`)
           if (next !== undefined) value[index] = next
@@ -52,7 +52,7 @@ window.__ModuleLoader__.load({
         return value
       }
       if (spec.kind === 'object') {
-        if (typeof value !== 'object' || Array.isArray(value)) throw new Error(`dsh-router wire: ${path} must be an object`)
+        if (typeof value !== 'object' || Array.isArray(value)) throw new Error(`dsh-agent-router wire: ${path} must be an object`)
         if (spec.properties) for (const [key, child] of Object.entries(spec.properties)) {
           const childSpec = child && child.spec ? child.spec : child
           const next = wireCheck(childSpec, value[key], path === '' ? key : `${path}.${key}`)
@@ -163,23 +163,23 @@ window.__ModuleLoader__.load({
 
     // ── Remote 契约（与宿主 lib/rpc.js 一致）────────────────────────────────
     function parameter(name, schema) {
-      return { name, wire: name, source: 'json', codec: { mode: 'strict', typeSymbol: `dsh-router/types#${name}`, schema } }
+      return { name, wire: name, source: 'json', codec: { mode: 'strict', typeSymbol: `dsh-agent-router/types#${name}`, schema } }
     }
     function resultOf(name, schema) {
-      return { mode: 'strict', typeSymbol: `dsh-router/types#${name}`, schema }
+      return { mode: 'strict', typeSymbol: `dsh-agent-router/types#${name}`, schema }
     }
     const ROUTER_REMOTE = {
-      package: 'dsh-router',
+      package: 'dsh-agent-router',
       descriptors: [
-        { id: 'dsh-router#router/catalog', service: 'router', namespace: 'router', method: 'catalog', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('CatalogResult', wCatalog) },
-        { id: 'dsh-router#router/stats', service: 'router', namespace: 'router', method: 'stats', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('StatsResult', wStats) },
-        { id: 'dsh-router#router/test', service: 'router', namespace: 'router', method: 'test', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('TestResult', wTest) },
-        { id: 'dsh-router#router/reset', service: 'router', namespace: 'router', method: 'reset', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('ResetResult', wReset) },
-        { id: 'dsh-router#router/config', service: 'router', namespace: 'router', method: 'config', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('ConfigResult', wConfig) },
-        { id: 'dsh-router#router/save', service: 'router', namespace: 'router', method: 'save', invocation: { kind: 'direct' }, parameters: [parameter('request', wSaveRequest)], result: resultOf('SaveResult', wSaveResult) },
-        { id: 'dsh-router#router/oauthTokenExchange', service: 'router', namespace: 'router', method: 'oauthTokenExchange', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthExchangeRequest)], result: resultOf('OauthTokenExchangeResult', wOauthExchangeResult) },
-        { id: 'dsh-router#router/oauthBegin', service: 'router', namespace: 'router', method: 'oauthBegin', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthBeginRequest)], result: resultOf('OauthBeginResult', wOauthBeginResult) },
-        { id: 'dsh-router#router/oauthDiscover', service: 'router', namespace: 'router', method: 'oauthDiscover', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthDiscoverRequest)], result: resultOf('OauthDiscoverResult', wOauthDiscoverResult) },
+        { id: 'dsh-agent-router#router/catalog', service: 'router', namespace: 'router', method: 'catalog', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('CatalogResult', wCatalog) },
+        { id: 'dsh-agent-router#router/stats', service: 'router', namespace: 'router', method: 'stats', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('StatsResult', wStats) },
+        { id: 'dsh-agent-router#router/test', service: 'router', namespace: 'router', method: 'test', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('TestResult', wTest) },
+        { id: 'dsh-agent-router#router/reset', service: 'router', namespace: 'router', method: 'reset', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('ResetResult', wReset) },
+        { id: 'dsh-agent-router#router/config', service: 'router', namespace: 'router', method: 'config', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('ConfigResult', wConfig) },
+        { id: 'dsh-agent-router#router/save', service: 'router', namespace: 'router', method: 'save', invocation: { kind: 'direct' }, parameters: [parameter('request', wSaveRequest)], result: resultOf('SaveResult', wSaveResult) },
+        { id: 'dsh-agent-router#router/oauthTokenExchange', service: 'router', namespace: 'router', method: 'oauthTokenExchange', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthExchangeRequest)], result: resultOf('OauthTokenExchangeResult', wOauthExchangeResult) },
+        { id: 'dsh-agent-router#router/oauthBegin', service: 'router', namespace: 'router', method: 'oauthBegin', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthBeginRequest)], result: resultOf('OauthBeginResult', wOauthBeginResult) },
+        { id: 'dsh-agent-router#router/oauthDiscover', service: 'router', namespace: 'router', method: 'oauthDiscover', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthDiscoverRequest)], result: resultOf('OauthDiscoverResult', wOauthDiscoverResult) },
       ],
     }
 
@@ -244,10 +244,10 @@ window.__ModuleLoader__.load({
 .dshrouter-category-title{font-size:14px;font-weight:500;line-height:22px}
 .dshrouter-category-body{border-top:1px solid rgba(140,140,140,.35);border-top:1px solid color-mix(in srgb,currentColor 20%,transparent);padding:12px 14px;display:flex;flex-direction:column;gap:10px}
 `
-    const CSS_ID = 'dsh-router'
+    const CSS_ID = 'dsh-agent-router'
     if (typeof document !== 'undefined' && document.querySelector('style[data-plugin-css=' + JSON.stringify(CSS_ID) + ']') === null) {
       const tag = document.createElement('style')
-      tag.dataset.plugin = 'dsh-router'
+      tag.dataset.plugin = 'dsh-agent-router'
       tag.dataset.pluginCss = CSS_ID
       tag.textContent = CSS
       document.head.appendChild(tag)
@@ -259,7 +259,7 @@ window.__ModuleLoader__.load({
       title: '多模型路由',
       intro: '为不同能力配置专业 agent（图片识别、图片生成、翻译、语音识别等），每个 agent 可选独立服务商与模型；未配置时自动复用主 agent 模型。专业 Agent 是核心功能区（默认展开），多模态账号与统计信息默认折叠——点击分类卡片标题展开或收起。',
       masterSwitch: '启用多模型路由',
-      masterHint: '关闭后 route_agent 工具将拒绝调用，提示段与统计暂停；组合层可通过禁用 dsh-router 行整体关闭插件。',
+      masterHint: '关闭后 route_agent 工具将拒绝调用，提示段与统计暂停；组合层可通过禁用 dsh-agent-router 行整体关闭插件。',
       accountTitle: '多模态账号管理',
       accountSummary: (n) => `已配置 ${n} 个账号`,
       accountIntro: '为常用多模态服务商登录 API Key（ChatGPT/Claude/Grok/Gemini 等订阅 plan 均可使用其官方 API Key）。',
@@ -448,7 +448,7 @@ window.__ModuleLoader__.load({
       title: 'Multi-model Routing',
       intro: 'Configure specialist agents (vision, image generation, translation, speech recognition, …) with their own provider and model; unset values inherit the main agent model. Specialist Agents is the core area (expanded by default); accounts and statistics are collapsed — click a category header to expand or collapse.',
       masterSwitch: 'Enable multi-model routing',
-      masterHint: 'While disabled, route_agent refuses calls, the prompt section renders empty and stats pause. The whole native plugin can also be disabled by disabling the dsh-router composition row.',
+      masterHint: 'While disabled, route_agent refuses calls, the prompt section renders empty and stats pause. The whole native plugin can also be disabled by disabling the dsh-agent-router composition row.',
       accountTitle: 'Multimodal Accounts',
       accountSummary: (n) => `${n} account(s) configured`,
       accountIntro: 'Sign in with an API key for common multimodal providers — ChatGPT/Claude/Grok/Gemini subscription plans all work through their official API keys.',
@@ -1163,7 +1163,7 @@ window.__ModuleLoader__.load({
       const load = useCallback(async () => {
         const routerRemote = remote()
         if (!routerRemote) {
-          setState((current) => ({ ...current, status: 'error', error: t('loadFailed') + ': remote.router 未就绪（宿主行 dsh-router 未挂载或 Remote 挂载失败）' }))
+          setState((current) => ({ ...current, status: 'error', error: t('loadFailed') + ': remote.router 未就绪（宿主行 dsh-agent-router 未挂载或 Remote 挂载失败）' }))
           return
         }
         let configResponse, providersResponse, catalogResponse, settingsResponse
@@ -1576,7 +1576,7 @@ window.__ModuleLoader__.load({
         }
         let popup
         try {
-          popup = window.open(response.value.authUrl, 'dsh-router-oauth', 'popup,width=520,height=680')
+          popup = window.open(response.value.authUrl, 'dsh-agent-router-oauth', 'popup,width=520,height=680')
         } catch {
           popup = null
         }
@@ -2213,12 +2213,12 @@ window.__ModuleLoader__.load({
     const inject = ['slots', 'locale', 'connection', 'remote']
 
     function apply(ctx) {
-      ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-router: locale')
+      ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-agent-router: locale')
       const connection = ctx.get('connection')
       const api = connection.api
       const t = ctx.locale.bind(NS)
       const remoteReady = ctx.remote.$mount(ROUTER_REMOTE).catch((error) => {
-        console.error('dsh-router: remote mount failed', error)
+        console.error('dsh-agent-router: remote mount failed', error)
       })
       // 书签回传的 access token：官方站页面点「获取 token 书签」→ 跳回本页
       // 带 dshrouter-account/dshrouter-token 参数 → 自动写入 credentials。

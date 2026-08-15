@@ -1,4 +1,4 @@
-// dsh-router 冒烟测试：模块解析 + schema 默认值 + RPC 校验器 + 服务核心逻辑。
+// dsh-agent-router 冒烟测试：模块解析 + schema 默认值 + RPC 校验器 + 服务核心逻辑。
 import { Context } from '@deepseek-ai/cordis'
 import { routerSchema, wireCodecs } from '../lib/schemas.js'
 import { createHostContribution, ROUTER_REMOTE } from '../lib/rpc.js'
@@ -7,10 +7,12 @@ import { BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const LIB_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'lib')
+const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 let failures = 0
 function check(label, condition) {
@@ -18,14 +20,22 @@ function check(label, condition) {
   else { failures++; console.error(`FAIL  ${label}`) }
 }
 
-// 0. lib 语法守卫：client.js 是浏览器 bundle，但宿主启动时预打包客户端
+// 0. 语法守卫：client.js 是浏览器 bundle，但宿主启动时预打包客户端
 //    入口——语法错误会直接击穿 DSH 启动（括号失衡事故教训）。用 node
-//    --check 全量把关（stdio ignore：不进管道，兼容受限运行环境）。
+//    --check 全量把关；install.ps1 由 Windows 用户直接执行，用 PowerShell
+//    解析器把关（stdio ignore：不进管道，兼容受限运行环境）。
 console.log('syntax:')
 {
   for (const file of ['client.js', 'service.js', 'tool.js', 'index.js', 'rpc.js', 'schemas.js']) {
     const result = spawnSync(process.execPath, ['--check', join(LIB_DIR, file)], { stdio: 'ignore' })
     check(`lib/${file} parses`, result.status === 0)
+  }
+  const installPs1 = join(ROOT_DIR, 'install.ps1')
+  if (existsSync(installPs1)) {
+    // 路径直接内嵌 PS 单引号字符串（-Command 的尾随参数不进入 $args）。
+    const parseScript = `$e=$null; $t=$null; [System.Management.Automation.Language.Parser]::ParseFile('${installPs1}', [ref]$t, [ref]$e) | Out-Null; exit $e.Count`
+    const result = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', parseScript], { stdio: 'ignore' })
+    check('install.ps1 parses', result.status === 0)
   }
 }
 
@@ -352,7 +362,7 @@ console.log('RouterService:')
     const osModule = await import('node:os')
     const pathModule = await import('node:path')
     const fsModule = await import('node:fs')
-    const tmpDir = pathModule.join(osModule.tmpdir(), `dsh-router-smoke-${Date.now()}`)
+    const tmpDir = pathModule.join(osModule.tmpdir(), `dsh-agent-router-smoke-${Date.now()}`)
     const realFetch2 = globalThis.fetch
     globalThis.fetch = async (url) => ({ ok: true, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer })
     try {
@@ -479,7 +489,7 @@ console.log('apply wiring:')
     const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
     await app
     check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
-    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 9 && registeredContribution.package === 'dsh-router')
+    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 9 && registeredContribution.package === 'dsh-agent-router')
     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
     check('oauth callback route registered', webRoute && webRoute.kind === 'exact' && webRoute.path === '/router-oauth/callback' && typeof webRoute.handler === 'function')
     await app.dispose()
