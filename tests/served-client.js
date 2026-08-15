@@ -265,6 +265,11 @@ window.__ModuleLoader__.load({
       accountIntro: '为常用多模态服务商登录 API Key（ChatGPT/Claude/Grok/Gemini 等订阅 plan 均可使用其官方 API Key）。',
       accountOAuth: '说明：harness 模型适配层目前仅支持 API Key 认证，官方 OAuth 登录流暂不在支持范围；登录后该服务商模型会立即出现在上方模型列表中，账号与模型的具体配置与「设置 → 模型」页同源。',
       accountPresets: '账号预设：',
+      accountCustom: '＋ 自定义',
+      accountCustomHint: '自定义提供方：适用于未集成的服务商、第三方中转与本地部署（如 Ollama / One-API / LM Studio）。复用模型添加基座：注册后模型立即出现在共享模型列表，Agent 配置中可用「发现模型」拉取端点模型。',
+      fieldProviderId: '服务商 ID（如 my-gateway / one-api；勿与已有服务商重名）',
+      accountKeyOptional: 'API Key（可选：本地部署/免鉴权中转可留空）',
+      accountBaseUrlRequired: 'Base URL（自定义提供方必填，如 http://127.0.0.1:11434/v1）',
       accountProvider: '服务商',
       accountKey: 'API Key',
       accountBaseUrl: 'Base URL（可选，覆盖默认端点，如代理网关）',
@@ -337,6 +342,8 @@ window.__ModuleLoader__.load({
       oauthDelete: '删除账号',
       oauthConfirmDelete: '确认删除该 OAuth 账号？',
       oauthAdd: '添加 OAuth 账号',
+      oauthCustomAdd: '＋ 自定义（自建 OAuth2 服务商）',
+      oauthCustomHint: '已创建空白账号：请在卡片中填写协议、Base URL、授权/Token 端点、Client ID 与 Scope 后保存，再执行登录。',
       oauthQuickAddHint: '点击服务商即自动创建账号：Gemini 直接弹出官方登录完成一键授权；ChatGPT/Claude/Grok 添加后展开卡片粘贴 access token 即可。',
       oauthAddedPasteHint: '账号已添加：在此粘贴 access token 完成登录（官方 API 不提供 OAuth 一键登录）。',
       oauthOpenSite: '打开官方站登录',
@@ -454,6 +461,11 @@ window.__ModuleLoader__.load({
       accountIntro: 'Sign in with an API key for common multimodal providers — ChatGPT/Claude/Grok/Gemini subscription plans all work through their official API keys.',
       accountOAuth: 'Note: the harness model layer currently supports API-key authentication only; official OAuth sign-in flows are not provided. Once signed in, the provider models appear in the lists above; accounts share the same storage as Settings → Models.',
       accountPresets: 'Presets:',
+      accountCustom: '+ Custom',
+      accountCustomHint: 'Custom provider: for unintegrated providers, third-party relays and local deployments (e.g. Ollama / One-API / LM Studio). It reuses the model-adding foundation: models appear in the shared model lists right away, and "Discover models" fetches them from the endpoint.',
+      fieldProviderId: 'Provider id (e.g. my-gateway / one-api; must not collide)',
+      accountKeyOptional: 'API Key (optional: leave empty for keyless local deployments)',
+      accountBaseUrlRequired: 'Base URL (required for custom providers, e.g. http://127.0.0.1:11434/v1)',
       accountProvider: 'Provider',
       accountKey: 'API Key',
       accountBaseUrl: 'Base URL (optional, overrides the default endpoint, e.g. a proxy gateway)',
@@ -526,6 +538,8 @@ window.__ModuleLoader__.load({
       oauthDelete: 'Delete account',
       oauthConfirmDelete: 'Delete this OAuth account?',
       oauthAdd: 'Add OAuth Account',
+      oauthCustomAdd: '+ Custom (own OAuth2 provider)',
+      oauthCustomHint: 'Blank account created: fill in protocol, Base URL, auth/token endpoints, Client ID and Scope, then save and sign in.',
       oauthQuickAddHint: 'Click a provider to create the account instantly: Gemini opens the official sign-in page for one-click authorization; ChatGPT/Claude/Grok just need a pasted access token afterwards.',
       oauthAddedPasteHint: 'Account created: paste the access token here to sign in (official APIs offer no OAuth one-click flow).',
       oauthOpenSite: 'Open official site to sign in',
@@ -818,41 +832,58 @@ window.__ModuleLoader__.load({
           el('span', { style: { fontSize: 18, lineHeight: 1 } }, '+'),
           el('span', null, t('addAccount')))
       }
+      const custom = account.custom === true
+      const customIdEmpty = custom && !account.provider.trim()
+      const customUrlEmpty = custom && !account.baseUrl.trim()
+      const customInvalid = customIdEmpty || customUrlEmpty
       return el('div', { className: 'dshrouter-card' },
         el('div', { className: 'dshrouter-head' },
           el('span', { className: 'dshrouter-name' }, t('addAccount')),
           el('span', { className: 'dshrouter-spacer' }),
-          el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: () => { setAdding(false); setAccount((current) => ({ ...current, key: '', failure: null })) } }, t('cancel'))),
+          el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: () => { setAdding(false); setAccount((current) => ({ ...current, key: '', custom: false, failure: null })) } }, t('cancel'))),
         el('div', { className: 'dshrouter-row' },
           el('span', { className: 'dshrouter-meta' }, t('accountPresets')),
           ...ACCOUNT_PRESETS.map((preset) => el('button', {
             type: 'button', key: preset.provider,
-            className: 'dshrouter-chip' + (account.provider === preset.provider ? ' active' : ''),
-            onClick: () => setAccount((current) => ({ ...current, provider: preset.provider, baseUrl: '' })),
-          }, preset.label))),
+            className: 'dshrouter-chip' + (!custom && account.provider === preset.provider ? ' active' : ''),
+            onClick: () => setAccount((current) => ({ ...current, custom: false, provider: preset.provider, baseUrl: '', failure: null })),
+          }, preset.label)),
+          el('button', {
+            type: 'button',
+            className: 'dshrouter-chip' + (custom ? ' active' : ''),
+            onClick: () => setAccount((current) => ({ ...current, custom: true, provider: '', baseUrl: '', failure: null })),
+          }, t('accountCustom'))),
         el('div', { className: 'dshrouter-row' },
-          el('select', {
-            className: 'dshrouter-select', style: { flex: '0 0 240px' },
-            value: account.provider,
-            onChange: (event) => setAccount((current) => ({ ...current, provider: event.target.value, baseUrl: '' })),
-          }, providers.filter((entry) => entry.settingsNs === 'llm-pi-ai').map((entry) =>
-            el('option', { value: entry.provider, key: entry.provider }, `${entry.displayName} (${entry.provider})`))),
+          custom
+            ? el('input', {
+                className: 'dshrouter-input', style: { flex: '0 0 280px' }, type: 'text',
+                placeholder: t('fieldProviderId'), 'aria-label': t('fieldProviderId'),
+                value: account.provider, onChange: (event) => setAccount((current) => ({ ...current, provider: event.target.value })),
+              })
+            : el('select', {
+                className: 'dshrouter-select', style: { flex: '0 0 240px' },
+                value: account.provider,
+                onChange: (event) => setAccount((current) => ({ ...current, provider: event.target.value, baseUrl: '' })),
+              }, providers.filter((entry) => entry.settingsNs === 'llm-pi-ai').map((entry) =>
+                el('option', { value: entry.provider, key: entry.provider }, `${entry.displayName} (${entry.provider})`))),
           el('input', {
             className: 'dshrouter-input', type: 'password', autoComplete: 'off',
-            placeholder: t('accountKey'), 'aria-label': t('accountKey'),
+            placeholder: custom ? t('accountKeyOptional') : t('accountKey'), 'aria-label': t('accountKey'),
             value: account.key, onChange: (event) => setAccount((current) => ({ ...current, key: event.target.value })),
           }),
           el('input', {
             className: 'dshrouter-input', type: 'text',
-            placeholder: t('accountBaseUrl'), 'aria-label': t('accountBaseUrl'),
+            placeholder: custom ? t('accountBaseUrlRequired') : t('accountBaseUrl'), 'aria-label': t('accountBaseUrl'),
             value: account.baseUrl, onChange: (event) => setAccount((current) => ({ ...current, baseUrl: event.target.value })),
           }),
           el('button', {
             type: 'button', className: 'dshrouter-button',
-            disabled: busy || !account.key.trim() || !writable,
+            disabled: busy || !writable || (!custom && !account.key.trim()) || (custom && customInvalid),
             onClick: onLogin,
           }, busy ? t('saving') : t('accountLogin'))),
-        accountProvider ? el('p', { className: 'dshrouter-meta' }, `${accountProvider.provider} · ${accountProvider.active ? t('accountActive') : t('accountDormant')}`) : null,
+        custom ? el('p', { className: 'dshrouter-hint' }, t('accountCustomHint')) : null,
+        custom && customInvalid ? el('p', { className: 'dshrouter-error' }, customIdEmpty ? t('fieldProviderId') : t('accountBaseUrlRequired')) : null,
+        accountProvider ? el('p', { className: 'dshrouter-meta' }, `${accountProvider.provider} · ${accountProvider.active ? t('accountActive') : t('accountDormant')}${custom ? `（同名服务商已存在：仅写入凭据，不覆盖其配置）` : ''}`) : null,
         failure ? el('p', { className: 'dshrouter-error' }, failure) : null)
     }
 
@@ -1010,7 +1041,8 @@ window.__ModuleLoader__.load({
           ...OAUTH_PRESETS.map((preset) => el('button', {
             type: 'button', key: preset.id, className: 'dshrouter-chip',
             onClick: () => onQuickAdd(preset.id),
-          }, preset.label))))
+          }, preset.label)),
+          el('button', { type: 'button', className: 'dshrouter-chip', onClick: () => onQuickAdd('custom') }, t('oauthCustomAdd'))))
     }
 
     /** 账号池卡片：折叠摘要 + 展开配置（策略 / 池内账号一键授权与健康度 / 增删）。 */
@@ -1142,7 +1174,7 @@ window.__ModuleLoader__.load({
       const [notice, setNotice] = useState({})
       const [testResults, setTestResults] = useState({})
       const [discover, setDiscover] = useState(null)
-      const [account, setAccount] = useState({ provider: 'openai', baseUrl: '', key: '', busy: false, failure: null, state: null })
+      const [account, setAccount] = useState({ provider: 'openai', baseUrl: '', key: '', custom: false, busy: false, failure: null, state: null })
       const [stats, setStats] = useState(null)
       const [expandedAgents, setExpandedAgents] = useState({})
       const [expandedAccounts, setExpandedAccounts] = useState({})
@@ -1338,9 +1370,15 @@ window.__ModuleLoader__.load({
       }
 
       const doLogin = async () => {
-        const provider = account.provider
+        const provider = account.provider.trim()
         const key = account.key.trim()
-        if (!key) return
+        const custom = account.custom === true
+        if (!provider) return
+        if (custom && !account.baseUrl.trim()) {
+          setAccount((current) => ({ ...current, failure: t('accountBaseUrlRequired') }))
+          return
+        }
+        if (!custom && !key) return
         setAccount((current) => ({ ...current, busy: true, failure: null }))
         try {
           const ref = deriveKeyRef(provider)
@@ -1351,16 +1389,22 @@ window.__ModuleLoader__.load({
           if (!llmView) throw new Error('llm-pi-ai namespace 不可用：请确认该适配器已挂载')
           const existing = llmView.value && llmView.value.providers ? llmView.value.providers[provider] : undefined
           if (existing === undefined) {
-            const profile = { apiKeyEnv: ref, ...(account.baseUrl.trim() ? { baseURL: account.baseUrl.trim() } : {}) }
+            // 自定义提供方：无凭据的本地部署不写 apiKeyEnv（pi-ai 按未认证直连）。
+            const profile = {
+              ...(key ? { apiKeyEnv: ref } : {}),
+              ...(account.baseUrl.trim() ? { baseURL: account.baseUrl.trim() } : {}),
+            }
             const response = await api.settings.mutate({
               ns: 'llm-pi-ai',
               ops: [{ op: 'set', path: ['providers', provider], value: profile }],
             })
             if (!response.result.ok) throw new Error(response.result.error.message)
           }
-          const stored = await api.credentials.set({ ref, value: key })
-          if (!stored.result.ok) throw new Error(stored.result.error.message)
-          setAccount((current) => ({ ...current, busy: false, key: '', state: { configured: true } }))
+          if (key) {
+            const stored = await api.credentials.set({ ref, value: key })
+            if (!stored.result.ok) throw new Error(stored.result.error.message)
+          }
+          setAccount((current) => ({ ...current, busy: false, key: '', custom: false, failure: null, state: { configured: true } }))
           await load()
         } catch (error) {
           setAccount((current) => ({ ...current, busy: false, failure: messageOf(error) }))
@@ -1509,8 +1553,33 @@ window.__ModuleLoader__.load({
         await mutate([{ op: 'unset', path: ['oauthAccounts', id] }])
       }
 
-      /** 快速添加账号：点服务商预设即创建账号；Gemini 立即一键授权，其余提示粘贴 token。 */
+      /** 快速添加账号：点服务商预设即创建账号；Gemini 立即一键授权，其余提示粘贴 token。
+       *  'custom' 创建空白账号（自建 OAuth2 服务商：中转/自托管），展开卡片手动配置。 */
       const quickAddOauthAccount = async (presetId) => {
+        if (presetId === 'custom') {
+          let accountId = 'custom'
+          let n = 2
+          while (oauthById.has(accountId)) { accountId = `custom-${n++}` }
+          const tokenRef = `ROUTER_OAUTH_${accountId.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_TOKEN`
+          const outcome = await mutate([{ op: 'set', path: ['oauthAccounts', accountId], value: {
+            name: '自定义',
+            enabled: true,
+            protocol: 'openai-completions',
+            baseURL: '',
+            clientId: '',
+            publicClient: false,
+            authUrl: '',
+            tokenUrl: '',
+            scope: '',
+            models: [],
+            tokenRef,
+          } }])
+          if (!outcome.ok) { setOauthNotice((current) => ({ ...current, [accountId]: outcome.message })); return }
+          setAddingOauth(false)
+          setExpandedOauth((current) => ({ ...current, [accountId]: true }))
+          setOauthNotice((current) => ({ ...current, [accountId]: t('oauthCustomHint') }))
+          return
+        }
         const preset = OAUTH_PRESETS.find((entry) => entry.id === presetId)
         if (!preset) return
         let accountId = preset.id

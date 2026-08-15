@@ -101,7 +101,8 @@ cd dsh-agent-router-v0.1.0
 ![多模态账号配置](docs/images/accounts.png)
 
 - **API Key 账号**：ChatGPT/Claude/Grok/Gemini 预设一键登录（官方 API Key，可配 Base URL 覆盖代理端点）
-- **OAuth 账号**（插件独立管理）：官方授权码登录（OAuth2 + PKCE，Gemini 内置公开 Client 零配置一键授权）或粘贴 access token；模型列表插件内单独维护
+- **自定义提供方（＋ 自定义）**：未集成的服务商、第三方中转与本地部署（Ollama / One-API / LM Studio 等）——填服务商 ID 与 Base URL 即复用模型添加基座注册到共享模型列表，注册后可用「发现模型」拉取端点模型；API Key 可留空（免鉴权本地服务）
+- **OAuth 账号**（插件独立管理）：官方授权码登录（OAuth2 + PKCE，Gemini 内置公开 Client 零配置一键授权）或粘贴 access token；模型列表插件内单独维护；同样支持「＋ 自定义」创建自建 OAuth2 服务商账号（自配协议 / 端点 / Client ID / Scope）
 - **账号池**：多个已授权账号组成池，按健康优先 / 用量最低 / 轮询自动选号，单账号失败自动切换；agent 的「OAuth 账号」字段可指向池
 
 ### 4. 统计信息
