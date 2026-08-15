@@ -6,11 +6,27 @@ import { RouterService, AGENT_TYPES, errorMessage } from '../lib/service.js'
 import { BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { spawnSync } from 'node:child_process'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const LIB_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'lib')
 
 let failures = 0
 function check(label, condition) {
   if (condition) console.log(`  ok  ${label}`)
   else { failures++; console.error(`FAIL  ${label}`) }
+}
+
+// 0. lib 语法守卫：client.js 是浏览器 bundle，但宿主启动时预打包客户端
+//    入口——语法错误会直接击穿 DSH 启动（括号失衡事故教训）。用 node
+//    --check 全量把关（stdio ignore：不进管道，兼容受限运行环境）。
+console.log('syntax:')
+{
+  for (const file of ['client.js', 'service.js', 'tool.js', 'index.js', 'rpc.js', 'schemas.js']) {
+    const result = spawnSync(process.execPath, ['--check', join(LIB_DIR, file)], { stdio: 'ignore' })
+    check(`lib/${file} parses`, result.status === 0)
+  }
 }
 
 // 1. schema 默认值解析
@@ -41,8 +57,8 @@ console.log('rpc contribution:')
 {
   const contribution = createHostContribution()
   check('face host', contribution.face === 'host')
-  check('8 invocations', contribution.invocations.length === 8)
-  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 8 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
+  check('9 invocations', contribution.invocations.length === 9)
+  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 9 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
   check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))
 }
 
@@ -97,15 +113,52 @@ console.log('RouterService:')
     set: async () => undefined,
     unset: async () => undefined,
   })
+  let lastChatRequest = null
   root.provide('llm', {
     listModels: async (provider) => provider === 'openai' ? [{ id: 'gpt-4o', name: 'GPT-4o' }] : [],
     resolveModelInfo: async () => ({ inputModalities: ['text', 'image'] }),
-    stream: async function* () {
+    stream: async function* (request) {
+      lastChatRequest = request
       yield { type: 'block-start', index: 0, blockType: 'text' }
       yield { type: 'text-delta', index: 0, text: '你好' }
       yield { type: 'block-end', index: 0, block: { type: 'text', text: '你好' } }
       yield { type: 'usage', usage: { inputTokens: 10, outputTokens: 2 } }
       yield { type: 'finish', reason: { kind: 'stop' } }
+    },
+  })
+  const delegationRequests = []
+  root.provide('subagents', {
+    start: async (_name, request) => {
+      delegationRequests.push(request)
+      return {
+        result: Promise.resolve({ output: [{ type: 'text', text: '子代理完成' }], stopReason: 'completed' }),
+        dispose: async () => undefined,
+      }
+    },
+  })
+  const savedImages = []
+  root.provide('attachments', {
+    imageLimits: { maxImageBytes: 20 * 1024 * 1024, maxImagesPerMessage: 8, maxMessageImageBytes: 40 * 1024 * 1024, maxImagePixels: 100_000_000, mediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] },
+    saveImage: async (input) => {
+      const ref = { attachmentId: `att-file-${savedImages.length + 1}`, mediaType: input.mediaType, bytes: input.data.length, width: 2, height: 2, name: input.name }
+      savedImages.push(ref)
+      return ref
+    },
+    readImage: async (ref) => ({ ref, data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) }),
+  })
+  root.provide('fs', {
+    resolve: async (path) => ({ displayPath: path.includes(':') || path.startsWith('/') ? path : `D:/work/example/${path}` }),
+    stat: async (target) => {
+      const displayPath = String(target?.displayPath ?? '')
+      if (displayPath.includes('missing')) return undefined
+      if (displayPath.endsWith('dir')) return { type: 'directory', version: 1 }
+      return { type: 'file', version: 1, size: 10 }
+    },
+    readBytes: async (target) => {
+      const displayPath = String(target?.displayPath ?? '')
+      if (displayPath.toLowerCase().endsWith('.png')) return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01])
+      if (displayPath.toLowerCase().endsWith('.txt')) return new TextEncoder().encode('hello 文本内容')
+      return new Uint8Array([0xff, 0xfe, 0x00])
     },
   })
   const service = new RouterService(root)
@@ -116,10 +169,17 @@ console.log('RouterService:')
       draw: { name: '画图', type: 'image', enabled: true, description: '画图', provider: 'openai', model: 'dall-e-3' },
       broken: { name: '坏', type: 'chat', enabled: true, provider: 'openai', model: '' },
       vchat: { name: '视觉OAuth', type: 'chat', enabled: true, account: 'oauth' },
+      pchat: { name: '池chat', type: 'chat', enabled: true, account: 'pool:gpool' },
+      helper: { name: '子代理', type: 'agent', enabled: true, description: '委派子代理', provider: 'openai', model: 'gpt-4o' },
       off: { name: '关', type: 'chat', enabled: false },
     },
     oauthAccounts: {
-      oauth: { name: 'GPT', enabled: true, protocol: 'openai-completions', baseURL: 'https://api.openai.com/v1', tokenRef: 'ROUTER_OAUTH_OAUTH_TOKEN', tokenUrl: 'https://auth.example/token', clientId: 'cid', models: ['gpt-4o'] },
+      oauth: { name: 'GPT', enabled: true, protocol: 'openai-completions', baseURL: 'https://api.openai.com/v1', tokenRef: 'ROUTER_OAUTH_OAUTH_TOKEN', authUrl: 'https://auth.example/authorize', tokenUrl: 'https://auth.example/token', clientId: 'cid', scope: 'openid', models: ['gpt-4o'] },
+      oauth2: { name: 'GPT2', enabled: true, protocol: 'openai-completions', baseURL: 'https://api.openai.com/v1', tokenRef: 'ROUTER_OAUTH_OAUTH2_TOKEN', authUrl: 'https://auth.example/authorize', tokenUrl: 'https://auth.example/token', clientId: 'cid2', models: ['gpt-4o'] },
+      puboauth: { name: 'Gemini内置', enabled: true, protocol: 'gemini', baseURL: 'https://generativelanguage.googleapis.com/v1beta', tokenRef: 'ROUTER_OAUTH_PUBOAUTH_TOKEN', publicClient: true, authUrl: 'https://accounts.google.com/o/oauth2/v2/auth', tokenUrl: 'https://oauth2.googleapis.com/token', scope: 'https://www.googleapis.com/auth/generativelanguage', models: ['gemini-2.5-flash'] },
+    },
+    pools: {
+      gpool: { name: 'G池', enabled: true, strategy: 'healthy', accounts: ['oauth2', 'oauth'] },
     },
   })})
 
@@ -145,23 +205,43 @@ console.log('RouterService:')
   check('unknown agent error', missing.error && String(missing.error).includes('nope'))
 
   const catalog = await service.catalog()
-  check('catalog lists enabled only', catalog.agents.length === 4 && catalog.agents.every((entry) => entry.id !== 'off'))
+  check('catalog lists enabled only', catalog.agents.length === 6 && catalog.agents.every((entry) => entry.id !== 'off'))
   check('catalog effective', catalog.agents.find((entry) => entry.id === 'vision').effectiveModel === 'deepseek-v4-pro')
-  check('catalog oauth accounts', catalog.oauthAccounts.length === 1 && catalog.oauthAccounts[0].id === 'oauth' && catalog.oauthAccounts[0].models.length === 1)
+  check('catalog oauth accounts', catalog.oauthAccounts.length === 3 && catalog.oauthAccounts[0].id === 'oauth' && catalog.oauthAccounts[0].models.length === 1 && catalog.oauthAccounts.find((entry) => entry.id === 'puboauth').publicClient === true)
   check('catalog oauth agent account', catalog.agents.find((entry) => entry.id === 'vchat').account === 'oauth')
+  check('catalog pools', catalog.pools.length === 1 && catalog.pools[0].id === 'gpool' && catalog.pools[0].strategy === 'healthy' && catalog.pools[0].accounts.length === 2 && catalog.pools[0].accountHealth.length === 2)
+  check('catalog pool agent', catalog.agents.find((entry) => entry.id === 'pchat').account === 'pool:gpool' && catalog.agents.find((entry) => entry.id === 'pchat').source === 'pool')
 
   // OAuth 账号解析与直连调用
   const vchat = await service.resolveAgent('vchat')
   check('oauth resolve', vchat.mode === 'oauth' && vchat.accountId === 'oauth' && vchat.model === 'gpt-4o' && vchat.provider === 'oauth:oauth')
   const badAccount = await service.resolveAgent('vision')
   check('route resolve unaffected', badAccount.mode === 'route')
+
+  // 账号池解析与策略排序
+  const pchat = await service.resolveAgent('pchat')
+  check('pool resolve', pchat.mode === 'pool' && pchat.poolId === 'gpool' && pchat.source === 'pool' && pchat.provider === 'oauth:pool:gpool' && pchat.model === 'gpt-4o' && pchat.candidates.length === 2)
+  const missingPool = await service.resolveAgent('off')
+  check('pool unaffected for disabled agent', missingPool.agent.enabled === false)
+  const orderedHealthy = service.orderPoolCandidates('gpool', { strategy: 'healthy' }, pchat.candidates)
+  check('pool healthy order', orderedHealthy.length === 2 && orderedHealthy[0].accountId === 'oauth2')
+  const orderedUsage = service.orderPoolCandidates('gpool', { strategy: 'usage-lowest' }, pchat.candidates)
+  check('pool usage order', orderedUsage.length === 2)
+  const rr1 = service.orderPoolCandidates('gpool', { strategy: 'round-robin' }, pchat.candidates)
+  const rr2 = service.orderPoolCandidates('gpool', { strategy: 'round-robin' }, pchat.candidates)
+  check('pool round robin rotates', rr1.length === 2 && rr2.length === 2 && rr1[0].accountId !== rr2[0].accountId)
+
   const realFetch = globalThis.fetch
+  let tokenRequestBody = ''
   globalThis.fetch = async (url, options) => {
     if (String(url).endsWith('/chat/completions')) {
       const body = JSON.parse(options.body)
       return { ok: true, json: async () => ({ choices: [{ message: { content: `echo:${body.messages[1].content}` } }], usage: { prompt_tokens: 5, completion_tokens: 2 } }) }
     }
-    if (String(url).includes('auth.example/token')) return { ok: true, json: async () => ({ access_token: 't2', expires_in: 3600 }) }
+    if (String(url).includes('auth.example/token') || String(url).includes('oauth2.googleapis.com/token')) {
+      tokenRequestBody = String(options.body ?? '')
+      return { ok: true, json: async () => ({ access_token: 't2', expires_in: 3600 }) }
+    }
     if (String(url).endsWith('/models')) return { ok: true, json: async () => ({ data: [{ id: 'm1' }, { id: 'm2' }] }) }
     return { ok: false, status: 404, text: async () => 'not found' }
   }
@@ -169,15 +249,130 @@ console.log('RouterService:')
     const oauthResult = await service.run({ agentId: 'vchat', task: '你好', images: [] })
     check('oauth run direct call', oauthResult.kind === 'chat' && oauthResult.text === 'echo:你好' && oauthResult.usage.inputTokens === 5 && oauthResult.usage.outputTokens === 2)
     const exchange = await service.oauthTokenExchange({ accountId: 'oauth', code: 'c1', codeVerifier: 'v1', redirectUri: 'http://localhost/' })
-    check('oauth token exchange', exchange.ok === true && exchange.expiresIn === 3600 && exchange.message.includes('成功'))
+    check('oauth token exchange (manual)', exchange.ok === true && exchange.expiresIn === 3600 && exchange.message.includes('成功') && tokenRequestBody.includes('code_verifier=v1'))
+
+    // 一键授权：oauthBegin 生成授权 URL 并登记会话
+    const beginMissing = await service.oauthBegin({ accountId: 'nope', redirectUri: 'http://localhost/router-oauth/callback' })
+    check('oauth begin unknown account', beginMissing.ok === false)
+    const begin = await service.oauthBegin({ accountId: 'oauth', redirectUri: 'http://localhost/router-oauth/callback' })
+    check('oauth begin builds auth url', begin.ok === true && begin.authUrl.includes('response_type=code') && begin.authUrl.includes('client_id=cid') && begin.authUrl.includes('code_challenge_method=S256') && begin.authUrl.includes('scope=openid') && begin.authUrl.includes(`state=${begin.state}`))
+    check('oauth begin registers pending', service.oauthPending.get(begin.state)?.accountId === 'oauth' && typeof service.oauthPending.get(begin.state)?.verifier === 'string')
+
+    // 一键授权：回调只带 code+state，宿主自动取回 verifier 完成交换并清除会话
+    tokenRequestBody = ''
+    const autoExchange = await service.oauthTokenExchange({ code: 'c2', state: begin.state })
+    check('oauth token exchange (one-click)', autoExchange.ok === true && tokenRequestBody.includes('grant_type=authorization_code') && tokenRequestBody.includes('code=c2') && tokenRequestBody.includes('redirect_uri=http%3A%2F%2Flocalhost%2Frouter-oauth%2Fcallback') && tokenRequestBody.includes('code_verifier=') && !tokenRequestBody.includes('code_verifier=v1'))
+    check('oauth pending consumed', !service.oauthPending.has(begin.state))
+    const replay = await service.oauthTokenExchange({ code: 'c3', state: begin.state })
+    check('oauth pending replay rejected', replay.ok === false)
+
+    // 内置公开 OAuth Client（零配置一键授权）：8085 回调未就绪时拒绝；
+    // 就绪后 authUrl 使用内置 clientId 与固定回调；交换带内置 clientSecret。
+    const pubNotReady = await service.oauthBegin({ accountId: 'puboauth', redirectUri: 'http://127.0.0.1:3080/router-oauth/callback' })
+    check('oauth begin public client not ready', pubNotReady.ok === false && pubNotReady.message.includes('8085'))
+    service.oauthLoopbackReady = true
+    const pubBegin = await service.oauthBegin({ accountId: 'puboauth', redirectUri: 'http://127.0.0.1:3080/router-oauth/callback' })
+    check('oauth begin public client', pubBegin.ok === true && pubBegin.authUrl.includes('client_id=32555940559.apps.googleusercontent.com') && pubBegin.authUrl.includes('redirect_uri=http%3A%2F%2Flocalhost%3A8085%2F'))
+    tokenRequestBody = ''
+    const pubExchange = await service.oauthTokenExchange({ code: 'c4', state: pubBegin.state })
+    check('oauth exchange public client', pubExchange.ok === true && tokenRequestBody.includes('client_id=32555940559.apps.googleusercontent.com') && tokenRequestBody.includes('client_secret=ZmssLNjJy2998hD4CTg2ejr2'))
+    service.oauthLoopbackReady = false
+
     const discovered = await service.oauthDiscover({ accountId: 'oauth' })
     check('oauth discover', discovered.ok === true && discovered.models.length === 2 && discovered.models[0] === 'm1')
+
+    // 账号池失败切换：oauth2 的凭据未配置（resolve 返回 undefined）→ 失败，
+    // 自动切换 oauth（凭据已配置）→ 成功；失败尝试记入 oauth2 的健康统计。
+    const poolRun = await service.run({ agentId: 'pchat', task: '池测试', images: [] })
+    check('pool failover succeeds', poolRun.kind === 'chat' && poolRun.text === 'echo:池测试' && poolRun.usage.inputTokens === 5)
+    check('pool failed account recorded', service.accountTotals.get('oauth:oauth2')?.calls === 1 && service.accountTotals.get('oauth:oauth2')?.errors === 1)
+
+    // OAuth 账号（chat 直连）同样按能力接收 files：文本内联进请求体。
+    const oauthFilesRun = await service.run({ agentId: 'vchat', task: '总结', images: [], files: ['notes.txt'], exec: { agent: { session: { header: { cwd: 'D:/work/example', delegationDepth: 0 } } } } })
+    check('oauth chat files text inlined', oauthFilesRun.kind === 'chat' && oauthFilesRun.text.includes('hello 文本内容'))
   } finally {
     globalThis.fetch = realFetch
   }
 
   const text = service.promptText()
   check('promptText lists agents', text.includes('vision') && text.includes('draw') && text.includes('route_agent') && !text.includes('off'))
+  check('promptText pool meta', text.includes('OAuth 账号池:G池') && text.includes('2 个账号'))
+  check('promptText delegation note', text.includes('可读写工作区任意文件') && text.includes('附件按需显式派发'))
+
+  // agent 类型委派：prompt 必须携带工作目录注入与图片附件块，子代理收到
+  // 附件直接查看而非按路径读文件。
+  const fakeParent = { session: { header: { cwd: 'D:/work/example', delegationDepth: 0 } } }
+  const delegation = await service.run({
+    agentId: 'helper',
+    task: '识别这张截图',
+    images: [{ id: 'att-1', kind: 'image' }],
+    exec: { agent: fakeParent },
+  })
+  check('agent delegation completes', delegation.kind === 'agent' && delegation.text === '子代理完成')
+  check('agent delegation prompt context', delegationRequests.length === 1 && delegationRequests[0].prompt[0].type === 'text' && delegationRequests[0].prompt[0].text.includes('工作目录：D:/work/example') && delegationRequests[0].prompt[0].text.includes('已附带 1 张图片'))
+  check('agent delegation carries image block', delegationRequests[0].prompt.some((block) => block.type === 'image' && block.attachment && block.attachment.id === 'att-1'))
+  check('agent delegation options', delegationRequests[0].agentOptions.provider === 'openai' && delegationRequests[0].agentOptions.model === 'gpt-4o')
+  check('agent delegation denies route_agent', delegationRequests[0].toolFilter && delegationRequests[0].toolFilter.deny && delegationRequests[0].toolFilter.deny.includes('route_agent'))
+
+  // files：agent 类型一次调用显式派发多个不同类型的工作区文件（路径注入子代理）。
+  const filesRun = await service.run({
+    agentId: 'helper',
+    task: '解析这些文件并汇总',
+    images: [],
+    files: ['report.pdf', 'D:/data/sample.wav'],
+    exec: { agent: fakeParent },
+  })
+  check('files injected into delegation', delegationRequests.length === 2 && delegationRequests[1].prompt[0].text.includes('待处理文件') && delegationRequests[1].prompt[0].text.includes('D:/work/example/report.pdf') && delegationRequests[1].prompt[0].text.includes('D:/data/sample.wav'))
+  // files：chat 类型按内容能力化分发——图片经附件服务内联注入、文本内联进
+  // task；二进制/目录明确报错；未声明 image 能力的 chat agent 拒绝图片。
+  lastChatRequest = null
+  const chatFilesRun = await service.run({ agentId: 'vision', task: '看图写摘要', images: [], files: ['shot.png', 'notes.txt'], exec: { agent: fakeParent } })
+  check('chat files dispatch succeeds', chatFilesRun.kind === 'chat' && chatFilesRun.text === '你好')
+  check('chat files text inlined', lastChatRequest && lastChatRequest.messages[0].content.some((block) => block.type === 'text' && block.text.includes('看图写摘要') && block.text.includes('文件：D:/work/example/notes.txt') && block.text.includes('hello 文本内容')))
+  check('chat files image injected', lastChatRequest && lastChatRequest.messages[0].content.some((block) => block.type === 'image' && block.attachment && String(block.attachment.attachmentId).startsWith('att-file-')))
+  check('chat files image saved via attachments', savedImages.length === 1 && savedImages[0].name === 'shot.png' && savedImages[0].mediaType === 'image/png')
+  let chatBinaryRejected = false
+  try { await service.run({ agentId: 'vision', task: 'x', images: [], files: ['data.bin'], exec: { agent: fakeParent } }) } catch (error) { chatBinaryRejected = String(error.message).includes('二进制') && String(error.message).includes('agent 类型') }
+  check('chat files binary rejected', chatBinaryRejected)
+  let chatDirRejected = false
+  try { await service.run({ agentId: 'vision', task: 'x', images: [], files: ['somedir'], exec: { agent: fakeParent } }) } catch (error) { chatDirRejected = String(error.message).includes('目录') }
+  check('chat files directory rejected', chatDirRejected)
+  let chatCapRejected = false
+  try { await service.run({ agentId: 'broken', task: 'x', images: [], files: ['shot.png'], exec: { agent: fakeParent } }) } catch (error) { chatCapRejected = String(error.message).includes('image 能力') }
+  check('chat files image capability gate', chatCapRejected)
+  let imageTypeRejected = false
+  try { await service.run({ agentId: 'draw', task: 'x', images: [], files: ['notes.txt'], exec: { agent: fakeParent } }) } catch (error) { imageTypeRejected = String(error.message).includes('仅支持 chat 与 agent') }
+  check('files rejected for image type', imageTypeRejected)
+  let missingRejected = false
+  try { await service.run({ agentId: 'helper', task: 'x', images: [], files: ['missing-file.bin'], exec: { agent: fakeParent } }) } catch (error) { missingRejected = String(error.message).includes('不存在或不可访问') }
+  check('files missing path rejected', missingRejected)
+
+  // files URL：宿主下载落盘到工作区 .router-files/ 后注入路径。
+  {
+    const osModule = await import('node:os')
+    const pathModule = await import('node:path')
+    const fsModule = await import('node:fs')
+    const tmpDir = pathModule.join(osModule.tmpdir(), `dsh-router-smoke-${Date.now()}`)
+    const realFetch2 = globalThis.fetch
+    globalThis.fetch = async (url) => ({ ok: true, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer })
+    try {
+      const urlRun = await service.run({
+        agentId: 'helper',
+        task: '处理下载的文件',
+        images: [],
+        files: ['https://example.com/data.csv'],
+        exec: { agent: { session: { header: { cwd: tmpDir, delegationDepth: 0 } } } },
+      })
+      const expectedPath = pathModule.join(tmpDir, '.router-files', 'data.csv')
+      check('files url downloaded and injected', delegationRequests.length === 3 && delegationRequests[2].prompt[0].text.includes('待处理文件') && delegationRequests[2].prompt[0].text.includes(expectedPath) && delegationRequests[2].prompt[0].text.includes('已由宿主下载') && fsModule.existsSync(expectedPath))
+      let urlRejected = false
+      try { await service.run({ agentId: 'helper', task: 'x', images: [], files: ['https://example.com/x.bin'], exec: { agent: { session: { header: { delegationDepth: 0 } } } } }) } catch (error) { urlRejected = String(error.message).includes('需要会话工作目录') }
+      check('files url without cwd rejected', urlRejected)
+    } finally {
+      globalThis.fetch = realFetch2
+      fsModule.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  }
 
   const result = await service.runChat(vision, { agentId: 'vision', task: '你好', images: [] })
   check('runChat streams', result.kind === 'chat' && result.text === '你好' && result.usage.inputTokens === 10 && result.usage.outputTokens === 2)
@@ -185,10 +380,10 @@ console.log('RouterService:')
   service.record({ agentId: 'vision', provider: 'deepseek-official', model: 'deepseek-v4-pro', ok: true, ms: 100, inputTokens: 10, outputTokens: 2 })
   service.record({ agentId: 'draw', provider: 'openai', model: 'dall-e-3', ok: false, ms: 200 })
   const stats = service.statsSnapshot()
-  check('stats totals', stats.totals.length === 2 && stats.totals.find((t) => t.agentId === 'vision').calls === 1 && stats.totals.find((t) => t.agentId === 'draw').errors === 1)
-  check('stats recent', stats.recent.length === 2 && stats.recent[0].agentId === 'draw')
+  check('stats totals', stats.totals.length === 3 && stats.totals.find((t) => t.agentId === 'vision').calls === 1 && stats.totals.find((t) => t.agentId === 'draw').errors === 1 && stats.totals.find((t) => t.agentId === 'pchat').calls === 1)
+  check('stats recent', stats.recent.length === 3 && stats.recent[2].agentId === 'pchat')
   check('stats series', stats.series.some((s) => s.agentId === 'vision' && s.buckets.length === 1 && s.buckets[0].outputTokens === 2))
-  check('stats account totals', stats.accountTotals.length === 2 && stats.accountTotals.find((a) => a.provider === 'openai').calls === 1 && stats.accountTotals.find((a) => a.provider === 'openai').models.length === 1 && stats.accountTotals.find((a) => a.provider === 'openai').models[0].model === 'dall-e-3')
+  check('stats account totals', stats.accountTotals.length === 3 && stats.accountTotals.find((a) => a.provider === 'openai').calls === 1 && stats.accountTotals.find((a) => a.provider === 'openai').models.length === 1 && stats.accountTotals.find((a) => a.provider === 'openai').models[0].model === 'dall-e-3' && stats.accountTotals.find((a) => a.provider === 'oauth:oauth2').errors === 1)
   check('stats account series', stats.accountSeries.some((s) => s.provider === 'deepseek-official' && s.buckets.length === 1 && s.buckets[0].inputTokens === 10))
 
   const test = await service.test({ agentId: 'vision' })
@@ -199,7 +394,40 @@ console.log('RouterService:')
   service.reset()
   check('reset clears', service.statsSnapshot().totals.length === 0)
 
-  check('findRecentImages empty', service.findRecentImages(null).length === 0)
+  check('recentAttachmentBlocks empty', service.recentAttachmentBlocks(null).length === 0)
+
+  // 附件按需显式派发：序号映射 / 越界报错 / includeImages 快捷方式 / 默认不携带。
+  {
+    const fakeAgent = {
+      session: {
+        deriveMessages: () => [
+          { role: 'user', content: [{ type: 'text', text: '老消息' }] },
+          { role: 'user', content: [
+            { type: 'text', text: '看图' },
+            { type: 'image', attachment: { id: 'att-a' } },
+            { type: 'image', attachment: { id: 'att-b' } },
+            { type: 'image', attachment: { id: 'att-c' } },
+          ] },
+          { role: 'assistant', content: [{ type: 'text', text: '收到' }] },
+        ],
+      },
+    }
+    const none = service.selectAttachments(fakeAgent)
+    check('attachments default none', none.length === 0)
+    const picked = service.selectAttachments(fakeAgent, { indices: [2, 0] })
+    check('attachments indices map', picked.length === 2 && picked[0].id === 'att-c' && picked[1].id === 'att-a')
+    const all = service.selectAttachments(fakeAgent, { includeImages: true })
+    check('attachments includeImages', all.length === 3 && all[0].id === 'att-a')
+    const merged = service.selectAttachments(fakeAgent, { indices: [1], includeImages: true })
+    check('attachments merged dedupe', merged.length === 3 && merged[0].id === 'att-b')
+    let threw = false
+    try { service.selectAttachments(fakeAgent, { indices: [3] }) } catch (error) { threw = String(error.message).includes('共 3 个附件') }
+    check('attachments out of range rejected', threw)
+    threw = false
+    try { service.selectAttachments(fakeAgent, { indices: [1.5] }) } catch (error) { threw = String(error.message).includes('必须是整数') }
+    check('attachments non-integer rejected', threw)
+  }
+
   check('errorMessage', errorMessage(new Error('x')) === 'x' && errorMessage({ message: 'y' }) === 'y')
 }
 
@@ -224,6 +452,7 @@ console.log('apply wiring:')
     check('route_agent registered', registered && registered.name === 'route_agent')
     check('prompt section registered', sections.some((s) => s.name === 'router:agents' && s.order === 120 && s.text() === 'ROUTER-PROMPT'))
     check('tool timeout 5min', registered.timeoutMs === 300000)
+    check('tool parameters schema', registered.parameters && registered.parameters.properties && registered.parameters.properties.agent && registered.parameters.properties.task && registered.parameters.properties.attachments && registered.parameters.properties.attachments.type === 'array' && registered.parameters.properties.includeImages)
     check('tool output has render', typeof registered.output.render === 'function' && typeof registered.execute === 'function')
     await app.dispose()
   }
@@ -242,12 +471,17 @@ console.log('apply wiring:')
     await root.plugin({ name: 'stub-typert', apply: (ctx) => ctx.provide('typert', {
       register: (contribution) => { registeredContribution = contribution; return () => {} },
     }) })
-    check('index module declares inject', Array.isArray(indexModule.inject) && indexModule.inject.includes('settings') && indexModule.inject.includes('typert'))
+    let webRoute = null
+    await root.plugin({ name: 'stub-webserver', apply: (ctx) => ctx.provide('webServer', {
+      register: (route) => { webRoute = route; return () => {} },
+    }) })
+    check('index module declares inject', Array.isArray(indexModule.inject) && indexModule.inject.includes('settings') && indexModule.inject.includes('typert') && indexModule.inject.includes('webServer'))
     const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
     await app
     check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
-    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 8 && registeredContribution.package === 'dsh-router')
+    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 9 && registeredContribution.package === 'dsh-router')
     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
+    check('oauth callback route registered', webRoute && webRoute.kind === 'exact' && webRoute.path === '/router-oauth/callback' && typeof webRoute.handler === 'function')
     await app.dispose()
   }
 }
