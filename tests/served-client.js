@@ -284,7 +284,10 @@ window.__ModuleLoader__.load({
       accountEditTitle: '编辑配置',
       accountEditHint: '修改 Base URL 或 API Key 后点「保存」（Key 留空 = 保持原凭据；Base URL 不能为空）。',
       accountKeyKeep: '留空 = 保持原 Key',
+      accountNoBaseUrlWarn: '该自定义服务商未配置 Base URL：缺少它会使整个模型目录失效（内置服务商无需填写）。请补全后保存。',
+      accountCatalogEmptyWarn: '模型目录整体为空：通常由某个账号的无效配置引起（缺少 Base URL 的自定义服务商会使整个 llm-pi-ai 目录失效）。请逐个展开账号，为缺少 Base URL 的补全并保存。',
       accountDelete: '删除账号',
+      accountModelsTitle: '模型列表',
       accountConfirmDelete: '确认删除该账号？（将移除该服务商的配置与凭据）',
       accountModels: '个模型',
       oauthTitle: 'OAuth 账号（官方登录，插件独立管理）',
@@ -493,7 +496,10 @@ window.__ModuleLoader__.load({
       accountEditTitle: 'Edit configuration',
       accountEditHint: 'Edit Base URL or API Key, then Save (leave Key empty to keep the current credential; Base URL must not be empty).',
       accountKeyKeep: 'empty = keep current key',
+      accountNoBaseUrlWarn: 'This custom provider has no Base URL: a custom provider without one voids the whole model catalog (built-in providers need none). Fill it in and save.',
+      accountCatalogEmptyWarn: 'The model catalog is entirely empty: usually caused by one invalid account (a custom provider without a Base URL voids the whole llm-pi-ai catalog). Expand each account and fill in the missing Base URL, then save.',
       accountDelete: 'Delete account',
+      accountModelsTitle: 'Models',
       accountConfirmDelete: 'Delete this account? (Removes the provider config and its credential.)',
       accountModels: 'models',
       oauthTitle: 'OAuth Accounts (official sign-in, plugin-managed)',
@@ -821,7 +827,7 @@ window.__ModuleLoader__.load({
 
     /** 已配置账号卡片：折叠摘要 + 展开编辑（Base URL / API Key / 删除）与模型列表。 */
     function AccountCard(props) {
-      const { provider, displayName, active, models, profile, total, buckets, expanded, draft, busy, notice, failure, t, writable, onToggle, onField, onSave, onDiscover, onDelete } = props
+      const { provider, displayName, active, models, profile, total, buckets, expanded, draft, busy, notice, failure, declared, t, writable, onToggle, onField, onSave, onDiscover, onDelete } = props
       return el('div', { className: 'dshrouter-card' },
         el('button', { type: 'button', className: 'dshrouter-card-head', onClick: onToggle, 'aria-expanded': expanded, title: expanded ? t('collapse') : t('expand') },
           active ? el('span', { className: 'dshrouter-dot ok', title: t('accountDone') }) : el('span', { className: 'dshrouter-dot bad', title: t('accountDormant') }),
@@ -842,7 +848,8 @@ window.__ModuleLoader__.load({
                 el('option', { value: 'anthropic-messages' }, 'anthropic-messages'))),
             el('div', { className: 'dshrouter-field' },
               el('span', { className: 'dshrouter-field-label' }, t('accountBaseUrlRequired')),
-              el('input', { className: 'dshrouter-input', value: draft.baseURL ?? '', placeholder: 'https://api.openai.com/v1', onChange: (event) => onField('baseURL', event.target.value) })),
+              el('input', { className: 'dshrouter-input', value: draft.baseURL ?? '', placeholder: 'https://api.openai.com/v1', onChange: (event) => onField('baseURL', event.target.value) }),
+              declared === true && profile && !profile.baseURL ? el('p', { className: 'dshrouter-error' }, t('accountNoBaseUrlWarn')) : null),
             el('div', { className: 'dshrouter-field' },
               el('span', { className: 'dshrouter-field-label' }, t('accountKeyOptional')),
               el('input', { className: 'dshrouter-input', type: 'password', autoComplete: 'off', value: draft.key ?? '', placeholder: t('accountKeyKeep'), onChange: (event) => onField('key', event.target.value) })),
@@ -863,7 +870,7 @@ window.__ModuleLoader__.load({
             }, busy ? t('oauthDiscovering') : t('fieldDiscover'))),
           el('p', { className: 'dshrouter-hint' }, t('accountEditHint')),
           notice ? el('p', { className: 'dshrouter-hint' }, notice) : null,
-          el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-meta' }, t('accountModels'))),
+          el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-meta' }, t('accountModelsTitle'))),
           failure ? el('p', { className: 'dshrouter-error' }, `模型目录解析失败：${failure}`) : null,
           models.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('accountMissing')) : el('table', { className: 'dshrouter-table' },
             el('thead', null, el('tr', null, el('th', null, t('fieldModel')), el('th', null, t('fieldName')), el('th', null, 'input'))),
@@ -2038,6 +2045,11 @@ window.__ModuleLoader__.load({
       const accountsBody = [
         el('p', { className: 'dshrouter-intro' }, t('accountIntro')),
         el('p', { className: 'dshrouter-hint' }, t('accountOAuth')),
+        // llm-pi-ai 整体解析：任一账号无效（如缺 Base URL）会使整个模型
+        // 目录回退为空（groups 与 failures 同时为空）——显式警示引导修复。
+        addedAccounts.length > 0 && (state.models ?? []).length === 0 && (state.modelsFailure ?? []).length === 0
+          ? el('p', { className: 'dshrouter-error' }, t('accountCatalogEmptyWarn'))
+          : null,
         addedAccounts.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('accountMissing')) : null,
         ...addedAccounts.map((provider) => {
           const entry = providerEntry(provider)
@@ -2056,6 +2068,7 @@ window.__ModuleLoader__.load({
             busy: !!accountBusy[provider],
             notice: accountNotice[provider],
             failure: (state.modelsFailure ?? []).find((item) => item.id === provider)?.message ?? '',
+            declared: entry ? entry.declared === true : false,
             t,
             writable: state.writable,
             onToggle: () => toggleAccount(provider),
