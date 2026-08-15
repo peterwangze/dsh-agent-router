@@ -835,6 +835,12 @@ window.__ModuleLoader__.load({
           el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-subtitle' }, t('accountEditTitle'))),
           el('div', { className: 'dshrouter-row' },
             el('div', { className: 'dshrouter-field' },
+              el('span', { className: 'dshrouter-field-label' }, t('accountApi')),
+              el('select', { className: 'dshrouter-select', value: draft.api ?? 'openai-completions', onChange: (event) => onField('api', event.target.value) },
+                el('option', { value: 'openai-completions' }, 'openai-completions'),
+                el('option', { value: 'openai-responses' }, 'openai-responses'),
+                el('option', { value: 'anthropic-messages' }, 'anthropic-messages'))),
+            el('div', { className: 'dshrouter-field' },
               el('span', { className: 'dshrouter-field-label' }, t('accountBaseUrlRequired')),
               el('input', { className: 'dshrouter-input', value: draft.baseURL ?? '', placeholder: 'https://api.openai.com/v1', onChange: (event) => onField('baseURL', event.target.value) })),
             el('div', { className: 'dshrouter-field' },
@@ -1580,7 +1586,8 @@ window.__ModuleLoader__.load({
       const accountDraftOf = (provider) => {
         const profile = accountProfileOf(provider)
         const modelsText = profile && Array.isArray(profile.models) ? profile.models.map((entry) => (typeof entry === 'string' ? entry : entry?.id)).filter(Boolean).join(', ') : ''
-        return { baseURL: profile && profile.baseURL ? profile.baseURL : '', key: '', models: modelsText, ...(accountDrafts[provider] ?? {}) }
+        const api = profile && ['openai-completions', 'openai-responses', 'anthropic-messages'].includes(profile.api) ? profile.api : 'openai-completions'
+        return { baseURL: profile && profile.baseURL ? profile.baseURL : '', key: '', api, models: modelsText, ...(accountDrafts[provider] ?? {}) }
       }
       const setAccountDraftField = (provider, field, fieldValue) => {
         setAccountDrafts((current) => ({ ...current, [provider]: { ...accountDraftOf(provider), [field]: fieldValue } }))
@@ -1601,6 +1608,7 @@ window.__ModuleLoader__.load({
             const ref = deriveKeyRef(provider)
             const modelIds = String(draft.models ?? '').split(',').map((item) => item.trim()).filter(Boolean)
             const profile = {
+              api: ['openai-completions', 'openai-responses', 'anthropic-messages'].includes(draft.api) ? draft.api : 'openai-completions',
               ...(draft.key.trim() ? { apiKeyEnv: ref } : {}),
               baseURL: draft.baseURL.trim(),
               ...(modelIds.length > 0 ? { models: modelIds.map((id) => ({ id })) } : {}),
@@ -1608,7 +1616,11 @@ window.__ModuleLoader__.load({
             const response = await api.settings.mutate({ ns: 'llm-pi-ai', ops: [{ op: 'set', path: ['providers', provider], value: profile }] })
             if (!response.result.ok) throw new Error(response.result.error.message)
           } else {
-            const response = await api.settings.mutate({ ns: 'llm-pi-ai', ops: [{ op: 'set', path: ['providers', provider, 'baseURL'], value: draft.baseURL.trim() }] })
+            const api = ['openai-completions', 'openai-responses', 'anthropic-messages'].includes(draft.api) ? draft.api : 'openai-completions'
+            const response = await api.settings.mutate({ ns: 'llm-pi-ai', ops: [
+              { op: 'set', path: ['providers', provider, 'baseURL'], value: draft.baseURL.trim() },
+              { op: 'set', path: ['providers', provider, 'api'], value: api },
+            ] })
             if (!response.result.ok) throw new Error(response.result.error.message)
             const modelIds = String(draft.models ?? '').split(',').map((item) => item.trim()).filter(Boolean)
             const modelOp = modelIds.length > 0
@@ -1638,6 +1650,7 @@ window.__ModuleLoader__.load({
             settingsNs: 'llm-pi-ai',
             provider,
             ...(draft.baseURL.trim() ? { baseURL: draft.baseURL.trim() } : {}),
+            ...(['openai-completions', 'openai-responses', 'anthropic-messages'].includes(draft.api) ? { api: draft.api } : {}),
           })
           if (!response.result.ok) throw new Error(response.result.error.message)
           const existing = String(draft.models ?? '').split(',').map((item) => item.trim()).filter(Boolean)
