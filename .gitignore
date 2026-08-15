@@ -1,0 +1,4 @@
+# 本地依赖 junction（冒烟测试用，指向 profiles 依赖树，不可提交）
+node_modules/
+*.log
+
