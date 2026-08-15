@@ -821,7 +821,7 @@ window.__ModuleLoader__.load({
 
     /** 已配置账号卡片：折叠摘要 + 展开编辑（Base URL / API Key / 删除）与模型列表。 */
     function AccountCard(props) {
-      const { provider, displayName, active, models, profile, total, buckets, expanded, draft, busy, notice, t, writable, onToggle, onField, onSave, onDiscover, onDelete } = props
+      const { provider, displayName, active, models, profile, total, buckets, expanded, draft, busy, notice, failure, t, writable, onToggle, onField, onSave, onDiscover, onDelete } = props
       return el('div', { className: 'dshrouter-card' },
         el('button', { type: 'button', className: 'dshrouter-card-head', onClick: onToggle, 'aria-expanded': expanded, title: expanded ? t('collapse') : t('expand') },
           active ? el('span', { className: 'dshrouter-dot ok', title: t('accountDone') }) : el('span', { className: 'dshrouter-dot bad', title: t('accountDormant') }),
@@ -864,6 +864,7 @@ window.__ModuleLoader__.load({
           el('p', { className: 'dshrouter-hint' }, t('accountEditHint')),
           notice ? el('p', { className: 'dshrouter-hint' }, notice) : null,
           el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-meta' }, t('accountModels'))),
+          failure ? el('p', { className: 'dshrouter-error' }, `模型目录解析失败：${failure}`) : null,
           models.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('accountMissing')) : el('table', { className: 'dshrouter-table' },
             el('thead', null, el('tr', null, el('th', null, t('fieldModel')), el('th', null, t('fieldName')), el('th', null, 'input'))),
             el('tbody', null, ...models.map((model) => el('tr', { key: model.id },
@@ -2054,6 +2055,7 @@ window.__ModuleLoader__.load({
             draft: accountDraftOf(provider),
             busy: !!accountBusy[provider],
             notice: accountNotice[provider],
+            failure: (state.modelsFailure ?? []).find((item) => item.id === provider)?.message ?? '',
             t,
             writable: state.writable,
             onToggle: () => toggleAccount(provider),
