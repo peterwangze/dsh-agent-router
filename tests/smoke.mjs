@@ -119,7 +119,7 @@ console.log('RouterService:')
     mutate: async () => undefined,
   })
   root.provide('credentials', {
-    resolve: async (ref) => (ref === 'ROUTER_OAUTH_OAUTH_TOKEN' ? { value: 'tok' } : undefined),
+    resolve: async (ref) => (ref === 'ROUTER_OAUTH_OAUTH_TOKEN' || ref === 'ROUTER_OAUTH_PUBOAUTH_TOKEN' ? { value: 'tok' } : undefined),
     set: async () => undefined,
     unset: async () => undefined,
   })
@@ -252,7 +252,12 @@ console.log('RouterService:')
       tokenRequestBody = String(options.body ?? '')
       return { ok: true, json: async () => ({ access_token: 't2', expires_in: 3600 }) }
     }
-    if (String(url).endsWith('/models')) return { ok: true, json: async () => ({ data: [{ id: 'm1' }, { id: 'm2' }] }) }
+    if (String(url).endsWith('/models')) {
+      // Gemini 端点返回 { models: [{ name: "models/<id>" }] }；OpenAI 兼容返回 { data: [{ id }] }。
+      return String(url).includes('generativelanguage')
+        ? { ok: true, json: async () => ({ models: [{ name: 'models/gemini-2.5-flash' }, { name: 'publishers/google/models/gemini-2.5-pro' }] }) }
+        : { ok: true, json: async () => ({ data: [{ id: 'm1' }, { id: 'm2' }] }) }
+    }
     return { ok: false, status: 404, text: async () => 'not found' }
   }
   try {
@@ -297,6 +302,8 @@ console.log('RouterService:')
 
     const discovered = await service.oauthDiscover({ accountId: 'oauth' })
     check('oauth discover', discovered.ok === true && discovered.models.length === 2 && discovered.models[0] === 'm1')
+    const geminiDiscovered = await service.oauthDiscover({ accountId: 'puboauth' })
+    check('oauth discover gemini models format', geminiDiscovered.ok === true && geminiDiscovered.models.length === 2 && geminiDiscovered.models[0] === 'gemini-2.5-flash' && geminiDiscovered.models[1] === 'publishers/google/models/gemini-2.5-pro')
 
     // 账号池失败切换：oauth2 的凭据未配置（resolve 返回 undefined）→ 失败，
     // 自动切换 oauth（凭据已配置）→ 成功；失败尝试记入 oauth2 的健康统计。
