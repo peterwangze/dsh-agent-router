@@ -2,7 +2,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { routerSchema, wireCodecs } from '../lib/schemas.js'
 import { createHostContribution, ROUTER_REMOTE } from '../lib/rpc.js'
-import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, migrateGeminiScope } from '../lib/service.js'
+import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope } from '../lib/service.js'
 import { BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -312,6 +312,7 @@ console.log('RouterService:')
     // oauthBegin 自动迁移为 cloud-platform（gcloud 同款组合，实测可用）。
     check('oauth begin gemini scope migrated', pubBegin.authUrl.includes('cloud-platform') && !pubBegin.authUrl.includes('retriever') && !pubBegin.authUrl.includes('auth%2Fgenerativelanguage'))
     check('migrateGeminiScope legacy', migrateGeminiScope('https://www.googleapis.com/auth/generativelanguage') === GEMINI_OAUTH_SCOPES)
+    check('migrateGeminiScope self-client legacy', migrateGeminiScope('https://www.googleapis.com/auth/generativelanguage', false) === GEMINI_SELF_CLIENT_SCOPES)
     check('migrateGeminiScope strips retriever', migrateGeminiScope('https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/generative-language.retriever') === 'https://www.googleapis.com/auth/cloud-platform' && migrateGeminiScope('https://www.googleapis.com/auth/generative-language.retriever') === GEMINI_OAUTH_SCOPES)
     check('migrateGeminiScope passthrough', migrateGeminiScope('openid email') === 'openid email' && migrateGeminiScope(GEMINI_OAUTH_SCOPES) === GEMINI_OAUTH_SCOPES && migrateGeminiScope('') === '' && migrateGeminiScope('https://www.googleapis.com/auth/generative-language.retriever', false) === 'https://www.googleapis.com/auth/generative-language.retriever')
     tokenRequestBody = ''
