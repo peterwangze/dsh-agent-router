@@ -15,7 +15,7 @@
 
 - 🧭 **自定义专业 Agent（核心）**：四种执行通路（chat 远端模型 / agent 完整子代理 / image 图片生成 / speech 语音转写）+ 自定义能力标签，主 agent 按标签自动路由；每个 agent 独立服务商与模型，未配置自动复用主 agent 模型
 - 🖼 **多模态任务路由**：图片识别（OCR、截图、图表）、图片生成、语音转写；`files` 参数按能力分发——图片内联注入、文本内联、任意文件交给 agent 类型子代理读取
-- 🔑 **多模态账号**：ChatGPT/Claude/Grok/Gemini 官方 API Key 一键登录；OAuth 官方授权（Gemini 内置公开 Client 零配置一键授权）；账号池按健康/用量/轮询策略自动选号与失败切换
+- 🔑 **多模态账号**：ChatGPT/Claude/Grok/Gemini 官方 API Key 一键保存（无需登录，仅写凭据）；OAuth 官方授权（Gemini 内置公开 Client 零配置一键授权）；账号池按健康/用量/轮询策略自动选号与失败切换
 - 📊 **实时用量统计**：Agent 级与账号级两级明细（调用/失败/tokens/耗时）、分钟级 tokens 分布、最近调用记录
 - 🔌 **零配置接入**：宿主平面注册 `route_agent` 工具与路由提示段，内置与自定义的任意 agent 预设自动获得路由能力
 
@@ -100,7 +100,7 @@ cd dsh-agent-router-v0.1.0
 
 ![多模态账号配置](docs/images/accounts.png)
 
-- **API Key 账号**：ChatGPT/Claude/Grok/Gemini 预设一键登录（官方 API Key，可配 Base URL 覆盖代理端点）
+- **API Key 账号**：ChatGPT/Claude/Grok/Gemini 预设填 Key 即保存（无需登录，只是写凭据；可配 Base URL 覆盖代理端点）
 - **自定义提供方（＋ 自定义）**：未集成的服务商、第三方中转与本地部署（Ollama / One-API / LM Studio 等）——填服务商 ID 与 Base URL 即复用模型添加基座注册到共享模型列表，注册后可用「发现模型」拉取端点模型；API Key 可留空（免鉴权本地服务）
 - **OAuth 账号**（插件独立管理）：官方授权码登录（OAuth2 + PKCE，Gemini 内置公开 Client 零配置一键授权）或粘贴 access token；模型列表插件内单独维护；同样支持「＋ 自定义」创建自建 OAuth2 服务商账号（自配协议 / 端点 / Client ID / Scope）
 - **账号池**：多个已授权账号组成池，按健康优先 / 用量最低 / 轮询自动选号，单账号失败自动切换；agent 的「OAuth 账号」字段可指向池
