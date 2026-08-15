@@ -1574,7 +1574,7 @@ window.__ModuleLoader__.load({
       }
       addedAccounts.sort()
       const accountModelsOf = (provider) => {
-        const group = (state.models ?? []).find((entry) => entry.provider === provider)
+        const group = (state.models ?? []).find((entry) => entry.id === provider)
         return group ? group.models ?? [] : []
       }
       const accountProfileOf = (provider) => {
@@ -2276,7 +2276,7 @@ window.__ModuleLoader__.load({
     function AgentCard(props) {
       const { id, draft, t, writable, busy, notice, providers, models, catalog, oauthAccounts, pools, testResult, stat, buckets, expanded, onToggle, onField, onSave, onDelete, onTest, onDiscover } = props
       const groups = models ?? []
-      const group = groups.find((entry) => entry.provider === (draft.provider || ''))
+      const group = groups.find((entry) => entry.id === (draft.provider || ''))
       const poolRef = typeof draft.account === 'string' && draft.account.startsWith('pool:') ? draft.account.slice(5) : ''
       const poolEntry = poolRef ? (pools ?? []).find((entry) => entry.id === poolRef) : undefined
       const poolFirstAccount = poolEntry && (poolEntry.accounts ?? []).length > 0
