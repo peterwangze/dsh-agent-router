@@ -283,10 +283,13 @@ console.log('RouterService:')
     service.oauthLoopbackReady = true
     const pubBegin = await service.oauthBegin({ accountId: 'puboauth', redirectUri: 'http://127.0.0.1:3080/router-oauth/callback' })
     check('oauth begin public client', pubBegin.ok === true && pubBegin.authUrl.includes('client_id=32555940559.apps.googleusercontent.com') && pubBegin.authUrl.includes('redirect_uri=http%3A%2F%2Flocalhost%3A8085%2F'))
-    // 旧 Gemini scope（generativelanguage）已被 Google 拒绝：oauthBegin 自动迁移为现行组合。
-    check('oauth begin gemini scope migrated', pubBegin.authUrl.includes('cloud-platform') && pubBegin.authUrl.includes('generative-language.retriever') && !pubBegin.authUrl.includes('auth%2Fgenerativelanguage'))
+    // 旧 Gemini scope（generativelanguage）已被 Google 拒绝，官方新 scope
+    // generative-language.retriever 是受限 scope（公开 client 报 403）；
+    // oauthBegin 自动迁移为 cloud-platform（gcloud 同款组合，实测可用）。
+    check('oauth begin gemini scope migrated', pubBegin.authUrl.includes('cloud-platform') && !pubBegin.authUrl.includes('retriever') && !pubBegin.authUrl.includes('auth%2Fgenerativelanguage'))
     check('migrateGeminiScope legacy', migrateGeminiScope('https://www.googleapis.com/auth/generativelanguage') === GEMINI_OAUTH_SCOPES)
-    check('migrateGeminiScope passthrough', migrateGeminiScope('openid email') === 'openid email' && migrateGeminiScope(GEMINI_OAUTH_SCOPES) === GEMINI_OAUTH_SCOPES && migrateGeminiScope('') === '')
+    check('migrateGeminiScope strips retriever', migrateGeminiScope('https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/generative-language.retriever') === 'https://www.googleapis.com/auth/cloud-platform' && migrateGeminiScope('https://www.googleapis.com/auth/generative-language.retriever') === GEMINI_OAUTH_SCOPES)
+    check('migrateGeminiScope passthrough', migrateGeminiScope('openid email') === 'openid email' && migrateGeminiScope(GEMINI_OAUTH_SCOPES) === GEMINI_OAUTH_SCOPES && migrateGeminiScope('') === '' && migrateGeminiScope('https://www.googleapis.com/auth/generative-language.retriever', false) === 'https://www.googleapis.com/auth/generative-language.retriever')
     tokenRequestBody = ''
     const pubExchange = await service.oauthTokenExchange({ code: 'c4', state: pubBegin.state })
     check('oauth exchange public client', pubExchange.ok === true && tokenRequestBody.includes('client_id=32555940559.apps.googleusercontent.com') && tokenRequestBody.includes('client_secret=ZmssLNjJy2998hD4CTg2ejr2'))
