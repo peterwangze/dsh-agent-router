@@ -7,7 +7,7 @@ import { BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -37,6 +37,25 @@ console.log('syntax:')
     const result = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', parseScript], { stdio: 'ignore' })
     check('install.ps1 parses', result.status === 0)
   }
+  // 文案键覆盖守卫：client.js 里每个 t('key') 引用必须同时存在于 zh 与 en
+  // 文案表（缺键 = 渲染期崩溃），并检查两张表键集合一致。
+  const clientSrc = readFileSync(join(ROOT_DIR, 'lib', 'client.js'), 'utf8')
+  const usedKeys = [...clientSrc.matchAll(/\bt\('([a-zA-Z0-9]+)'\)/g)].map((m) => m[1])
+  const tableKeys = (name) => {
+    const block = clientSrc.split(`const ${name} = {`)[1]
+    if (!block) return []
+    const end = block.indexOf('\n    }')
+    return [...block.slice(0, end).matchAll(/^\s*([a-zA-Z0-9]+):/gm)].map((m) => m[1])
+  }
+  const zhKeys = tableKeys('zh')
+  const enKeys = tableKeys('en')
+  const missingZh = [...new Set(usedKeys)].filter((key) => !zhKeys.includes(key))
+  const missingEn = [...new Set(usedKeys)].filter((key) => !enKeys.includes(key))
+  const zhExtra = zhKeys.filter((key) => !enKeys.includes(key))
+  const enExtra = enKeys.filter((key) => !zhKeys.includes(key))
+  check('client label keys covered (zh)', missingZh.length === 0 ? true : `missing: ${missingZh.join(', ')}`)
+  check('client label keys covered (en)', missingEn.length === 0 ? true : `missing: ${missingEn.join(', ')}`)
+  check('client label tables match', zhExtra.length === 0 && enExtra.length === 0 ? true : `zh-only: ${zhExtra.join(', ')} | en-only: ${enExtra.join(', ')}`)
 }
 
 // 1. schema 默认值解析
