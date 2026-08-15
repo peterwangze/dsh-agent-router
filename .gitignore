@@ -6,6 +6,8 @@ node_modules/
 # 运行时下载目录（files URL 落盘）与测试产物
 .router-files/
 
-# 安装脚本测试目录.test-home/
+# 安装脚本测试目录
+.test-home/
 
-# 发布产物*.tar.gz
+# 发布产物
+*.tar.gz
