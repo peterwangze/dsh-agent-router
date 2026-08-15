@@ -1488,6 +1488,9 @@ window.__ModuleLoader__.load({
               api: ['openai-completions', 'openai-responses', 'anthropic-messages'].includes(account.api) ? account.api : 'openai-completions',
               ...(account.baseUrl.trim() ? { baseURL: account.baseUrl.trim() } : {}),
               ...(key ? { apiKeyEnv: ref } : {}),
+              // 中转/本地部署常同时服务文本与多模态模型：默认输入声明含
+              // image，避免 pi-ai 默认纯文本导致视觉调用被拒。
+              defaultInput: ['text', 'image'],
               ...(modelIds.length > 0 ? { models: modelIds.map((id) => ({ id })) } : {}),
             }
             const response = await api.settings.mutate({
@@ -1619,6 +1622,9 @@ window.__ModuleLoader__.load({
               api: ['openai-completions', 'openai-responses', 'anthropic-messages'].includes(draft.api) ? draft.api : 'openai-completions',
               ...(draft.key.trim() ? { apiKeyEnv: ref } : {}),
               baseURL: draft.baseURL.trim(),
+              // 中转/本地部署常同时服务文本与多模态模型：路由级默认输入
+              // 声明含 image，避免 pi-ai 默认纯文本导致视觉调用被拒。
+              defaultInput: ['text', 'image'],
               ...(modelIds.length > 0 ? { models: modelIds.map((id) => ({ id })) } : {}),
             }
             const response = await api.settings.mutate({ ns: 'llm-pi-ai', ops: [{ op: 'set', path: ['providers', provider], value: profile }] })
@@ -1628,6 +1634,7 @@ window.__ModuleLoader__.load({
             const response = await api.settings.mutate({ ns: 'llm-pi-ai', ops: [
               { op: 'set', path: ['providers', provider, 'baseURL'], value: draft.baseURL.trim() },
               { op: 'set', path: ['providers', provider, 'api'], value: api },
+              { op: 'set', path: ['providers', provider, 'defaultInput'], value: ['text', 'image'] },
             ] })
             if (!response.result.ok) throw new Error(response.result.error.message)
             const modelIds = String(draft.models ?? '').split(',').map((item) => item.trim()).filter(Boolean)

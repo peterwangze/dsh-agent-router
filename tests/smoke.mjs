@@ -145,7 +145,9 @@ console.log('RouterService:')
   let lastChatRequest = null
   root.provide('llm', {
     listModels: async (provider) => provider === 'openai' ? [{ id: 'gpt-4o', name: 'GPT-4o' }] : [],
-    resolveModelInfo: async () => ({ inputModalities: ['text', 'image'] }),
+    // declared 路由（中转）的 input 声明按 pi-ai 默认纯文本；其余含 image。
+    resolveModelInfo: async (provider) => provider === 'relay' ? { inputModalities: ['text'] } : { inputModalities: ['text', 'image'] },
+    listProviders: async () => [{ provider: 'relay', displayName: 'Relay', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'relay'], active: true, declared: true }],
     stream: async function* (request) {
       lastChatRequest = request
       yield { type: 'block-start', index: 0, blockType: 'text' }
@@ -200,6 +202,7 @@ console.log('RouterService:')
       vchat: { name: '视觉OAuth', type: 'chat', enabled: true, account: 'oauth' },
       pchat: { name: '池chat', type: 'chat', enabled: true, account: 'pool:gpool' },
       helper: { name: '子代理', type: 'agent', enabled: true, description: '委派子代理', provider: 'openai', model: 'gpt-4o' },
+      relay: { name: '中转', type: 'chat', enabled: true, description: 'declared 中转', provider: 'relay', model: 'gpt-5.6-luna', maxRounds: 1 },
       off: { name: '关', type: 'chat', enabled: false },
     },
     oauthAccounts: {
@@ -234,7 +237,7 @@ console.log('RouterService:')
   check('unknown agent error', missing.error && String(missing.error).includes('nope'))
 
   const catalog = await service.catalog()
-  check('catalog lists enabled only', catalog.agents.length === 6 && catalog.agents.every((entry) => entry.id !== 'off'))
+  check('catalog lists enabled only', catalog.agents.length === 7 && catalog.agents.every((entry) => entry.id !== 'off'))
   check('catalog effective', catalog.agents.find((entry) => entry.id === 'vision').effectiveModel === 'deepseek-v4-pro')
   check('catalog oauth accounts', catalog.oauthAccounts.length === 3 && catalog.oauthAccounts[0].id === 'oauth' && catalog.oauthAccounts[0].models.length === 1 && catalog.oauthAccounts.find((entry) => entry.id === 'puboauth').publicClient === true)
   check('catalog oauth agent account', catalog.agents.find((entry) => entry.id === 'vchat').account === 'oauth')
@@ -375,6 +378,10 @@ console.log('RouterService:')
   check('chat files text inlined', lastChatRequest && lastChatRequest.messages[0].content.some((block) => block.type === 'text' && block.text.includes('看图写摘要') && block.text.includes('文件：D:/work/example/notes.txt') && block.text.includes('hello 文本内容')))
   check('chat files image injected', lastChatRequest && lastChatRequest.messages[0].content.some((block) => block.type === 'image' && block.attachment && String(block.attachment.attachmentId).startsWith('att-file-')))
   check('chat files image saved via attachments', savedImages.length === 1 && savedImages[0].name === 'shot.png' && savedImages[0].mediaType === 'image/png')
+  // declared 自定义路由（中转）：input 声明是 pi-ai 默认纯文本，不代表模型
+  // 真实能力——跳过图片预检由端点裁决（gpt-5.6-luna 场景）。
+  const relayRun = await service.run({ agentId: 'relay', task: '看图', images: [{ id: 'att-2', kind: 'image' }], exec: { agent: fakeParent } })
+  check('declared route skips image precheck', relayRun.kind === 'chat' && relayRun.text === '你好')
   let chatBinaryRejected = false
   try { await service.run({ agentId: 'vision', task: 'x', images: [], files: ['data.bin'], exec: { agent: fakeParent } }) } catch (error) { chatBinaryRejected = String(error.message).includes('二进制') && String(error.message).includes('agent 类型') }
   check('chat files binary rejected', chatBinaryRejected)
