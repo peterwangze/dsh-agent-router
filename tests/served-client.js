@@ -821,7 +821,7 @@ window.__ModuleLoader__.load({
 
     /** 已配置账号卡片：折叠摘要 + 展开编辑（Base URL / API Key / 删除）与模型列表。 */
     function AccountCard(props) {
-      const { provider, displayName, active, models, profile, total, buckets, expanded, draft, busy, notice, t, writable, onToggle, onField, onSave, onDelete } = props
+      const { provider, displayName, active, models, profile, total, buckets, expanded, draft, busy, notice, t, writable, onToggle, onField, onSave, onDiscover, onDelete } = props
       return el('div', { className: 'dshrouter-card' },
         el('button', { type: 'button', className: 'dshrouter-card-head', onClick: onToggle, 'aria-expanded': expanded, title: expanded ? t('collapse') : t('expand') },
           active ? el('span', { className: 'dshrouter-dot ok', title: t('accountDone') }) : el('span', { className: 'dshrouter-dot bad', title: t('accountDormant') }),
@@ -845,6 +845,16 @@ window.__ModuleLoader__.load({
               disabled: busy || !writable || !(draft.baseURL ?? '').trim(),
               onClick: onSave,
             }, busy ? t('saving') : t('save'))),
+          el('div', { className: 'dshrouter-row' },
+            el('div', { className: 'dshrouter-field' },
+              el('span', { className: 'dshrouter-field-label' }, t('accountModelsField')),
+              el('input', { className: 'dshrouter-input', type: 'text', value: draft.models ?? '', placeholder: t('accountModelsField'), onChange: (event) => onField('models', event.target.value) })),
+            el('button', {
+              type: 'button', className: 'dshrouter-button ghost',
+              disabled: busy || !writable || !(draft.baseURL ?? '').trim(),
+              title: (draft.baseURL ?? '').trim() ? undefined : t('accountBaseUrlRequired'),
+              onClick: onDiscover,
+            }, busy ? t('oauthDiscovering') : t('fieldDiscover'))),
           el('p', { className: 'dshrouter-hint' }, t('accountEditHint')),
           notice ? el('p', { className: 'dshrouter-hint' }, notice) : null,
           el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-meta' }, t('accountModels'))),
@@ -1566,10 +1576,11 @@ window.__ModuleLoader__.load({
         const profile = profiles ? profiles[provider] : undefined
         return profile && typeof profile === 'object' ? profile : null
       }
-      // ── 已添加账号的编辑（Base URL / API Key / 删除）──────────────────
+      // ── 已添加账号的编辑（Base URL / API Key / 模型 / 删除）──────────
       const accountDraftOf = (provider) => {
         const profile = accountProfileOf(provider)
-        return { baseURL: profile && profile.baseURL ? profile.baseURL : '', key: '', ...(accountDrafts[provider] ?? {}) }
+        const modelsText = profile && Array.isArray(profile.models) ? profile.models.map((entry) => (typeof entry === 'string' ? entry : entry?.id)).filter(Boolean).join(', ') : ''
+        return { baseURL: profile && profile.baseURL ? profile.baseURL : '', key: '', models: modelsText, ...(accountDrafts[provider] ?? {}) }
       }
       const setAccountDraftField = (provider, field, fieldValue) => {
         setAccountDrafts((current) => ({ ...current, [provider]: { ...accountDraftOf(provider), [field]: fieldValue } }))
@@ -1588,12 +1599,23 @@ window.__ModuleLoader__.load({
           const existing = llmView && llmView.value && llmView.value.providers ? llmView.value.providers[provider] : undefined
           if (existing === undefined) {
             const ref = deriveKeyRef(provider)
-            const profile = { ...(draft.key.trim() ? { apiKeyEnv: ref } : {}), baseURL: draft.baseURL.trim() }
+            const modelIds = String(draft.models ?? '').split(',').map((item) => item.trim()).filter(Boolean)
+            const profile = {
+              ...(draft.key.trim() ? { apiKeyEnv: ref } : {}),
+              baseURL: draft.baseURL.trim(),
+              ...(modelIds.length > 0 ? { models: modelIds.map((id) => ({ id })) } : {}),
+            }
             const response = await api.settings.mutate({ ns: 'llm-pi-ai', ops: [{ op: 'set', path: ['providers', provider], value: profile }] })
             if (!response.result.ok) throw new Error(response.result.error.message)
           } else {
             const response = await api.settings.mutate({ ns: 'llm-pi-ai', ops: [{ op: 'set', path: ['providers', provider, 'baseURL'], value: draft.baseURL.trim() }] })
             if (!response.result.ok) throw new Error(response.result.error.message)
+            const modelIds = String(draft.models ?? '').split(',').map((item) => item.trim()).filter(Boolean)
+            const modelOp = modelIds.length > 0
+              ? { op: 'set', path: ['providers', provider, 'models'], value: modelIds.map((id) => ({ id })) }
+              : { op: 'unset', path: ['providers', provider, 'models'] }
+            const modelResponse = await api.settings.mutate({ ns: 'llm-pi-ai', ops: [modelOp] })
+            if (!modelResponse.result.ok) throw new Error(modelResponse.result.error.message)
           }
           if (draft.key.trim()) {
             const stored = await api.credentials.set({ ref: deriveKeyRef(provider), value: draft.key.trim() })
@@ -1606,6 +1628,26 @@ window.__ModuleLoader__.load({
         } catch (error) {
           setAccountBusy((current) => ({ ...current, [provider]: false }))
           setAccountNotice((current) => ({ ...current, [provider]: messageOf(error) }))
+        }
+      }
+      const discoverAccountModels = async (provider) => {
+        setAccountBusy((current) => ({ ...current, [provider]: true }))
+        try {
+          const draft = accountDraftOf(provider)
+          const response = await api.llm.discoverModels({
+            settingsNs: 'llm-pi-ai',
+            provider,
+            ...(draft.baseURL.trim() ? { baseURL: draft.baseURL.trim() } : {}),
+          })
+          if (!response.result.ok) throw new Error(response.result.error.message)
+          const existing = String(draft.models ?? '').split(',').map((item) => item.trim()).filter(Boolean)
+          const merged = [...new Set([...existing, ...(response.result.value.models ?? []).map((model) => model.id)])]
+          setAccountDrafts((current) => ({ ...current, [provider]: { ...accountDraftOf(provider), models: merged.join(', ') } }))
+          setAccountNotice((current) => ({ ...current, [provider]: `发现 ${(response.result.value.models ?? []).length} 个模型（已合并进模型列表，点「保存」生效）` }))
+        } catch (error) {
+          setAccountNotice((current) => ({ ...current, [provider]: `发现模型失败：${messageOf(error)}` }))
+        } finally {
+          setAccountBusy((current) => ({ ...current, [provider]: false }))
         }
       }
       const removeAccount = async (provider) => {
@@ -2004,6 +2046,7 @@ window.__ModuleLoader__.load({
             onToggle: () => toggleAccount(provider),
             onField: (field, fieldValue) => setAccountDraftField(provider, field, fieldValue),
             onSave: () => saveAccount(provider),
+            onDiscover: () => discoverAccountModels(provider),
             onDelete: () => removeAccount(provider),
           })
         }),
@@ -2210,6 +2253,7 @@ window.__ModuleLoader__.load({
         discover ? el(DiscoverModal, {
           api, t, provider: discover.provider,
           providers,
+          baseURL: (accountProfileOf(discover.provider) ?? {}).baseURL ?? '',
           onClose: () => setDiscover(null),
           onAdopt: (model) => { setDraftField(discover.id, 'model', model); setDiscover(null) },
         }) : null,
@@ -2410,7 +2454,7 @@ window.__ModuleLoader__.load({
     }
 
     function DiscoverModal(props) {
-      const { api, t, provider, providers, onClose, onAdopt } = props
+      const { api, t, provider, providers, baseURL, onClose, onAdopt } = props
       const [busy, setBusy] = useState(true)
       const [failure, setFailure] = useState(null)
       const [candidates, setCandidates] = useState([])
@@ -2419,9 +2463,12 @@ window.__ModuleLoader__.load({
         let alive = true
         setBusy(true)
         setFailure(null)
+        // 自定义服务商无内置模型目录：发现请求必须携带其 Base URL，
+        // 否则 pi-ai 适配器报 "ships no catalog … set a baseURL"。
         api.llm.discoverModels({
           settingsNs: entry ? entry.settingsNs : 'llm-pi-ai',
           provider,
+          ...(typeof baseURL === 'string' && baseURL.trim() ? { baseURL: baseURL.trim() } : {}),
         }).then((response) => {
           if (!alive) return
           if (!response.result.ok) { setFailure(response.result.error.message); return }
