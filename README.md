@@ -122,21 +122,41 @@ llm-pi-ai:
 - **speech**：OpenAI 兼容 Audio Transcriptions 端点（Whisper 系，`model` 默认
   `whisper-1`）；音频由 `route_agent` 的 `filePath` 参数指定工作区文件，
   经沙箱文件服务读取（≤25MB）后 multipart 上传，返回转写文本。
+- **OAuth 账号直连（chat）**：agent 的 `account` 字段指向插件独立管理的
+  OAuth 账号时，调用由本插件直连端点完成（`openai-completions` /
+  `anthropic` / `gemini` 三种协议，Bearer token 认证，支持图片以
+  base64 data URL 多模态输入），**不注册任何 llm 路由**——OAuth 账号
+  不出现在「设置 → 模型」与共享模型列表中，模型列表由插件单独维护
+  （手工添加或经 `oauthDiscover` 从 `GET /models` 发现）。
 
 统计为进程内内存数据（重启清零），由 `router` 服务维护；所有 RPC 走 typert
-gateway 严格契约（`/api/router/catalog|stats|test|reset|config|save`）。
+gateway 严格契约（`/api/router/catalog|stats|test|reset|config|save|oauthTokenExchange|oauthDiscover`）。
 配置读写（config/save）经由本插件自己的 Remote 端点：api-proxy 的
 `settings.describe/mutate` 只放行其内置白名单 namespace（回答
 `settings-not-exposed`），第三方 namespace 无法经该 wire 面读写；宿主侧仍走
 `ctx.settings` seam（settings.yaml `router:` 分节、热生效、revision 乐观并发）。
-GPT 账号登录写入的 `llm-pi-ai` 在白名单内，仍走固定 settings/credentials 域。
+API Key 账号登录写入的 `llm-pi-ai` 在白名单内，仍走固定 settings/credentials 域。
+
+## OAuth 账号（官方登录，插件独立管理）
+
+- 登录方式一：**官方授权码（OAuth2 + PKCE）**——浏览器生成 PKCE 并打开
+  官方 authorize URL，粘贴回调地址后由宿主经 token 端点完成 code →
+  access_token 交换，token 存入 credentials seam（`ROUTER_OAUTH_<ID>_TOKEN`）。
+  需要用户自有的 OAuth client（`clientId`，可选 `clientSecret`）；Gemini
+  等标准 OAuth2 服务商可端到端使用（预设已填 authorize/token/scope）。
+- 登录方式二：**粘贴 access token**（通用，适配任何接受 Bearer 的端点/网关）。
+- 服务商预设：Gemini（授权码流可用）、ChatGPT/Claude/Grok（预设仅含
+  端点与协议，默认使用粘贴 token——ChatGPT/Claude 的消费级 OAuth token
+  面向其 Web 后端而非官方 API，官方 API 请用 API Key 或可用的 token）。
+- 限制：OAuth 账号仅支持 chat 类型 agent；token 过期需在账号卡片重新登录。
 
 ## 已知限制
 
 - image 端点需支持 `b64_json`（自定义网关若不支持，请在高级设置更换 endpoint）；
   生成结果按 PNG/JPEG/WebP/GIF magic 自动识别 media type。
-- 账号登录仅支持 API Key 认证：harness 模型适配层（pi-ai seam）不提供官方
-  OAuth 登录流，ChatGPT/Claude/Grok/Gemini 订阅 plan 请使用其官方 API Key。
+- API Key 账号登录仍走 llm-pi-ai（进入共享模型列表）；OAuth 账号为插件
+  独立管理（不进入共享模型列表）。ChatGPT/Claude 官方消费者 OAuth token
+  面向 Web 后端，插件不集成其非官方后端协议。
 - 无通用「视频生成」API：视频生成预设为 chat 类型，需在高级设置中配置
   兼容网关与模型；speech 转写走 OpenAI 兼容 Audio Transcriptions 端点。
 - 统计不持久化；如需跨重启累计可扩展 `storageDomain` 落盘。

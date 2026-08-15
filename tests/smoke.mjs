@@ -27,7 +27,7 @@ console.log('schemas:')
 // 2. wire codec
 console.log('wire codecs:')
 {
-  const value = wireCodecs.catalogResult.parse({ ok: true, enabled: true, defaults: { provider: 'p', model: 'm' }, agents: [] })
+  const value = wireCodecs.catalogResult.parse({ ok: true, enabled: true, defaults: { provider: 'p', model: 'm' }, agents: [], oauthAccounts: [] })
   check('catalogResult parses', value.ok === true)
   let threw = false
   try { wireCodecs.catalogResult.parse({ ok: true }) } catch { threw = true }
@@ -41,8 +41,8 @@ console.log('rpc contribution:')
 {
   const contribution = createHostContribution()
   check('face host', contribution.face === 'host')
-  check('6 invocations', contribution.invocations.length === 6)
-  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 6 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
+  check('8 invocations', contribution.invocations.length === 8)
+  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 8 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
   check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))
 }
 
@@ -92,6 +92,11 @@ console.log('RouterService:')
     }],
     mutate: async () => undefined,
   })
+  root.provide('credentials', {
+    resolve: async (ref) => (ref === 'ROUTER_OAUTH_OAUTH_TOKEN' ? { value: 'tok' } : undefined),
+    set: async () => undefined,
+    unset: async () => undefined,
+  })
   root.provide('llm', {
     listModels: async (provider) => provider === 'openai' ? [{ id: 'gpt-4o', name: 'GPT-4o' }] : [],
     resolveModelInfo: async () => ({ inputModalities: ['text', 'image'] }),
@@ -110,7 +115,11 @@ console.log('RouterService:')
       vision: { name: '视觉', type: 'chat', enabled: true, description: '看图', capabilities: ['image'], provider: '', model: '', maxRounds: 1 },
       draw: { name: '画图', type: 'image', enabled: true, description: '画图', provider: 'openai', model: 'dall-e-3' },
       broken: { name: '坏', type: 'chat', enabled: true, provider: 'openai', model: '' },
+      vchat: { name: '视觉OAuth', type: 'chat', enabled: true, account: 'oauth' },
       off: { name: '关', type: 'chat', enabled: false },
+    },
+    oauthAccounts: {
+      oauth: { name: 'GPT', enabled: true, protocol: 'openai-completions', baseURL: 'https://api.openai.com/v1', tokenRef: 'ROUTER_OAUTH_OAUTH_TOKEN', tokenUrl: 'https://auth.example/token', clientId: 'cid', models: ['gpt-4o'] },
     },
   })})
 
@@ -136,8 +145,36 @@ console.log('RouterService:')
   check('unknown agent error', missing.error && String(missing.error).includes('nope'))
 
   const catalog = await service.catalog()
-  check('catalog lists enabled only', catalog.agents.length === 3 && catalog.agents.every((entry) => entry.id !== 'off'))
+  check('catalog lists enabled only', catalog.agents.length === 4 && catalog.agents.every((entry) => entry.id !== 'off'))
   check('catalog effective', catalog.agents.find((entry) => entry.id === 'vision').effectiveModel === 'deepseek-v4-pro')
+  check('catalog oauth accounts', catalog.oauthAccounts.length === 1 && catalog.oauthAccounts[0].id === 'oauth' && catalog.oauthAccounts[0].models.length === 1)
+  check('catalog oauth agent account', catalog.agents.find((entry) => entry.id === 'vchat').account === 'oauth')
+
+  // OAuth 账号解析与直连调用
+  const vchat = await service.resolveAgent('vchat')
+  check('oauth resolve', vchat.mode === 'oauth' && vchat.accountId === 'oauth' && vchat.model === 'gpt-4o' && vchat.provider === 'oauth:oauth')
+  const badAccount = await service.resolveAgent('vision')
+  check('route resolve unaffected', badAccount.mode === 'route')
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith('/chat/completions')) {
+      const body = JSON.parse(options.body)
+      return { ok: true, json: async () => ({ choices: [{ message: { content: `echo:${body.messages[1].content}` } }], usage: { prompt_tokens: 5, completion_tokens: 2 } }) }
+    }
+    if (String(url).includes('auth.example/token')) return { ok: true, json: async () => ({ access_token: 't2', expires_in: 3600 }) }
+    if (String(url).endsWith('/models')) return { ok: true, json: async () => ({ data: [{ id: 'm1' }, { id: 'm2' }] }) }
+    return { ok: false, status: 404, text: async () => 'not found' }
+  }
+  try {
+    const oauthResult = await service.run({ agentId: 'vchat', task: '你好', images: [] })
+    check('oauth run direct call', oauthResult.kind === 'chat' && oauthResult.text === 'echo:你好' && oauthResult.usage.inputTokens === 5 && oauthResult.usage.outputTokens === 2)
+    const exchange = await service.oauthTokenExchange({ accountId: 'oauth', code: 'c1', codeVerifier: 'v1', redirectUri: 'http://localhost/' })
+    check('oauth token exchange', exchange.ok === true && exchange.expiresIn === 3600 && exchange.message.includes('成功'))
+    const discovered = await service.oauthDiscover({ accountId: 'oauth' })
+    check('oauth discover', discovered.ok === true && discovered.models.length === 2 && discovered.models[0] === 'm1')
+  } finally {
+    globalThis.fetch = realFetch
+  }
 
   const text = service.promptText()
   check('promptText lists agents', text.includes('vision') && text.includes('draw') && text.includes('route_agent') && !text.includes('off'))
@@ -209,7 +246,7 @@ console.log('apply wiring:')
     const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
     await app
     check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
-    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 6 && registeredContribution.package === 'dsh-router')
+    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 8 && registeredContribution.package === 'dsh-router')
     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
     await app.dispose()
   }
@@ -217,3 +254,5 @@ console.log('apply wiring:')
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : `\n${failures} FAILURES`)
 process.exit(failures === 0 ? 0 : 1)
+
+
