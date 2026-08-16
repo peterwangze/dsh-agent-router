@@ -219,6 +219,7 @@ console.log('RouterService:')
       coderbusy: { name: 'CLI忙碌', type: 'cli', enabled: true, command: process.execPath, args: CLI_SLEEP_ARGS(1000), maxConcurrent: 1 },
       codertimeout: { name: 'CLI超时', type: 'cli', enabled: true, command: process.execPath, args: CLI_SLEEP_ARGS(5000), timeoutMs: 200 },
       coderacct: { name: 'CLI账号', type: 'cli', enabled: true, account: 'oauth', command: process.execPath, args: CLI_ECHO_ARGS },
+      codersbx: { name: 'CLI沙箱', type: 'cli', enabled: true, command: process.execPath, args: `${CLI_ECHO_ARGS} -- --sandbox workspace-write` },
       coderout: { name: 'CLI未登录', type: 'cli', enabled: true, command: process.execPath, statusArgs: `-e "process.exit(1)"`, loginArgs: `-e "process.exit(0)"` },
       coderref: { name: 'CLI引用', type: 'cli', enabled: true, cliAgent: 'codexentry' },
       coderbadref: { name: 'CLI坏引用', type: 'cli', enabled: true, cliAgent: 'nope' },
@@ -261,7 +262,7 @@ console.log('RouterService:')
   check('unknown agent error', missing.error && String(missing.error).includes('nope'))
 
   const catalog = await service.catalog()
-  check('catalog lists enabled only', catalog.agents.length === 16 && catalog.agents.every((entry) => entry.id !== 'off'))
+  check('catalog lists enabled only', catalog.agents.length === 17 && catalog.agents.every((entry) => entry.id !== 'off'))
   check('catalog effective', catalog.agents.find((entry) => entry.id === 'vision').effectiveModel === 'deepseek-v4-pro')
   check('catalog cli type kept', catalog.agents.find((entry) => entry.id === 'coder').type === 'cli')
   check('catalog cli no main-model leak', catalog.agents.find((entry) => entry.id === 'coder').effectiveModel === '' && catalog.agents.find((entry) => entry.id === 'coder').effectiveProvider === 'cli:coder' && catalog.agents.find((entry) => entry.id === 'coder').source === 'agent')
@@ -466,6 +467,10 @@ console.log('RouterService:')
     try {
       const cliRun = await service.run({ agentId: 'coder', task: 'cli测试', images: [], exec: { agent: fakeParentCli } })
       check('cli run spawns headless process', cliRun.kind === 'cli' && cliRun.text.includes('cli测试') && cliRun.text.includes('工作目录：') && cliRun.text.includes('重试纪律') && cliRun.text.includes('生成或处理图片') && cliRun.text.includes('[角色设定]') && cliRun.text.includes('你是一个测试助手'))
+      // 未启用 CLI 沙箱（本伪 CLI 无 --sandbox 参数）时注入自觉收敛文案，而非错误的「受沙箱限制」。
+      check('cli run unsandboxed wording', cliRun.text.includes('未启用 CLI 沙箱') && !cliRun.text.includes('受沙箱限制'))
+      const cliSbxRun = await service.run({ agentId: 'codersbx', task: '沙箱文案', images: [], exec: { agent: fakeParentCli } })
+      check('cli run sandboxed wording', cliSbxRun.kind === 'cli' && cliSbxRun.text.includes('受沙箱限制') && !cliSbxRun.text.includes('未启用 CLI 沙箱'))
       const cliFilesRun = await service.run({ agentId: 'coder', task: '处理文件', images: [], files: ['notes.txt'], exec: { agent: fakeParentCli } })
       check('cli files paths injected', cliFilesRun.kind === 'cli' && cliFilesRun.text.includes('待处理文件') && cliFilesRun.text.includes('D:/work/example/notes.txt'))
       // 经 cliAgent 引用子代理条目执行：使用条目 command/args，而非 agent 内嵌字段。
@@ -527,6 +532,28 @@ console.log('RouterService:')
   let cliSpecMissing = false
   try { service.resolveCliSpec({ command: '', args: '' }) } catch (error) { cliSpecMissing = String(error.message).includes('command 字段') }
   check('cli spec missing command rejected', cliSpecMissing)
+  // codex 沙箱按平台自适应：Windows 用 danger-full-access（OS 沙箱无法启动
+  // WindowsApps 的 shell），其余平台保留 workspace-write 最小权限。
+  const cliSpecWin = service.resolveCliSpec({ command: 'codex', args: '' }, 'win32')
+  const cliSpecPosix = service.resolveCliSpec({ command: 'codex', args: '' }, 'linux')
+  check('cli spec platform sandbox default', cliSpecWin.sandbox === 'danger-full-access' && !cliSpecWin.args.includes('workspace-write') && cliSpecPosix.sandbox === 'workspace-write' && !cliSpecPosix.args.includes('danger-full-access') && cliSpecWin.args.includes('--skip-git-repo-check'))
+  // 旧版 UI 模板与文档预设把沙箱参数写死进保存值：一字不差时按未设置迁移。
+  const cliSpecLegacyPicker = service.resolveCliSpec({ command: 'codex', args: 'exec --json --sandbox workspace-write' }, 'win32')
+  const cliSpecLegacyPreset = service.resolveCliSpec({ command: 'codex', args: 'exec --json --sandbox workspace-write --skip-git-repo-check' }, 'linux')
+  check('cli spec legacy codex template migrated', cliSpecLegacyPicker.sandbox === 'danger-full-access' && cliSpecLegacyPreset.sandbox === 'workspace-write')
+  // 用户显式指定沙箱：原样保留，不自动改写。
+  const cliSpecExplicit = service.resolveCliSpec({ command: 'codex', args: 'exec --json --sandbox read-only' }, 'win32')
+  check('cli spec explicit sandbox kept', cliSpecExplicit.sandbox === 'read-only')
+  // 用户自定义 args 未指定 --sandbox：按平台补齐可用默认（自定义模型参数等形态）。
+  const cliSpecFillWin = service.resolveCliSpec({ command: 'codex', args: 'exec --json -m gpt-5-codex' }, 'win32')
+  const cliSpecFillPosix = service.resolveCliSpec({ command: 'codex', args: 'exec --json -m gpt-5-codex' }, 'linux')
+  check('cli spec sandbox auto-filled per platform', cliSpecFillWin.sandbox === 'danger-full-access' && cliSpecFillPosix.sandbox === 'workspace-write' && cliSpecFillWin.args.includes('-m') && cliSpecFillPosix.args.includes('-m'))
+  // 完整旁路开关已覆盖权限：不再追加 --sandbox。
+  const cliSpecBypass = service.resolveCliSpec({ command: 'codex', args: 'exec --json --dangerously-bypass-approvals-and-sandbox' }, 'win32')
+  check('cli spec bypass flag skips auto-fill', cliSpecBypass.sandbox === '' && !cliSpecBypass.args.includes('--sandbox'))
+  // 非 codex CLI 不受沙箱补齐影响。
+  const cliSpecClaude = service.resolveCliSpec({ command: 'claude', args: '' }, 'win32')
+  check('cli spec non-codex unaffected', !cliSpecClaude.args.includes('--sandbox') && cliSpecClaude.sandbox === '')
   const cmdInv = service.resolveCliInvocation('codex.cmd', ['-p', 'a b'])
   check('cli invocation cmd shim', cmdInv.executable.toLowerCase().includes('cmd.exe') && cmdInv.argv.length === 4 && cmdInv.argv[3].includes('"-p"') && cmdInv.argv[3].includes('"a b"'))
   const wrappedCmd = wrapCmdLine(cmdInv.argv)

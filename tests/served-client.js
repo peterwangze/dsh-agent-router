@@ -449,7 +449,7 @@ window.__ModuleLoader__.load({
       fieldApiKeyEnv: '凭据引用（image / speech 类型，空 = OPENAI_API_KEY）',
       fieldTools: '工具白名单（agent 类型，逗号分隔；空 = 全部工具但禁用 route_agent）',
       fieldCommand: 'CLI 命令（如 codex / claude / gemini，或任意可执行路径）',
-      fieldCliArgs: 'CLI 参数（空格分隔，可带引号；空 = 该 CLI 的安全默认参数）',
+      fieldCliArgs: 'CLI 参数（空格分隔，可带引号；空 = 该 CLI 的安全默认参数；codex 未显式指定 --sandbox 时按平台自动补齐）',
       fieldCliTimeout: '执行超时（分钟，0 = 默认 15 分钟）',
       fieldCliConcurrent: '并发上限（同 agent，1-4）',
       cliSystemHint: 'cli 类型的 system prompt 会以「角色设定」段落注入任务头部（各 CLI 的原生 system prompt 参数形态不一，统一用注入方式生效）。',
@@ -700,7 +700,7 @@ window.__ModuleLoader__.load({
       fieldApiKeyEnv: 'Credential ref (image / speech types; empty = OPENAI_API_KEY)',
       fieldTools: 'Tool allow-list (agent type, comma separated; empty = all tools except route_agent)',
       fieldCommand: 'CLI command (e.g. codex / claude / gemini, or any executable path)',
-      fieldCliArgs: 'CLI args (space separated, quotes allowed; empty = safe defaults for this CLI)',
+      fieldCliArgs: 'CLI args (space separated, quotes allowed; empty = safe defaults for this CLI; codex auto-fills --sandbox per platform when unspecified)',
       fieldCliTimeout: 'Timeout (minutes; 0 = default 15 minutes)',
       fieldCliConcurrent: 'Concurrency cap (same agent, 1-4)',
       cliSystemHint: 'For cli type, the system prompt is injected into the task as a "role" section (CLI-specific system-prompt flags vary, so injection keeps it uniform).',
@@ -807,10 +807,13 @@ window.__ModuleLoader__.load({
 
     /** cli 执行方式的可选子代理工具（codex/claude/gemini + 自定义）。
      *  账号区的「子代理」快速添加使用：选中即预填条目名称/命令/参数
-     *  （登录/状态/模型命令走运行时预设，可在条目高级设置覆盖）。 */
+     *  （登录/状态/模型命令走运行时预设，可在条目高级设置覆盖）。
+     *  codex 的 args 留空 = 运行时按平台自适应补齐沙箱参数（Windows 用
+     *  danger-full-access——其 OS 沙箱无法启动 WindowsApps 的 shell；
+     *  其余平台 workspace-write），不要再预填旧版固定模板。 */
     const CLI_PICKER = [
       { id: '', key: 'cliCustomAdd' },
-      { id: 'codex', key: 'cliPickerCodex', fill: { name: 'Codex 子代理', command: 'codex', args: 'exec --json --sandbox workspace-write' } },
+      { id: 'codex', key: 'cliPickerCodex', fill: { name: 'Codex 子代理', command: 'codex', args: '' } },
       { id: 'claude', key: 'cliPickerClaude', fill: { name: 'Claude 子代理', command: 'claude', args: '-p --output-format json --permission-mode bypassPermissions' } },
       { id: 'gemini', key: 'cliPickerGemini', fill: { name: 'Gemini 子代理', command: 'gemini', args: '-p --output-format json --yolo' } },
     ]
@@ -2642,7 +2645,7 @@ window.__ModuleLoader__.load({
               el('input', { className: 'dshrouter-input', value: draft.command ?? '', placeholder: 'codex', onChange: (event) => onField('command', event.target.value) })),
             el('div', { className: 'dshrouter-field', style: { flex: '0 0 260px' } },
               el('span', { className: 'dshrouter-field-label' }, t('fieldCliArgs')),
-              el('input', { className: 'dshrouter-input', value: draft.args ?? '', placeholder: 'exec --json --sandbox workspace-write', onChange: (event) => onField('args', event.target.value) }))),
+              el('input', { className: 'dshrouter-input', value: draft.args ?? '', placeholder: 'exec --json（留空 = 平台自适应默认）', onChange: (event) => onField('args', event.target.value) }))),
           el('div', { className: 'dshrouter-row', style: { alignItems: 'flex-end' } },
             el('div', { className: 'dshrouter-field', style: { flex: '0 0 180px' } },
               el('span', { className: 'dshrouter-field-label' }, t('fieldCliTimeout')),
