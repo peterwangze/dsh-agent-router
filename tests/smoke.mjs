@@ -2,7 +2,8 @@
 import { Context } from '@deepseek-ai/cordis'
 import { routerSchema, wireCodecs } from '../lib/schemas.js'
 import { createHostContribution, ROUTER_REMOTE } from '../lib/rpc.js'
-import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope } from '../lib/service.js'
+import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine } from '../lib/service.js'
+import { runClientRender } from './client-render.mjs'
 import { BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -66,6 +67,7 @@ console.log('schemas:')
   check('default agents = {}', a.agents && Object.keys(a.agents).length === 0)
   const b = routerSchema({ agents: { vision: { name: 'V' } } })
   check('dict entry resolves defaults', b.agents.vision.type === 'chat' && b.agents.vision.enabled === true && b.agents.vision.maxRounds === 1 && b.agents.vision.imageSize === '1024x1024')
+  check('cli fields resolve defaults', b.agents.vision.command === '' && b.agents.vision.args === '' && b.agents.vision.timeoutMs === 0 && b.agents.vision.maxConcurrent === 1)
   check('name kept', b.agents.vision.name === 'V')
 }
 
@@ -86,9 +88,13 @@ console.log('rpc contribution:')
 {
   const contribution = createHostContribution()
   check('face host', contribution.face === 'host')
-  check('9 invocations', contribution.invocations.length === 9)
-  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 9 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
+  check('12 invocations', contribution.invocations.length === 12)
+  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 12 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
   check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))
+  const cliStatusCodec = wireCodecs.cliStatusResult.parse({ ok: true, message: '已登录', loggedIn: true })
+  check('cliStatusResult parses', cliStatusCodec.ok === true && cliStatusCodec.loggedIn === true)
+  const cliModelsCodec = wireCodecs.cliModelsResult.parse({ ok: true, message: 'm', models: ['a'] })
+  check('cliModelsResult parses', cliModelsCodec.models.length === 1)
 }
 
 // 4. llm 词法 import
@@ -192,6 +198,11 @@ console.log('RouterService:')
       return new Uint8Array([0xff, 0xfe, 0x00])
     },
   })
+  // cli 类型测试用的伪 CLI 参数（node -e：读 stdin 回显任务 / 直接失败 / 睡眠）。
+  const CLI_ECHO_ARGS = `-e "process.stdin.setEncoding('utf8');let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log('TASK:'+s.trim()))"`
+  const CLI_BAD_ARGS = `-e "console.error('boom');process.exit(3)"`
+  const CLI_SLEEP_ARGS = (ms) => `-e "setTimeout(()=>console.log('SLEPT'),${ms})"`
+
   const service = new RouterService(root)
   service.attach({ get: () => ({
     enabled: true,
@@ -203,6 +214,15 @@ console.log('RouterService:')
       pchat: { name: '池chat', type: 'chat', enabled: true, account: 'pool:gpool' },
       helper: { name: '子代理', type: 'agent', enabled: true, description: '委派子代理', provider: 'openai', model: 'gpt-4o' },
       relay: { name: '中转', type: 'chat', enabled: true, description: 'declared 中转', provider: 'relay', model: 'gpt-5.6-luna', maxRounds: 1 },
+      coder: { name: 'CLI子代理', type: 'cli', enabled: true, description: '无头 CLI', capabilities: ['image'], command: process.execPath, args: CLI_ECHO_ARGS, systemPrompt: '你是一个测试助手', statusArgs: `-e "process.exit(0)"`, modelsArgs: `-e "console.log('m1\\nm2')"` },
+      coderbad: { name: 'CLI失败', type: 'cli', enabled: true, command: process.execPath, args: CLI_BAD_ARGS },
+      coderbusy: { name: 'CLI忙碌', type: 'cli', enabled: true, command: process.execPath, args: CLI_SLEEP_ARGS(1000), maxConcurrent: 1 },
+      codertimeout: { name: 'CLI超时', type: 'cli', enabled: true, command: process.execPath, args: CLI_SLEEP_ARGS(5000), timeoutMs: 200 },
+      coderacct: { name: 'CLI账号', type: 'cli', enabled: true, account: 'oauth', command: process.execPath, args: CLI_ECHO_ARGS },
+      coderout: { name: 'CLI未登录', type: 'cli', enabled: true, command: process.execPath, statusArgs: `-e "process.exit(1)"`, loginArgs: `-e "process.exit(0)"` },
+      coderref: { name: 'CLI引用', type: 'cli', enabled: true, cliAgent: 'codexentry' },
+      coderbadref: { name: 'CLI坏引用', type: 'cli', enabled: true, cliAgent: 'nope' },
+      codexpreset: { name: 'Codex预设', type: 'cli', enabled: true, command: 'codex' },
       off: { name: '关', type: 'chat', enabled: false },
     },
     oauthAccounts: {
@@ -213,10 +233,14 @@ console.log('RouterService:')
     pools: {
       gpool: { name: 'G池', enabled: true, strategy: 'healthy', accounts: ['oauth2', 'oauth'] },
     },
+    cliAgents: {
+      codexentry: { name: 'Codex 子代理', enabled: true, command: process.execPath, args: CLI_ECHO_ARGS, statusArgs: `-e "process.exit(0)"`, modelsArgs: `-e "console.log('m1\\nm2')"` },
+    },
   })})
 
   check('isEnabled', service.isEnabled())
-  check('normalizeType', service.normalizeType('image') === 'image' && service.normalizeType('speech') === 'speech' && service.normalizeType('bogus') === 'chat')
+  check('normalizeType', service.normalizeType('image') === 'image' && service.normalizeType('speech') === 'speech' && service.normalizeType('cli') === 'cli' && service.normalizeType('bogus') === 'chat')
+  check('AGENT_TYPES includes cli', AGENT_TYPES.includes('cli'))
   check('typertRemote binding', service.typertRemote && service.typertRemote.namespace === 'router' && service.typertRemote.serviceKey === 'router' && service.typertRemote.service === service)
 
   const config = await service.config()
@@ -237,8 +261,12 @@ console.log('RouterService:')
   check('unknown agent error', missing.error && String(missing.error).includes('nope'))
 
   const catalog = await service.catalog()
-  check('catalog lists enabled only', catalog.agents.length === 7 && catalog.agents.every((entry) => entry.id !== 'off'))
+  check('catalog lists enabled only', catalog.agents.length === 16 && catalog.agents.every((entry) => entry.id !== 'off'))
   check('catalog effective', catalog.agents.find((entry) => entry.id === 'vision').effectiveModel === 'deepseek-v4-pro')
+  check('catalog cli type kept', catalog.agents.find((entry) => entry.id === 'coder').type === 'cli')
+  check('catalog cli no main-model leak', catalog.agents.find((entry) => entry.id === 'coder').effectiveModel === '' && catalog.agents.find((entry) => entry.id === 'coder').effectiveProvider === 'cli:coder' && catalog.agents.find((entry) => entry.id === 'coder').source === 'agent')
+  check('catalog cli agent reference kept', catalog.agents.find((entry) => entry.id === 'coderref').cliAgent === 'codexentry' && catalog.agents.find((entry) => entry.id === 'coderref').effectiveProvider === 'cli:codexentry')
+  check('catalog cli entries', (catalog.cliAgents ?? []).length === 1 && catalog.cliAgents[0].id === 'codexentry' && catalog.cliAgents[0].command === process.execPath)
   check('catalog oauth accounts', catalog.oauthAccounts.length === 3 && catalog.oauthAccounts[0].id === 'oauth' && catalog.oauthAccounts[0].models.length === 1 && catalog.oauthAccounts.find((entry) => entry.id === 'puboauth').publicClient === true)
   check('catalog oauth agent account', catalog.agents.find((entry) => entry.id === 'vchat').account === 'oauth')
   check('catalog pools', catalog.pools.length === 1 && catalog.pools[0].id === 'gpool' && catalog.pools[0].strategy === 'healthy' && catalog.pools[0].accounts.length === 2 && catalog.pools[0].accountHealth.length === 2)
@@ -345,6 +373,7 @@ console.log('RouterService:')
   check('promptText lists agents', text.includes('vision') && text.includes('draw') && text.includes('route_agent') && !text.includes('off'))
   check('promptText pool meta', text.includes('OAuth 账号池:G池') && text.includes('2 个账号'))
   check('promptText delegation note', text.includes('可读写工作区任意文件') && text.includes('附件按需显式派发'))
+  check('promptText cli meta', text.includes('子代理:'))
 
   // agent 类型委派：prompt 必须携带工作目录注入与图片附件块，子代理收到
   // 附件直接查看而非按路径读文件。
@@ -425,6 +454,129 @@ console.log('RouterService:')
     }
   }
 
+  // cli 类型：无头 CLI 子代理——宿主经系统 shell + 文件重定向执行（node -e
+  // 作为被测 CLI），任务经 stdin 文件注入，stdout/stderr 重定向到文件。
+  {
+    const pathModule = await import('node:path')
+    const fsModule = await import('node:fs')
+    // 用工作区内的临时目录（受限环境下 os.tmpdir 递归删除会被沙箱拒绝）。
+    const tmpDir = pathModule.join(ROOT_DIR, `.tmp-cli-smoke-${Date.now()}`)
+    fsModule.mkdirSync(tmpDir, { recursive: true })
+    const fakeParentCli = { session: { header: { cwd: tmpDir, delegationDepth: 0 } } }
+    try {
+      const cliRun = await service.run({ agentId: 'coder', task: 'cli测试', images: [], exec: { agent: fakeParentCli } })
+      check('cli run spawns headless process', cliRun.kind === 'cli' && cliRun.text.includes('cli测试') && cliRun.text.includes('工作目录：') && cliRun.text.includes('重试纪律') && cliRun.text.includes('生成或处理图片') && cliRun.text.includes('[角色设定]') && cliRun.text.includes('你是一个测试助手'))
+      const cliFilesRun = await service.run({ agentId: 'coder', task: '处理文件', images: [], files: ['notes.txt'], exec: { agent: fakeParentCli } })
+      check('cli files paths injected', cliFilesRun.kind === 'cli' && cliFilesRun.text.includes('待处理文件') && cliFilesRun.text.includes('D:/work/example/notes.txt'))
+      // 经 cliAgent 引用子代理条目执行：使用条目 command/args，而非 agent 内嵌字段。
+      const cliRefRun = await service.run({ agentId: 'coderref', task: '引用运行', images: [], exec: { agent: fakeParentCli } })
+      check('cli run via entry reference', cliRefRun.kind === 'cli' && cliRefRun.text.includes('引用运行') && cliRefRun.text.includes('工作目录：'))
+      const cliImagesRun = await service.run({ agentId: 'coder', task: '看图', images: [{ id: 'att-1', kind: 'image' }], exec: { agent: fakeParentCli } })
+      check('cli images materialized as files', cliImagesRun.kind === 'cli' && cliImagesRun.text.includes('已附带 1 张图片') && fsModule.readdirSync(pathModule.join(tmpDir, '.router-files')).some((name) => name.includes('-img-')))
+      let cliBadRejected = false
+      try { await service.run({ agentId: 'coderbad', task: 'x', images: [], exec: { agent: fakeParentCli } }) } catch (error) { cliBadRejected = String(error.message).includes('exit 3') && String(error.message).includes('boom') }
+      check('cli nonzero exit reported', cliBadRejected)
+      const busyRun = service.run({ agentId: 'coderbusy', task: '忙', images: [], exec: { agent: fakeParentCli } })
+      let cliBusyRejected = false
+      try { await service.run({ agentId: 'coderbusy', task: '再忙', images: [], exec: { agent: fakeParentCli } }) } catch (error) { cliBusyRejected = String(error.message).includes('正忙') }
+      check('cli concurrency cap', cliBusyRejected)
+      const busyResult = await busyRun
+      check('cli busy run completes', busyResult.kind === 'cli' && busyResult.text.includes('SLEPT'))
+      let cliTimeoutRejected = false
+      const timeoutStarted = Date.now()
+      try { await service.run({ agentId: 'codertimeout', task: '超时', images: [], exec: { agent: fakeParentCli } }) } catch (error) { cliTimeoutRejected = String(error.message).includes('超时') }
+      check('cli timeout kills process', cliTimeoutRejected && Date.now() - timeoutStarted < 5000)
+      let cliNoCwdRejected = false
+      try { await service.run({ agentId: 'coder', task: 'x', images: [], exec: { agent: { session: { header: { delegationDepth: 0 } } } } }) } catch (error) { cliNoCwdRejected = String(error.message).includes('会话工作目录') }
+      check('cli without cwd rejected', cliNoCwdRejected)
+      let cliOauthRejected = false
+      try { await service.run({ agentId: 'coderacct', task: 'x', images: [], exec: { agent: fakeParentCli } }) } catch (error) { cliOauthRejected = String(error.message).includes('仅支持 chat') }
+      check('cli with oauth account rejected', cliOauthRejected)
+      service.killCliChildren()
+      check('cli children drained after kill', service.cliChildren.size === 0)
+    } finally {
+      // 逐个删除文件再删目录（受限环境对递归删除的放行不一致）。
+      try {
+        const routerFiles = pathModule.join(tmpDir, '.router-files')
+        if (fsModule.existsSync(routerFiles)) {
+          for (const name of fsModule.readdirSync(routerFiles)) {
+            try { fsModule.rmSync(pathModule.join(routerFiles, name), { force: true }) } catch { /* 继续清理其余文件 */ }
+          }
+          try { fsModule.rmdirSync(routerFiles) } catch { /* 目录可能已被删除 */ }
+        }
+        // Windows 上被杀进程可能短暂占用目录句柄：重试几次。
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            fsModule.rmdirSync(tmpDir)
+            break
+          } catch {
+            await new Promise((done) => setTimeout(done, 200))
+          }
+        }
+      } catch { /* 沙箱拒绝清理时留待手动删除 */ }
+    }
+  }
+
+  // resolveCliSpec 与 CLI 输出解析器
+  const cliSpec = service.resolveCliSpec({ command: 'codex', args: '', model: 'gpt-5' })
+  check('cli spec preset defaults', cliSpec.base === 'codex' && cliSpec.args.includes('--json') && cliSpec.args[cliSpec.args.length - 2] === '-m' && cliSpec.args[cliSpec.args.length - 1] === 'gpt-5')
+  const cliSpecOverride = service.resolveCliSpec({ command: 'claude.exe', args: '-p "a b"', model: '' })
+  check('cli spec user args override', cliSpecOverride.base === 'claude' && cliSpecOverride.args.length === 2 && cliSpecOverride.args[1] === 'a b')
+  const cliSpecJsPath = service.resolveCliSpec({ command: '/opt/tools/codex.js', args: '', model: '' })
+  check('cli spec preset from js path', cliSpecJsPath.base === 'codex' && cliSpecJsPath.args.includes('--json'))
+  let cliSpecMissing = false
+  try { service.resolveCliSpec({ command: '', args: '' }) } catch (error) { cliSpecMissing = String(error.message).includes('command 字段') }
+  check('cli spec missing command rejected', cliSpecMissing)
+  const cmdInv = service.resolveCliInvocation('codex.cmd', ['-p', 'a b'])
+  check('cli invocation cmd shim', cmdInv.executable.toLowerCase().includes('cmd.exe') && cmdInv.argv.length === 4 && cmdInv.argv[3].includes('"-p"') && cmdInv.argv[3].includes('"a b"'))
+  const wrappedCmd = wrapCmdLine(cmdInv.argv)
+  check('wrapCmdLine outer quotes', wrappedCmd[3] === `"${cmdInv.argv[3]}"` && wrappedCmd.slice(0, 3).join('|') === '/d|/s|/c')
+  check('wrapCmdLine passthrough', wrapCmdLine(['-p', 'x']).join('|') === '-p|x' && wrapCmdLine(['/d', '/s', '/c', 'plain'])[3] === 'plain')
+  const jsInv = service.resolveCliInvocation('./tool.mjs', ['x'])
+  check('cli invocation node script', jsInv.executable === process.execPath && jsInv.argv[0] === './tool.mjs')
+  const exeInv = service.resolveCliInvocation(process.execPath, [])
+  check('cli invocation direct exe', exeInv.executable === process.execPath && exeInv.argv.length === 0)
+  check('extractCodexJsonl item', extractCodexJsonl('{"type":"item","item":{"type":"message","role":"assistant","content":[{"type":"text","text":"hi"}]}}').text === 'hi')
+  check('extractCodexJsonl turn', extractCodexJsonl('noise\n{"type":"turn","turn":{"type":"message","status":"completed","content":[{"type":"text","text":"ok"}]}}').text === 'ok')
+  check('extractCodexJsonl fallback', extractCodexJsonl('not json').text === 'not json')
+  check('extractCliJsonObject result string', extractCliJsonObject('{"result":"done"}').text === 'done')
+  check('extractCliJsonObject response field', extractCliJsonObject('{"response":"gem"}').text === 'gem')
+  check('extractCliJsonObject nested result', extractCliJsonObject('{"result":{"result":"deep"}}').text === 'deep')
+  check('extractCliJsonObject fallback', extractCliJsonObject('plain').text === 'plain')
+
+  // cli 登录状态 / 登录 / 模型列表 RPC
+  const coderStatus = await service.cliStatus({ agentId: 'coder' })
+  check('cli status logged in', coderStatus.ok === true && coderStatus.loggedIn === true)
+  const coderOut = await service.cliStatus({ agentId: 'coderout' })
+  check('cli status logged out', coderOut.ok === true && coderOut.loggedIn === false)
+  const coderBadStatus = await service.cliStatus({ agentId: 'coderbad' })
+  check('cli status unknown command rejected', coderBadStatus.ok === false && coderBadStatus.message.includes('状态命令'))
+  const nonCliStatus = await service.cliStatus({ agentId: 'vision' })
+  check('cli status non-cli rejected', nonCliStatus.ok === false && nonCliStatus.message.includes('cli'))
+  const nonCliLogin = await service.cliLogin({ agentId: 'vision' })
+  check('cli login non-cli rejected', nonCliLogin.ok === false && nonCliLogin.message.includes('cli'))
+  if (globalThis.process?.platform !== 'win32') {
+    const loginOk = await service.cliLogin({ agentId: 'coderout' })
+    check('cli login starts process', loginOk.ok === true && loginOk.message.includes('终端窗口'))
+  }
+  const coderModels = await service.cliModels({ agentId: 'coder' })
+  check('cli models from command', coderModels.ok === true && coderModels.models.length === 2 && coderModels.models[0] === 'm1' && coderModels.source === 'cli')
+  // 子代理条目：按条目 id 直接探测；专业 agent 经 cliAgent 引用探测。
+  const entryStatus = await service.cliStatus({ agentId: 'codexentry' })
+  check('cli status by entry id', entryStatus.ok === true && entryStatus.loggedIn === true)
+  const refStatus = await service.cliStatus({ agentId: 'coderref' })
+  check('cli status via agent reference', refStatus.ok === true && refStatus.loggedIn === true)
+  const badRefStatus = await service.cliStatus({ agentId: 'coderbadref' })
+  check('cli status bad reference rejected', badRefStatus.ok === false && badRefStatus.message.includes('子代理 "nope" 不存在'))
+  const entryModels = await service.cliModels({ agentId: 'codexentry' })
+  check('cli models by entry id', entryModels.ok === true && entryModels.models.length === 2 && entryModels.models[0] === 'm1')
+  const presetModels = await service.cliModels({ agentId: 'codexpreset' })
+  check('cli models preset fallback', presetModels.ok === true && presetModels.source === 'preset' && presetModels.models.includes('gpt-5.4-codex'))
+  const nonCliModels = await service.cliModels({ agentId: 'vision' })
+  check('cli models non-cli rejected', nonCliModels.ok === false && nonCliModels.message.includes('cli'))
+  check('parseClaudeStatus loggedIn', parseClaudeStatus('{"loggedIn":false,"authMethod":"none","apiProvider":"firstParty"}').loggedIn === false)
+  check('parseClaudeStatus non-json', parseClaudeStatus('nope') === null)
+
   const result = await service.runChat(vision, { agentId: 'vision', task: '你好', images: [] })
   check('runChat streams', result.kind === 'chat' && result.text === '你好' && result.usage.inputTokens === 10 && result.usage.outputTokens === 2)
 
@@ -441,6 +593,8 @@ console.log('RouterService:')
   check('test ping', test.ok === true && test.message.includes('deepseek-official'))
   const testBad = await service.test({ agentId: 'nope' })
   check('test unknown agent', testBad.ok === false)
+  const testCli = await service.test({ agentId: 'coder' })
+  check('test cli reports login status', testCli.ok === true && testCli.message.includes('登录正常'))
 
   service.reset()
   check('reset clears', service.statsSnapshot().totals.length === 0)
@@ -502,7 +656,7 @@ console.log('apply wiring:')
     await app
     check('route_agent registered', registered && registered.name === 'route_agent')
     check('prompt section registered', sections.some((s) => s.name === 'router:agents' && s.order === 120 && s.text() === 'ROUTER-PROMPT'))
-    check('tool timeout 5min', registered.timeoutMs === 300000)
+    check('tool timeout 20min (covers cli 15min default)', registered.timeoutMs === 20 * 60 * 1000)
     check('tool parameters schema', registered.parameters && registered.parameters.properties && registered.parameters.properties.agent && registered.parameters.properties.task && registered.parameters.properties.attachments && registered.parameters.properties.attachments.type === 'array' && registered.parameters.properties.includeImages)
     check('tool output has render', typeof registered.output.render === 'function' && typeof registered.execute === 'function')
     await app.dispose()
@@ -530,11 +684,15 @@ console.log('apply wiring:')
     const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
     await app
     check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
-    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 9 && registeredContribution.package === 'dsh-agent-router')
+    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 12 && registeredContribution.package === 'dsh-agent-router')
     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
     check('oauth callback route registered', webRoute && webRoute.kind === 'exact' && webRoute.path === '/router-oauth/callback' && typeof webRoute.handler === 'function')
     await app.dispose()
   }
+
+  // 客户端 UI 真实渲染（迷你 React 驱动整页，结构断言见 client-render.mjs）。
+  console.log('client render:')
+  await runClientRender(check)
 }
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : `\n${failures} FAILURES`)

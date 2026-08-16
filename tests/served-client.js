@@ -80,7 +80,7 @@ window.__ModuleLoader__.load({
       agents: wv.array(wv.object({
         id: wv.string(), name: wv.string(), type: wv.string(), enabled: wv.boolean(),
         description: wv.string(), capabilities: wv.array(wv.string()),
-        provider: wv.string(), model: wv.string(), account: wv.string(),
+        provider: wv.string(), model: wv.string(), account: wv.string(), cliAgent: wv.string(true),
         effectiveProvider: wv.string(), effectiveModel: wv.string(), source: wv.string(),
         error: wv.string(true),
       })),
@@ -97,6 +97,11 @@ window.__ModuleLoader__.load({
         accountHealth: wv.array(wv.object({
           accountId: wv.string(), calls: wv.number(), errors: wv.number(), lastAt: wv.number(true),
         })),
+      }), true),
+      cliAgents: wv.array(wv.object({
+        id: wv.string(), name: wv.string(), enabled: wv.boolean(),
+        command: wv.string(), args: wv.string(),
+        timeoutMs: wv.number(), maxConcurrent: wv.number(),
       }), true),
     })
     const wBucket = wv.object({
@@ -160,6 +165,9 @@ window.__ModuleLoader__.load({
     const wOauthExchangeResult = wv.object({ ok: wv.boolean(), message: wv.string(), expiresIn: wv.number(true) })
     const wOauthDiscoverRequest = wv.object({ accountId: wv.string() })
     const wOauthDiscoverResult = wv.object({ ok: wv.boolean(), message: wv.string(), models: wv.array(wv.string()) })
+    const wCliStatusResult = wv.object({ ok: wv.boolean(), message: wv.string(), loggedIn: wv.boolean(true) })
+    const wCliLoginResult = wv.object({ ok: wv.boolean(), message: wv.string() })
+    const wCliModelsResult = wv.object({ ok: wv.boolean(), message: wv.string(), models: wv.array(wv.string()), source: wv.string(true) })
 
     // ── Remote 契约（与宿主 lib/rpc.js 一致）────────────────────────────────
     function parameter(name, schema) {
@@ -180,6 +188,9 @@ window.__ModuleLoader__.load({
         { id: 'dsh-agent-router#router/oauthTokenExchange', service: 'router', namespace: 'router', method: 'oauthTokenExchange', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthExchangeRequest)], result: resultOf('OauthTokenExchangeResult', wOauthExchangeResult) },
         { id: 'dsh-agent-router#router/oauthBegin', service: 'router', namespace: 'router', method: 'oauthBegin', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthBeginRequest)], result: resultOf('OauthBeginResult', wOauthBeginResult) },
         { id: 'dsh-agent-router#router/oauthDiscover', service: 'router', namespace: 'router', method: 'oauthDiscover', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthDiscoverRequest)], result: resultOf('OauthDiscoverResult', wOauthDiscoverResult) },
+        { id: 'dsh-agent-router#router/cliStatus', service: 'router', namespace: 'router', method: 'cliStatus', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('CliStatusResult', wCliStatusResult) },
+        { id: 'dsh-agent-router#router/cliLogin', service: 'router', namespace: 'router', method: 'cliLogin', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('CliLoginResult', wCliLoginResult) },
+        { id: 'dsh-agent-router#router/cliModels', service: 'router', namespace: 'router', method: 'cliModels', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('CliModelsResult', wCliModelsResult) },
       ],
     }
 
@@ -215,7 +226,7 @@ window.__ModuleLoader__.load({
 .dshrouter-chip{box-sizing:border-box;height:28px;font:inherit;font-size:12px;line-height:18px;cursor:pointer;border:1px solid var(--dsw-alias-border-l3);border-radius:14px;padding:0 12px;display:inline-flex;align-items:center;gap:4px;background:transparent;color:var(--dsw-alias-label-primary)}
 .dshrouter-chip:hover{border-color:var(--dsw-alias-button-primary-fill)}
 .dshrouter-chip.active{border-color:var(--dsw-alias-button-primary-fill);background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground)}
-.dshrouter-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.dshrouter-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none;background:#6f7280;vertical-align:middle}
 .dshrouter-dot.ok{background:var(--dsw-alias-state-success-primary)}
 .dshrouter-dot.bad{background:var(--dsw-alias-state-error-primary)}
 .dshrouter-meta{font-size:12px;color:var(--dsw-alias-label-tertiary);line-height:18px}
@@ -292,7 +303,7 @@ window.__ModuleLoader__.load({
       accountModels: '个模型',
       oauthTitle: 'OAuth 账号（官方登录，插件独立管理）',
       oauthSummary: (n) => `${n} 个 OAuth 账号`,
-      oauthIntro: 'OAuth 高级区（自建网关 / 账号池场景）。官方 API 现状：ChatGPT/Claude/Grok 官方 API 不提供 OAuth（仅支持粘贴 Web token 到自建兼容网关）；Gemini 支持 OAuth 但需自建 Google Cloud OAuth Client（内置公开 Client 的 token 被 Google 禁用于 API）。日常使用推荐上方 API Key 配置式添加。OAuth 账号只由本插件管理：不注册共享模型列表，调用经插件直连端点。',
+      oauthIntro: 'OAuth 高级区（自建网关 / 账号池场景）。官方 API 现状：ChatGPT/Claude/Grok 官方 API 不提供 OAuth（仅支持粘贴 Web token 到自建兼容网关）；Gemini 支持 OAuth 但需自建 Google Cloud OAuth Client（内置公开 Client 已被 Google 禁用：授权页直接报 invalid_request / invalid_scope）。日常使用推荐上方 API Key 配置式添加。OAuth 账号只由本插件管理：不注册共享模型列表，调用经插件直连端点。',
       oauthLoginMode: '登录方式',
       oauthModeCode: '官方授权码登录（OAuth2 + PKCE）',
       oauthModePaste: '粘贴 access token',
@@ -317,7 +328,7 @@ window.__ModuleLoader__.load({
       oauthDone: '授权成功，access token 已保存。',
       oauthAutoDiscovering: '授权成功：正在自动发现模型…',
       oauthAfterLoginHint: '下一步：点「发现模型」从端点拉取模型（或手工填写模型 id）；然后把「专业 Agent」里某 agent 的「OAuth 账号」指向本账号即可开始使用。',
-      oauthPublicClientLimit: '注意：内置公开 Client 的 token 受 Google 限制，无法调用 Gemini API（模型发现/调用会报 403 insufficient scopes）。实际使用二选一：① 高级设置中取消「内置公开 OAuth Client」，改用自建 Client（Google Cloud 控制台创建，回调填 http://127.0.0.1:3080/router-oauth/callback，scope 用 cloud-platform + generative-language.retriever）；② 在「添加账号」用 Gemini API Key 配置 provider=google。',
+      oauthPublicClientLimit: '注意：Google 已禁用内置公开 Client——授权页直接报 invalid_request / invalid_scope，此账号无法完成登录。实际使用二选一：① 取消勾选「内置公开 OAuth Client」，改用自建 Client（Google Cloud 控制台创建，回调填 http://127.0.0.1:3080/router-oauth/callback，scope 用 cloud-platform + generative-language.retriever）；② 在「添加账号」用 Gemini API Key 配置 provider=google。',
       oauthFillScopes: '填入 Gemini 推荐 scope',
       oauthNeedPasteHint: '如需粘贴 access token 或配置自建 OAuth Client，展开下方「账号与登录设置」。',
       advancedLogin: '账号与登录设置',
@@ -326,8 +337,8 @@ window.__ModuleLoader__.load({
       oauthAddOnly: '仅添加（稍后登录）',
       oauthNeedClientId: '需先填 Client ID',
       oauthClientIdHint: '官方授权码流需要你自有的 OAuth Client（在服务商控制台创建；回调地址登记下方所示地址，其余端点/Scope 已由预设填好）。',
-      oauthPublicClientLabel: '使用内置公开 OAuth Client（零配置，推荐）',
-      oauthPublicClientHint: '内置 Google Cloud SDK 公开 Client：无需创建任何 OAuth Client，直接弹出官方登录页完成授权。回调走 127.0.0.1:8085（若该端口被 gcloud CLI 等占用，会提示降级；可取消勾选改用自建 Client）。',
+      oauthPublicClientLabel: '使用内置公开 OAuth Client（已被 Google 禁用，不推荐）',
+      oauthPublicClientHint: '内置 Google Cloud SDK 公开 Client 已被 Google 拒绝（授权页报 invalid_request / invalid_scope），仅保留兼容。请取消勾选，改用自建 Client（回调 http://127.0.0.1:3080/router-oauth/callback），或直接使用 Gemini API Key。',
       poolTitle: '账号池',
       poolIntro: '把多个已授权账号组成池：调用时按策略自动选择账号（健康优先 / 用量最低 / 轮询），单个账号失败自动切换到下一个。agent 的「OAuth 账号」可指向池。',
       poolSummary: (n) => `${n} 个账号池`,
@@ -412,13 +423,17 @@ window.__ModuleLoader__.load({
       presetSpeech: '语音识别',
       presetVideo: '视频生成',
       presetGeneral: '通用子 Agent',
+      cliPickerCodex: 'Codex CLI（OpenAI）',
+      cliPickerClaude: 'Claude Code（Anthropic）',
+      cliPickerGemini: 'Gemini CLI（Google）',
       fieldName: '名称',
       fieldType: '类型',
-      fieldTypeHint: '类型只是执行方式（chat 调远端模型 / agent 委派 DSH 子代理 / image 文生图 / speech 语音转写），不限制能力；能力标签才是你自定义的调度依据，files 图片分发也按它判定。',
+      fieldTypeHint: '类型只是执行方式（chat 调远端模型 / agent 委派 DSH 子代理 / image 文生图 / speech 语音转写 / cli 无头 CLI 子代理），不限制能力；能力标签才是你自定义的调度依据，files 图片分发也按它判定。',
       typeChat: 'chat · 对话型专业调用',
       typeAgent: 'agent · 完整子 Agent 委派',
       typeImage: 'image · 图片生成',
       typeSpeech: 'speech · 语音识别（转写）',
+      typeCli: 'cli · 无头 CLI 子代理',
       fieldDescription: '能力说明（主模型据此判断何时调用）',
       fieldCapabilities: '能力标签（逗号分隔，如 image, audio）——自定义调度依据；files 传图片要求含 image',
       fieldProvider: '服务商（空 = 跟随主模型）',
@@ -433,6 +448,41 @@ window.__ModuleLoader__.load({
       fieldImageSize: '图片尺寸',
       fieldApiKeyEnv: '凭据引用（image / speech 类型，空 = OPENAI_API_KEY）',
       fieldTools: '工具白名单（agent 类型，逗号分隔；空 = 全部工具但禁用 route_agent）',
+      fieldCommand: 'CLI 命令（如 codex / claude / gemini，或任意可执行路径）',
+      fieldCliArgs: 'CLI 参数（空格分隔，可带引号；空 = 该 CLI 的安全默认参数）',
+      fieldCliTimeout: '执行超时（分钟，0 = 默认 15 分钟）',
+      fieldCliConcurrent: '并发上限（同 agent，1-4）',
+      cliSystemHint: 'cli 类型的 system prompt 会以「角色设定」段落注入任务头部（各 CLI 的原生 system prompt 参数形态不一，统一用注入方式生效）。',
+      cliLoginStatus: '登录状态',
+      cliStatusLoggedIn: '已登录',
+      cliStatusLoggedOut: '未登录',
+      cliStatusUnknown: '未检测',
+      cliStatusRefresh: '刷新状态',
+      cliLogin: '登录（打开终端窗口）',
+      cliLoginWaiting: '等待登录…',
+      cliRelogin: '重新登录',
+      cliRemoteMissing: '宿主未提供 cliStatus/cliLogin 接口（dsh-agent-router 宿主行可能是旧版本）：请完全退出并重启 DSH，然后强制刷新页面（Ctrl+F5）。',
+      cliRemoteFailed: 'CLI 接口调用失败',
+      cliFetchModels: '拉取模型',
+      cliFetchingModels: '拉取中…',
+      cliTitle: '子代理（无头 CLI）',
+      cliSummary: (n) => `${n} 个子代理`,
+      cliIntro: '无头 CLI 子代理（Codex / Claude Code / Gemini CLI 等）作为账号类条目统一管理：配置命令与参数、完成登录、拉取模型、查看用量统计；专业 Agent 把「执行方式」设为 cli 后，从下拉直接选择这里的条目作为执行路径。',
+      cliAdd: '添加子代理',
+      cliQuickAddHint: '点击即创建子代理条目：Codex / Claude / Gemini 已预填命令与参数（登录/状态/模型列表命令走各 CLI 预设，可在高级设置覆盖）。',
+      cliCustomAdd: '＋ 自定义',
+      cliCustomHint: '已创建空白子代理：请在卡片中填写 CLI 命令与参数后保存，再执行登录。',
+      cliConfirmDelete: '确认删除该子代理？（引用它的专业 agent 将无法调用）',
+      cliDelete: '删除子代理',
+      fieldCliAgent: '子代理（账号区维护的 CLI 条目）',
+      cliAgentNone: '— 未选择（使用本 agent 内嵌命令，建议迁移）—',
+      cliManageHint: '登录、拉取模型与命令参数在 多模态账号 → 子代理 中维护；此处模型字段为 -m / --model 覆盖参数（空 = CLI 默认模型）。',
+      cliRoutingHint: '能力标签才是调度依据：保留能力标签（如 image），主 agent 仍会按对应任务路由到此 agent，cli 只决定交给哪个子代理执行；生成图片等产物时让子代理把文件写入工作区并在结果中报告路径。宿主会向子代理注入重试纪律（同一失败最多重试 2 次即报告错误结束），避免任务长时间卡死；图片生成走子代理自身的上游服务（如 ChatGPT 图片接口）时，请保证本机网络可达（例如开启代理）。',
+      advancedSection: '高级扩展（OAuth 账号 / 账号池）',
+      cliLegacyHint: '旧配置：本 agent 直接内嵌命令（未引用子代理条目）。建议在 多模态账号 → 子代理 中创建条目并在此选择，便于统一登录、模型与统计。',
+      fieldCliLoginArgs: '登录命令参数（空 = 该 CLI 预设）',
+      fieldCliStatusArgs: '状态命令参数（空 = 该 CLI 预设）',
+      fieldCliModelsArgs: '模型列表命令参数（空 = 该 CLI 预设）',
       enable: '启用',
       save: '保存',
       saved: '已保存',
@@ -504,7 +554,7 @@ window.__ModuleLoader__.load({
       accountModels: 'models',
       oauthTitle: 'OAuth Accounts (official sign-in, plugin-managed)',
       oauthSummary: (n) => `${n} OAuth account(s)`,
-      oauthIntro: 'OAuth advanced area (self-hosted gateway / account pool scenarios). Official API reality: ChatGPT/Claude/Grok offer no OAuth on their official APIs (paste a web token into your own compatible gateway); Gemini supports OAuth but needs your own Google Cloud OAuth client (tokens from the built-in public client are barred from the API by Google). For everyday use prefer the API-key configuration above. OAuth accounts are plugin-managed: they never register in the shared model lists and calls go through the plugin directly.',
+      oauthIntro: 'OAuth advanced area (self-hosted gateway / account pool scenarios). Official API reality: ChatGPT/Claude/Grok offer no OAuth on their official APIs (paste a web token into your own compatible gateway); Gemini supports OAuth but needs your own Google Cloud OAuth client (the built-in public client has been disabled by Google: the authorization page now fails with invalid_request / invalid_scope). For everyday use prefer the API-key configuration above. OAuth accounts are plugin-managed: they never register in the shared model lists and calls go through the plugin directly.',
       oauthLoginMode: 'Sign-in method',
       oauthModeCode: 'Official authorization code (OAuth2 + PKCE)',
       oauthModePaste: 'Paste access token',
@@ -529,7 +579,7 @@ window.__ModuleLoader__.load({
       oauthDone: 'Signed in; access token saved.',
       oauthAutoDiscovering: 'Signed in: discovering models automatically…',
       oauthAfterLoginHint: 'Next step: click "Discover models" to fetch endpoint models (or type model ids by hand); then point an agent\'s "OAuth account" field at this account to start using it.',
-      oauthPublicClientLimit: 'Note: tokens from the built-in public client are restricted by Google and cannot call the Gemini API (model discovery / calls fail with 403 insufficient scopes). To actually use it: ① uncheck "built-in public OAuth client" in advanced settings and use your own client (create one in the Google Cloud console, callback http://127.0.0.1:3080/router-oauth/callback, scope cloud-platform + generative-language.retriever); or ② configure a Gemini API Key for provider=google under "Add account".',
+      oauthPublicClientLimit: 'Note: Google has disabled the built-in public client — the authorization page fails with invalid_request / invalid_scope and this account cannot sign in. To actually use it: ① uncheck "built-in public OAuth client" and use your own client (create one in the Google Cloud console, callback http://127.0.0.1:3080/router-oauth/callback, scope cloud-platform + generative-language.retriever); or ② configure a Gemini API Key for provider=google under "Add account".',
       oauthFillScopes: 'Fill recommended Gemini scopes',
       oauthNeedPasteHint: 'To paste an access token or configure your own OAuth client, expand "Account & sign-in settings" below.',
       advancedLogin: 'Account & sign-in settings',
@@ -538,8 +588,8 @@ window.__ModuleLoader__.load({
       oauthAddOnly: 'Add only (sign in later)',
       oauthNeedClientId: 'Client ID required',
       oauthClientIdHint: 'The authorization-code flow needs your own OAuth client (create it in the provider console; register the redirect URI shown below — endpoints and scope are pre-filled by the preset).',
-      oauthPublicClientLabel: 'Use built-in public OAuth client (zero-config, recommended)',
-      oauthPublicClientHint: 'Built-in Google Cloud SDK public client: no OAuth client to create — it opens the official sign-in page directly. Callback goes to 127.0.0.1:8085 (if that port is taken, e.g. by the gcloud CLI, you will see a fallback error; uncheck to use your own client instead).',
+      oauthPublicClientLabel: 'Use built-in public OAuth client (disabled by Google, not recommended)',
+      oauthPublicClientHint: 'The built-in Google Cloud SDK public client has been rejected by Google (the authorization page fails with invalid_request / invalid_scope); it is kept for compatibility only. Uncheck it and use your own client (callback http://127.0.0.1:3080/router-oauth/callback), or use a Gemini API key instead.',
       poolTitle: 'Account Pools',
       poolIntro: 'Group authorized accounts into a pool: calls pick an account by strategy (healthy first / lowest usage / round robin) and fail over to the next one automatically. An agent\'s "OAuth account" can point at a pool.',
       poolSummary: (n) => `${n} account pool(s)`,
@@ -624,13 +674,17 @@ window.__ModuleLoader__.load({
       presetSpeech: 'Speech Recognition',
       presetVideo: 'Video Generation',
       presetGeneral: 'General Subagent',
+      cliPickerCodex: 'Codex CLI (OpenAI)',
+      cliPickerClaude: 'Claude Code (Anthropic)',
+      cliPickerGemini: 'Gemini CLI (Google)',
       fieldName: 'Name',
       fieldType: 'Type',
-      fieldTypeHint: 'Type is only the execution path (chat calls a remote model / agent delegates a DSH subagent / image generates images / speech transcribes audio) — it does not limit capability. Capability tags are your custom routing contract, and files image dispatch follows them.',
+      fieldTypeHint: 'Type is only the execution path (chat calls a remote model / agent delegates a DSH subagent / image generates images / speech transcribes audio / cli runs a headless CLI subagent) — it does not limit capability. Capability tags are your custom routing contract, and files image dispatch follows them.',
       typeChat: 'chat · specialist call',
       typeAgent: 'agent · full subagent delegation',
       typeImage: 'image · image generation',
       typeSpeech: 'speech · audio transcription',
+      typeCli: 'cli · headless CLI subagent',
       fieldDescription: 'Capability description (guides the main model)',
       fieldCapabilities: 'Capability tags (comma separated, e.g. image, audio) — custom routing contract; files images require image',
       fieldProvider: 'Provider (empty = inherit main model)',
@@ -645,6 +699,41 @@ window.__ModuleLoader__.load({
       fieldImageSize: 'Image size',
       fieldApiKeyEnv: 'Credential ref (image / speech types; empty = OPENAI_API_KEY)',
       fieldTools: 'Tool allow-list (agent type, comma separated; empty = all tools except route_agent)',
+      fieldCommand: 'CLI command (e.g. codex / claude / gemini, or any executable path)',
+      fieldCliArgs: 'CLI args (space separated, quotes allowed; empty = safe defaults for this CLI)',
+      fieldCliTimeout: 'Timeout (minutes; 0 = default 15 minutes)',
+      fieldCliConcurrent: 'Concurrency cap (same agent, 1-4)',
+      cliSystemHint: 'For cli type, the system prompt is injected into the task as a "role" section (CLI-specific system-prompt flags vary, so injection keeps it uniform).',
+      cliLoginStatus: 'Sign-in status',
+      cliStatusLoggedIn: 'Signed in',
+      cliStatusLoggedOut: 'Not signed in',
+      cliStatusUnknown: 'Unknown',
+      cliStatusRefresh: 'Refresh status',
+      cliLogin: 'Sign in (opens terminal)',
+      cliLoginWaiting: 'Waiting for sign-in…',
+      cliRelogin: 'Sign in again',
+      cliRemoteMissing: 'The host does not provide the cliStatus/cliLogin interface (outdated dsh-agent-router host plugin): fully quit and restart DSH, then hard-refresh the page (Ctrl+F5).',
+      cliRemoteFailed: 'CLI interface call failed',
+      cliFetchModels: 'Fetch models',
+      cliFetchingModels: 'Fetching…',
+      cliTitle: 'Subagents (headless CLI)',
+      cliSummary: (n) => `${n} subagent(s)`,
+      cliIntro: 'Headless CLI subagents (Codex / Claude Code / Gemini CLI, …) are managed as account-like entries: configure command & args, sign in, fetch models, and review usage stats. Specialist agents pick one of these entries as their execution path when their type is set to cli.',
+      cliAdd: 'Add Subagent',
+      cliQuickAddHint: 'Click to create a subagent entry: Codex / Claude / Gemini come pre-filled (login/status/model-list commands use per-CLI presets, overridable in advanced settings).',
+      cliCustomAdd: '+ Custom',
+      cliCustomHint: 'Blank subagent created: fill in the CLI command and args, save, then sign in.',
+      cliConfirmDelete: 'Delete this subagent? (agents referencing it will fail to run)',
+      cliDelete: 'Delete subagent',
+      fieldCliAgent: 'Subagent (CLI entry maintained under accounts)',
+      cliAgentNone: '— None selected (uses this agent\'s embedded command; migrate recommended) —',
+      cliManageHint: 'Sign-in, model fetching and command args live under Accounts → Subagents; the model field here is the -m / --model override (empty = CLI default model).',
+      cliRoutingHint: 'Capability tags drive routing: keep tags like image and the main agent still routes matching tasks here — cli only picks which subagent executes them. For artifacts such as images, have the subagent write files into the workspace and report their paths in the result. The host injects a retry discipline (max 2 retries per failure, then report and exit) to prevent long hangs; when image generation goes through the subagent\'s own upstream (e.g. ChatGPT\'s image API), the machine must be able to reach it (e.g. with a proxy on).',
+      advancedSection: 'Advanced extensions (OAuth accounts / account pools)',
+      cliLegacyHint: 'Legacy config: this agent embeds its own command (no subagent reference). Create an entry under Accounts → Subagents and select it here for unified sign-in, models and stats.',
+      fieldCliLoginArgs: 'Login command args (empty = CLI preset)',
+      fieldCliStatusArgs: 'Status command args (empty = CLI preset)',
+      fieldCliModelsArgs: 'Model-list command args (empty = CLI preset)',
       enable: 'Enabled',
       save: 'Save',
       saved: 'Saved',
@@ -704,7 +793,9 @@ window.__ModuleLoader__.load({
       return namespaces.find((view) => view.ns === ns)
     }
 
-    /** 专业 agent 预设模板。 */
+    /** 专业 agent 预设模板：都是能力起点（chat/agent/image/speech 执行方式），
+     *  不是 agent 类别——codex/claude/gemini 等 CLI 工具不是预设，而是任意
+     *  专业 agent 在「执行方式 = cli」时可选的子代理路径（见 CLI_PICKER）。 */
     const AGENT_PRESETS = [
       { id: 'vision', key: 'presetVision', draft: { name: '视觉识别', type: 'chat', description: '识别与描述图片内容（OCR、界面截图、图表解读等；可接收 files 图片路径/URL 与对话图片附件）', capabilities: ['image'] } },
       { id: 'draw', key: 'presetImage', draft: { name: '图片生成', type: 'image', provider: 'openai', model: 'dall-e-3', description: '根据文字描述生成图片', capabilities: ['image'] } },
@@ -712,6 +803,16 @@ window.__ModuleLoader__.load({
       { id: 'voice', key: 'presetSpeech', draft: { name: '语音识别', type: 'speech', provider: 'openai', model: 'whisper-1', description: '把音频文件转写为文字（route_agent 经 filePath 指定工作区文件）', capabilities: ['audio'] } },
       { id: 'video', key: 'presetVideo', draft: { name: '视频生成', type: 'chat', description: '视频脚本、字幕与内容生成（无通用视频生成 API：请在高级设置中配置兼容网关与模型）', capabilities: ['video'] } },
       { id: 'assistant', key: 'presetGeneral', draft: { name: '通用子 Agent', type: 'agent', description: '把复杂子任务交给独立模型的完整 agent', capabilities: [] } },
+    ]
+
+    /** cli 执行方式的可选子代理工具（codex/claude/gemini + 自定义）。
+     *  账号区的「子代理」快速添加使用：选中即预填条目名称/命令/参数
+     *  （登录/状态/模型命令走运行时预设，可在条目高级设置覆盖）。 */
+    const CLI_PICKER = [
+      { id: '', key: 'cliCustomAdd' },
+      { id: 'codex', key: 'cliPickerCodex', fill: { name: 'Codex 子代理', command: 'codex', args: 'exec --json --sandbox workspace-write' } },
+      { id: 'claude', key: 'cliPickerClaude', fill: { name: 'Claude 子代理', command: 'claude', args: '-p --output-format json --permission-mode bypassPermissions' } },
+      { id: 'gemini', key: 'cliPickerGemini', fill: { name: 'Gemini 子代理', command: 'gemini', args: '-p --output-format json --yolo' } },
     ]
 
     /** OAuth 账号预设（官方登录）。authUrl/tokenUrl 为空的预设仅支持粘贴 token。
@@ -1093,7 +1194,7 @@ window.__ModuleLoader__.load({
                 el('button', { type: 'button', className: 'dshrouter-button', disabled: busy || !writable, onClick: onOneClick }, busy ? t('oauthWaiting') : t('oauthOneClick')),
                 el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: busy || !writable, onClick: onAuthorize }, t('oauthOpenUrl'))),
               loginMode === 'code' ? el('p', { className: 'dshrouter-hint' }, t('oauthOneClickHint')) : null,
-              loginMode === 'code' && draft.publicClient === true ? el('p', { className: 'dshrouter-hint' }, t('oauthPublicClientHint')) : null,
+              loginMode === 'code' && draft.publicClient === true ? el('p', { className: 'dshrouter-error' }, t('oauthPublicClientHint')) : null,
               loginMode === 'code' ? el('p', { className: 'dshrouter-meta' }, `${t('oauthRedirectUriLabel')}: ${draft.publicClient === true ? 'http://localhost:8085/' : `${window.location.origin}/router-oauth/callback`}`) : null,
               loginMode === 'code' ? el('div', { className: 'dshrouter-row', style: { alignItems: 'flex-end' } },
                 el('input', {
@@ -1263,6 +1364,13 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState({})
       const [notice, setNotice] = useState({})
       const [testResults, setTestResults] = useState({})
+      const [cliStates, setCliStates] = useState({})
+      const [cliDrafts, setCliDrafts] = useState({})
+      const [cliBusy, setCliBusy] = useState({})
+      const [cliNotice, setCliNotice] = useState({})
+      const [addingCli, setAddingCli] = useState(false)
+      const [expandedCli, setExpandedCli] = useState({})
+      const [expandedAdvanced, setExpandedAdvanced] = useState(false)
       const [discover, setDiscover] = useState(null)
       const [account, setAccount] = useState({ provider: '', baseUrl: '', key: '', custom: false, api: 'openai-completions', models: '', busy: false, failure: null, state: null })
       const [stats, setStats] = useState(null)
@@ -1401,6 +1509,102 @@ window.__ModuleLoader__.load({
         if (response.ok) setStats(response.value)
       }
 
+      // ── cli 子代理：登录状态 / 交互式登录 / 模型列表 ──────────────────
+      // 接口探测：宿主行旧版本（未重启）时 remote 缺少 cliStatus/cliLogin/
+      // cliModels——一律显式报错，绝不静默失败（按钮"无效"的第一大原因）。
+      const cliRemote = () => {
+        const routerRemote = remote()
+        if (!routerRemote) return null
+        return typeof routerRemote.cliStatus === 'function' && typeof routerRemote.cliLogin === 'function' && typeof routerRemote.cliModels === 'function'
+          ? routerRemote
+          : null
+      }
+
+      const runCliStatus = async (id, stateKey = id) => {
+        const routerRemote = cliRemote()
+        if (!routerRemote) {
+          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), statusBusy: false, statusMessage: t('cliRemoteMissing') } }))
+          return
+        }
+        setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), statusBusy: true } }))
+        try {
+          const response = await routerRemote.cliStatus({ agentId: id })
+          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), statusBusy: false, loggedIn: response.ok ? response.value.loggedIn : undefined, statusMessage: response.ok ? response.value.message : response.error.message } }))
+        } catch (error) {
+          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), statusBusy: false, statusMessage: `${t('cliRemoteFailed')}：${messageOf(error)}` } }))
+        }
+      }
+
+      const runCliLogin = async (id, stateKey = id) => {
+        const routerRemote = cliRemote()
+        if (!routerRemote) {
+          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginNotice: t('cliRemoteMissing') } }))
+          return
+        }
+        setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: true, loginNotice: '' } }))
+        try {
+          const response = await routerRemote.cliLogin({ agentId: id })
+          if (!response.ok) {
+            setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: false, loginNotice: response.error.message } }))
+            return
+          }
+          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: false, loginNotice: response.value.message } }))
+          // 轮询登录状态：最多 20 次 × 3 秒，登录成功即停；轮询失败给出提示并停止。
+          for (let attempt = 0; attempt < 20; attempt++) {
+            await new Promise((done) => window.setTimeout(done, 3000))
+            try {
+              const poll = await routerRemote.cliStatus({ agentId: id })
+              const loggedIn = poll.ok && poll.value.loggedIn === true
+              setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), ...(loggedIn ? { loggedIn: true } : {}), statusMessage: poll.ok ? poll.value.message : (current[stateKey]?.statusMessage ?? '') } }))
+              if (loggedIn) {
+                setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginNotice: t('cliStatusLoggedIn') + `：${poll.value.message}` } }))
+                return
+              }
+            } catch (pollError) {
+              setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginNotice: `${t('cliRemoteFailed')}：${messageOf(pollError)}` } }))
+              return
+            }
+          }
+        } catch (error) {
+          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: false, loginNotice: `${t('cliRemoteFailed')}：${messageOf(error)}` } }))
+        }
+      }
+
+      const runCliModels = async (id, stateKey = id) => {
+        const routerRemote = cliRemote()
+        if (!routerRemote) {
+          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), modelsMessage: t('cliRemoteMissing') } }))
+          return
+        }
+        setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), modelsBusy: true } }))
+        try {
+          const response = await routerRemote.cliModels({ agentId: id })
+          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), modelsBusy: false, models: response.ok ? response.value.models : [], modelsMessage: response.ok ? response.value.message : response.error.message } }))
+        } catch (error) {
+          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), modelsBusy: false, modelsMessage: `${t('cliRemoteFailed')}：${messageOf(error)}` } }))
+        }
+      }
+
+      // 目录就绪后自动探测 CLI 子代理条目与旧形态 cli agent 的登录状态（幂等，可手动刷新）。
+      useEffect(() => {
+        if (state.status !== 'ready') return
+        for (const entry of state.catalog?.cliAgents ?? []) {
+          if (entry.enabled === false) continue
+          const cached = cliStates[entry.id]
+          if (cached?.statusBusy) continue
+          if (!cached || cached.loggedIn === undefined) void runCliStatus(entry.id)
+        }
+        for (const agent of state.catalog?.agents ?? []) {
+          if (agent.type !== 'cli' || agent.cliAgent) continue
+          const key = `agent:${agent.id}`
+          const cached = cliStates[key]
+          if (cached?.statusBusy) continue
+          if (!cached || cached.loggedIn === undefined) void runCliStatus(agent.id, key)
+        }
+        // cliStates 不在依赖内：避免状态更新触发循环；手动刷新走按钮。
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [state.status, state.catalog])
+
       const mutate = useCallback(async (ops) => {
         const routerRemote = remote()
         if (!routerRemote) return { ok: false, message: t('loadFailed') }
@@ -1425,6 +1629,7 @@ window.__ModuleLoader__.load({
         name: '', type: 'chat', enabled: true, description: '', capabilities: [],
         provider: '', model: '', account: '', reasoningEffort: '', temperature: 0, maxTokens: 0,
         maxRounds: 1, systemPrompt: '', endpoint: '', imageSize: '1024x1024', apiKeyEnv: '', tools: [],
+        command: '', args: '', timeoutMs: 0, maxConcurrent: 1, cliAgent: '',
       })
       const draftOf = (id) => drafts[id] ?? agentValue(id) ?? defaultDraft()
       const setDraft = (id, patch) => setDrafts((current) => ({ ...current, [id]: { ...draftOf(id), ...patch } }))
@@ -1831,6 +2036,60 @@ window.__ModuleLoader__.load({
         }
       }
 
+      // ── 子代理（无头 CLI 条目：账号区维护，专业 agent 经 cliAgent 引用）──
+      const cliEntries = state.catalog?.cliAgents ?? []
+      const cliEntriesById = new Map(cliEntries.map((entry) => [entry.id, entry]))
+      const cliEntryIds = cliEntries.map((entry) => entry.id).sort()
+      const cliValue = (id) => state.value && state.value.cliAgents ? state.value.cliAgents[id] ?? null : null
+      const defaultCliDraft = () => ({
+        name: '', enabled: true, command: '', args: '', timeoutMs: 0, maxConcurrent: 1,
+        loginArgs: '', statusArgs: '', modelsArgs: '',
+      })
+      const cliDraftOf = (id) => {
+        const entry = cliValue(id)
+        const base = entry
+          ? { name: entry.name, enabled: entry.enabled, command: entry.command, args: entry.args, timeoutMs: entry.timeoutMs, maxConcurrent: entry.maxConcurrent, loginArgs: entry.loginArgs, statusArgs: entry.statusArgs, modelsArgs: entry.modelsArgs }
+          : defaultCliDraft()
+        return { ...base, ...(cliDrafts[id] ?? {}) }
+      }
+      const setCliDraft = (id, patch) => setCliDrafts((current) => ({ ...current, [id]: { ...cliDraftOf(id), ...patch } }))
+
+      const saveCliAgent = async (id, isNew) => {
+        if (isNew && (!ID_PATTERN.test(id) || id === '')) return
+        if (isNew && cliEntriesById.has(id)) return
+        setCliBusy((current) => ({ ...current, [id]: true }))
+        const draft = cliDraftOf(id)
+        const outcome = await mutate([{ op: 'set', path: ['cliAgents', id], value: draft }])
+        setCliBusy((current) => ({ ...current, [id]: false }))
+        setCliNotice((current) => ({ ...current, [id]: outcome.ok ? t('saved') : outcome.message }))
+        if (outcome.ok && isNew) setAddingCli(false)
+        if (outcome.ok) setCliDrafts((current) => ({ ...current, [id]: { ...cliDraftOf(id) } }))
+      }
+
+      const deleteCliAgent = async (id) => {
+        if (!window.confirm(t('cliConfirmDelete'))) return
+        await mutate([{ op: 'unset', path: ['cliAgents', id] }])
+        setCliDrafts((current) => { const next = { ...current }; delete next[id]; return next })
+      }
+
+      /** 快速添加子代理条目：'custom' 空白；其余按 CLI_PICKER 预填名称/命令/参数。 */
+      const quickAddCli = async (kind) => {
+        let id = kind === 'custom' ? 'custom' : kind
+        if (!id) return
+        let n = 2
+        while (cliEntriesById.has(id)) { id = `${kind === 'custom' ? 'custom' : kind}-${n++}` }
+        const pick = CLI_PICKER.find((entry) => entry.id === kind)
+        const draft = pick?.fill
+          ? { name: pick.fill.name, enabled: true, command: pick.fill.command, args: pick.fill.args, timeoutMs: 0, maxConcurrent: 1, loginArgs: '', statusArgs: '', modelsArgs: '' }
+          : defaultCliDraft()
+        const outcome = await mutate([{ op: 'set', path: ['cliAgents', id], value: draft }])
+        if (!outcome.ok) { setCliNotice((current) => ({ ...current, [id]: outcome.message })); return }
+        setAddingCli(false)
+        setExpandedCli((current) => ({ ...current, [id]: true }))
+        setCliNotice((current) => ({ ...current, [id]: pick?.fill ? t('saved') : t('cliCustomHint') }))
+        void runCliStatus(id)
+      }
+
       const pasteOauthToken = async (id, token) => {
         const entry = oauthById.get(id)
         if (!entry || !entry.tokenRef) { setOauthNotice((current) => ({ ...current, [id]: t('oauthNeedConfig') })); return }
@@ -2048,7 +2307,7 @@ window.__ModuleLoader__.load({
           el('p', { className: 'dshrouter-hint' }, t('masterHint')),
           !enabled ? el('p', { className: 'dshrouter-error' }, t('routeDisabled')) : null),
       ]
-      // ── 多模态账号（API Key + OAuth + 账号池；辅助功能区）─────────────
+      // ── 多模态账号（API Key → 子代理 → 高级扩展[OAuth+账号池，默认折叠]）──
       const accountsBody = [
         el('p', { className: 'dshrouter-intro' }, t('accountIntro')),
         el('p', { className: 'dshrouter-hint' }, t('accountOAuth')),
@@ -2091,75 +2350,116 @@ window.__ModuleLoader__.load({
           failure: account.failure, accountProvider,
           onLogin: doLogin,
         }),
-        // OAuth 账号子区（官方登录，插件独立管理）
-        el('hr', { className: 'dshrouter-divider' }),
-        el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-subtitle' }, t('oauthTitle'))),
-        el('p', { className: 'dshrouter-hint' }, t('oauthIntro')),
-        oauthIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('accountMissing')) : null,
-        ...oauthIds.map((id) => {
-          const entry = oauthById.get(id)
-          const total = accountTotalsById.get(`oauth:${id}`)
-          const tokenState = entry && entry.tokenRef ? oauthTokenStates[entry.tokenRef] : undefined
-          return el(OAuthAccountCard, {
-            key: id, id, entry, tokenState, total,
-            buckets: accountSeriesById.get(`oauth:${id}`) ?? [],
-            expanded: expandedOauth[id] === true,
-            draft: oauthDraftOf(id),
-            busy: !!oauthBusy[id],
-            notice: oauthNotice[id],
-            t, writable: state.writable,
-            onToggle: () => setExpandedOauth((current) => ({ ...current, [id]: !current[id] })),
-            onDraftField: (field, fieldValue) => setOauthDraft(id, { [field]: fieldValue }),
-            onSave: () => saveOauthAccount(id, false),
-            onPasteToken: (token) => pasteOauthToken(id, token),
-            onOneClick: () => runOneClickOauth(id),
-            onAuthorize: () => openOauthAuthorize(id),
-            onExchange: (callbackUrl) => exchangeOauthCode(id, callbackUrl),
-            onDiscover: () => discoverOauth(id),
-            onDelete: () => deleteOauthAccount(id),
-          })
-        }),
-        el(AddOAuthCard, {
-          t, adding: addingOauth, setAdding: setAddingOauth,
-          onQuickAdd: (presetId) => quickAddOauthAccount(presetId),
-        }),
-        // ── 账号池（扩展功能；多账号健康路由 + 失败切换）─────────────────
+        // ── 子代理（无头 CLI：codex/claude/gemini 等账号类条目，第二位）──
         el('hr', { className: 'dshrouter-divider' }),
         el('div', { className: 'dshrouter-head' },
-          el('span', { className: 'dshrouter-subtitle' }, t('poolTitle')),
+          el('span', { className: 'dshrouter-subtitle' }, t('cliTitle')),
           el('span', { className: 'dshrouter-spacer' }),
-          el('span', { className: 'dshrouter-meta' }, t('poolSummary')(poolIds.length))),
-        el('p', { className: 'dshrouter-hint' }, t('poolIntro')),
-        poolIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('accountMissing')) : null,
-        ...poolIds.map((id) => {
-          const entry = poolById.get(id)
-          return el(PoolCard, {
-            key: id, id, pool: entry ?? { name: '', enabled: true, strategy: 'healthy', accounts: [] },
-            health: entry ? entry.accountHealth ?? [] : [],
-            oauthEntries: oauthEntries, tokenStates: oauthTokenStates,
-            expanded: expandedPools[id] === true,
-            draft: poolDraftOf(id),
-            busy: !!poolBusy[id],
-            notice: poolNotice[id],
+          el('span', { className: 'dshrouter-meta' }, t('cliSummary')(cliEntryIds.length))),
+        el('p', { className: 'dshrouter-hint' }, t('cliIntro')),
+        cliEntryIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('accountMissing')) : null,
+        ...cliEntryIds.map((id) => {
+          const entry = cliEntriesById.get(id)
+          const total = accountTotalsById.get(`cli:${id}`)
+          return el(CliAgentCard, {
+            key: id, id, entry, total,
+            expanded: expandedCli[id] === true,
+            draft: cliDraftOf(id),
+            busy: !!cliBusy[id],
+            notice: cliNotice[id],
+            cliState: cliStates[id],
             t, writable: state.writable,
-            onToggle: () => setExpandedPools((current) => ({ ...current, [id]: !current[id] })),
-            onField: (field, fieldValue) => setPoolDraft(id, { [field]: fieldValue }),
-            onSave: () => savePool(id, false),
-            onDelete: () => deletePool(id),
-            onAddAccount: (accountId) => addAccountToPool(id, accountId),
-            onRemoveAccount: (accountId) => removeAccountFromPool(id, accountId),
-            onOneClickAccount: (accountId) => runOneClickOauth(accountId),
-            onDiscoverAccount: (accountId) => discoverOauth(accountId),
-            onOauthAddToPool: (poolId, presetId, clientId) => oauthAddToPool(poolId, presetId, clientId),
+            onToggle: () => setExpandedCli((current) => ({ ...current, [id]: !current[id] })),
+            onField: (field, fieldValue) => setCliDraft(id, { [field]: fieldValue }),
+            onSave: () => saveCliAgent(id, false),
+            onDelete: () => deleteCliAgent(id),
+            onCliLogin: () => runCliLogin(id),
+            onCliStatus: () => runCliStatus(id),
+            onCliModels: () => runCliModels(id),
           })
         }),
-        el(AddPoolCard, {
-          t, adding: addingPool, setAdding: setAddingPool,
-          newId: newPoolId, setNewId: setNewPoolId,
-          idTaken: poolIdsTaken.includes(newPoolId.trim()),
-          idInvalid: poolIdInvalid,
-          writable: state.writable,
-          onSave: () => savePool(newPoolId.trim(), true),
+        el(AddCliCard, {
+          t, adding: addingCli, setAdding: setAddingCli,
+          onQuickAdd: (kind) => quickAddCli(kind),
+        }),
+        // ── 高级扩展：OAuth 账号 + 账号池（收进折叠卡片，默认不展开）─────
+        el(CategoryCard, {
+          title: t('advancedSection'),
+          summary: `${t('oauthSummary')(oauthIds.length)} · ${t('poolSummary')(poolIds.length)}`,
+          expanded: expandedAdvanced === true,
+          t,
+          onToggle: () => setExpandedAdvanced((current) => !current),
+          children: [
+            // OAuth 账号子区（官方登录，插件独立管理）
+            el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-subtitle' }, t('oauthTitle'))),
+            el('p', { className: 'dshrouter-hint' }, t('oauthIntro')),
+            oauthIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('accountMissing')) : null,
+            ...oauthIds.map((id) => {
+              const entry = oauthById.get(id)
+              const total = accountTotalsById.get(`oauth:${id}`)
+              const tokenState = entry && entry.tokenRef ? oauthTokenStates[entry.tokenRef] : undefined
+              return el(OAuthAccountCard, {
+                key: id, id, entry, tokenState, total,
+                buckets: accountSeriesById.get(`oauth:${id}`) ?? [],
+                expanded: expandedOauth[id] === true,
+                draft: oauthDraftOf(id),
+                busy: !!oauthBusy[id],
+                notice: oauthNotice[id],
+                t, writable: state.writable,
+                onToggle: () => setExpandedOauth((current) => ({ ...current, [id]: !current[id] })),
+                onDraftField: (field, fieldValue) => setOauthDraft(id, { [field]: fieldValue }),
+                onSave: () => saveOauthAccount(id, false),
+                onPasteToken: (token) => pasteOauthToken(id, token),
+                onOneClick: () => runOneClickOauth(id),
+                onAuthorize: () => openOauthAuthorize(id),
+                onExchange: (callbackUrl) => exchangeOauthCode(id, callbackUrl),
+                onDiscover: () => discoverOauth(id),
+                onDelete: () => deleteOauthAccount(id),
+              })
+            }),
+            el(AddOAuthCard, {
+              t, adding: addingOauth, setAdding: setAddingOauth,
+              onQuickAdd: (presetId) => quickAddOauthAccount(presetId),
+            }),
+            // 账号池（扩展功能；多账号健康路由 + 失败切换）
+            el('hr', { className: 'dshrouter-divider' }),
+            el('div', { className: 'dshrouter-head' },
+              el('span', { className: 'dshrouter-subtitle' }, t('poolTitle')),
+              el('span', { className: 'dshrouter-spacer' }),
+              el('span', { className: 'dshrouter-meta' }, t('poolSummary')(poolIds.length))),
+            el('p', { className: 'dshrouter-hint' }, t('poolIntro')),
+            poolIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('accountMissing')) : null,
+            ...poolIds.map((id) => {
+              const entry = poolById.get(id)
+              return el(PoolCard, {
+                key: id, id, pool: entry ?? { name: '', enabled: true, strategy: 'healthy', accounts: [] },
+                health: entry ? entry.accountHealth ?? [] : [],
+                oauthEntries: oauthEntries, tokenStates: oauthTokenStates,
+                expanded: expandedPools[id] === true,
+                draft: poolDraftOf(id),
+                busy: !!poolBusy[id],
+                notice: poolNotice[id],
+                t, writable: state.writable,
+                onToggle: () => setExpandedPools((current) => ({ ...current, [id]: !current[id] })),
+                onField: (field, fieldValue) => setPoolDraft(id, { [field]: fieldValue }),
+                onSave: () => savePool(id, false),
+                onDelete: () => deletePool(id),
+                onAddAccount: (accountId) => addAccountToPool(id, accountId),
+                onRemoveAccount: (accountId) => removeAccountFromPool(id, accountId),
+                onOneClickAccount: (accountId) => runOneClickOauth(accountId),
+                onDiscoverAccount: (accountId) => discoverOauth(accountId),
+                onOauthAddToPool: (poolId, presetId, clientId) => oauthAddToPool(poolId, presetId, clientId),
+              })
+            }),
+            el(AddPoolCard, {
+              t, adding: addingPool, setAdding: setAddingPool,
+              newId: newPoolId, setNewId: setNewPoolId,
+              idTaken: poolIdsTaken.includes(newPoolId.trim()),
+              idInvalid: poolIdInvalid,
+              writable: state.writable,
+              onSave: () => savePool(newPoolId.trim(), true),
+            }),
+          ],
         }),
       ]
       // ── 统计信息（辅助功能区，默认折叠）───────────────────────────────
@@ -2246,16 +2546,18 @@ window.__ModuleLoader__.load({
           const testResult = testResults[id]
           return el(AgentCard, {
             key: id, id, draft, t, writable: state.writable, busy: !!busy[id], notice: notice[id],
-            providers, models: state.models ?? [], catalog, oauthAccounts: oauthEntries, pools: poolEntries, testResult,
+            providers, models: state.models ?? [], catalog, oauthAccounts: oauthEntries, pools: poolEntries, cliEntries, testResult,
             stat: statsTotals.get(id) ?? null,
             buckets: statsSeries.get(id) ?? [],
             expanded: expandedAgents[id] === true,
+            cliState: draft.type === 'cli' ? cliStates[(draft.cliAgent ?? '').trim() || `agent:${id}`] : undefined,
             onToggle: () => toggleExpanded(id),
             onField: (key, fieldValue) => setDraftField(id, key, fieldValue),
             onSave: () => saveAgent(id, false),
             onDelete: () => deleteAgent(id),
             onTest: () => runTest(id),
             onDiscover: (provider) => setDiscover({ id, provider }),
+            onCliLogin: () => runCliLogin(id, (draft.cliAgent ?? '').trim() || `agent:${id}`),
           })
         }),
         el(AddAgentCard, {
@@ -2275,7 +2577,7 @@ window.__ModuleLoader__.load({
           children: agentsBody,
         }),
         el(CategoryCard, {
-          title: t('accountTitle'), summary: `${t('accountSummary')(addedAccounts.length)} · ${t('oauthSummary')(oauthIds.length)}`,
+          title: t('accountTitle'), summary: `${t('accountSummary')(addedAccounts.length)} · ${t('cliSummary')(cliEntryIds.length)} · ${t('oauthSummary')(oauthIds.length)}`,
           expanded: expandedSection.accounts === true, t, onToggle: () => toggleSection('accounts'),
           children: accountsBody,
         }),
@@ -2295,8 +2597,103 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** cli 登录状态指示 chip（圆点与文字分离：dshrouter-dot 是纯色点，不承载文字）。 */
+    function cliStatusChipOf(cliState, t) {
+      const chip = cliState && cliState.statusBusy
+        ? { dot: '', text: `${t('fetching')}…` }
+        : cliState && cliState.loggedIn === true
+          ? { dot: 'ok', text: t('cliStatusLoggedIn') }
+          : cliState && cliState.loggedIn === false
+            ? { dot: 'bad', text: t('cliStatusLoggedOut') }
+            : { dot: '', text: t('cliStatusUnknown') }
+      return el('span', { className: 'dshrouter-meta', title: cliState && cliState.statusMessage },
+        el('span', { className: `dshrouter-dot ${chip.dot}`.trim(), style: { marginRight: 6 } }),
+        chip.text)
+    }
+
+    /** 子代理条目卡片（账号区的「子代理」区：命令/登录/模型/统计）。 */
+    function CliAgentCard(props) {
+      const { id, total, expanded, draft, busy, notice, cliState, t, writable, onToggle, onField, onSave, onDelete, onCliLogin, onCliStatus, onCliModels } = props
+      return el('div', { className: 'dshrouter-card' },
+        el('button', { type: 'button', className: 'dshrouter-card-head', onClick: onToggle, 'aria-expanded': expanded, title: expanded ? t('collapse') : t('expand') },
+          el('span', { className: 'dshrouter-name' }, draft.name || id),
+          el('span', { className: 'dshrouter-id' }, id),
+          el('span', { className: 'dshrouter-tag' }, draft.command || 'cli'),
+          el('span', { className: 'dshrouter-meta' }, `${t('statsCalls')} ${total ? total.calls : 0} · ${t('statsErrors')} ${total ? total.errors : 0} · ${total && total.calls > 0 ? fmtMs(total.totalMs / total.calls) : '—'}`),
+          el('span', { className: 'dshrouter-spacer' }),
+          el('span', { className: 'dshrouter-chevron' }, expanded ? '▾' : '▸')),
+        expanded ? el('div', { className: 'dshrouter-stats' },
+          notice ? el('p', { className: 'dshrouter-hint' }, notice) : null,
+          el('div', { className: 'dshrouter-row', style: { alignItems: 'flex-end' } },
+            el('div', { className: 'dshrouter-field', style: { flex: '0 0 150px' } },
+              el('span', { className: 'dshrouter-field-label' }, t('cliLoginStatus')),
+              cliStatusChipOf(cliState, t)),
+            el('button', { type: 'button', className: 'dshrouter-button', disabled: busy || !writable || (cliState && cliState.loginBusy), onClick: onCliLogin },
+              cliState && cliState.loginBusy ? t('cliLoginWaiting') : (cliState && cliState.loggedIn === true ? t('cliRelogin') : t('cliLogin'))),
+            el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: cliState && cliState.statusBusy, onClick: onCliStatus }, t('cliStatusRefresh'))),
+          cliState && cliState.statusMessage ? el('p', { className: 'dshrouter-hint' }, cliState.statusMessage) : null,
+          cliState && cliState.loginNotice ? el('p', { className: 'dshrouter-hint' }, cliState.loginNotice) : null,
+          el('div', { className: 'dshrouter-row' },
+            el('div', { className: 'dshrouter-field', style: { flex: '0 0 180px' } },
+              el('span', { className: 'dshrouter-field-label' }, t('fieldName')),
+              el('input', { className: 'dshrouter-input', value: draft.name ?? '', onChange: (event) => onField('name', event.target.value) })),
+            el('div', { className: 'dshrouter-field' },
+              el('span', { className: 'dshrouter-field-label' }, t('fieldCommand')),
+              el('input', { className: 'dshrouter-input', value: draft.command ?? '', placeholder: 'codex', onChange: (event) => onField('command', event.target.value) })),
+            el('div', { className: 'dshrouter-field', style: { flex: '0 0 260px' } },
+              el('span', { className: 'dshrouter-field-label' }, t('fieldCliArgs')),
+              el('input', { className: 'dshrouter-input', value: draft.args ?? '', placeholder: 'exec --json --sandbox workspace-write', onChange: (event) => onField('args', event.target.value) }))),
+          el('div', { className: 'dshrouter-row', style: { alignItems: 'flex-end' } },
+            el('div', { className: 'dshrouter-field', style: { flex: '0 0 180px' } },
+              el('span', { className: 'dshrouter-field-label' }, t('fieldCliTimeout')),
+              el('input', { className: 'dshrouter-input', type: 'number', min: 0, step: 1, value: draft.timeoutMs ? Math.round(Number(draft.timeoutMs) / 60000) : '', placeholder: '15', onChange: (event) => onField('timeoutMs', Math.max(0, Math.trunc(Number(event.target.value) || 0)) * 60000) })),
+            el('div', { className: 'dshrouter-field', style: { flex: '0 0 120px' } },
+              el('span', { className: 'dshrouter-field-label' }, t('fieldCliConcurrent')),
+              el('input', { className: 'dshrouter-input', type: 'number', min: 1, max: 4, step: 1, value: draft.maxConcurrent ?? 1, onChange: (event) => onField('maxConcurrent', Math.max(1, Math.min(4, Math.trunc(Number(event.target.value) || 1)))) })),
+            el('button', { type: 'button', className: 'dshrouter-button ghost', style: { flex: 'none' }, disabled: cliState && cliState.modelsBusy, onClick: onCliModels },
+              cliState && cliState.modelsBusy ? t('cliFetchingModels') : t('cliFetchModels'))),
+          cliState && cliState.modelsMessage ? el('p', { className: 'dshrouter-hint' }, cliState.modelsMessage) : null,
+          el('details', null,
+            el('summary', { className: 'dshrouter-meta' }, t('advancedLogin')),
+            el('div', { className: 'dshrouter-stats', style: { marginTop: 8 } },
+              el('div', { className: 'dshrouter-field' },
+                el('span', { className: 'dshrouter-field-label' }, t('fieldCliLoginArgs')),
+                el('input', { className: 'dshrouter-input', value: draft.loginArgs ?? '', placeholder: 'login / auth login', onChange: (event) => onField('loginArgs', event.target.value) })),
+              el('div', { className: 'dshrouter-field' },
+                el('span', { className: 'dshrouter-field-label' }, t('fieldCliStatusArgs')),
+                el('input', { className: 'dshrouter-input', value: draft.statusArgs ?? '', placeholder: 'login status / auth status', onChange: (event) => onField('statusArgs', event.target.value) })),
+              el('div', { className: 'dshrouter-field' },
+                el('span', { className: 'dshrouter-field-label' }, t('fieldCliModelsArgs')),
+                el('input', { className: 'dshrouter-input', value: draft.modelsArgs ?? '', placeholder: '--list-models', onChange: (event) => onField('modelsArgs', event.target.value) })))),
+          el('div', { className: 'dshrouter-row' },
+            el('button', { type: 'button', className: 'dshrouter-button', disabled: busy || !writable, onClick: onSave }, busy ? t('saving') : t('save')),
+            el('span', { className: 'dshrouter-spacer' }),
+            el('button', { type: 'button', className: 'dshrouter-button danger', disabled: busy || !writable, onClick: onDelete }, t('cliDelete')))) : null)
+    }
+
+    /** 子代理列表末尾的「+」创建卡片（选 CLI 即创建并预填）。 */
+    function AddCliCard(props) {
+      const { t, adding, setAdding, onQuickAdd } = props
+      if (!adding) {
+        return el('div', { className: 'dshrouter-add', role: 'button', tabIndex: 0, onClick: () => setAdding(true), onKeyDown: (event) => { if (event.key === 'Enter') setAdding(true) } },
+          el('span', { style: { fontSize: 18, lineHeight: 1 } }, '+'),
+          el('span', null, t('cliAdd')))
+      }
+      return el('div', { className: 'dshrouter-card' },
+        el('div', { className: 'dshrouter-head' },
+          el('span', { className: 'dshrouter-name' }, t('cliAdd')),
+          el('span', { className: 'dshrouter-spacer' }),
+          el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: () => setAdding(false) }, t('cancel'))),
+        el('p', { className: 'dshrouter-hint' }, t('cliQuickAddHint')),
+        el('div', { className: 'dshrouter-row' },
+          ...CLI_PICKER.map((pick) => el('button', {
+            type: 'button', key: pick.id || 'custom', className: 'dshrouter-chip',
+            onClick: () => onQuickAdd(pick.id),
+          }, pick.id ? t(pick.key) : t('cliCustomAdd')))))
+    }
+
     function AgentCard(props) {
-      const { id, draft, t, writable, busy, notice, providers, models, catalog, oauthAccounts, pools, testResult, stat, buckets, expanded, onToggle, onField, onSave, onDelete, onTest, onDiscover } = props
+      const { id, draft, t, writable, busy, notice, providers, models, catalog, oauthAccounts, pools, cliEntries, testResult, stat, buckets, expanded, cliState, onToggle, onField, onSave, onDelete, onTest, onDiscover, onCliLogin } = props
       const groups = models ?? []
       const group = groups.find((entry) => entry.id === (draft.provider || ''))
       const poolRef = typeof draft.account === 'string' && draft.account.startsWith('pool:') ? draft.account.slice(5) : ''
@@ -2312,10 +2709,13 @@ window.__ModuleLoader__.load({
       if (draft.model && !modelIds.has(draft.model)) modelOptions.push({ id: draft.model, name: draft.model })
       const providerChoice = providers.find((entry) => entry.provider === draft.provider)
       const effective = catalog ? `${catalog.effectiveProvider}/${catalog.effectiveModel}` : '—'
+      const effectiveDisplay = draft.type === 'cli'
+        ? `${draft.command || 'cli'}${draft.model ? `/${draft.model}` : ''}`
+        : effective
       const sourceLabel = catalog ? ({ agent: t('sourceAgent'), main: t('sourceMain'), 'provider-default': t('sourceProvider'), account: t('fieldAccount'), pool: t('poolAccountSource') }[catalog.source] ?? t('sourceUnknown')) : ''
       const barBuckets = (buckets ?? []).slice(-48)
       const barMax = Math.max(1, ...barBuckets.map((bucket) => bucket.inputTokens + bucket.outputTokens))
-      const typeLabel = ({ chat: t('typeChat'), agent: t('typeAgent'), image: t('typeImage'), speech: t('typeSpeech') }[draft.type] ?? t('typeChat'))
+      const typeLabel = ({ chat: t('typeChat'), agent: t('typeAgent'), image: t('typeImage'), speech: t('typeSpeech'), cli: t('typeCli') }[draft.type] ?? t('typeChat'))
 
       // 折叠摘要：类型 tag + 生效模型 + 简要用量
       const summary = el('div', { className: 'dshrouter-card' },
@@ -2324,7 +2724,7 @@ window.__ModuleLoader__.load({
           el('span', { className: 'dshrouter-id' }, id),
           el('span', { className: 'dshrouter-tag' }, draft.type || 'chat'),
           catalog && catalog.error ? el('span', { className: 'dshrouter-error', title: catalog.error }, '⚠') : null,
-          el('span', { className: 'dshrouter-meta' }, `${effective}`),
+          el('span', { className: 'dshrouter-meta' }, `${effectiveDisplay}`),
           el('span', { className: 'dshrouter-meta' }, `${t('statsCalls')} ${stat ? stat.calls : 0} · ${t('statsErrors')} ${stat ? stat.errors : 0} · ${stat ? fmtTokens(stat.inputTokens) : 0}/${stat ? fmtTokens(stat.outputTokens) : 0}`),
           el('span', { className: 'dshrouter-spacer' }),
           el('span', { className: 'dshrouter-chevron' }, expanded ? '▾' : '▸')))
@@ -2352,19 +2752,37 @@ window.__ModuleLoader__.load({
               el('option', { value: 'chat' }, t('typeChat')),
               el('option', { value: 'agent' }, t('typeAgent')),
               el('option', { value: 'image' }, t('typeImage')),
-              el('option', { value: 'speech' }, t('typeSpeech'))))),
+              el('option', { value: 'speech' }, t('typeSpeech')),
+              el('option', { value: 'cli' }, t('typeCli'))))),
         el('p', { className: 'dshrouter-hint' }, t('fieldTypeHint')),
         el('div', { className: 'dshrouter-field' },
           el('span', { className: 'dshrouter-field-label' }, t('fieldDescription')),
           el('textarea', { className: 'dshrouter-textarea', value: draft.description ?? '', onChange: (event) => onField('description', event.target.value) })),
-        ((oauthAccounts ?? []).length > 0 || (pools ?? []).length > 0) ? el('div', { className: 'dshrouter-field' },
+        (draft.type !== 'cli' && ((oauthAccounts ?? []).length > 0 || (pools ?? []).length > 0)) ? el('div', { className: 'dshrouter-field' },
           el('span', { className: 'dshrouter-field-label' }, t('fieldAccount')),
           el('select', { className: 'dshrouter-select', value: draft.account ?? '', onChange: (event) => onField('account', event.target.value) },
             el('option', { value: '' }, `— ${t('inherit')} —`),
             ...(pools ?? []).map((entry) => el('option', { value: `pool:${entry.id}`, key: `pool:${entry.id}` }, `${t('poolTitle')} · ${entry.name || entry.id} (${entry.id})`)),
             ...(oauthAccounts ?? []).map((entry) => el('option', { value: entry.id, key: entry.id }, `${entry.name || entry.id} (${entry.id})`))),
           draft.account ? el('p', { className: 'dshrouter-hint' }, t('oauthChatOnly')) : null) : null,
-        el('div', { className: 'dshrouter-row' },
+        draft.type === 'cli' ? el('div', { className: 'dshrouter-stats' },
+          el('div', { className: 'dshrouter-row', style: { alignItems: 'flex-end' } },
+            el('div', { className: 'dshrouter-field' },
+              el('span', { className: 'dshrouter-field-label' }, t('fieldCliAgent')),
+              el('select', { className: 'dshrouter-select', value: draft.cliAgent ?? '', onChange: (event) => onField('cliAgent', event.target.value) },
+                el('option', { value: '' }, t('cliAgentNone')),
+                ...cliEntries.map((entry) => el('option', { value: entry.id, key: entry.id }, `${entry.name || entry.id} (${entry.id})`)))),
+            el('div', { className: 'dshrouter-field', style: { flex: '0 0 170px' } },
+              el('span', { className: 'dshrouter-field-label' }, t('cliLoginStatus')),
+              cliStatusChipOf(cliState, t))),
+          draft.cliAgent ? null : el('p', { className: 'dshrouter-hint' }, t('cliLegacyHint')),
+          el('div', { className: 'dshrouter-field', style: { maxWidth: 420 } },
+            el('span', { className: 'dshrouter-field-label' }, t('fieldModel')),
+            el('input', { className: 'dshrouter-input', list: `dshrouter-cli-models-${id}`, value: draft.model ?? '', placeholder: `— ${t('inherit')} —`, onChange: (event) => onField('model', event.target.value) }),
+            el('datalist', { id: `dshrouter-cli-models-${id}` },
+              ...(Array.isArray(cliState?.models) ? cliState.models : []).map((model) => el('option', { value: model, key: model }, model)))),
+          el('p', { className: 'dshrouter-hint' }, t('cliManageHint')),
+          el('p', { className: 'dshrouter-hint' }, t('cliRoutingHint'))) : el('div', { className: 'dshrouter-row' },
           el('div', { className: 'dshrouter-field' },
             el('span', { className: 'dshrouter-field-label' }, t('fieldProvider')),
             el('select', { className: 'dshrouter-select', value: draft.provider ?? '', disabled: !!draft.account, onChange: (event) => onField('provider', event.target.value) },
@@ -2405,16 +2823,16 @@ window.__ModuleLoader__.load({
         el('details', null,
           el('summary', { className: 'dshrouter-meta' }, t('advanced')),
           el('div', { className: 'dshrouter-row', style: { marginTop: 8 } },
-            el('div', { className: 'dshrouter-field' },
+            draft.type !== 'cli' ? el('div', { className: 'dshrouter-field' },
               el('span', { className: 'dshrouter-field-label' }, t('fieldReasoning')),
-              el('input', { className: 'dshrouter-input', value: draft.reasoningEffort ?? '', placeholder: 'high', onChange: (event) => onField('reasoningEffort', event.target.value) })),
-            el('div', { className: 'dshrouter-field' },
+              el('input', { className: 'dshrouter-input', value: draft.reasoningEffort ?? '', placeholder: 'high', onChange: (event) => onField('reasoningEffort', event.target.value) })) : null,
+            draft.type !== 'cli' ? el('div', { className: 'dshrouter-field' },
               el('span', { className: 'dshrouter-field-label' }, t('fieldTemperature')),
-              el('input', { className: 'dshrouter-input', type: 'number', min: 0, max: 2, step: 0.1, value: draft.temperature ?? 0, onChange: (event) => onField('temperature', Number(event.target.value) || 0) })),
-            el('div', { className: 'dshrouter-field' },
+              el('input', { className: 'dshrouter-input', type: 'number', min: 0, max: 2, step: 0.1, value: draft.temperature ?? 0, onChange: (event) => onField('temperature', Number(event.target.value) || 0) })) : null,
+            draft.type !== 'cli' ? el('div', { className: 'dshrouter-field' },
               el('span', { className: 'dshrouter-field-label' }, t('fieldMaxTokens')),
-              el('input', { className: 'dshrouter-input', type: 'number', min: 0, step: 1, value: draft.maxTokens ?? 0, onChange: (event) => onField('maxTokens', Number(event.target.value) || 0) })),
-            draft.type !== 'image' ? el('div', { className: 'dshrouter-field' },
+              el('input', { className: 'dshrouter-input', type: 'number', min: 0, step: 1, value: draft.maxTokens ?? 0, onChange: (event) => onField('maxTokens', Number(event.target.value) || 0) })) : null,
+            draft.type !== 'image' && draft.type !== 'cli' ? el('div', { className: 'dshrouter-field' },
               el('span', { className: 'dshrouter-field-label' }, t('fieldMaxRounds')),
               el('input', { className: 'dshrouter-input', type: 'number', min: 1, max: 8, step: 1, value: draft.maxRounds ?? 1, onChange: (event) => onField('maxRounds', Math.max(1, Math.min(8, Number(event.target.value) || 1))) })) : null,
             el('div', { className: 'dshrouter-field' },
@@ -2422,8 +2840,9 @@ window.__ModuleLoader__.load({
               el('input', { className: 'dshrouter-input', value: (draft.capabilities ?? []).join(', '), onChange: (event) => onField('capabilities', event.target.value.split(',').map((item) => item.trim()).filter(Boolean)) }))),
           el('div', { className: 'dshrouter-field', style: { marginTop: 8 } },
             el('span', { className: 'dshrouter-field-label' }, t('fieldSystemPrompt')),
-            el('textarea', { className: 'dshrouter-textarea', value: draft.systemPrompt ?? '', onChange: (event) => onField('systemPrompt', event.target.value) }))),
-        el('p', { className: 'dshrouter-meta' },
+            el('textarea', { className: 'dshrouter-textarea', value: draft.systemPrompt ?? '', onChange: (event) => onField('systemPrompt', event.target.value) })),
+          draft.type === 'cli' ? el('p', { className: 'dshrouter-hint' }, t('cliSystemHint')) : null),
+        draft.type === 'cli' ? null : el('p', { className: 'dshrouter-meta' },
           t('effective'), el('strong', null, effective),
           catalog && catalog.source ? ` · ${sourceLabel}` : null,
           providerChoice && !providerChoice.active ? ` · (${t('accountDormant')})` : null),
@@ -2447,7 +2866,14 @@ window.__ModuleLoader__.load({
         notice ? el('p', { className: 'dshrouter-hint' }, notice) : null,
         el('div', { className: 'dshrouter-row' },
           el('button', { type: 'button', className: 'dshrouter-button', disabled: busy || !writable, onClick: onSave }, busy ? t('saving') : t('save')),
-          el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: testResult && testResult.busy, onClick: onTest }, testResult && testResult.busy ? t('testing') : t('test')),
+          // cli 类型：测试按键替换为登录（CLI 无连通性测试，登录即就绪）。
+          draft.type === 'cli'
+            ? el('button', {
+              type: 'button', className: 'dshrouter-button ghost',
+              disabled: busy || !writable || (cliState && cliState.loginBusy),
+              onClick: onCliLogin,
+            }, cliState && cliState.loginBusy ? t('cliLoginWaiting') : (cliState && cliState.loggedIn === true ? t('cliRelogin') : t('cliLogin')))
+            : el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: testResult && testResult.busy, onClick: onTest }, testResult && testResult.busy ? t('testing') : t('test')),
           el('span', { className: 'dshrouter-spacer' }),
           el('button', { type: 'button', className: 'dshrouter-button danger', disabled: busy || !writable, onClick: onDelete }, t('delete'))),
       )
