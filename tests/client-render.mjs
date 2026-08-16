@@ -171,7 +171,8 @@ export async function runClientRender(check) {
     sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
     setInterval: () => 0,
     clearInterval: () => {},
-    setTimeout: () => 0,
+    // 登录轮询依赖 setTimeout 真正回调（忽略延迟立即排队），否则轮询挂死。
+    setTimeout: (fn) => { setImmediate(fn); return 0 },
     clearTimeout: () => {},
     confirm: () => true,
     open: () => {},
@@ -184,6 +185,9 @@ export async function runClientRender(check) {
   })
   check('client exports apply/inject', typeof bundleExports.apply === 'function' && Array.isArray(bundleExports.inject))
 
+  // cli 登录状态可切换：'ok' = 已登录；'logged-out' = 未登录（Not logged in）。
+  // 登录轮询、刷新状态与未登录红色提示的回归断言共用。
+  let cliStatusMode = 'ok'
   const remoteMock = {
     catalog: async () => ({ ok: true, value: { ok: true, enabled: true, defaults: { provider: 'deepseek-official', model: 'deepseek-v4-pro' }, agents: [
       { id: 'codex', name: 'Codex 助手', type: 'cli', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', cliAgent: 'codexentry', effectiveProvider: 'cli:codexentry', effectiveModel: '', source: 'agent' },
@@ -207,7 +211,9 @@ export async function runClientRender(check) {
     save: async () => ({ ok: true, value: { ok: true, revision: 1 } }),
     reset: async () => ({ ok: true, value: { ok: true } }),
     test: async () => ({ ok: true, value: { ok: true, message: 'ok' } }),
-    cliStatus: async () => ({ ok: true, value: { ok: true, loggedIn: true, message: '已登录' } }),
+    cliStatus: async () => cliStatusMode === 'logged-out'
+      ? { ok: true, value: { ok: true, loggedIn: false, message: 'Not logged in' } }
+      : { ok: true, value: { ok: true, loggedIn: true, message: '已登录' } },
     cliLogin: async () => ({ ok: true, value: { ok: true, message: '已在终端窗口启动' } }),
     cliModels: async () => ({ ok: true, value: { ok: true, message: '2 个模型', models: ['m1', 'm2'], source: 'cli' } }),
   }
@@ -486,5 +492,65 @@ export async function runClientRender(check) {
         discoverMode = 'ok'
       }
     }
+  }
+
+  // ── 断言：cli 子代理登录体验——未登录红色醒目提示 + 登录轮询状态机 ──
+  // 负向见证：宿主 cliLogin 曾引用未定义的 agent（ReferenceError），登录
+  // 按钮永远报失败、只有「刷新状态」能显示已登录；轮询成功后 loginBusy
+  // 不复位、按钮永久卡「等待登录…」。以下断言覆盖：未登录红字、登录后
+  // 轮询自动刷新为已登录且按钮复位、轮询耗尽给出红色超时提示且按钮复位。
+  const subCard = () => findAll(currentTree, (node) => node && node.type === 'div' && hasClass(node, 'dshrouter-card')).find((node) => {
+    const head = (node.children ?? []).find((child) => child && child.type === 'button' && hasClass(child, 'dshrouter-card-head'))
+    return !!head && textOf(head).includes('codexentry')
+  })
+  const subButtons = () => {
+    const card = subCard()
+    return card ? findAll(card, (node) => node && node.type === 'button') : []
+  }
+  const subCardFound = !!subCard()
+  check('subagent card found for login flow', subCardFound)
+  if (subCardFound) {
+    // 场景 1：未登录 → 刷新状态后 chip 与状态消息均为红色醒目样式。
+    cliStatusMode = 'logged-out'
+    const refreshButton = subButtons().find((node) => textOf(node) === zh.cliStatusRefresh)
+    check('subagent refresh status button found', !!refreshButton)
+    if (refreshButton) {
+      refreshButton.props.onClick()
+      currentTree = await settle()
+      const card = subCard()
+      const redChips = card ? findAll(card, (node) => node && node.type === 'span' && hasClass(node, 'dshrouter-error') && textOf(node).includes(zh.cliStatusLoggedOut)) : []
+      check('logged-out chip rendered red', redChips.length > 0)
+      const redMessages = card ? findAll(card, (node) => node && node.type === 'p' && hasClass(node, 'dshrouter-error') && textOf(node).includes('Not logged in')) : []
+      check('logged-out status message rendered red', redMessages.length > 0)
+
+      // 场景 2：点击登录 → 轮询立即成功 → chip 已登录 + 按钮复位为「重新登录」。
+      cliStatusMode = 'ok'
+      const loginButton = subButtons().find((node) => textOf(node) === zh.cliLogin)
+      check('subagent login button found', !!loginButton)
+      if (loginButton) {
+        loginButton.props.onClick()
+        currentTree = await settle(120)
+        const after = subCard()
+        const afterButtons = after ? findAll(after, (node) => node && node.type === 'button') : []
+        check('login poll flips chip to logged in', !!after && textOf(after).includes(zh.cliStatusLoggedIn) && textOf(after).includes('已登录：已登录'))
+        check('login button resets after success', afterButtons.some((node) => textOf(node) === zh.cliRelogin) && !afterButtons.some((node) => textOf(node) === zh.cliLoginWaiting))
+
+        // 场景 3：轮询耗尽（20 次都未登录）→ 红色超时提示 + 按钮复位为「登录」。
+        cliStatusMode = 'logged-out'
+        const reloginButton = afterButtons.find((node) => textOf(node) === zh.cliRelogin)
+        check('subagent relogin button found', !!reloginButton)
+        if (reloginButton) {
+          reloginButton.props.onClick()
+          currentTree = await settle(200)
+          const timedOut = subCard()
+          const timedOutButtons = timedOut ? findAll(timedOut, (node) => node && node.type === 'button') : []
+          const timeoutNotice = timedOut ? findAll(timedOut, (node) => node && node.type === 'p' && hasClass(node, 'dshrouter-error') && textOf(node).includes(zh.cliLoginTimeoutHint)) : []
+          check('login poll timeout shows red hint', timeoutNotice.length > 0)
+          check('timeout flips chip back to logged out', !!timedOut && textOf(timedOut).includes(zh.cliStatusLoggedOut))
+          check('login button resets after timeout', timedOutButtons.some((node) => textOf(node) === zh.cliLogin) && !timedOutButtons.some((node) => textOf(node) === zh.cliLoginWaiting))
+        }
+      }
+    }
+    cliStatusMode = 'ok'
   }
 }

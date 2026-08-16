@@ -468,6 +468,7 @@ window.__ModuleLoader__.load({
       cliRelogin: '重新登录',
       cliRemoteMissing: '宿主未提供 cliStatus/cliLogin 接口（dsh-agent-router 宿主行可能是旧版本）：请完全退出并重启 DSH，然后强制刷新页面（Ctrl+F5）。',
       cliRemoteFailed: 'CLI 接口调用失败',
+      cliLoginTimeoutHint: '等待登录超时（约 60 秒未检测到登录完成）：请在终端窗口完成授权后点「刷新状态」；若已完成登录，刷新即显示「已登录」。',
       cliFetchModels: '拉取模型',
       cliFetchingModels: '拉取中…',
       cliTitle: '子代理（无头 CLI）',
@@ -724,6 +725,7 @@ window.__ModuleLoader__.load({
       cliRelogin: 'Sign in again',
       cliRemoteMissing: 'The host does not provide the cliStatus/cliLogin interface (outdated dsh-agent-router host plugin): fully quit and restart DSH, then hard-refresh the page (Ctrl+F5).',
       cliRemoteFailed: 'CLI interface call failed',
+      cliLoginTimeoutHint: 'Sign-in was not detected within ~60s: complete the authorization in the terminal window, then click "Refresh status"; if you already signed in, refreshing shows "Signed in".',
       cliFetchModels: 'Fetch models',
       cliFetchingModels: 'Fetching…',
       cliTitle: 'Subagents (headless CLI)',
@@ -1586,35 +1588,41 @@ window.__ModuleLoader__.load({
       const runCliLogin = async (id, stateKey = id) => {
         const routerRemote = cliRemote()
         if (!routerRemote) {
-          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginNotice: t('cliRemoteMissing') } }))
+          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: false, loginError: true, loginNotice: t('cliRemoteMissing') } }))
           return
         }
-        setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: true, loginNotice: '' } }))
+        setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: true, loginError: false, loginNotice: '' } }))
         try {
           const response = await routerRemote.cliLogin({ agentId: id })
           if (!response.ok) {
-            setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: false, loginNotice: response.error.message } }))
+            setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: false, loginError: true, loginNotice: response.error.message } }))
             return
           }
-          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: false, loginNotice: response.value.message } }))
-          // 轮询登录状态：最多 20 次 × 3 秒，登录成功即停；轮询失败给出提示并停止。
+          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginNotice: response.value.message } }))
+          // 轮询登录状态：最多 20 次 × 3 秒，登录成功即停。轮询期间 loginBusy
+          // 保持 true（按钮显示「等待登录…」并禁用，防止重复弹窗）；轮询任一
+          // 失败与轮询耗尽都必须复位 busy 并给出明确提示，避免按钮永久卡死。
           for (let attempt = 0; attempt < 20; attempt++) {
             await new Promise((done) => window.setTimeout(done, 3000))
             try {
               const poll = await routerRemote.cliStatus({ agentId: id })
               const loggedIn = poll.ok && poll.value.loggedIn === true
-              setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), ...(loggedIn ? { loggedIn: true } : {}), statusMessage: poll.ok ? poll.value.message : (current[stateKey]?.statusMessage ?? '') } }))
+              // 每次轮询都镜像探测结果（含负向）：登录流程中状态以端点为准，
+              // 轮询耗尽时 chip 与按钮如实回到「未登录」而不是残留旧值。
+              setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loggedIn: poll.ok ? poll.value.loggedIn === true : undefined, statusMessage: poll.ok ? poll.value.message : (current[stateKey]?.statusMessage ?? '') } }))
               if (loggedIn) {
-                setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginNotice: t('cliStatusLoggedIn') + `：${poll.value.message}` } }))
+                setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: false, loginError: false, loginNotice: t('cliStatusLoggedIn') + `：${poll.value.message}` } }))
                 return
               }
             } catch (pollError) {
-              setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginNotice: `${t('cliRemoteFailed')}：${messageOf(pollError)}` } }))
+              setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: false, loginError: true, loginNotice: `${t('cliRemoteFailed')}：${messageOf(pollError)}` } }))
               return
             }
           }
+          // 轮询耗尽（60 秒内未检测到登录完成）：复位并指引用户手动刷新状态。
+          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: false, loginError: true, loginNotice: t('cliLoginTimeoutHint') } }))
         } catch (error) {
-          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: false, loginNotice: `${t('cliRemoteFailed')}：${messageOf(error)}` } }))
+          setCliStates((current) => ({ ...current, [stateKey]: { ...(current[stateKey] ?? {}), loginBusy: false, loginError: true, loginNotice: `${t('cliRemoteFailed')}：${messageOf(error)}` } }))
         }
       }
 
@@ -2703,8 +2711,10 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** cli 登录状态指示 chip（圆点与文字分离：dshrouter-dot 是纯色点，不承载文字）。 */
+    /** cli 登录状态指示 chip（圆点与文字分离：dshrouter-dot 是纯色点，不承载文字）。
+     *  未登录时文字以错误色（红）呈现，避免灰色小字不醒目。 */
     function cliStatusChipOf(cliState, t) {
+      const loggedOut = !!cliState && cliState.loggedIn === false && !cliState.statusBusy
       const chip = cliState && cliState.statusBusy
         ? { dot: '', text: `${t('fetching')}…` }
         : cliState && cliState.loggedIn === true
@@ -2712,7 +2722,7 @@ window.__ModuleLoader__.load({
           : cliState && cliState.loggedIn === false
             ? { dot: 'bad', text: t('cliStatusLoggedOut') }
             : { dot: '', text: t('cliStatusUnknown') }
-      return el('span', { className: 'dshrouter-meta', title: cliState && cliState.statusMessage },
+      return el('span', { className: 'dshrouter-meta' + (loggedOut ? ' dshrouter-error' : ''), title: cliState && cliState.statusMessage },
         el('span', { className: `dshrouter-dot ${chip.dot}`.trim(), style: { marginRight: 6 } }),
         chip.text)
     }
@@ -2737,8 +2747,8 @@ window.__ModuleLoader__.load({
             el('button', { type: 'button', className: 'dshrouter-button', disabled: busy || !writable || (cliState && cliState.loginBusy), onClick: onCliLogin },
               cliState && cliState.loginBusy ? t('cliLoginWaiting') : (cliState && cliState.loggedIn === true ? t('cliRelogin') : t('cliLogin'))),
             el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: cliState && cliState.statusBusy, onClick: onCliStatus }, t('cliStatusRefresh'))),
-          cliState && cliState.statusMessage ? el('p', { className: 'dshrouter-hint' }, cliState.statusMessage) : null,
-          cliState && cliState.loginNotice ? el('p', { className: 'dshrouter-hint' }, cliState.loginNotice) : null,
+          cliState && cliState.statusMessage ? el('p', { className: cliState.loggedIn === false ? 'dshrouter-error' : 'dshrouter-hint' }, cliState.statusMessage) : null,
+          cliState && cliState.loginNotice ? el('p', { className: cliState.loginError === true ? 'dshrouter-error' : 'dshrouter-hint' }, cliState.loginNotice) : null,
           el('div', { className: 'dshrouter-row' },
             el('div', { className: 'dshrouter-field', style: { flex: '0 0 180px' } },
               el('span', { className: 'dshrouter-field-label' }, t('fieldName')),

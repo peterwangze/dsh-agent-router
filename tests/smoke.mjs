@@ -595,10 +595,18 @@ console.log('RouterService:')
   check('cli status non-cli rejected', nonCliStatus.ok === false && nonCliStatus.message.includes('cli'))
   const nonCliLogin = await service.cliLogin({ agentId: 'vision' })
   check('cli login non-cli rejected', nonCliLogin.ok === false && nonCliLogin.message.includes('cli'))
-  if (globalThis.process?.platform !== 'win32') {
-    const loginOk = await service.cliLogin({ agentId: 'coderout' })
-    check('cli login starts process', loginOk.ok === true && loginOk.message.includes('终端窗口'))
+  // 登录按钮全平台回归（负向见证）：旧实现的窗口标题拼装引用未定义的
+  // agent → ReferenceError，登录按钮永远失败；此前该断言只在非 Windows
+  // 执行（本机 Windows 被跳过），缺陷从未被捕获。Windows 下经 cmd start
+  // 弹出一个立即退出的 node 窗口（spawn 事件即返回，不影响断言）。
+  let cliLoginThrew = null
+  let loginOk = null
+  try {
+    loginOk = await service.cliLogin({ agentId: 'coderout' })
+  } catch (error) {
+    cliLoginThrew = error
   }
+  check('cli login starts process (all platforms)', !cliLoginThrew && loginOk && loginOk.ok === true && loginOk.message.includes('终端窗口'))
   const coderModels = await service.cliModels({ agentId: 'coder' })
   check('cli models from command', coderModels.ok === true && coderModels.models.length === 2 && coderModels.models[0] === 'm1' && coderModels.source === 'cli')
   // 子代理条目：按条目 id 直接探测；专业 agent 经 cliAgent 引用探测。
