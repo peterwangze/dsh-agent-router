@@ -2,7 +2,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { routerSchema, wireCodecs } from '../lib/schemas.js'
 import { createHostContribution, ROUTER_REMOTE } from '../lib/rpc.js'
-import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine } from '../lib/service.js'
+import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine, cliWorkspaceHint } from '../lib/service.js'
 import { runClientRender } from './client-render.mjs'
 import { BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
@@ -219,7 +219,7 @@ console.log('RouterService:')
       coderbusy: { name: 'CLI忙碌', type: 'cli', enabled: true, command: process.execPath, args: CLI_SLEEP_ARGS(1000), maxConcurrent: 1 },
       codertimeout: { name: 'CLI超时', type: 'cli', enabled: true, command: process.execPath, args: CLI_SLEEP_ARGS(5000), timeoutMs: 200 },
       coderacct: { name: 'CLI账号', type: 'cli', enabled: true, account: 'oauth', command: process.execPath, args: CLI_ECHO_ARGS },
-      codersbx: { name: 'CLI沙箱', type: 'cli', enabled: true, command: process.execPath, args: `${CLI_ECHO_ARGS} -- --sandbox workspace-write` },
+      coderflags: { name: 'CLI仿沙箱旗标', type: 'cli', enabled: true, command: process.execPath, args: `${CLI_ECHO_ARGS} -- --sandbox workspace-write -s --output-format json` },
       coderout: { name: 'CLI未登录', type: 'cli', enabled: true, command: process.execPath, statusArgs: `-e "process.exit(1)"`, loginArgs: `-e "process.exit(0)"` },
       coderref: { name: 'CLI引用', type: 'cli', enabled: true, cliAgent: 'codexentry' },
       coderbadref: { name: 'CLI坏引用', type: 'cli', enabled: true, cliAgent: 'nope' },
@@ -467,10 +467,15 @@ console.log('RouterService:')
     try {
       const cliRun = await service.run({ agentId: 'coder', task: 'cli测试', images: [], exec: { agent: fakeParentCli } })
       check('cli run spawns headless process', cliRun.kind === 'cli' && cliRun.text.includes('cli测试') && cliRun.text.includes('工作目录：') && cliRun.text.includes('重试纪律') && cliRun.text.includes('生成或处理图片') && cliRun.text.includes('[角色设定]') && cliRun.text.includes('你是一个测试助手'))
-      // 未启用 CLI 沙箱（本伪 CLI 无 --sandbox 参数）时注入自觉收敛文案，而非错误的「受沙箱限制」。
+      // 未启用 CLI 沙箱（本伪 CLI 无沙箱参数）时注入自觉收敛文案，而非错误的「受沙箱限制」。
       check('cli run unsandboxed wording', cliRun.text.includes('未启用 CLI 沙箱') && !cliRun.text.includes('受沙箱限制'))
-      const cliSbxRun = await service.run({ agentId: 'codersbx', task: '沙箱文案', images: [], exec: { agent: fakeParentCli } })
-      check('cli run sandboxed wording', cliSbxRun.kind === 'cli' && cliSbxRun.text.includes('受沙箱限制') && !cliSbxRun.text.includes('未启用 CLI 沙箱'))
+      // 非 codex CLI 携带 --sandbox/-s 字样（如 gemini 的布尔 -s）不得被按 codex 语义
+      // 误读为值形态沙箱：仍应注入未启用文案（沙箱识别按 CLI 语义收敛）。
+      const cliFlagsRun = await service.run({ agentId: 'coderflags', task: '旗标文案', images: [], exec: { agent: fakeParentCli } })
+      check('cli run sandbox flags not misread for non-codex', cliFlagsRun.kind === 'cli' && cliFlagsRun.text.includes('未启用 CLI 沙箱') && !cliFlagsRun.text.includes('受沙箱限制'))
+      // 提示文案双分支的单元覆盖（受限/未启用；gemini 'on' 视为受限）。
+      check('cli workspace hint restricted', cliWorkspaceHint('/w', 'workspace-write').includes('受沙箱限制') && cliWorkspaceHint('/w', 'read-only').includes('受沙箱限制') && cliWorkspaceHint('/w', 'on').includes('受沙箱限制'))
+      check('cli workspace hint unrestricted', cliWorkspaceHint('/w', 'danger-full-access').includes('未启用 CLI 沙箱') && cliWorkspaceHint('/w', '').includes('未启用 CLI 沙箱') && !cliWorkspaceHint('/w', 'danger-full-access').includes('受沙箱限制'))
       const cliFilesRun = await service.run({ agentId: 'coder', task: '处理文件', images: [], files: ['notes.txt'], exec: { agent: fakeParentCli } })
       check('cli files paths injected', cliFilesRun.kind === 'cli' && cliFilesRun.text.includes('待处理文件') && cliFilesRun.text.includes('D:/work/example/notes.txt'))
       // 经 cliAgent 引用子代理条目执行：使用条目 command/args，而非 agent 内嵌字段。
@@ -554,6 +559,13 @@ console.log('RouterService:')
   // 非 codex CLI 不受沙箱补齐影响。
   const cliSpecClaude = service.resolveCliSpec({ command: 'claude', args: '' }, 'win32')
   check('cli spec non-codex unaffected', !cliSpecClaude.args.includes('--sandbox') && cliSpecClaude.sandbox === '')
+  // gemini 的 -s/--sandbox 是布尔标志（无值）：出现即视为启用沙箱（'on'），
+  // 不得按 codex 值形态误读下一个 token。
+  const cliSpecGemini = service.resolveCliSpec({ command: 'gemini', args: '' }, 'win32')
+  const cliSpecGeminiSbx = service.resolveCliSpec({ command: 'gemini', args: '-p --output-format json -s' }, 'win32')
+  check('cli spec gemini boolean sandbox', cliSpecGemini.sandbox === '' && cliSpecGeminiSbx.sandbox === 'on' && cliSpecGeminiSbx.args.includes('--yolo') === false)
+  const cliSpecGeminiLongSbx = service.resolveCliSpec({ command: 'gemini', args: '-p --output-format json --sandbox' }, 'win32')
+  check('cli spec gemini long boolean sandbox', cliSpecGeminiLongSbx.sandbox === 'on')
   const cmdInv = service.resolveCliInvocation('codex.cmd', ['-p', 'a b'])
   check('cli invocation cmd shim', cmdInv.executable.toLowerCase().includes('cmd.exe') && cmdInv.argv.length === 4 && cmdInv.argv[3].includes('"-p"') && cmdInv.argv[3].includes('"a b"'))
   const wrappedCmd = wrapCmdLine(cmdInv.argv)
