@@ -118,12 +118,26 @@ function Add-PatchEntry([string[]]$lines, [string]$fileName) {
     }
   }
   if ($insertIndex -lt 0) {
+    $newEntry = @(
+      '- insert:'
+      '    - id: router'
+      "      name: $script:PluginName"
+      '    - id: tool-router'
+      "      name: $script:PluginName/tool"
+    )
+    # `[]`（空数组 = 禁用层形态）不能与新增条目并存：直接用 insert 条目替换该行。
+    for ($i = 0; $i -lt $lines.Length; $i++) {
+      if ($lines[$i] -match '^\s*\[\]\s*$') {
+        $lines[$i] = $newEntry[0]
+        $result = New-Object System.Collections.Generic.List[string]
+        for ($j = 0; $j -le $i; $j++) { $result.Add($lines[$j]) }
+        for ($j = 1; $j -lt $newEntry.Length; $j++) { $result.Add($newEntry[$j]) }
+        for ($j = $i + 1; $j -lt $lines.Length; $j++) { $result.Add($lines[$j]) }
+        return $result.ToArray()
+      }
+    }
     $lines += ''
-    $lines += '- insert:'
-    $lines += "    - id: router"
-    $lines += "      name: $script:PluginName"
-    $lines += "    - id: tool-router"
-    $lines += "      name: $script:PluginName/tool"
+    $lines += $newEntry
     return $lines
   }
   # 列表尾部 = insert 行之后、下一个顶层数组元素 / 顶层键之前的最后一个条目行。

@@ -119,6 +119,19 @@ else
       /^[[:space:]]*(-[[:space:]]+)?insert:[[:space:]]*$/ && !found { L = NR; found = 1 }
       END {
         if (!found) {
+          # `[]`（空数组 = 禁用层形态）不能与新增条目并存：直接用 insert 条目替换该行。
+          empty = 0
+          for (i = 1; i <= NR; i++) if (lines[i] ~ /^[[:space:]]*\[\][[:space:]]*$/) { empty = i; break }
+          if (empty > 0) {
+            for (i = 1; i < empty; i++) print lines[i]
+            print "- insert:"
+            print "    - id: router"
+            print "      name: " plugin
+            print "    - id: tool-router"
+            print "      name: " plugin "/tool"
+            for (i = empty + 1; i <= NR; i++) print lines[i]
+            exit
+          }
           for (i = 1; i <= NR; i++) print lines[i]
           print ""
           print "- insert:"
