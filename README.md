@@ -26,7 +26,7 @@
 
 | 平台 | 命令 |
 | --- | --- |
-| Windows（PowerShell） | `powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/peterwangze/dsh-agent-router/main/install.ps1 \| iex"` |
+| Windows（PowerShell） | `powershell -ExecutionPolicy Bypass -Command "iex (((irm https://raw.githubusercontent.com/peterwangze/dsh-agent-router/main/install.ps1) -join [Environment]::NewLine).TrimStart([char]0xFEFF))"` |
 | macOS / Linux | `curl -fsSL https://raw.githubusercontent.com/peterwangze/dsh-agent-router/main/install.sh \| sh` |
 
 安装脚本自动完成：克隆源码 → 链接到 `~/.dsh/profiles/node_modules/` → 在 `profiles/web/cordis.patch.yml` 写入宿主行（幂等，可重复执行）。完成后**重启 DSH** 即可。
@@ -61,7 +61,7 @@ cd dsh-agent-router-v0.1.2
 
 1. 检测当前系统平台，在终端执行对应安装命令：
    - Windows（PowerShell）：
-     powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/peterwangze/dsh-agent-router/main/install.ps1 | iex"
+     powershell -ExecutionPolicy Bypass -Command "iex (((irm https://raw.githubusercontent.com/peterwangze/dsh-agent-router/main/install.ps1) -join [Environment]::NewLine).TrimStart([char]0xFEFF))"
    - macOS / Linux：
      curl -fsSL https://raw.githubusercontent.com/peterwangze/dsh-agent-router/main/install.sh | sh
 2. 等待命令执行完成，确认输出包含「安装完成」。

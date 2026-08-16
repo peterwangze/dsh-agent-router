@@ -4,6 +4,7 @@ import { routerSchema, wireCodecs } from '../lib/schemas.js'
 import { createHostContribution, ROUTER_REMOTE } from '../lib/rpc.js'
 import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine, cliWorkspaceHint } from '../lib/service.js'
 import { runClientRender } from './client-render.mjs'
+import { runInstallEntryTests } from './install-entry.mjs'
 import { BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -733,6 +734,9 @@ console.log('apply wiring:')
   console.log('client render:')
   await runClientRender(check)
 }
+
+// 8. 平台安装入口（BOM 免疫在线命令 + 离线安装幂等；涉及系统宿主与本地 fixture 服务器）
+await runInstallEntryTests(check)
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : `\n${failures} FAILURES`)
 process.exit(failures === 0 ? 0 : 1)
