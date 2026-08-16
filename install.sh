@@ -72,16 +72,53 @@ if [ -e "$DST" ] || [ -L "$DST" ]; then
     exit 1
   fi
   step "链接已存在：$DST"
+  LINKED=1
 else
   if ln -s "$SRC" "$DST" 2>/dev/null; then
     step "已创建符号链接：$DST -> $SRC"
+    LINKED=1
   else
     step "符号链接创建失败：改用目录拷贝…"
-    rm -rf "$DST"
-    mkdir -p "$DST"
-    (cd "$SRC" && tar -cf - --exclude=.git --exclude=node_modules --exclude=.router-files --exclude=tests .) | (cd "$DST" && tar -xf -)
-    step "拷贝完成：$DST"
+    LINKED=0
   fi
+fi
+
+# 依赖解析链接：Node 从符号链接解析到源码真实目录后，插件的
+# `@deepseek-ai/*` 依赖也从真实目录向上查找 node_modules——git clone 的
+# 源码没有依赖树，必须把 profiles 的平坦依赖树链接进源码目录。拷贝回退
+# 路径不需要：插件本体直接落在 profiles/node_modules 下，依赖向上查找即可解析。
+if [ "$LINKED" = 1 ]; then
+  SRC_NODE_MODULES="$SRC/node_modules"
+  if [ -e "$SRC_NODE_MODULES" ] || [ -L "$SRC_NODE_MODULES" ]; then
+    if [ -L "$SRC_NODE_MODULES" ]; then
+      step "依赖链接已存在：$SRC_NODE_MODULES"
+    else
+      step "源码自带依赖目录：$SRC_NODE_MODULES（跳过依赖链接）"
+    fi
+  else
+    if ln -s "$NODE_MODULES" "$SRC_NODE_MODULES" 2>/dev/null; then
+      step "已创建依赖链接：$SRC_NODE_MODULES -> $NODE_MODULES"
+    else
+      echo "警告：依赖链接创建失败：改用目录拷贝…" >&2
+      rm -f "$DST"
+      LINKED=0
+    fi
+  fi
+fi
+
+if [ "$LINKED" = 0 ]; then
+  # 安全护栏：只移除本脚本创建的符号链接（绝不对真实目录 rm -rf），
+  # 并确认链接已移除——若仍在，tar 会把源码解包进源码自身，破坏用户目录。
+  if [ -L "$DST" ]; then
+    rm -f "$DST"
+  fi
+  if [ -e "$DST" ] || [ -L "$DST" ]; then
+    echo "$DST 仍存在（链接移除失败）：已中止拷贝，请手动删除后重试" >&2
+    exit 1
+  fi
+  mkdir -p "$DST"
+  (cd "$SRC" && tar -cf - --exclude=.git --exclude=node_modules --exclude=.router-files --exclude=tests .) | (cd "$DST" && tar -xf -)
+  step "拷贝完成：$DST"
 fi
 
 # ── 3. 幂等写入 cordis.patch.yml（宿主平面两行：router + tool-router）──

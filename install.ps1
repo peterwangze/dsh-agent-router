@@ -79,7 +79,48 @@ if (Test-Path $dst) {
     Write-Warning "junction 创建失败（$($_.Exception.Message)）：改用目录拷贝"
   }
 }
+
+# 依赖解析链接：Node 从 junction 解析到源码真实目录后，插件的
+# `@deepseek-ai/*` 依赖也从真实目录向上查找 node_modules——git clone 的
+# 源码没有依赖树，必须把 profiles 的平坦依赖树链接进源码目录（与开发机
+# 的 node_modules 依赖 junction 同形态）。拷贝回退路径不需要：插件本体
+# 直接落在 profiles\node_modules 下，依赖向上查找即可解析。
+if ($linked) {
+  $srcNodeModules = Join-Path $src 'node_modules'
+  $hasDepTree = $false
+  if (Test-Path $srcNodeModules) {
+    $depItem = Get-Item $srcNodeModules -Force
+    $isDepLink = $depItem.LinkType -or ($depItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
+    if ($isDepLink) {
+      Write-Step "依赖链接已存在：$srcNodeModules"
+    } else {
+      Write-Step "源码自带依赖目录：$srcNodeModules（跳过依赖链接）"
+    }
+    $hasDepTree = $true
+  } else {
+    # 悬空依赖链接：Test-Path 不可见但目录项仍存在，重建前只移除链接本身。
+    $dangling = Get-Item $srcNodeModules -Force -ErrorAction SilentlyContinue
+    if ($dangling -and ($dangling.LinkType -or ($dangling.Attributes -band [System.IO.FileAttributes]::ReparsePoint))) {
+      $dangling.Delete()
+    }
+  }
+  if (-not $hasDepTree) {
+    try {
+      New-Item -ItemType Junction -Path $srcNodeModules -Target $nodeModules | Out-Null
+      Write-Step "已创建依赖链接：$srcNodeModules -> $nodeModules"
+    } catch {
+      Write-Warning "依赖链接创建失败（$($_.Exception.Message)）：改用目录拷贝"
+      (Get-Item $dst -Force).Delete()
+      $linked = $false
+    }
+  }
+}
 if (-not $linked) {
+  # 安全护栏：回退拷贝前必须确认链接已移除，否则 robocopy 会沿 junction
+  # 把源码递归拷贝进源码自身，破坏用户目录。
+  if (Test-Path $dst) {
+    Write-Error "$dst 仍存在（链接移除失败）：已中止拷贝，请手动删除该链接后重试"
+  }
   Write-Step "拷贝源码到 $dst …"
   robocopy $src $dst /E /XD .git node_modules .router-files tests /NFL /NDL /NJH /NJS | Out-Null
   if ($LASTEXITCODE -gt 7) { Write-Error "拷贝失败（robocopy 退出码 $LASTEXITCODE）" }
