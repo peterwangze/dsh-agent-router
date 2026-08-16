@@ -211,13 +211,37 @@ export async function runClientRender(check) {
     cliLogin: async () => ({ ok: true, value: { ok: true, message: '已在终端窗口启动' } }),
     cliModels: async () => ({ ok: true, value: { ok: true, message: '2 个模型', models: ['m1', 'm2'], source: 'cli' } }),
   }
+  // 账号添加/编辑回归用记录：端点探测请求、llm-pi-ai 写入、凭据写入。
+  // discoverMode 切 'fail' 模拟端点不可达（负向见证）。
+  const discoverCalls = []
+  const mutateCalls = []
+  const credSetCalls = []
+  let discoverMode = 'ok'
   const apiMock = {
     llm: {
-      providers: async () => ({ result: { ok: true, value: { providers: [] } } }),
-      models: async () => ({ result: { ok: true, value: { groups: [], failures: [] } } }),
+      providers: async () => ({ result: { ok: true, value: { providers: [
+        { provider: 'openai', displayName: 'OpenAI', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], active: false, declared: false },
+        { provider: 'gateway', displayName: 'Gateway', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'gateway'], active: true, declared: true },
+      ] } } }),
+      models: async () => ({ result: { ok: true, value: { groups: [{ id: 'gateway', models: [{ id: 'old-m', name: 'Old M' }] }], failures: [] } } }),
+      discoverModels: async (request) => {
+        discoverCalls.push(request)
+        if (discoverMode === 'fail') return { result: { ok: false, error: { message: 'could not reach https://gateway.example/v1/models' } } }
+        return { result: { ok: true, value: { models: [{ id: 'm-a' }, { id: 'm-b', name: 'Model B', contextWindow: 65536, maxTokens: 4096 }] } } }
+      },
     },
-    settings: { describe: async () => ({ result: { ok: true, value: { namespaces: [] } } }) },
-    credentials: {},
+    settings: {
+      describe: async () => ({ result: { ok: true, value: { namespaces: [{ ns: 'llm-pi-ai', value: { providers: { gateway: { api: 'openai-completions', baseURL: 'https://gateway.example/v1', models: [{ id: 'old-m', name: 'Old M' }] } } } }] } } }),
+      mutate: async (payload) => {
+        mutateCalls.push(payload)
+        return { result: { ok: true } }
+      },
+    },
+    credentials: {
+      describe: async () => ({ result: { ok: true, value: { credentials: {} } } }),
+      set: async (payload) => { credSetCalls.push(payload); return { result: { ok: true } } },
+      unset: async () => ({ result: { ok: true } }),
+    },
   }
   const zh = {}
   const ctx = {
@@ -332,6 +356,135 @@ export async function runClientRender(check) {
       advancedHead.props.onClick()
       currentTree = await settle()
       check('advanced section reveals oauth & pools', textOf(currentTree).includes(zh.oauthTitle) && textOf(currentTree).includes(zh.poolIntro))
+    }
+  }
+
+  // ── 断言：添加账号（＋ 自定义）模型留空时自动从端点拉取并随配置写入 ──
+  // 负向见证：旧行为直接写无 models 的 profile → 宿主 llm-pi-ai 校验器
+  // 报 "resolves no models" 拒绝写入；新行为必须先探测端点（与 cc-switch
+  // 同款 GET /models），拉到才写入，拉不到中止并给出指引。
+  const accountAddCard = findAll(currentTree, (node) => hasClass(node, 'dshrouter-add')).find((node) => textOf(node).includes(zh.addAccount))
+  check('account add card found', !!accountAddCard)
+  if (accountAddCard) {
+    accountAddCard.props.onClick()
+    currentTree = await settle()
+    const customChip = buttonsOf(currentTree).find((node) => textOf(node).includes(zh.accountCustom))
+    check('account add custom chip found', !!customChip)
+    if (customChip) {
+      customChip.props.onClick()
+      currentTree = await settle()
+      const inputByLabel = (label) => findAll(currentTree, (node) => node && node.type === 'input' && node.props && node.props['aria-label'] === label)[0]
+      const fillAdd = (provider, baseUrl, key, models) => {
+        const providerInput = inputByLabel(zh.fieldProviderId)
+        if (providerInput) providerInput.props.onChange({ target: { value: provider } })
+        const keyInput = inputByLabel(zh.accountKey)
+        if (keyInput) keyInput.props.onChange({ target: { value: key } })
+        const urlInput = inputByLabel(zh.accountBaseUrl)
+        if (urlInput) urlInput.props.onChange({ target: { value: baseUrl } })
+        const modelsInput = inputByLabel(zh.accountModelsField)
+        if (modelsInput) modelsInput.props.onChange({ target: { value: models } })
+      }
+      const submitAdd = async () => {
+        currentTree = await settle()
+        const addButton = buttonsOf(currentTree).find((node) => textOf(node) === zh.accountAddProvider)
+        if (addButton) addButton.props.onClick()
+        currentTree = await settle()
+        return addButton
+      }
+      // 场景 1：模型留空 + 端点可达 → 保存时自动拉取并写入发现的模型。
+      fillAdd('crazy-code', 'https://gateway.example/v1', 'sk-test', '')
+      const ready1 = await submitAdd()
+      check('account add submit ready', !!ready1)
+      check('custom add probes endpoint once', discoverCalls.length === 1 && discoverCalls[0].settingsNs === 'llm-pi-ai' && discoverCalls[0].provider === 'crazy-code' && discoverCalls[0].baseURL === 'https://gateway.example/v1' && discoverCalls[0].api === 'openai-completions' && discoverCalls[0].apiKey === 'sk-test')
+      const crazyWrite = mutateCalls.find((call) => call.ns === 'llm-pi-ai' && Array.isArray(call.ops) && call.ops[0] && call.ops[0].path[1] === 'crazy-code')
+      check('custom add writes discovered models', !!crazyWrite && Array.isArray(crazyWrite.ops[0].value.models) && crazyWrite.ops[0].value.models.length === 2 && crazyWrite.ops[0].value.models[0].id === 'm-a' && crazyWrite.ops[0].value.models[1].id === 'm-b' && crazyWrite.ops[0].value.models[1].name === 'Model B' && crazyWrite.ops[0].value.models[1].contextWindow === 65536 && crazyWrite.ops[0].value.models[1].maxTokens === 4096 && crazyWrite.ops[0].value.apiKeyEnv === 'CRAZY_CODE_API_KEY' && crazyWrite.ops[0].value.defaultInput.join(',') === 'text,image' && crazyWrite.ops[0].value.api === 'openai-completions' && crazyWrite.ops[0].value.baseURL === 'https://gateway.example/v1')
+      check('custom add stores credential', credSetCalls.some((call) => call.ref === 'CRAZY_CODE_API_KEY' && call.value === 'sk-test'))
+
+      // 场景 2：手工填写模型 → 原样写入，不探测端点（保持旧行为）。
+      fillAdd('manual-gw', 'https://manual.example/v1', '', 'gpt-x, gpt-y')
+      const ready2 = await submitAdd()
+      check('manual add submit ready', !!ready2)
+      const manualWrite = mutateCalls.find((call) => call.ns === 'llm-pi-ai' && Array.isArray(call.ops) && call.ops[0] && call.ops[0].path[1] === 'manual-gw')
+      check('manual models skip probe', discoverCalls.length === 1)
+      check('manual models written verbatim', !!manualWrite && Array.isArray(manualWrite.ops[0].value.models) && manualWrite.ops[0].value.models.length === 2 && manualWrite.ops[0].value.models[0].id === 'gpt-x' && manualWrite.ops[0].value.models[1].id === 'gpt-y' && !('apiKeyEnv' in manualWrite.ops[0].value))
+
+      // 场景 3：同名内置服务商（目录路由）模型留空 → 不探测、不写 models
+      // （按目录默认模型服务），保持旧行为。
+      fillAdd('openai', 'https://api.openai.com/v1', 'sk-o', '')
+      const ready3 = await submitAdd()
+      check('catalog overwrite submit ready', !!ready3)
+      const openaiWrite = mutateCalls.find((call) => call.ns === 'llm-pi-ai' && Array.isArray(call.ops) && call.ops[0] && call.ops[0].path[1] === 'openai')
+      check('catalog route overwrite skips probe', discoverCalls.length === 1)
+      check('catalog route overwrite omits models', !!openaiWrite && !('models' in openaiWrite.ops[0].value) && openaiWrite.ops[0].value.apiKeyEnv === 'OPENAI_API_KEY')
+
+      // 场景 4：端点不可达 → 中止写入并给出明确指引（绝不写半成品配置）。
+      const beforeFailWrites = mutateCalls.length
+      discoverMode = 'fail'
+      fillAdd('broken-gw', 'https://broken.example/v1', '', '')
+      const ready4 = await submitAdd()
+      check('failed add submit ready', !!ready4)
+      check('failed discovery aborts write', mutateCalls.length === beforeFailWrites && discoverCalls.length === 2)
+      check('failed discovery shows guidance', textOf(currentTree).includes(zh.accountDiscoverFailed) && textOf(currentTree).includes(zh.accountModelsRequiredHint))
+      discoverMode = 'ok'
+    }
+  }
+
+  // ── 断言：账号卡片编辑——自定义路由清空模型时自动拉取并原子写入；
+  //  拉取失败时保留现有模型（绝不写坏已生效的配置）────────────────────
+  const gatewayHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-card-head')).find((node) => textOf(node).includes('gateway'))
+  check('declared account card head found', !!gatewayHead)
+  if (gatewayHead) {
+    gatewayHead.props.onClick()
+    currentTree = await settle()
+    // 按头部按钮定位账号卡片：其他卡片展开后的内容（如 agent 卡片的服务商
+    // datalist 选项 "Gateway (gateway)"）同样含该字样，必须锚定在头部。
+    const gatewayCard = () => findAll(currentTree, (node) => node && node.type === 'div' && hasClass(node, 'dshrouter-card')).find((node) => {
+      const head = (node.children ?? []).find((child) => child && child.type === 'button' && hasClass(child, 'dshrouter-card-head'))
+      return !!head && textOf(head).includes('gateway')
+    })
+    // 账号卡片的模型输入框没有 aria-label（仅添加表单有）：在卡片子树内按
+    // 值定位（profile 里既有模型渲染为 'old-m'）。
+    const gatewayModelsInput = () => {
+      const card = gatewayCard()
+      return card ? findAll(card, (node) => node && node.type === 'input').find((node) => node.props && node.props.value === 'old-m') : null
+    }
+    const gatewaySave = () => {
+      const card = gatewayCard()
+      return card ? findAll(card, (node) => node && node.type === 'button').find((node) => textOf(node) === zh.save) : null
+    }
+    const gatewayInput = gatewayModelsInput()
+    check('declared account models field shown', !!gatewayInput)
+    if (gatewayInput) {
+      // 清空模型字段后保存：自动拉取 → 模型与 Base URL 合并进同一次原子写入。
+      gatewayInput.props.onChange({ target: { value: '' } })
+      currentTree = await settle()
+      const beforeEditWrites = mutateCalls.length
+      const saveButton = gatewaySave()
+      check('declared account save button found', !!saveButton)
+      if (saveButton) {
+        saveButton.props.onClick()
+        currentTree = await settle()
+        const lastDiscover = discoverCalls[discoverCalls.length - 1]
+        check('edit probes endpoint for declared route', lastDiscover && lastDiscover.provider === 'gateway' && lastDiscover.baseURL === 'https://gateway.example/v1' && lastDiscover.api === 'openai-completions' && !('apiKey' in lastDiscover))
+        const gatewayEditWrite = mutateCalls.slice(beforeEditWrites).find((call) => call.ns === 'llm-pi-ai')
+        const modelsOp = gatewayEditWrite ? gatewayEditWrite.ops.find((op) => op.path[2] === 'models') : null
+        check('edit writes discovered models atomically', !!gatewayEditWrite && gatewayEditWrite.ops.length >= 4 && !!modelsOp && modelsOp.op === 'set' && Array.isArray(modelsOp.value) && modelsOp.value.length === 2 && modelsOp.value[0].id === 'm-a' && modelsOp.value[1].id === 'm-b' && gatewayEditWrite.ops.some((op) => op.path[2] === 'baseURL' && op.value === 'https://gateway.example/v1'))
+        check('edit notice reports discovery', textOf(currentTree).includes(zh.accountDiscovered(2)))
+
+        // 负向见证：拉取失败时保留现有模型列表——本次写入不含 models 操作。
+        discoverMode = 'fail'
+        const beforeFailEdit = mutateCalls.length
+        const inputAgain = gatewayModelsInput()
+        if (inputAgain) inputAgain.props.onChange({ target: { value: '' } })
+        currentTree = await settle()
+        const saveAgain = gatewaySave()
+        if (saveAgain) saveAgain.props.onClick()
+        currentTree = await settle()
+        const failEditWrite = mutateCalls.slice(beforeFailEdit).find((call) => call.ns === 'llm-pi-ai')
+        check('failed edit keeps models', !!failEditWrite && !failEditWrite.ops.some((op) => op.path[2] === 'models') && failEditWrite.ops.some((op) => op.path[2] === 'baseURL'))
+        check('failed edit notice kept models', textOf(currentTree).includes(zh.accountModelsKept) && textOf(currentTree).includes(zh.accountDiscoverFailed))
+        discoverMode = 'ok'
+      }
     }
   }
 }

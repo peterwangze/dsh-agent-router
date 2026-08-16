@@ -104,7 +104,7 @@ cd dsh-agent-router-v0.1.5
 
 - **API Key 账号**：统一配置式添加——服务商 ID（openai / my-gateway / one-api 等）+ 接口类型（openai-completions / openai-responses / anthropic-messages）+ Base URL + API Key（本地部署可留空）+ 模型列表，填好即保存到共享模型列表；官方服务商、第三方中转与本地部署同一条路径
 - **子代理（无头 CLI）**：Codex / Claude Code / Gemini CLI 等 CLI 工具作为账号类条目统一管理——「＋」一键添加（预填命令与参数）或自定义；每卡配置命令/参数/超时/并发、**登录状态与一键登录**（弹出终端窗口完成 `codex login` 等并自动刷新）、**拉取模型**（CLI 无列表命令时回退常见模型清单）与用量统计；专业 Agent 的「执行方式 = cli」时从「子代理」下拉直接引用这些条目。Codex 沙箱参数按平台自适应：macOS/Linux 用 `--sandbox workspace-write`（产物如图片必须能写入工作区，`read-only` 会导致任务无法落盘），Windows 用 `--sandbox danger-full-access`——codex 的 Windows 沙箱实现无法启动 WindowsApps 目录下的 shell（报 `CreateProcessAsUserW failed: 5/1920`），每条命令都会在执行前失败并触发子代理反复重试、成倍浪费 token，关闭 OS 级沙箱后仍保留审批策略；参数留空即用该默认，自定义参数未显式指定 `--sandbox` 时也会按平台自动补齐；每次执行宿主都会注入**重试纪律**（同一失败最多重试 2 次即报告错误结束），避免子代理无限重试卡死任务
-- **自定义提供方（＋ 自定义）**：未集成的服务商、第三方中转与本地部署（Ollama / One-API / LM Studio 等）——填服务商 ID 与 Base URL 即复用模型添加基座注册到共享模型列表，注册后可用「发现模型」拉取端点模型；API Key 可留空（免鉴权本地服务）
+- **自定义提供方（＋ 自定义）**：未集成的服务商、第三方中转与本地部署（Ollama / One-API / LM Studio 等）——填服务商 ID 与 Base URL 即复用模型添加基座注册到共享模型列表，模型列表留空时保存会自动从端点拉取并写入（拉取失败会提示手工填写模型 id），注册后也可用「发现模型」拉取端点模型；API Key 可留空（免鉴权本地服务）
 - **高级扩展（默认折叠）**：OAuth 账号与账号池收进折叠卡片——
   - **OAuth 账号**（插件独立管理）：官方授权码登录（OAuth2 + PKCE，Gemini 需自建 OAuth Client）或粘贴 access token；模型列表插件内单独维护；同样支持「＋ 自定义」创建自建 OAuth2 服务商账号（自配协议 / 端点 / Client ID / Scope）
   - **账号池**：多个已授权账号组成池，按健康优先 / 用量最低 / 轮询自动选号，单账号失败自动切换；agent 的「OAuth 账号」字段可指向池
