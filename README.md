@@ -103,7 +103,7 @@ cd dsh-agent-router-v0.1.2
 ![多模态账号配置](docs/images/accounts.png)
 
 - **API Key 账号**：统一配置式添加——服务商 ID（openai / my-gateway / one-api 等）+ 接口类型（openai-completions / openai-responses / anthropic-messages）+ Base URL + API Key（本地部署可留空）+ 模型列表，填好即保存到共享模型列表；官方服务商、第三方中转与本地部署同一条路径
-- **子代理（无头 CLI）**：Codex / Claude Code / Gemini CLI 等 CLI 工具作为账号类条目统一管理——「＋」一键添加（预填命令与参数）或自定义；每卡配置命令/参数/超时/并发、**登录状态与一键登录**（弹出终端窗口完成 `codex login` 等并自动刷新）、**拉取模型**（CLI 无列表命令时回退常见模型清单）与用量统计；专业 Agent 的「执行方式 = cli」时从「子代理」下拉直接引用这些条目。Codex 预设参数为 `exec --json --sandbox workspace-write`（产物如图片必须能写入工作区，`read-only` 会导致任务无法落盘）；每次执行宿主都会注入**重试纪律**（同一失败最多重试 2 次即报告错误结束），避免子代理无限重试卡死任务
+- **子代理（无头 CLI）**：Codex / Claude Code / Gemini CLI 等 CLI 工具作为账号类条目统一管理——「＋」一键添加（预填命令与参数）或自定义；每卡配置命令/参数/超时/并发、**登录状态与一键登录**（弹出终端窗口完成 `codex login` 等并自动刷新）、**拉取模型**（CLI 无列表命令时回退常见模型清单）与用量统计；专业 Agent 的「执行方式 = cli」时从「子代理」下拉直接引用这些条目。Codex 沙箱参数按平台自适应：macOS/Linux 用 `--sandbox workspace-write`（产物如图片必须能写入工作区，`read-only` 会导致任务无法落盘），Windows 用 `--sandbox danger-full-access`——codex 的 Windows 沙箱实现无法启动 WindowsApps 目录下的 shell（报 `CreateProcessAsUserW failed: 5/1920`），每条命令都会在执行前失败并触发子代理反复重试、成倍浪费 token，关闭 OS 级沙箱后仍保留审批策略；参数留空即用该默认，自定义参数未显式指定 `--sandbox` 时也会按平台自动补齐；每次执行宿主都会注入**重试纪律**（同一失败最多重试 2 次即报告错误结束），避免子代理无限重试卡死任务
 - **自定义提供方（＋ 自定义）**：未集成的服务商、第三方中转与本地部署（Ollama / One-API / LM Studio 等）——填服务商 ID 与 Base URL 即复用模型添加基座注册到共享模型列表，注册后可用「发现模型」拉取端点模型；API Key 可留空（免鉴权本地服务）
 - **高级扩展（默认折叠）**：OAuth 账号与账号池收进折叠卡片——
   - **OAuth 账号**（插件独立管理）：官方授权码登录（OAuth2 + PKCE，Gemini 需自建 OAuth Client）或粘贴 access token；模型列表插件内单独维护；同样支持「＋ 自定义」创建自建 OAuth2 服务商账号（自配协议 / 端点 / Client ID / Scope）
@@ -122,7 +122,7 @@ cd dsh-agent-router-v0.1.2
 
 - **视觉 agent 用什么模型？** 需要支持图片输入的模型（如 `gpt-4o` 等 OpenAI 兼容多模态模型；实测 `opencode-go/qwen3.7-plus` 亦可）。模型不支持图片输入时插件会在调用前给出明确报错。
 - **能用 Codex / Claude Code / Gemini CLI 做子代理吗？** 能——在「多模态账号 → 子代理」添加 CLI 条目（一键预填或自定义），完成登录与模型拉取；然后把任意专业 agent 的执行方式切到 `cli`，从「子代理」下拉选择该条目。无头模式在工作区内执行，CLI 自己管登录（`codex login` 等一次即可），不经过插件的 OAuth 账号体系。
-- **CLI 子代理任务一直转圈/卡住？** CLI 子代理是完整 LLM agent：遇到可重试的错误（网络 502、上游超时）会自行反复重试而不是立即失败，而插件只在总超时（默认 15 分钟/条目，工具级 20 分钟）后强杀，因此表现为长时间卡住。宿主已注入重试纪律（同一失败重试 ≤2 次即报告错误结束），失败时返回结果会带上子代理 stderr 关键行（工作区 `.router-files/cli-run-*-err.log` 也有完整日志）。常见根因：① 上游网络不可达——图片生成走子代理自身的上游服务（如 Codex 走 ChatGPT 图片接口），需保证本机可达（开启代理等）；② 沙箱过严——命令参数须允许写入工作区（Codex 用 `--sandbox workspace-write`，`read-only` 会让产物无法落盘）；③ 并发与超时——同一子代理受「并发上限」约束，连点多次会各自排队或报「正忙」。
+- **CLI 子代理任务一直转圈/卡住？** CLI 子代理是完整 LLM agent：遇到可重试的错误（网络 502、上游超时）会自行反复重试而不是立即失败，而插件只在总超时（默认 15 分钟/条目，工具级 20 分钟）后强杀，因此表现为长时间卡住。宿主已注入重试纪律（同一失败重试 ≤2 次即报告错误结束），失败时返回结果会带上子代理 stderr 关键行（工作区 `.router-files/cli-run-*-err.log` 也有完整日志）。常见根因：① 上游网络不可达——图片生成走子代理自身的上游服务（如 Codex 走 ChatGPT 图片接口），需保证本机可达（开启代理等）；② 沙箱配置不当——Codex 在 Windows 上用 `workspace-write` / `read-only` 时，OS 沙箱无法启动 shell（每条命令报 `CreateProcessAsUserW failed: 5/1920`），子代理会反复重试浪费 token；保持参数留空（平台自适应默认）或显式使用 `--sandbox danger-full-access`（Windows）/ `workspace-write`（macOS/Linux），`read-only` 还会让产物无法落盘。注意：自定义参数里的旧版 `--full-auto` 会让 `--sandbox danger-full-access` 失效（实测仍走 Windows 沙箱并报 5/1920），请一并移除；③ 并发与超时——同一子代理受「并发上限」约束，连点多次会各自排队或报「正忙」。
 - **ChatGPT / Claude 能 OAuth 登录吗？** 官方 API 不提供 OAuth：请用官方 API Key；消费级 Web token 面向官方站后端，仅适用于兼容网关，可用「粘贴 token」方式保存。Gemini 需自建 Google Cloud OAuth Client（内置公开 Client 已被 Google 禁用：授权页报 invalid_request / invalid_scope）。
 - **主 agent 怎么知道该调谁？** 安装后所有 agent 预设自动获得 `route_agent` 工具与路由提示段，按能力标签路由：带图片的任务路由给声明 `image` 能力的 agent，语音转写路由给 `audio` 能力 agent。
 - **统计会丢吗？** 统计保存在内存中，DSH 重启后清零。
