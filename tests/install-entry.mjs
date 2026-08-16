@@ -17,7 +17,7 @@
 // 不依赖捕获子进程管道输出。清理 temp 目录时 junction/symlink 只删链接本身。
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { readFileSync, existsSync, readdirSync, lstatSync, rmSync, mkdirSync, rmdirSync, cpSync, symlinkSync, writeFileSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync, lstatSync, rmSync, mkdirSync, rmdirSync, cpSync, symlinkSync, writeFileSync, openSync, closeSync, chmodSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -34,13 +34,22 @@ const BOM = Buffer.from([0xef, 0xbb, 0xbf])
 const SPAWN_TIMEOUT_MS = 30000
 
 /**
- * 异步执行子进程并等待退出（stdio 全部忽略）。必须异步：fixture 服务器跑在
- * 本进程事件循环里，spawnSync 同步阻塞会饿死 HTTP 响应、导致子进程永远等响应。
+ * 异步执行子进程并等待退出。默认 stdio 全部 ignore；传 `outputFile` 时把
+ * stdout+stderr 合并重定向到该文件（文件捕获兼容受限环境，避免命名管道）。
+ * 必须异步：fixture 服务器跑在本进程事件循环里，spawnSync 同步阻塞会饿死
+ * HTTP 响应、导致子进程永远等响应。
  * @returns {Promise<{status: number | null, error: {code?: string} | null}>}
  */
 function runCommand(command, args, options = {}) {
   return new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: 'ignore', ...options })
+    const { outputFile, ...spawnOptions } = options
+    let outputFd = null
+    if (outputFile !== undefined) {
+      outputFd = openSync(outputFile, 'w')
+      spawnOptions.stdio = ['ignore', outputFd, outputFd]
+    }
+    const child = spawn(command, args, { stdio: 'ignore', ...spawnOptions })
+    if (outputFd !== null) closeSync(outputFd)
     let settled = false
     const finish = (error, status) => {
       if (settled) return
@@ -385,8 +394,82 @@ export async function runInstallEntryTests(check) {
         removeTempDir(bareRoot)
       }
     }
+
+    // ── 7. git 失败守卫：在线模式 git 失败必须立即中止───────────────
+    // 回归目标：git clone 失败后旧脚本继续走 junction/robocopy，最终以误导性的
+    // "robocopy 退出码 16" 收场且污染失败现场（用户实测报错）。修复后：
+    // git 任一环节失败 → 清晰报错并退出，不创建任何链接/拷贝/补丁。
+    {
+      const gitRoot = bareRoot()
+      try {
+        const fakeGitRoot = join(gitRoot, 'fake-git')
+        mkdirSync(fakeGitRoot, { recursive: true })
+        // Windows fake git（.cmd shim 进入 PATH 首位）；POSIX 用同名 shell 脚本。
+        writeFileSync(join(fakeGitRoot, 'git.cmd'), '@echo off\r\necho fatal: unable to access repo: simulated failure 1>&2\r\nexit /b 128\r\n')
+        writeFileSync(join(fakeGitRoot, 'git'), '#!/bin/sh\necho "fatal: unable to access repo: simulated failure" >&2\nexit 128\n')
+        if (process.platform !== 'win32') chmodSync(join(fakeGitRoot, 'git'), 0o755)
+        const fakePath = `${fakeGitRoot}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH ?? ''}`
+
+        for (const host of hosts) {
+          const failHome = join(fakeGitRoot, `fail-home-${host}`)
+          const outFile = join(fakeGitRoot, `fail-out-${host}.txt`)
+          const run = () => runCommand(host, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(ROOT_DIR, 'install.ps1')], { env: { ...process.env, DSH_HOME: failHome, PATH: fakePath }, outputFile: outFile })
+          const result = await run()
+          const output = existsSync(outFile) ? readFileSync(outFile, 'utf8') : ''
+          const noLink = !existsSync(join(failHome, 'profiles', 'node_modules', 'dsh-agent-router'))
+          const noPatch = !existsSync(join(failHome, 'profiles', 'web', 'cordis.patch.yml'))
+          check(`git clone failure aborts install on ${host}`, result.status !== 0 && noLink && noPatch)
+          check(`git clone failure reports clear error on ${host}`, output.includes('git clone 失败') && output.includes('离线安装'))
+        }
+        if (sh !== null) {
+          const failHome = join(fakeGitRoot, 'fail-home-sh')
+          const outFile = join(fakeGitRoot, 'fail-out-sh.txt')
+          const run = () => runCommand(sh, ['-c', `DSH_HOME='${failHome}' PATH='${fakePath}' sh '${join(ROOT_DIR, 'install.sh')}'`], { outputFile: outFile })
+          const result = await run()
+          const output = existsSync(outFile) ? readFileSync(outFile, 'utf8') : ''
+          const noLink = !existsSync(join(failHome, 'profiles', 'node_modules', 'dsh-agent-router'))
+          const noPatch = !existsSync(join(failHome, 'profiles', 'web', 'cordis.patch.yml'))
+          check(`git clone failure aborts install on ${sh}`, result.status !== 0 && noLink && noPatch)
+          check(`git clone failure reports clear error on ${sh}`, output.includes('git clone 失败') && output.includes('离线安装'))
+        }
+        if (hosts.length > 0) {
+          // git pull 失败同样中止（.git 已存在分支）。
+          const host = hosts[0]
+          const pullHome = join(fakeGitRoot, 'pull-home')
+          mkdirSync(join(pullHome, 'plugins-src', 'dsh-agent-router', '.git'), { recursive: true })
+          writeFileSync(join(pullHome, 'plugins-src', 'dsh-agent-router', 'package.json'), '{}')
+          const outFile = join(fakeGitRoot, 'pull-out.txt')
+          const run = () => runCommand(host, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(ROOT_DIR, 'install.ps1')], { env: { ...process.env, DSH_HOME: pullHome, PATH: fakePath }, outputFile: outFile })
+          const result = await run()
+          const output = existsSync(outFile) ? readFileSync(outFile, 'utf8') : ''
+          const noLink = !existsSync(join(pullHome, 'profiles', 'node_modules', 'dsh-agent-router'))
+          const noPatch = !existsSync(join(pullHome, 'profiles', 'web', 'cordis.patch.yml'))
+          check('git fetch failure aborts install (existing checkout)', result.status !== 0 && noLink && noPatch)
+          check('git fetch failure reports clear error', output.includes('git fetch 失败') && output.includes('离线安装'))
+          // 正向后置：fake git 成功（exit 0 且不创建目录）→ 触发源码缺失拦截。
+          writeFileSync(join(fakeGitRoot, 'git.cmd'), '@echo off\r\nexit /b 0\r\n')
+          writeFileSync(join(fakeGitRoot, 'git'), '#!/bin/sh\nexit 0\n')
+          if (process.platform !== 'win32') chmodSync(join(fakeGitRoot, 'git'), 0o755)
+          const ghostHome = join(fakeGitRoot, 'ghost-home')
+          const ghostOut = join(fakeGitRoot, 'ghost-out.txt')
+          const ghostRun = () => runCommand(host, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(ROOT_DIR, 'install.ps1')], { env: { ...process.env, DSH_HOME: ghostHome, PATH: fakePath }, outputFile: ghostOut })
+          const ghost = await ghostRun()
+          const ghostOutput = existsSync(ghostOut) ? readFileSync(ghostOut, 'utf8') : ''
+          check('ghost git clone (no source dir) aborts with missing-source error', ghost.status !== 0 && ghostOutput.includes('未生成源码目录') && !existsSync(join(ghostHome, 'profiles', 'node_modules', 'dsh-agent-router')))
+        }
+      } finally {
+        removeTempDir(gitRoot)
+      }
+    }
   } finally {
     await server.close()
     removeTempDir(tmpDir)
   }
+}
+
+/** 仓库外临时目录（同裸源码守卫的 bareRoot 约定，避免仓库 dev junction 污染解析）。 */
+function bareRoot() {
+  const dir = join(ROOT_DIR, '..', `.test-home-git-${process.pid}-${Date.now()}`)
+  mkdirSync(dir, { recursive: true })
+  return dir
 }

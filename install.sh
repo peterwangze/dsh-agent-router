@@ -41,14 +41,18 @@ if [ -n "$LOCAL_PATH" ]; then
 else
   SRC="$DSH_HOME/plugins-src/$PLUGIN"
   if [ -d "$SRC/.git" ]; then
-    step "源码目录已存在，git pull 更新（分支 $REF）…"
-    git -C "$SRC" fetch --depth 1 origin "$REF"
-    git -C "$SRC" checkout -q "$REF"
-    git -C "$SRC" pull -q --ff-only origin "$REF"
+    step "源码目录已存在，git 更新（分支 $REF）…"
+    git -C "$SRC" fetch --depth 1 origin "$REF" || { echo "git fetch 失败：无法更新插件源码。请检查网络/代理后重试，或改用离线安装：./install.sh --local <解压目录>" >&2; exit 1; }
+    git -C "$SRC" checkout -q "$REF" || { echo "git checkout 失败：请检查后重试，或改用离线安装：./install.sh --local <解压目录>" >&2; exit 1; }
+    git -C "$SRC" pull -q --ff-only origin "$REF" || { echo "git pull 失败：无法更新插件源码。请检查网络/代理后重试，或改用离线安装：./install.sh --local <解压目录>" >&2; exit 1; }
   else
     step "git clone $REPO_URL（分支 $REF）…"
     mkdir -p "$(dirname "$SRC")"
-    git clone --depth 1 --branch "$REF" "$REPO_URL" "$SRC"
+    git clone --depth 1 --branch "$REF" "$REPO_URL" "$SRC" || { echo "git clone 失败：无法访问 GitHub 获取插件源码。请检查网络/代理后重试，或改用离线安装：下载发行包并解压后执行 ./install.sh --local <解压目录>" >&2; exit 1; }
+    if [ ! -f "$SRC/package.json" ]; then
+      echo "git clone 未生成源码目录：$SRC 下找不到 package.json" >&2
+      exit 1
+    fi
   fi
 fi
 
@@ -114,6 +118,11 @@ if [ "$LINKED" = 0 ]; then
   fi
   if [ -e "$DST" ] || [ -L "$DST" ]; then
     echo "$DST 仍存在（链接移除失败）：已中止拷贝，请手动删除后重试" >&2
+    exit 1
+  fi
+  # 源校验：git clone 失败等场景下 $SRC 可能不存在，先明确拦截再拷贝。
+  if [ ! -f "$SRC/package.json" ]; then
+    echo "源码目录缺失：$SRC 下找不到 package.json，无法拷贝。请检查 git 步骤是否失败（见上方输出），或改用离线安装" >&2
     exit 1
   fi
   mkdir -p "$DST"

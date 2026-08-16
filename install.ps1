@@ -33,14 +33,32 @@ if ($LocalPath) {
 } else {
   $src = Join-Path $dshHome "plugins-src\$script:PluginName"
   if (Test-Path (Join-Path $src '.git')) {
-    Write-Step "源码目录已存在，git pull 更新（分支 $Ref）…"
-    git -C $src fetch --depth 1 origin $Ref *> $null
+    Write-Step "源码目录已存在，git 更新（分支 $Ref）…"
+    # 不重定向 stderr：PS 5.1 下重定向会把原生 stderr 包装成 ErrorRecord 并在
+    # $ErrorActionPreference='Stop' 时提前终止，绕过后面的清晰报错；直接透传
+    # 并由 $LASTEXITCODE 判定即可（原生 stderr 透传时不产生终止性错误）。
+    git -C $src fetch --depth 1 origin $Ref
+    if ($LASTEXITCODE -ne 0) {
+      Write-Error "git fetch 失败（退出码 $LASTEXITCODE）：无法更新插件源码。请检查网络/代理后重试，或改用离线安装（下载发行包后执行 .\install.ps1 -LocalPath <解压目录>）"
+    }
     git -C $src checkout -q $Ref
+    if ($LASTEXITCODE -ne 0) {
+      Write-Error "git checkout 失败（退出码 $LASTEXITCODE）：请检查后重试，或改用离线安装（下载发行包后执行 .\install.ps1 -LocalPath <解压目录>）"
+    }
     git -C $src pull -q --ff-only origin $Ref
+    if ($LASTEXITCODE -ne 0) {
+      Write-Error "git pull 失败（退出码 $LASTEXITCODE）：无法更新插件源码。请检查网络/代理后重试，或改用离线安装（下载发行包后执行 .\install.ps1 -LocalPath <解压目录>）"
+    }
   } else {
     Write-Step "git clone $RepoUrl（分支 $Ref）…"
     New-Item -ItemType Directory -Path (Split-Path $src -Parent) -Force | Out-Null
     git clone --depth 1 --branch $Ref $RepoUrl $src
+    if ($LASTEXITCODE -ne 0) {
+      Write-Error "git clone 失败（退出码 $LASTEXITCODE）：无法访问 GitHub 获取插件源码。请检查网络/代理后重试，或改用离线安装：下载发行包并解压后执行 .\install.ps1 -LocalPath <解压目录>"
+    }
+    if (-not (Test-Path (Join-Path $src 'package.json'))) {
+      Write-Error "git clone 未生成源码目录：$src 下找不到 package.json"
+    }
   }
 }
 
@@ -120,6 +138,11 @@ if (-not $linked) {
   # 把源码递归拷贝进源码自身，破坏用户目录。
   if (Test-Path $dst) {
     Write-Error "$dst 仍存在（链接移除失败）：已中止拷贝，请手动删除该链接后重试"
+  }
+  # 源校验：git clone 失败等场景下 $src 可能不存在，此时 robocopy 退出码
+  # 16（找不到源）只会给出误导性报错——在拷贝前明确拦截。
+  if (-not (Test-Path (Join-Path $src 'package.json'))) {
+    Write-Error "源码目录缺失：$src 下找不到 package.json，无法拷贝。请检查 git 步骤是否失败（见上方输出），或改用离线安装"
   }
   Write-Step "拷贝源码到 $dst …"
   robocopy $src $dst /E /XD .git node_modules .router-files tests /NFL /NDL /NJH /NJS | Out-Null
