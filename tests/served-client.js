@@ -3251,7 +3251,9 @@ window.__ModuleLoader__.load({
     function ImagePromptDock(props) {
       const { t, router, conversation, inputActions, sessionId, useInput } = props
       const catalog = useRouterCatalog()
-      const input = typeof useInput === 'function' ? useInput() : undefined
+      // kit 钩子（useSyncExternalStoreWithSelector 绑定）必须传选择器：
+      // 裸调 useInput() 会 TypeError，且槽位错误边界会永久弃用本条目。
+      const input = typeof useInput === 'function' ? useInput((state) => state) : undefined
       const imageIds = input && Array.isArray(input.imageIds) ? input.imageIds : []
       const [agentId, setAgentId] = useState('')
       const [busy, setBusy] = useState(false)

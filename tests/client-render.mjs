@@ -622,7 +622,13 @@ export async function runClientRender(check) {
     submit: () => {},
   }
   let currentInput = { draft: '', imageIds: [] }
-  const useInputMock = () => currentInput
+  // 真实 kit 钩子（useSyncExternalStoreWithSelector 绑定）必须传选择器函数：
+  // 裸调会 TypeError 且槽位错误边界会永久弃用本条目——mock 忠实还原该契约，
+  // 作为负向见证守卫（曾因裸调 useInput() 导致发送条静默消失）。
+  const useInputMock = (selector) => {
+    if (typeof selector !== 'function') throw new TypeError('useInput: selector is not a function')
+    return selector(currentInput)
+  }
   const fakeFile = { type: 'image/png', name: 'shot.png', arrayBuffer: async () => new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer }
   captured.imagePromptCalls = []
   captured.imageDataCalls = []
