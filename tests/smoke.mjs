@@ -208,6 +208,8 @@ console.log('RouterService:')
   const CLI_ECHO_ARGS = `-e "process.stdin.setEncoding('utf8');let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log('TASK:'+s.trim()))"`
   const CLI_BAD_ARGS = `-e "console.error('boom');process.exit(3)"`
   const CLI_SLEEP_ARGS = (ms) => `-e "setTimeout(()=>console.log('SLEPT'),${ms})"`
+  // 伪 CLI 生图：在会话工作目录落盘一张 1x1 PNG 后输出文本（图生图产物收集）。
+  const CLI_GEN_ARGS = `-e "require('fs').writeFileSync(require('path').join(process.cwd(),'gen.png'),Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==','base64'));console.log('generated-artifact')"`
 
   const service = new RouterService(root)
   service.attach({ get: () => ({
@@ -221,6 +223,7 @@ console.log('RouterService:')
       helper: { name: '子代理', type: 'agent', enabled: true, description: '委派子代理', provider: 'openai', model: 'gpt-4o' },
       relay: { name: '中转', type: 'chat', enabled: true, description: 'declared 中转', provider: 'relay', model: 'gpt-5.6-luna', maxRounds: 1 },
       coder: { name: 'CLI子代理', type: 'cli', enabled: true, description: '无头 CLI', capabilities: ['image'], command: process.execPath, args: CLI_ECHO_ARGS, systemPrompt: '你是一个测试助手', statusArgs: `-e "process.exit(0)"`, modelsArgs: `-e "console.log('m1\\nm2')"` },
+      codergen: { name: 'CLI生图', type: 'cli', enabled: true, description: '图生图产物', capabilities: ['image'], command: process.execPath, args: CLI_GEN_ARGS },
       coderbad: { name: 'CLI失败', type: 'cli', enabled: true, command: process.execPath, args: CLI_BAD_ARGS },
       coderbusy: { name: 'CLI忙碌', type: 'cli', enabled: true, command: process.execPath, args: CLI_SLEEP_ARGS(1000), maxConcurrent: 1 },
       codertimeout: { name: 'CLI超时', type: 'cli', enabled: true, command: process.execPath, args: CLI_SLEEP_ARGS(5000), timeoutMs: 200 },
@@ -268,7 +271,7 @@ console.log('RouterService:')
   check('unknown agent error', missing.error && String(missing.error).includes('nope'))
 
   const catalog = await service.catalog()
-  check('catalog lists enabled only', catalog.agents.length === 17 && catalog.agents.every((entry) => entry.id !== 'off'))
+  check('catalog lists enabled only', catalog.agents.length === 18 && catalog.agents.every((entry) => entry.id !== 'off'))
   check('catalog effective', catalog.agents.find((entry) => entry.id === 'vision').effectiveModel === 'deepseek-v4-pro')
   check('catalog cli type kept', catalog.agents.find((entry) => entry.id === 'coder').type === 'cli')
   check('catalog cli no main-model leak', catalog.agents.find((entry) => entry.id === 'coder').effectiveModel === '' && catalog.agents.find((entry) => entry.id === 'coder').effectiveProvider === 'cli:coder' && catalog.agents.find((entry) => entry.id === 'coder').source === 'agent')
@@ -490,6 +493,14 @@ console.log('RouterService:')
       check('cli run via entry reference', cliRefRun.kind === 'cli' && cliRefRun.text.includes('引用运行') && cliRefRun.text.includes('工作目录：'))
       const cliImagesRun = await service.run({ agentId: 'coder', task: '看图', images: [{ id: 'att-1', kind: 'image' }], exec: { agent: fakeParentCli } })
       check('cli images materialized as files', cliImagesRun.kind === 'cli' && cliImagesRun.text.includes('已附带 1 张图片') && fsModule.readdirSync(pathModule.join(tmpDir, '.router-files')).some((name) => name.includes('-img-')))
+      // 图生图产物收集：cli 子代理落盘的新图片 diff 出来 → 保存附件 → images 返回
+      // （工具卡据此渲染缩略图；回归曾因 runCli 不返回 images 导致生成图无处显示）。
+      const genRun = await service.run({ agentId: 'codergen', task: '生成一张图', images: [], exec: { agent: fakeParentCli } })
+      check('cli generation artifact collected', genRun.kind === 'cli' && genRun.text.includes('generated-artifact') && Array.isArray(genRun.images) && genRun.images.length === 1 && genRun.images[0].name === 'gen.png' && savedImages.some((ref) => ref.name === 'gen.png'))
+      check('cli artifact excluded from rerun (unchanged)', (async () => {
+        const rerun = await service.run({ agentId: 'codergen', task: '再生成', images: [], exec: { agent: fakeParentCli } })
+        return rerun.kind === 'cli' && (!Array.isArray(rerun.images) || rerun.images.length === 0)
+      })())
       let cliBadRejected = false
       try { await service.run({ agentId: 'coderbad', task: 'x', images: [], exec: { agent: fakeParentCli } }) } catch (error) { cliBadRejected = String(error.message).includes('exit 3') && String(error.message).includes('boom') }
       check('cli nonzero exit reported', cliBadRejected)
@@ -704,7 +715,7 @@ console.log('RouterService:')
     // 生图 agent 选择：image 类型端点 + cli 类型生图子代理（capabilities 含
     // image），供图生图/文生图；识别类 chat/agent 与无 image 能力的 cli 除外。
     const generationList = service.listImageGenerationAgents().map(([id]) => id)
-    check('generation agents list', generationList.length === 2 && generationList[0] === 'coder' && generationList[1] === 'draw' && !generationList.includes('vision') && !generationList.includes('coderbad'))
+    check('generation agents list', generationList.length === 3 && generationList[0] === 'coder' && generationList[1] === 'codergen' && generationList[2] === 'draw' && !generationList.includes('vision') && !generationList.includes('coderbad'))
     // imageData：读字节 → base64 与元数据（生成图片展示通路）。
     const imageData = await service.imageData({ ref: { attachmentId: 'sha256:abcd', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'n.png' } })
     check('imageData returns bytes', imageData.ok === true && imageData.data === Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64') && imageData.mediaType === 'image/png')
