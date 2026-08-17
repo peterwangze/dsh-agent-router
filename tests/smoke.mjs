@@ -829,9 +829,10 @@ console.log('twin wrapper mechanism (real LlmRuntime):')
     },
   }
   // ── twin 包装适配器：声明 image、改写图片块后委托原适配器 ─────────────
-  const twinRoute = 'text-provider-vision'
+  // 接管标签：原名 + " + 多模态"（用户可见钩子已生效）。
+  const twinRoute = 'text-provider-router'
   const twinAdapter = {
-    providerInfo(provider) { return { id: provider, name: 'TextBrain + 自动识图' } },
+    providerInfo(provider) { return { id: provider, name: 'TextBrain + 多模态' } },
     providerRetryPolicy(provider) { return llm.registration('text-provider').adapter.providerRetryPolicy(provider) },
     async listModels() {
       const listed = await llm.registration('text-provider').adapter.listModels('text-provider')
@@ -871,6 +872,8 @@ console.log('twin wrapper mechanism (real LlmRuntime):')
   // 2) 模型选择器可见性与目录镜像。
   const providers = llm.listProviders()
   check('twin route appears in provider list', providers.some((entry) => entry.id === twinRoute))
+  const twinProvider = providers.find((entry) => entry.id === twinRoute)
+  check('twin labels multimodal takeover', !!twinProvider && twinProvider.name === 'TextBrain + 多模态')
   const twinModels = await llm.listModels(twinRoute)
   check('twin mirrors catalog with own provider id', twinModels.length === 1 && twinModels[0].provider === twinRoute && twinModels[0].inputModalities.includes('image'))
   // 3) 图片轮经 twin：委托完成、原适配器只见改写文本（无裸图片块）。
@@ -902,7 +905,7 @@ console.log('twin wrapper mechanism (real LlmRuntime):')
 // 7.6 准入包装模块（L1）：门控注册 / 改写标记 / 热同步 / 卸载
 console.log('admission wrapper (L1):')
 {
-  const { installAdmissionWrapper, createTwinAdapter, rewriteImagesDeep, wrappableProviders, minimalImageRewrite, TWIN_SUFFIX } = await import('../lib/wrapper.js')
+  const { installAdmissionWrapper, createWrapAdapter, rewriteContentDeep, wrappableProviders, minimalImageRewrite, WRAP_SUFFIX } = await import('../lib/wrapper.js')
   const root = new Context()
   const llm = new LlmRuntime(root)
   const delegateCalls = []
@@ -934,43 +937,45 @@ console.log('admission wrapper (L1):')
   const fireSettingsUpdate = (ns, revision) => {
     for (const callback of root.events.dispatch('emit', ['settings/document-updated', ns, revision])) callback(ns, revision)
   }
-  // 1) 视觉 agent 存在 → twin 注册、声明 image、目录镜像。
+  // 1) 视觉 agent 存在 → 包装注册、声明 image、目录镜像、+多模态 标签。
   const dispose = installAdmissionWrapper(root, fakeService)
-  check('wrapper registers twin when vision agent exists', llm.listProviders().some((entry) => entry.id === `text-provider${TWIN_SUFFIX}`))
-  const twinInfo = await llm.resolveModelInfo(`text-provider${TWIN_SUFFIX}`, 'brain-1')
+  check('wrapper registers twin when vision agent exists', llm.listProviders().some((entry) => entry.id === `text-provider${WRAP_SUFFIX}`))
+  const wrapProvider = llm.listProviders().find((entry) => entry.id === `text-provider${WRAP_SUFFIX}`)
+  check('wrapper labels +多模态 takeover', !!wrapProvider && wrapProvider.name === 'TextBrain + 多模态')
+  const twinInfo = await llm.resolveModelInfo(`text-provider${WRAP_SUFFIX}`, 'brain-1')
   check('wrapper twin declares image input', twinInfo.inputModalities.includes('image'))
-  const twinModels = await llm.listModels(`text-provider${TWIN_SUFFIX}`)
-  check('wrapper twin mirrors catalog', twinModels.length === 1 && twinModels[0].provider === `text-provider${TWIN_SUFFIX}` && twinModels[0].inputModalities.includes('image'))
+  const twinModels = await llm.listModels(`text-provider${WRAP_SUFFIX}`)
+  check('wrapper twin mirrors catalog', twinModels.length === 1 && twinModels[0].provider === `text-provider${WRAP_SUFFIX}` && twinModels[0].inputModalities.includes('image'))
   // 2) 图片轮改写：委托方收到 route_agent/includeImages 标记，无裸图片块。
   const imageMessage = createUserMessage({ content: [{ type: 'text', text: '看图' }, { type: 'image', attachment: { attachmentId: 'sha256:abc', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'shot.png' } }], source: { kind: 'user' } })
   const assembler = new BlockAssembler()
-  for await (const chunk of llm.stream({ provider: `text-provider${TWIN_SUFFIX}`, model: 'brain-1', system: undefined, messages: [imageMessage] })) assembler.push(chunk)
+  for await (const chunk of llm.stream({ provider: `text-provider${WRAP_SUFFIX}`, model: 'brain-1', system: undefined, messages: [imageMessage] })) assembler.push(chunk)
   const lastCall = delegateCalls[delegateCalls.length - 1]
   check('wrapper image turn completes', assembler.finish.kind === 'stop')
   check('wrapper delegate sees route_agent marker', lastCall && lastCall.messages[0].content.some((block) => block.type === 'text' && block.text.includes('route_agent') && block.text.includes('"vision"') && block.text.includes('includeImages') && block.text.includes('shot.png')) && lastCall.messages[0].content.every((block) => block.type !== 'image'))
   // 3) 嵌套 tool-result 中的图片块同样被改写（原文本适配器会递归拒绝）。
-  const nestedResult = rewriteImagesDeep([{ type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }, { type: 'text', text: 'x' }] }], (block) => minimalImageRewrite(block, 'vision'))
-  check('rewriteImagesDeep reaches nested tool-result', nestedResult.changed === true && nestedResult.content[0].content.every((block) => block.type === 'text'))
-  // 4) 门控：关闭视觉 agent + settings 事件 → twin 卸载。
+  const nestedResult = rewriteContentDeep([{ type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }, { type: 'text', text: 'x' }] }], [{ modality: 'image', agentId: 'vision', rewrite: minimalImageRewrite }])
+  check('rewriteContentDeep reaches nested tool-result', nestedResult.changed === true && nestedResult.content[0].content.every((block) => block.type === 'text'))
+  // 4) 门控：关闭视觉 agent + settings 事件 → 包装卸载。
   config.visionAgents = []
   fireSettingsUpdate('router', 2)
-  check('wrapper drops twin when vision agents disabled', !llm.listProviders().some((entry) => entry.id === `text-provider${TWIN_SUFFIX}`))
+  check('wrapper drops twin when vision agents disabled', !llm.listProviders().some((entry) => entry.id === `text-provider${WRAP_SUFFIX}`))
   // 5) 门控：总开关关闭 → 同样不注册。
   config.enabled = false
   config.visionAgents = [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]]
   fireSettingsUpdate('router', 3)
-  check('wrapper respects master switch', !llm.listProviders().some((entry) => entry.id === `text-provider${TWIN_SUFFIX}`))
-  // 6) 恢复 + adapters 事件热同步；新 provider 出现即补 twin。
+  check('wrapper respects master switch', !llm.listProviders().some((entry) => entry.id === `text-provider${WRAP_SUFFIX}`))
+  // 6) 恢复 + adapters 事件热同步；新 provider 出现即补包装。
   config.enabled = true
   fireSettingsUpdate('router', 4)
   llm.registerAdapter(['another-provider'], { ...textAdapter, providerInfo(provider) { return { id: provider, name: 'Another' } } })
-  check('wrapper hot-syncs on adapters event', llm.listProviders().some((entry) => entry.id === `another-provider${TWIN_SUFFIX}`))
-  check('wrappableProviders excludes twins', wrappableProviders(llm).every((provider) => !provider.endsWith(TWIN_SUFFIX)) && wrappableProviders(llm).includes('text-provider'))
+  check('wrapper hot-syncs on adapters event', llm.listProviders().some((entry) => entry.id === `another-provider${WRAP_SUFFIX}`))
+  check('wrappableProviders excludes twins', wrappableProviders(llm).every((provider) => !provider.endsWith(WRAP_SUFFIX)) && wrappableProviders(llm).includes('text-provider'))
   // 7) 卸载器释放全部注册。
   dispose()
-  check('wrapper uninstaller removes all twins', !llm.listProviders().some((entry) => String(entry.id).endsWith(TWIN_SUFFIX)))
-  // 8) createTwinAdapter 对已消失原适配器明确报错。
-  const orphan = createTwinAdapter(llm, 'missing-provider', 'vision')
+  check('wrapper uninstaller removes all twins', !llm.listProviders().some((entry) => String(entry.id).endsWith(WRAP_SUFFIX)))
+  // 8) createWrapAdapter 对已消失原适配器明确报错。
+  const orphan = createWrapAdapter(llm, 'missing-provider', [{ modality: 'image', agentId: 'vision', rewrite: minimalImageRewrite }])
   let orphanRejected = false
   try { await orphan.resolveModel('x', 'y') } catch (error) { orphanRejected = String(error.message).includes('no adapter registered') }
   check('twin without original adapter fails loud', orphanRejected)
