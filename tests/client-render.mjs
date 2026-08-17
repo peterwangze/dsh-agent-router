@@ -608,16 +608,16 @@ export async function runClientRender(check) {
   const inputActionsMock = { addImages: () => true }
   captured.imageDataCalls = []
 
-  // 附件按钮：有视觉 agent 时渲染；仅有生图 agent 时隐藏。
+  // 附件按钮：多模态开启（有视觉 agent）时渲染；仅有生图 agent 时隐藏——与接管同信号。
   {
     const tree = await renderInto(imageToolReg.render({ t: tOf, router: () => remoteMock, conversation: () => conversationMock, inputActions: inputActionsMock }), 'imagetool')
-    const attachButton = findAll(tree, (node) => node && node.type === 'button' && node.props && node.props['aria-label'] === tOf('imageAttach'))
+    const attachButton = findAll(tree, (node) => node && node.type === 'button' && node.props && node.props['aria-label'] === tOf('attach'))
     check('composer attach button renders with vision agent', attachButton.length === 1)
     catalogMode = 'drawOnly'
     const listener = captured.listeners.find((entry) => entry.event === 'settings/document-updated')
     if (listener) listener.listener()
     const hidden = await renderInto(imageToolReg.render({ t: tOf, router: () => remoteMock, conversation: () => conversationMock, inputActions: inputActionsMock }), 'imagetool')
-    const attachHidden = findAll(hidden, (node) => node && node.type === 'button' && node.props && node.props['aria-label'] === tOf('imageAttach'))
+    const attachHidden = findAll(hidden, (node) => node && node.type === 'button' && node.props && node.props['aria-label'] === tOf('attach'))
     check('composer attach button hidden without vision agent', attachHidden.length === 0)
     catalogMode = 'withVision'
     listener && listener.listener()
