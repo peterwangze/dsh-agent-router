@@ -921,7 +921,7 @@ console.log('twin wrapper mechanism (real LlmRuntime):')
 // 7.6 准入包装模块（L1）：门控注册 / 改写标记 / 热同步 / 卸载
 console.log('admission wrapper (L1):')
 {
-  const { installAdmissionWrapper, createWrapAdapter, rewriteContentDeep, wrappableProviders, minimalImageRewrite, imagePlaceholder, collectMarkers, WRAP_SUFFIX } = await import('../lib/wrapper.js')
+  const { installAdmissionWrapper, createWrapAdapter, rewriteContentDeep, wrappableProviders, minimalImageRewrite, collectMarkers, WRAP_SUFFIX } = await import('../lib/wrapper.js')
   const root = new Context()
   const llm = new LlmRuntime(root)
   const delegateCalls = []
@@ -988,9 +988,10 @@ console.log('admission wrapper (L1):')
   for await (const chunk of llm.stream({ provider: `text-provider${WRAP_SUFFIX}`, model: 'brain-1', system: undefined, messages: [imageMessage] })) assembler.push(chunk)
   const lastCall = delegateCalls[delegateCalls.length - 1]
   check('wrapper image turn completes', assembler.finish.kind === 'stop')
-  // 完整标记进 system（大脑不复述），user 消息里只有中性占位、无裸图片块。
+  // 完整标记进 system（大脑不复述）；user 消息里的图片块被整体移除——
+  // 不留任何占位文本（占位也会被大脑当"用户说的话"复述）。
   check('wrapper delegate sees route_agent marker in system', lastCall && typeof lastCall.system === 'string' && lastCall.system.includes('route_agent') && lastCall.system.includes('"vision"') && lastCall.system.includes('includeImages') && lastCall.system.includes('shot.png'))
-  check('wrapper delegate sees neutral placeholder in message', lastCall && lastCall.messages[0].content.every((block) => block.type !== 'image') && lastCall.messages[0].content.some((block) => block.type === 'text' && block.text.includes('处理说明见系统提示')))
+  check('wrapper delegate sees no image remnants in message', lastCall && lastCall.messages[0].content.every((block) => block.type !== 'image') && !lastCall.messages[0].content.some((block) => block.type === 'text' && (block.text.includes('处理说明') || block.text.includes('图片'))))
   // 日志原件（F3）：agent-loop 的日志消息与 deriveMessages 共享对象引用，
   // 改写只允许出现在模型输入层——stream 后日志里的 user message 必须仍是
   // 图片块（否则气泡会显示改写标记，即"图片显示有问题"的泄漏形态）。
@@ -1004,10 +1005,10 @@ console.log('admission wrapper (L1):')
   const genMarker = minimalImageRewrite({ attachment: { attachmentId: 'sha256:g', mediaType: 'image/png', bytes: 1, width: 1, height: 1, name: 'ref.png' } }, { vision: ['vision'], generation: ['draw'] })
   check('marker offers recognition and generation routes', typeof genMarker === 'string' && genMarker.includes('视觉 agent') && genMarker.includes('"vision"') && genMarker.includes('生图 agent') && genMarker.includes('"draw"') && genMarker.includes('图生图') && genMarker.includes('includeImages'))
   // 标记收集按 attachmentId 去重（历史轮不再重复注入 system）。
-  const markerList = collectMarkers([imageMessage, imageMessage], [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: imagePlaceholder }])
+  const markerList = collectMarkers([imageMessage, imageMessage], [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: () => null }])
   check('collectMarkers dedupes by attachment', markerList.length === 1 && markerList[0].includes('sha256:abc'))
   // 3) 嵌套 tool-result 中的图片块同样被改写（原文本适配器会递归拒绝）。
-  const nestedResult = rewriteContentDeep([{ type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }, { type: 'text', text: 'x' }] }], [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: imagePlaceholder }])
+  const nestedResult = rewriteContentDeep([{ type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }, { type: 'text', text: 'x' }] }], [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: () => null }])
   check('rewriteContentDeep reaches nested tool-result', nestedResult.changed === true && nestedResult.content[0].content.every((block) => block.type === 'text'))
   // 4) 门控：关闭视觉 agent → settings/updated 提交后包装卸载、默认模型恢复。
   config.visionAgents = []
@@ -1038,7 +1039,7 @@ console.log('admission wrapper (L1):')
   check('wrapper uninstaller removes all twins', !llm.listProviders().some((entry) => String(entry.id).endsWith(WRAP_SUFFIX)))
   check('wrapper uninstaller restores default model', defaultSelection.provider === 'text-provider')
   // 8) createWrapAdapter 对已消失原适配器明确报错。
-  const orphan = createWrapAdapter(llm, 'missing-provider', [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: imagePlaceholder }])
+  const orphan = createWrapAdapter(llm, 'missing-provider', [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: () => null }])
   let orphanRejected = false
   try { await orphan.resolveModel('x', 'y') } catch (error) { orphanRejected = String(error.message).includes('no adapter registered') }
   check('twin without original adapter fails loud', orphanRejected)
