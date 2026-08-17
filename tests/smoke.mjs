@@ -978,6 +978,15 @@ console.log('admission wrapper (L1):')
   const lastCall = delegateCalls[delegateCalls.length - 1]
   check('wrapper image turn completes', assembler.finish.kind === 'stop')
   check('wrapper delegate sees route_agent marker', lastCall && lastCall.messages[0].content.some((block) => block.type === 'text' && block.text.includes('route_agent') && block.text.includes('"vision"') && block.text.includes('includeImages') && block.text.includes('shot.png')) && lastCall.messages[0].content.every((block) => block.type !== 'image'))
+  // 日志原件（F3）：agent-loop 的日志消息与 deriveMessages 共享对象引用，
+  // 改写只允许出现在模型输入层——stream 后日志里的 user message 必须仍是
+  // 图片块（否则气泡会显示改写标记，即"图片显示有问题"的泄漏形态）。
+  {
+    const loggedMessage = createUserMessage({ content: [{ type: 'text', text: '看图' }, { type: 'image', attachment: { attachmentId: 'sha256:log', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'shot.png' } }], source: { kind: 'user' } })
+    const logAssembler = new BlockAssembler()
+    for await (const chunk of llm.stream({ provider: `text-provider${WRAP_SUFFIX}`, model: 'brain-1', system: undefined, messages: [loggedMessage] })) logAssembler.push(chunk)
+    check('log keeps original image block (F3)', logAssembler.finish.kind === 'stop' && loggedMessage.content.some((block) => block.type === 'image') && !loggedMessage.content.some((block) => block.type === 'text' && block.text.includes('route_agent')))
+  }
   // 图生图分流：识别 agent 与生图 agent 并存时，改写标记给大脑两个选项。
   const genMarker = minimalImageRewrite({ attachment: { attachmentId: 'sha256:g', mediaType: 'image/png', bytes: 1, width: 1, height: 1, name: 'ref.png' } }, { vision: ['vision'], generation: ['draw'] }).text
   check('marker offers recognition and generation routes', genMarker.includes('视觉 agent') && genMarker.includes('"vision"') && genMarker.includes('生图 agent') && genMarker.includes('"draw"') && genMarker.includes('图生图') && genMarker.includes('includeImages'))
