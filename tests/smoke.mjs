@@ -762,7 +762,15 @@ console.log('apply wiring:')
   {
     let registered = null
     let sections = []
-    const fakeRouter = { isEnabled: () => true, promptText: () => 'ROUTER-PROMPT', resolveAgent: async () => ({ error: 'stub' }), record: () => {} }
+    // 可变门控面：视觉 agent 列表 / 总开关（整轮路由判据）。
+    const visionState = { enabled: true, agents: [['vision', {}]] }
+    const fakeRouter = {
+      isEnabled: () => visionState.enabled,
+      promptText: () => 'ROUTER-PROMPT',
+      listImageVisionAgents: () => visionState.agents,
+      resolveAgent: async (id) => (id === 'vision' ? { provider: 'openai', model: 'gpt-4o' } : { error: 'stub' }),
+      record: () => {},
+    }
     const root = new Context()
     await root.plugin({ name: 'stub-router', apply: (ctx) => ctx.provide('router', fakeRouter) })
     await root.plugin({ name: 'stub-tools', apply: (ctx) => ctx.provide('tools', { register: (definition) => { registered = definition; return () => {} } }) })
@@ -779,6 +787,27 @@ console.log('apply wiring:')
     // image（生成）与 images（视觉注入）都渲染为标记，供 toolview 显示缩略图。
     const rendered = registered.output.render({}, { ok: true, text: '已生成', image: { attachmentId: 'sha256:aa', mediaType: 'image/png', bytes: 4, width: 2, height: 2 }, images: [{ attachmentId: 'sha256:bb', mediaType: 'image/jpeg', bytes: 4, width: 2, height: 2 }], usage: { inputTokens: 0, outputTokens: 0 } })
     check('tool render emits markers not image blocks', rendered.every((block) => block.type === 'text') && rendered.filter((block) => block.text.includes('[router:image:')).length === 2 && rendered.some((block) => block.text.includes('sha256:aa')) && rendered.some((block) => block.text.includes('sha256:bb')))
+    // ── 带图轮确定性整轮路由：agent/request 瀑布把含图轮切到视觉模型 ──
+    {
+      const imageBlock = { type: 'image', attachment: { attachmentId: 'sha256:x', mediaType: 'image/png', bytes: 4, width: 2, height: 2 } }
+      const agentOf = (messages) => ({ session: { deriveMessages: () => messages } })
+      const defaultConfig = async () => ({ provider: 'text-provider', model: 'brain-1' })
+      const runRequest = (messages) => root.events.waterfall('agent/request', { agent: agentOf(messages), turn: 1, step: 1, signal: undefined }, defaultConfig)
+      const imageTurn = await runRequest([{ role: 'user', content: [{ type: 'text', text: '看图' }, imageBlock] }])
+      check('image turn routes to vision model', imageTurn.provider === 'openai' && imageTurn.model === 'gpt-4o')
+      const textTurn = await runRequest([{ role: 'user', content: [{ type: 'text', text: '纯文本' }] }])
+      check('text turn keeps default config', textTurn.provider === 'text-provider' && textTurn.model === 'brain-1')
+      const followupStep = await runRequest([{ role: 'user', content: [{ type: 'text', text: '看图' }, imageBlock] }, { role: 'assistant', content: [{ type: 'text', text: '已回答' }] }])
+      check('answered image turn keeps default config', followupStep.provider === 'text-provider')
+      visionState.agents = []
+      const noVision = await runRequest([{ role: 'user', content: [{ type: 'text', text: '看图' }, imageBlock] }])
+      check('image turn without vision agent keeps default', noVision.provider === 'text-provider')
+      visionState.agents = [['vision', {}]]
+      visionState.enabled = false
+      const disabled = await runRequest([{ role: 'user', content: [{ type: 'text', text: '看图' }, imageBlock] }])
+      check('image turn respects master switch', disabled.provider === 'text-provider')
+      visionState.enabled = true
+    }
     await app.dispose()
   }
 
@@ -1007,6 +1036,9 @@ console.log('admission wrapper (L1):')
   // 标记收集按 attachmentId 去重（历史轮不再重复注入 system）。
   const markerList = collectMarkers([imageMessage, imageMessage], [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: () => null }])
   check('collectMarkers dedupes by attachment', markerList.length === 1 && markerList[0].includes('sha256:abc'))
+  // 历史图不再标记：已由整轮路由处理过，后续文本轮不得重复注入（否则大脑重复路由）。
+  const historicMarkers = collectMarkers([imageMessage, createUserMessage({ content: [{ type: 'text', text: '后续文本轮' }], source: { kind: 'user' } })], [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: () => null }])
+  check('collectMarkers skips answered history images', historicMarkers.length === 0)
   // 3) 嵌套 tool-result 中的图片块同样被改写（原文本适配器会递归拒绝）。
   const nestedResult = rewriteContentDeep([{ type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }, { type: 'text', text: 'x' }] }], [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: () => null }])
   check('rewriteContentDeep reaches nested tool-result', nestedResult.changed === true && nestedResult.content[0].content.every((block) => block.type === 'text'))
