@@ -47,8 +47,8 @@
 ```
 ┌───────────────────────────────────────────────────────────────┐
 │ L1 准入包装层  Admission Wrapper                                │
-│   每 provider 一个包装路由（<provider>-router）：                │
-│   resolveModel 镜像原元数据并声明已接入的模态（如 +image）；      │
+│   每 provider 一个包装路由（<provider>-vision）：                │
+│   resolveModel 镜像原元数据并声明已接入的模态（当前 image）；     │
 │   stream()：文本轮委托原适配器；含模态块轮先经 L3 改写再委托。    │
 ├───────────────────────────────────────────────────────────────┤
 │ L2 模态输入管线  Modality Input Pipeline                        │
