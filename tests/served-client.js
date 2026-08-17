@@ -3144,14 +3144,20 @@ window.__ModuleLoader__.load({
       }, [])
       return routerCatalog.value
     }
-    /** 目录中的多模态 agent（当前唯一已落地的模态是视觉：capabilities 含
-     *  image 且非 image 生成类型；音频/视频等后续模态落地时在此扩展为各
-     *  模态 agent 的并集）。按 id 排序。附件按钮显隐与模型接管共用此信号，
-     *  两者与「多模态开启」状态严格同步。 */
+    /** 目录中的多模态 agent 并集（识别 + 生图），按 id 排序：image 类型
+     *  （生图端点）或 capabilities 含 image 的任意类型（chat/agent 识别、
+     *  cli 生图子代理）都计入——附件按钮显隐与模型接管只看"是否有任一
+     *  多模态 agent"，与宿主 MODALITY_ENTRIES 的 stateOf 门控一致。改写标记
+     *  里的"识别 vs 图生图"分流由宿主 listImageVisionAgents /
+     *  listImageGenerationAgents 负责，这里不分。 */
     function multimodalAgentsOf(catalog) {
       if (!catalog || catalog.ok !== true) return []
       return (catalog.agents ?? [])
-        .filter((agent) => agent.enabled !== false && agent.type !== 'image' && (agent.capabilities ?? []).includes('image'))
+        .filter((agent) => {
+          if (agent.enabled === false) return false
+          const capabilities = Array.isArray(agent.capabilities) ? agent.capabilities : []
+          return agent.type === 'image' || capabilities.includes('image')
+        })
         .sort((a, b) => (a.id < b.id ? -1 : 1))
     }
     /** 从文本提取图片标记的引用（容忍损坏负载）。 */

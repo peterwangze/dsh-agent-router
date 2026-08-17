@@ -697,9 +697,14 @@ console.log('RouterService:')
     const parsed = service.parseImageMarkers(`前文 ${marker} 后文`)
     check('image marker round-trips', parsed.length === 1 && parsed[0].attachmentId === 'sha256:abcd' && parsed[0].mediaType === 'image/png' && parsed[0].name === 'abc.png')
     check('image marker tolerates corrupt payload', service.parseImageMarkers('[router:image:not-json]').length === 0)
-    // 视觉类 agent 选择：image 生成类型与无 image 能力者除外，按 id 排序。
+    // 视觉识别 agent 选择：仅 chat/agent 类型 + image 能力；生图 agent（image
+    // 类型端点、cli 类型生图子代理如 codex）与无 image 能力者除外，按 id 排序。
     const visionList = service.listImageVisionAgents().map(([id]) => id)
-    check('vision agents list', visionList.length === 2 && visionList[0] === 'coder' && visionList[1] === 'vision' && !visionList.includes('draw') && !visionList.includes('broken'))
+    check('vision agents list', visionList.length === 1 && visionList[0] === 'vision' && !visionList.includes('coder') && !visionList.includes('draw') && !visionList.includes('helper') && !visionList.includes('broken'))
+    // 生图 agent 选择：image 类型端点 + cli 类型生图子代理（capabilities 含
+    // image），供图生图/文生图；识别类 chat/agent 与无 image 能力的 cli 除外。
+    const generationList = service.listImageGenerationAgents().map(([id]) => id)
+    check('generation agents list', generationList.length === 2 && generationList[0] === 'coder' && generationList[1] === 'draw' && !generationList.includes('vision') && !generationList.includes('coderbad'))
     // imageData：读字节 → base64 与元数据（生成图片展示通路）。
     const imageData = await service.imageData({ ref: { attachmentId: 'sha256:abcd', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'n.png' } })
     check('imageData returns bytes', imageData.ok === true && imageData.data === Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64') && imageData.mediaType === 'image/png')
@@ -938,10 +943,11 @@ console.log('admission wrapper (L1):')
   })
   const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
   // 可变服务门控面。
-  const config = { enabled: true, visionAgents: [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]] }
+  const config = { enabled: true, visionAgents: [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]], generationAgents: [] }
   const fakeService = {
     isEnabled: () => config.enabled,
     listImageVisionAgents: () => config.visionAgents,
+    listImageGenerationAgents: () => config.generationAgents,
   }
   // cordis 语义：events.dispatch('emit', …) 返回回调数组、由调用方执行
   //（settings 服务与 LlmRuntime 均如此），测试按同款方式触发。
@@ -972,8 +978,11 @@ console.log('admission wrapper (L1):')
   const lastCall = delegateCalls[delegateCalls.length - 1]
   check('wrapper image turn completes', assembler.finish.kind === 'stop')
   check('wrapper delegate sees route_agent marker', lastCall && lastCall.messages[0].content.some((block) => block.type === 'text' && block.text.includes('route_agent') && block.text.includes('"vision"') && block.text.includes('includeImages') && block.text.includes('shot.png')) && lastCall.messages[0].content.every((block) => block.type !== 'image'))
+  // 图生图分流：识别 agent 与生图 agent 并存时，改写标记给大脑两个选项。
+  const genMarker = minimalImageRewrite({ attachment: { attachmentId: 'sha256:g', mediaType: 'image/png', bytes: 1, width: 1, height: 1, name: 'ref.png' } }, { vision: ['vision'], generation: ['draw'] }).text
+  check('marker offers recognition and generation routes', genMarker.includes('视觉 agent') && genMarker.includes('"vision"') && genMarker.includes('生图 agent') && genMarker.includes('"draw"') && genMarker.includes('图生图') && genMarker.includes('includeImages'))
   // 3) 嵌套 tool-result 中的图片块同样被改写（原文本适配器会递归拒绝）。
-  const nestedResult = rewriteContentDeep([{ type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }, { type: 'text', text: 'x' }] }], [{ modality: 'image', agentId: 'vision', rewrite: minimalImageRewrite }])
+  const nestedResult = rewriteContentDeep([{ type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }, { type: 'text', text: 'x' }] }], [{ modality: 'image', state: { vision: ['vision'], generation: [] }, rewrite: minimalImageRewrite }])
   check('rewriteContentDeep reaches nested tool-result', nestedResult.changed === true && nestedResult.content[0].content.every((block) => block.type === 'text'))
   // 4) 门控：关闭视觉 agent → settings/updated 提交后包装卸载、默认模型恢复。
   config.visionAgents = []
@@ -1004,7 +1013,7 @@ console.log('admission wrapper (L1):')
   check('wrapper uninstaller removes all twins', !llm.listProviders().some((entry) => String(entry.id).endsWith(WRAP_SUFFIX)))
   check('wrapper uninstaller restores default model', defaultSelection.provider === 'text-provider')
   // 8) createWrapAdapter 对已消失原适配器明确报错。
-  const orphan = createWrapAdapter(llm, 'missing-provider', [{ modality: 'image', agentId: 'vision', rewrite: minimalImageRewrite }])
+  const orphan = createWrapAdapter(llm, 'missing-provider', [{ modality: 'image', state: { vision: ['vision'], generation: [] }, rewrite: minimalImageRewrite }])
   let orphanRejected = false
   try { await orphan.resolveModel('x', 'y') } catch (error) { orphanRejected = String(error.message).includes('no adapter registered') }
   check('twin without original adapter fails loud', orphanRejected)

@@ -196,8 +196,8 @@ export async function runClientRender(check) {
   // cli 登录状态可切换：'ok' = 已登录；'logged-out' = 未登录（Not logged in）。
   // 登录轮询、刷新状态与未登录红色提示的回归断言共用。
   let cliStatusMode = 'ok'
-  // 目录形态可切换：'withVision' = 有视觉 agent；'drawOnly' = 仅生图 agent
-  // （composer 图片按钮/发送条必须隐藏——生图 agent 不消费附件图片）。
+  // 目录形态可切换：'withVision' = 识别+生图；'drawOnly' = 仅生图 agent；
+  // 'none' = 无任何多模态 agent（附件按钮隐藏、接管解除）。
   let catalogMode = 'withVision'
   const remoteMock = {
     catalog: async () => ({
@@ -208,10 +208,14 @@ export async function runClientRender(check) {
           ? [
             { id: 'draw', name: '画图', type: 'image', enabled: true, description: 'd', capabilities: ['image'], provider: 'openai', model: 'dall-e-3', account: '', effectiveProvider: 'openai', effectiveModel: 'dall-e-3', source: 'agent' },
           ]
-          : [
-            { id: 'codex', name: 'Codex 助手', type: 'cli', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', cliAgent: 'codexentry', effectiveProvider: 'cli:codexentry', effectiveModel: '', source: 'agent' },
-            { id: 'vision', name: '视觉', type: 'chat', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', effectiveProvider: 'deepseek-official', effectiveModel: 'deepseek-v4-pro', source: 'main' },
-          ],
+          : catalogMode === 'none'
+            ? [
+              { id: 'plain', name: '纯文本', type: 'chat', enabled: true, description: 'd', capabilities: [], provider: 'openai', model: 'gpt-4o', account: '', effectiveProvider: 'openai', effectiveModel: 'gpt-4o', source: 'agent' },
+            ]
+            : [
+              { id: 'codex', name: 'Codex 助手', type: 'cli', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', cliAgent: 'codexentry', effectiveProvider: 'cli:codexentry', effectiveModel: '', source: 'agent' },
+              { id: 'vision', name: '视觉', type: 'chat', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', effectiveProvider: 'deepseek-official', effectiveModel: 'deepseek-v4-pro', source: 'main' },
+            ],
         oauthAccounts: [], pools: [], cliAgents: [
           { id: 'codexentry', name: 'Codex 子代理', enabled: true, command: 'codex', args: '', timeoutMs: 0, maxConcurrent: 1 },
         ],
@@ -613,12 +617,19 @@ export async function runClientRender(check) {
     const tree = await renderInto(imageToolReg.render({ t: tOf, router: () => remoteMock, conversation: () => conversationMock, inputActions: inputActionsMock }), 'imagetool')
     const attachButton = findAll(tree, (node) => node && node.type === 'button' && node.props && node.props['aria-label'] === tOf('attach'))
     check('composer attach button renders with vision agent', attachButton.length === 1)
+    // 生图 agent（draw，image 类型）也触发按钮显示——图生图需要发图。
     catalogMode = 'drawOnly'
     const listener = captured.listeners.find((entry) => entry.event === 'settings/document-updated')
     if (listener) listener.listener()
+    const genTree = await renderInto(imageToolReg.render({ t: tOf, router: () => remoteMock, conversation: () => conversationMock, inputActions: inputActionsMock }), 'imagetool')
+    const genButton = findAll(genTree, (node) => node && node.type === 'button' && node.props && node.props['aria-label'] === tOf('attach'))
+    check('composer attach button renders with generation-only agent', genButton.length === 1)
+    // 无任何多模态 agent → 按钮隐藏。
+    catalogMode = 'none'
+    if (listener) listener.listener()
     const hidden = await renderInto(imageToolReg.render({ t: tOf, router: () => remoteMock, conversation: () => conversationMock, inputActions: inputActionsMock }), 'imagetool')
     const attachHidden = findAll(hidden, (node) => node && node.type === 'button' && node.props && node.props['aria-label'] === tOf('attach'))
-    check('composer attach button hidden without vision agent', attachHidden.length === 0)
+    check('composer attach button hidden without multimodal agent', attachHidden.length === 0)
     catalogMode = 'withVision'
     listener && listener.listener()
   }
@@ -638,10 +649,10 @@ export async function runClientRender(check) {
       const before = sessionSelectCalls.length
       await renderInto(takeoverReg.render({ sessionId: 'sess-1', input: { imageIds: ['draft-1'] }, api: apiMock }), 'takeover')
       check('takeover idempotent when already wrapped', sessionSelectCalls.length === before)
-      // 关闭视觉：包装组当前选中 → 切回原 provider。
+      // 关闭全部多模态 agent：包装组当前选中 → 切回原 provider。
       sessionCurrent = { provider: 'openai-router', model: 'gpt-4o' }
       sessionSelectCalls.length = 0
-      catalogMode = 'drawOnly'
+      catalogMode = 'none'
       listener && listener.listener()
       await new Promise((resolve) => setImmediate(resolve))
       await renderInto(takeoverReg.render({ sessionId: 'sess-1', input: { imageIds: [] }, api: apiMock }), 'takeover')
