@@ -945,8 +945,14 @@ console.log('admission wrapper (L1):')
   }
   // cordis 语义：events.dispatch('emit', …) 返回回调数组、由调用方执行
   //（settings 服务与 LlmRuntime 均如此），测试按同款方式触发。
-  const fireSettingsUpdate = (ns, revision) => {
+  // settings 服务顺序：bumpRevision（发 document-updated，resolved 尚未提交）
+  // → commit（更新 resolved，发 settings/updated）。包装层必须监听后者，
+  // 否则"关闭视觉 agent"读到的还是旧配置、包装组残留（真实 bug 回归）。
+  const fireDocumentUpdate = (ns, revision) => {
     for (const callback of root.events.dispatch('emit', ['settings/document-updated', ns, revision])) callback(ns, revision)
+  }
+  const fireSettingsCommit = (ns) => {
+    for (const callback of root.events.dispatch('emit', ['settings/updated', ns, null, null, 'update'])) callback(ns, null, null, 'update')
   }
   // 1) 视觉 agent 存在 → 包装注册、声明 image、目录镜像、+多模态 标签。
   const dispose = installAdmissionWrapper(root, fakeService)
@@ -969,20 +975,24 @@ console.log('admission wrapper (L1):')
   // 3) 嵌套 tool-result 中的图片块同样被改写（原文本适配器会递归拒绝）。
   const nestedResult = rewriteContentDeep([{ type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }, { type: 'text', text: 'x' }] }], [{ modality: 'image', agentId: 'vision', rewrite: minimalImageRewrite }])
   check('rewriteContentDeep reaches nested tool-result', nestedResult.changed === true && nestedResult.content[0].content.every((block) => block.type === 'text'))
-  // 4) 门控：关闭视觉 agent + settings 事件 → 包装卸载、默认模型恢复。
+  // 4) 门控：关闭视觉 agent → settings/updated 提交后包装卸载、默认模型恢复。
   config.visionAgents = []
-  fireSettingsUpdate('router', 2)
+  // 负向见证：document-updated（resolved 未提交）不得触发卸载——曾因监听
+  // 该事件导致"关闭视觉 agent 后 +多模态 组残留"（真实 bug 回归）。
+  fireDocumentUpdate('router', 2)
+  check('wrapper ignores document-updated (stale resolved)', llm.listProviders().some((entry) => entry.id === `text-provider${WRAP_SUFFIX}`))
+  fireSettingsCommit('router')
   await tick()
   check('wrapper drops twin when vision agents disabled', !llm.listProviders().some((entry) => entry.id === `text-provider${WRAP_SUFFIX}`))
   check('wrapper restores default model on disable', defaultSelection.provider === 'text-provider')
   // 5) 门控：总开关关闭 → 同样不注册。
   config.enabled = false
   config.visionAgents = [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]]
-  fireSettingsUpdate('router', 3)
+  fireSettingsCommit('router')
   check('wrapper respects master switch', !llm.listProviders().some((entry) => entry.id === `text-provider${WRAP_SUFFIX}`))
   // 6) 恢复 + adapters 事件热同步；新 provider 出现即补包装；默认模型再接管。
   config.enabled = true
-  fireSettingsUpdate('router', 4)
+  fireSettingsCommit('router')
   llm.registerAdapter(['another-provider'], { ...textAdapter, providerInfo(provider) { return { id: provider, name: 'Another' } } })
   await tick()
   check('wrapper hot-syncs on adapters event', llm.listProviders().some((entry) => entry.id === `another-provider${WRAP_SUFFIX}`))
