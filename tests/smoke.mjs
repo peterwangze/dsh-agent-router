@@ -82,17 +82,10 @@ console.log('wire codecs:')
   check('catalogResult rejects missing fields', threw)
   const s = wireCodecs.statsResult.parse({ ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [] })
   check('statsResult parses empty', s.ok === true)
-  const promptReq = wireCodecs.imagePromptRequest.parse({ sessionId: 's1', text: '看图', images: [{ mediaType: 'image/png', data: 'aGk=' }] })
-  check('imagePromptRequest parses', promptReq.sessionId === 's1' && promptReq.images.length === 1 && promptReq.agentId === undefined)
-  const promptRes = wireCodecs.imagePromptResult.parse({ ok: true, message: '已发送', agentId: 'vision' })
-  check('imagePromptResult parses', promptRes.ok === true && promptRes.agentId === 'vision')
   const dataReq = wireCodecs.imageDataRequest.parse({ ref: { attachmentId: 'sha256:x', mediaType: 'image/png', bytes: 4, width: 2, height: 2 } })
   check('imageDataRequest parses', dataReq.ref.attachmentId === 'sha256:x' && dataReq.ref.name === undefined)
   const dataRes = wireCodecs.imageDataResult.parse({ ok: true, message: 'ok', mediaType: 'image/png', data: 'aGk=', width: 2, height: 2 })
   check('imageDataResult parses', dataRes.ok === true && dataRes.data === 'aGk=')
-  let codecThrew = false
-  try { wireCodecs.imagePromptRequest.parse({ sessionId: 's1', text: 'x' }) } catch { codecThrew = true }
-  check('imagePromptRequest rejects missing images', codecThrew)
 }
 
 // 3. typert 贡献形状
@@ -100,10 +93,10 @@ console.log('rpc contribution:')
 {
   const contribution = createHostContribution()
   check('face host', contribution.face === 'host')
-  check('14 invocations', contribution.invocations.length === 14)
-  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 14 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
+  check('13 invocations', contribution.invocations.length === 13)
+  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 13 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
   check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))
-  check('image RPC descriptors present', contribution.invocations.some((d) => d.method === 'imagePrompt') && contribution.invocations.some((d) => d.method === 'imageData'))
+  check('image RPC descriptors present', contribution.invocations.some((d) => d.method === 'imageData'))
   const cliStatusCodec = wireCodecs.cliStatusResult.parse({ ok: true, message: '已登录', loggedIn: true })
   check('cliStatusResult parses', cliStatusCodec.ok === true && cliStatusCodec.loggedIn === true)
   const cliModelsCodec = wireCodecs.cliModelsResult.parse({ ok: true, message: 'm', models: ['a'] })
@@ -195,12 +188,6 @@ console.log('RouterService:')
       return ref
     },
     readImage: async (ref) => ({ ref, data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) }),
-  })
-  // 对话框图片通路：会话 agent（followup 注入面；cwd 由测试块按需设置）。
-  const injectedMessages = []
-  const liveAgent = { followup: (message) => { injectedMessages.push(message) }, session: { header: { cwd: '' } } }
-  root.provide('agents', {
-    get: (id) => (id === 'sess-1' ? liveAgent : undefined),
   })
   root.provide('fs', {
     resolve: async (path) => ({ displayPath: path.includes(':') || path.startsWith('/') ? path : `D:/work/example/${path}` }),
@@ -700,7 +687,7 @@ console.log('RouterService:')
     check('attachments non-integer rejected', threw)
   }
 
-  // ── 对话框图片通路：工作区路径注入 / imagePrompt / imageData / 上下文附带 ──
+  // ── 对话框图片通路：标记往返 / imageData（生成图片展示通路）────────
   console.log('dialog image pathway:')
   {
     // 标记往返（生成图片展示用）：名称净化保证标记可按 ] 定界解析。
@@ -713,78 +700,11 @@ console.log('RouterService:')
     // 视觉类 agent 选择：image 生成类型与无 image 能力者除外，按 id 排序。
     const visionList = service.listImageVisionAgents().map(([id]) => id)
     check('vision agents list', visionList.length === 2 && visionList[0] === 'coder' && visionList[1] === 'vision' && !visionList.includes('draw') && !visionList.includes('broken'))
-    const promptText = service.composeImagePromptText('识别这张图', ['D:/work/example/.router-files/router-img-x-0.png'], 'vision')
-    check('image prompt text guides route_agent via files', promptText.includes('识别这张图') && promptText.includes('[用户附带图片]') && promptText.includes('D:/work/example/.router-files/router-img-x-0.png') && promptText.includes('route_agent') && promptText.includes('"vision"') && promptText.includes('files 填这些路径') && !promptText.includes('[router:image:'))
-
-    const pngB64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString('base64')
-    const pathModule = await import('node:path')
-    const fsModule = await import('node:fs')
-    const imageWorkDir = pathModule.join(ROOT_DIR, `.tmp-image-prompt-${process.pid}`)
-    fsModule.mkdirSync(imageWorkDir, { recursive: true })
-    liveAgent.session.header.cwd = imageWorkDir
-    const injectedBefore = injectedMessages.length
-    const okFlow = await service.imagePrompt({ sessionId: 'sess-1', text: '识别这张图', images: [{ mediaType: 'image/png', data: pngB64, name: 'shot.png' }] })
-    check('imagePrompt ok flow', okFlow.ok === true && okFlow.agentId === 'coder')
-    check('imagePrompt injected user message', injectedMessages.length === injectedBefore + 1 && injectedMessages[injectedMessages.length - 1].role === 'user' && injectedMessages[injectedMessages.length - 1].content.length === 1 && injectedMessages[injectedMessages.length - 1].content[0].type === 'text')
-    const injectedText = injectedMessages[injectedMessages.length - 1].content[0].text
-    const writtenPath = pathModule.join(imageWorkDir, '.router-files')
-    const writtenFiles = fsModule.existsSync(writtenPath) ? fsModule.readdirSync(writtenPath).filter((name) => name.startsWith('router-img-')) : []
-    check('imagePrompt saves to workspace files', writtenFiles.length === 1)
-    check('imagePrompt message carries path + files guidance', injectedText.includes('[用户附带图片]') && injectedText.includes(writtenFiles[0] ?? 'MISSING') && injectedText.includes('files 填这些路径') && injectedText.includes('"coder"') && !injectedText.includes('[router:image:'))
-    check('imagePrompt message is text-only (model-safe)', injectedMessages[injectedMessages.length - 1].content.every((block) => block.type === 'text'))
-    if (writtenFiles.length === 1) {
-      const bytes = fsModule.readFileSync(pathModule.join(writtenPath, writtenFiles[0]))
-      check('imagePrompt writes real image bytes', bytes.length === 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47)
-    }
-    // 显式目标与校验。
-    const explicit = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', agentId: 'vision', images: [{ mediaType: 'image/png', data: pngB64 }] })
-    check('imagePrompt explicit agent', explicit.ok === true && explicit.agentId === 'vision' && injectedMessages[injectedMessages.length - 1].content[0].text.includes('"vision"'))
-    const badTarget = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', agentId: 'draw', images: [{ mediaType: 'image/png', data: pngB64 }] })
-    check('imagePrompt rejects draw as target', badTarget.ok === false && badTarget.message.includes('不可接收图片'))
-    const unknownTarget = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', agentId: 'nope', images: [{ mediaType: 'image/png', data: pngB64 }] })
-    check('imagePrompt rejects unknown agent', unknownTarget.ok === false)
-    const noImages = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: [] })
-    check('imagePrompt rejects empty images', noImages.ok === false && noImages.message.includes('缺少图片附件'))
-    const tooMany = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: Array.from({ length: 9 }, () => ({ mediaType: 'image/png', data: pngB64 })) })
-    check('imagePrompt enforces count limit', tooMany.ok === false && tooMany.message.includes('最多 8 张'))
-    const badBase64 = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: [{ mediaType: 'image/png', data: '!!!not-base64!!!' }] })
-    check('imagePrompt rejects invalid base64', badBase64.ok === false && badBase64.message.includes('base64'))
-    // 声明 MIME 不在白名单：按魔数嗅探为 png 后落盘。
-    const sniffedFlow = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: [{ mediaType: 'image/bmp', data: pngB64 }] })
-    check('imagePrompt sniffs unsupported declared type', sniffedFlow.ok === true && fsModule.existsSync(pathModule.join(writtenPath, fsModule.readdirSync(writtenPath).filter((name) => name.startsWith('router-img-') && name.endsWith('.png')).pop() ?? 'nope')))
-    const unknownSession = await service.imagePrompt({ sessionId: 'sess-9', text: 'x', images: [{ mediaType: 'image/png', data: pngB64 }] })
-    check('imagePrompt rejects unknown session', unknownSession.ok === false && unknownSession.message.includes('sess-9'))
-    // 无工作目录：明确拒绝（绝不在错误位置写文件）。
-    liveAgent.session.header.cwd = ''
-    const noCwd = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: [{ mediaType: 'image/png', data: pngB64 }] })
-    check('imagePrompt rejects missing cwd', noCwd.ok === false && noCwd.message.includes('工作目录'))
-    liveAgent.session.header.cwd = imageWorkDir
-    // 失败路径绝不注入会话消息。
-    const injectedAfterFailures = injectedMessages.length
-    const failingSession = await service.imagePrompt({ sessionId: 'sess-9', text: 'x', images: [{ mediaType: 'image/png', data: pngB64 }] })
-    check('imagePrompt failure injects nothing', failingSession.ok === false && injectedMessages.length === injectedAfterFailures)
-    // 总开关关闭：拒绝（随后恢复原 scope，供后续测试继续使用）。
-    const savedScope = service.scope
-    service.attach({ get: () => ({ enabled: false, agents: {} }) })
-    const disabled = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: [{ mediaType: 'image/png', data: pngB64 }] })
-    check('imagePrompt respects master switch', disabled.ok === false && disabled.message.includes('未启用'))
-    service.attach(savedScope)
     // imageData：读字节 → base64 与元数据（生成图片展示通路）。
     const imageData = await service.imageData({ ref: { attachmentId: 'sha256:abcd', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'n.png' } })
     check('imageData returns bytes', imageData.ok === true && imageData.data === Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64') && imageData.mediaType === 'image/png')
     const imageDataMissing = await service.imageData({})
     check('imageData rejects missing ref', imageDataMissing.ok === false && imageDataMissing.message.includes('缺少附件引用'))
-    // 清理临时工作目录。
-    try {
-      const tmpRouter = pathModule.join(imageWorkDir, '.router-files')
-      if (fsModule.existsSync(tmpRouter)) {
-        for (const name of fsModule.readdirSync(tmpRouter)) {
-          try { fsModule.rmSync(pathModule.join(tmpRouter, name), { force: true }) } catch { /* 继续清理其余文件 */ }
-        }
-        try { fsModule.rmdirSync(tmpRouter) } catch { /* 目录可能已被删除 */ }
-      }
-      fsModule.rmdirSync(imageWorkDir)
-    } catch { /* 沙箱拒绝清理时留待手动删除 */ }
   }
 
   // ── 带图片调用自动附带会话上下文（截图是对话上下文的一部分）────────
@@ -868,7 +788,7 @@ console.log('apply wiring:')
     const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
     await app
     check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
-    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 14 && registeredContribution.package === 'dsh-agent-router')
+    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 13 && registeredContribution.package === 'dsh-agent-router')
     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
     check('oauth callback route registered', webRoute && webRoute.kind === 'exact' && webRoute.path === '/router-oauth/callback' && typeof webRoute.handler === 'function')
     await app.dispose()
