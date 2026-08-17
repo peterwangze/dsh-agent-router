@@ -926,6 +926,17 @@ console.log('admission wrapper (L1):')
     },
   }
   llm.registerAdapter(['text-provider'], textAdapter)
+  // 默认模型接管面：接管/恢复写入都记录（saveSelection 写 settings）。
+  const defaultWrites = []
+  let defaultSelection = { provider: 'text-provider', model: 'brain-1' }
+  root.provide('agentDefaultModel', {
+    currentSelection: () => ({ ...defaultSelection }),
+    saveSelection: async (next) => {
+      defaultSelection = { ...next }
+      defaultWrites.push({ ...next })
+    },
+  })
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
   // 可变服务门控面。
   const config = { enabled: true, visionAgents: [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]] }
   const fakeService = {
@@ -939,6 +950,8 @@ console.log('admission wrapper (L1):')
   }
   // 1) 视觉 agent 存在 → 包装注册、声明 image、目录镜像、+多模态 标签。
   const dispose = installAdmissionWrapper(root, fakeService)
+  await tick()
+  check('wrapper takes over default model', defaultSelection.provider === `text-provider${WRAP_SUFFIX}` && defaultSelection.model === 'brain-1')
   check('wrapper registers twin when vision agent exists', llm.listProviders().some((entry) => entry.id === `text-provider${WRAP_SUFFIX}`))
   const wrapProvider = llm.listProviders().find((entry) => entry.id === `text-provider${WRAP_SUFFIX}`)
   check('wrapper labels +多模态 takeover', !!wrapProvider && wrapProvider.name === 'TextBrain + 多模态')
@@ -956,24 +969,30 @@ console.log('admission wrapper (L1):')
   // 3) 嵌套 tool-result 中的图片块同样被改写（原文本适配器会递归拒绝）。
   const nestedResult = rewriteContentDeep([{ type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }, { type: 'text', text: 'x' }] }], [{ modality: 'image', agentId: 'vision', rewrite: minimalImageRewrite }])
   check('rewriteContentDeep reaches nested tool-result', nestedResult.changed === true && nestedResult.content[0].content.every((block) => block.type === 'text'))
-  // 4) 门控：关闭视觉 agent + settings 事件 → 包装卸载。
+  // 4) 门控：关闭视觉 agent + settings 事件 → 包装卸载、默认模型恢复。
   config.visionAgents = []
   fireSettingsUpdate('router', 2)
+  await tick()
   check('wrapper drops twin when vision agents disabled', !llm.listProviders().some((entry) => entry.id === `text-provider${WRAP_SUFFIX}`))
+  check('wrapper restores default model on disable', defaultSelection.provider === 'text-provider')
   // 5) 门控：总开关关闭 → 同样不注册。
   config.enabled = false
   config.visionAgents = [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]]
   fireSettingsUpdate('router', 3)
   check('wrapper respects master switch', !llm.listProviders().some((entry) => entry.id === `text-provider${WRAP_SUFFIX}`))
-  // 6) 恢复 + adapters 事件热同步；新 provider 出现即补包装。
+  // 6) 恢复 + adapters 事件热同步；新 provider 出现即补包装；默认模型再接管。
   config.enabled = true
   fireSettingsUpdate('router', 4)
   llm.registerAdapter(['another-provider'], { ...textAdapter, providerInfo(provider) { return { id: provider, name: 'Another' } } })
+  await tick()
   check('wrapper hot-syncs on adapters event', llm.listProviders().some((entry) => entry.id === `another-provider${WRAP_SUFFIX}`))
+  check('wrapper re-takes over default model', defaultSelection.provider === `text-provider${WRAP_SUFFIX}`)
   check('wrappableProviders excludes twins', wrappableProviders(llm).every((provider) => !provider.endsWith(WRAP_SUFFIX)) && wrappableProviders(llm).includes('text-provider'))
-  // 7) 卸载器释放全部注册。
+  // 7) 卸载器释放全部注册并恢复默认模型。
   dispose()
+  await tick()
   check('wrapper uninstaller removes all twins', !llm.listProviders().some((entry) => String(entry.id).endsWith(WRAP_SUFFIX)))
+  check('wrapper uninstaller restores default model', defaultSelection.provider === 'text-provider')
   // 8) createWrapAdapter 对已消失原适配器明确报错。
   const orphan = createWrapAdapter(llm, 'missing-provider', [{ modality: 'image', agentId: 'vision', rewrite: minimalImageRewrite }])
   let orphanRejected = false
