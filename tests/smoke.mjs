@@ -5,7 +5,7 @@ import { createHostContribution, ROUTER_REMOTE } from '../lib/rpc.js'
 import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine, cliWorkspaceHint } from '../lib/service.js'
 import { runClientRender } from './client-render.mjs'
 import { runInstallEntryTests } from './install-entry.mjs'
-import { BlockAssembler } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, LlmRuntime, contentHasImage } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { spawnSync } from 'node:child_process'
@@ -877,6 +877,106 @@ console.log('apply wiring:')
   // 客户端 UI 真实渲染（迷你 React 驱动整页，结构断言见 client-render.mjs）。
   console.log('client render:')
   await runClientRender(check)
+}
+
+// 7.5 准入包装机制验证：真实 LlmRuntime 上的 twin 路由
+// （多模态平台 L1 的核心技术风险预演——图片块进入历史、文本大脑不见裸图、
+//   包装模型声明 image 通过准入，全部在 rc.7 真实注册表上证明。）
+console.log('twin wrapper mechanism (real LlmRuntime):')
+{
+  const root = new Context()
+  const llm = new LlmRuntime(root)
+  // ── 模拟"纯文本原适配器"：见图片块即拒绝（复刻 UNSUPPORTED_CONTENT 语义）──
+  const delegateCalls = []
+  const textAdapter = {
+    providerInfo(provider) { return { id: provider, name: 'TextBrain' } },
+    providerRetryPolicy() { return undefined },
+    async listModels(provider) {
+      return [{ provider, id: 'brain-1', name: 'Brain-1', inputModalities: ['text'] }]
+    },
+    async resolveModel(provider, model) {
+      return { provider, id: model, name: model, inputModalities: ['text'], context: { contextWindow: 100_000 }, defaultMaxTokens: 4096 }
+    },
+    async *stream(options) {
+      delegateCalls.push(options)
+      for (const message of options.messages) {
+        if (contentHasImage(message.content)) throw new Error('UNSUPPORTED_CONTENT: text adapter saw a raw image block')
+      }
+      yield { type: 'block-start', index: 0, blockType: 'text' }
+      yield { type: 'text-delta', index: 0, text: 'delegated-ok' }
+      yield { type: 'block-end', index: 0, block: { type: 'text', text: 'delegated-ok' } }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    },
+  }
+  // ── twin 包装适配器：声明 image、改写图片块后委托原适配器 ─────────────
+  const twinRoute = 'text-provider-vision'
+  const twinAdapter = {
+    providerInfo(provider) { return { id: provider, name: 'TextBrain + 自动识图' } },
+    providerRetryPolicy(provider) { return llm.registration('text-provider').adapter.providerRetryPolicy(provider) },
+    async listModels() {
+      const listed = await llm.registration('text-provider').adapter.listModels('text-provider')
+      return listed.map((model) => ({ ...model, provider: twinRoute, inputModalities: ['text', 'image'] }))
+    },
+    async resolveModel(_provider, model, signal) {
+      const base = await llm.registration('text-provider').adapter.resolveModel('text-provider', model, signal)
+      return { ...base, provider: twinRoute, inputModalities: ['text', 'image'] }
+    },
+    async *stream(options) {
+      // 图片块改写：文本大脑收到的是证据文本，日志层保留原件（L3 语义）。
+      const rewritten = (options.messages ?? []).map((message) => {
+        if (!message || !Array.isArray(message.content)) return message
+        let changed = false
+        const content = []
+        for (const block of message.content) {
+          if (block && block.type === 'image') {
+            changed = true
+            content.push({ type: 'text', text: `[图片附件 ${String(block.attachment?.attachmentId ?? 'unknown')} 已上传：调用视觉工具查看]` })
+          } else {
+            content.push(block)
+          }
+        }
+        return changed ? { ...message, content } : message
+      })
+      yield* llm.stream({ ...options, provider: 'text-provider', messages: rewritten })
+    },
+  }
+  llm.registerAdapter(['text-provider'], textAdapter)
+  llm.registerAdapter([twinRoute], twinAdapter)
+
+  // 1) 包装模型声明 image：准入检查（resolveModelInfo）放行。
+  const twinInfo = await llm.resolveModelInfo(twinRoute, 'brain-1')
+  check('twin declares image input (admission passes)', Array.isArray(twinInfo.inputModalities) && twinInfo.inputModalities.includes('image'))
+  const rawInfo = await llm.resolveModelInfo('text-provider', 'brain-1')
+  check('raw route stays text-only', !rawInfo.inputModalities.includes('image'))
+  // 2) 模型选择器可见性与目录镜像。
+  const providers = llm.listProviders()
+  check('twin route appears in provider list', providers.some((entry) => entry.id === twinRoute))
+  const twinModels = await llm.listModels(twinRoute)
+  check('twin mirrors catalog with own provider id', twinModels.length === 1 && twinModels[0].provider === twinRoute && twinModels[0].inputModalities.includes('image'))
+  // 3) 图片轮经 twin：委托完成、原适配器只见改写文本（无裸图片块）。
+  const imageMessage = createUserMessage({ content: [{ type: 'text', text: '看看这张图' }, { type: 'image', attachment: { attachmentId: 'sha256:abc', mediaType: 'image/png', bytes: 4, width: 2, height: 2 } }], source: { kind: 'user' } })
+  const assembler = new BlockAssembler()
+  let twinText = ''
+  for await (const chunk of llm.stream({ provider: twinRoute, model: 'brain-1', system: undefined, messages: [imageMessage] })) {
+    assembler.push(chunk)
+  }
+  twinText = assembler.blocks().filter((block) => block.type === 'text').map((block) => block.text).join('')
+  check('image turn via twin completes', assembler.finish.kind === 'stop' && twinText === 'delegated-ok')
+  check('delegate saw rewritten text, not raw image', delegateCalls.length === 1 && delegateCalls[0].messages[0].content.some((block) => block.type === 'text' && block.text.includes('调用视觉工具查看')) && delegateCalls[0].messages[0].content.every((block) => block.type !== 'image'))
+  // 4) 负向见证：裸图片块直接进原适配器必然失败（twin 是唯一放行路径）。
+  //  rc.7 语义：适配器异常被转换为终态 finish 错误块（与 agent-loop 一致）。
+  const rawAssembler = new BlockAssembler()
+  for await (const chunk of llm.stream({ provider: 'text-provider', model: 'brain-1', system: undefined, messages: [imageMessage] })) {
+    rawAssembler.push(chunk)
+  }
+  check('raw route rejects image blocks (negative witness)', rawAssembler.finish.kind === 'error' && String(rawAssembler.finish.failure?.message ?? '').includes('UNSUPPORTED_CONTENT'))
+  // 5) 文本轮原样委托（改写零开销、模型身份不变）。
+  const textMessage = createUserMessage({ content: [{ type: 'text', text: '普通文本轮' }], source: { kind: 'user' } })
+  const textAssembler = new BlockAssembler()
+  for await (const chunk of llm.stream({ provider: twinRoute, model: 'brain-1', system: undefined, messages: [textMessage] })) {
+    textAssembler.push(chunk)
+  }
+  check('text turn delegates verbatim', textAssembler.finish.kind === 'stop' && delegateCalls[delegateCalls.length - 1].messages[0].content.length === 1 && delegateCalls[delegateCalls.length - 1].messages[0].content[0].text === '普通文本轮')
 }
 
 // 8. 平台安装入口（BOM 免疫在线命令 + 离线安装幂等；涉及系统宿主与本地 fixture 服务器）
