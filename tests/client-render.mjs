@@ -249,7 +249,18 @@ export async function runClientRender(check) {
   const mutateCalls = []
   const credSetCalls = []
   let discoverMode = 'ok'
+  // 模型接管面：会话当前选中 + 切换调用记录（视觉开→切包装组，关→切回）。
+  let sessionCurrent = { provider: 'openai', model: 'gpt-4o' }
+  const sessionSelectCalls = []
   const apiMock = {
+    sessions: {
+      models: async () => ({ result: { ok: true, value: { current: { ...sessionCurrent }, routable: true, groups: [], failures: [] } } }),
+      selectModel: async (payload) => {
+        sessionSelectCalls.push({ ...payload })
+        sessionCurrent = { provider: payload.provider, model: payload.model }
+        return { result: { ok: true, value: { selected: { provider: payload.provider, model: payload.model } } } }
+      },
+    },
     llm: {
       providers: async () => ({ result: { ok: true, value: { providers: [
         { provider: 'openai', displayName: 'OpenAI', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], active: false, declared: false },
@@ -610,6 +621,35 @@ export async function runClientRender(check) {
     check('composer attach button hidden without vision agent', attachHidden.length === 0)
     catalogMode = 'withVision'
     listener && listener.listener()
+  }
+
+  // 模型接管（无 UI 条目）：视觉开启 → 自动切包装组；已接管幂等；关闭 → 切回原 provider。
+  {
+    const takeoverReg = captured.registrations.find((reg) => reg && reg.id === 'router-model-takeover')
+    check('model takeover entry registered', !!takeoverReg)
+    if (takeoverReg) {
+      const listener = captured.listeners.find((entry) => entry.event === 'settings/document-updated')
+      // 开启接管：纯文本当前选中 → 自动切到包装组。
+      sessionCurrent = { provider: 'openai', model: 'gpt-4o' }
+      sessionSelectCalls.length = 0
+      await renderInto(takeoverReg.render({ sessionId: 'sess-1', input: { imageIds: [] }, api: apiMock }), 'takeover')
+      check('takeover switches to wrap route', sessionSelectCalls.some((call) => call.provider === 'openai-router' && call.model === 'gpt-4o'))
+      // 已接管：草稿变化（如贴图）重渲染不重复切（幂等，零竞态）。
+      const before = sessionSelectCalls.length
+      await renderInto(takeoverReg.render({ sessionId: 'sess-1', input: { imageIds: ['draft-1'] }, api: apiMock }), 'takeover')
+      check('takeover idempotent when already wrapped', sessionSelectCalls.length === before)
+      // 关闭视觉：包装组当前选中 → 切回原 provider。
+      sessionCurrent = { provider: 'openai-router', model: 'gpt-4o' }
+      sessionSelectCalls.length = 0
+      catalogMode = 'drawOnly'
+      listener && listener.listener()
+      await new Promise((resolve) => setImmediate(resolve))
+      await renderInto(takeoverReg.render({ sessionId: 'sess-1', input: { imageIds: [] }, api: apiMock }), 'takeover')
+      check('takeover restores original provider on disable', sessionSelectCalls.some((call) => call.provider === 'openai' && call.model === 'gpt-4o'))
+      catalogMode = 'withVision'
+      listener && listener.listener()
+      await new Promise((resolve) => setImmediate(resolve))
+    }
   }
 
   // route_agent 工具卡片：解析标记渲染缩略图；兼容旧会话真实图片块；运行态显示处理中。
