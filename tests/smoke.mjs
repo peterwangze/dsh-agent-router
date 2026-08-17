@@ -82,6 +82,17 @@ console.log('wire codecs:')
   check('catalogResult rejects missing fields', threw)
   const s = wireCodecs.statsResult.parse({ ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [] })
   check('statsResult parses empty', s.ok === true)
+  const promptReq = wireCodecs.imagePromptRequest.parse({ sessionId: 's1', text: '看图', images: [{ mediaType: 'image/png', data: 'aGk=' }] })
+  check('imagePromptRequest parses', promptReq.sessionId === 's1' && promptReq.images.length === 1 && promptReq.agentId === undefined)
+  const promptRes = wireCodecs.imagePromptResult.parse({ ok: true, message: '已发送', agentId: 'vision' })
+  check('imagePromptResult parses', promptRes.ok === true && promptRes.agentId === 'vision')
+  const dataReq = wireCodecs.imageDataRequest.parse({ ref: { attachmentId: 'sha256:x', mediaType: 'image/png', bytes: 4, width: 2, height: 2 } })
+  check('imageDataRequest parses', dataReq.ref.attachmentId === 'sha256:x' && dataReq.ref.name === undefined)
+  const dataRes = wireCodecs.imageDataResult.parse({ ok: true, message: 'ok', mediaType: 'image/png', data: 'aGk=', width: 2, height: 2 })
+  check('imageDataResult parses', dataRes.ok === true && dataRes.data === 'aGk=')
+  let codecThrew = false
+  try { wireCodecs.imagePromptRequest.parse({ sessionId: 's1', text: 'x' }) } catch { codecThrew = true }
+  check('imagePromptRequest rejects missing images', codecThrew)
 }
 
 // 3. typert 贡献形状
@@ -89,9 +100,10 @@ console.log('rpc contribution:')
 {
   const contribution = createHostContribution()
   check('face host', contribution.face === 'host')
-  check('12 invocations', contribution.invocations.length === 12)
-  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 12 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
+  check('14 invocations', contribution.invocations.length === 14)
+  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 14 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
   check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))
+  check('image RPC descriptors present', contribution.invocations.some((d) => d.method === 'imagePrompt') && contribution.invocations.some((d) => d.method === 'imageData'))
   const cliStatusCodec = wireCodecs.cliStatusResult.parse({ ok: true, message: '已登录', loggedIn: true })
   check('cliStatusResult parses', cliStatusCodec.ok === true && cliStatusCodec.loggedIn === true)
   const cliModelsCodec = wireCodecs.cliModelsResult.parse({ ok: true, message: 'm', models: ['a'] })
@@ -183,6 +195,11 @@ console.log('RouterService:')
       return ref
     },
     readImage: async (ref) => ({ ref, data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) }),
+  })
+  // 对话框图片通路：会话 agent（followup 注入面）。
+  const injectedMessages = []
+  root.provide('agents', {
+    get: (id) => (id === 'sess-1' ? { followup: (message) => { injectedMessages.push(message) } } : undefined),
   })
   root.provide('fs', {
     resolve: async (path) => ({ displayPath: path.includes(':') || path.startsWith('/') ? path : `D:/work/example/${path}` }),
@@ -375,6 +392,7 @@ console.log('RouterService:')
   check('promptText lists agents', text.includes('vision') && text.includes('draw') && text.includes('route_agent') && !text.includes('off'))
   check('promptText pool meta', text.includes('OAuth 账号池:G池') && text.includes('2 个账号'))
   check('promptText delegation note', text.includes('可读写工作区任意文件') && text.includes('附件按需显式派发'))
+  check('promptText dialog image guidance', text.includes('[router:image:…]') && text.includes('attachmentIds'))
   check('promptText cli meta', text.includes('子代理:'))
 
   // agent 类型委派：prompt 必须携带工作目录注入与图片附件块，子代理收到
@@ -681,6 +699,75 @@ console.log('RouterService:')
     check('attachments non-integer rejected', threw)
   }
 
+  // ── 对话框图片通路：标记往返 / 显式引用解析 / imagePrompt / imageData ──
+  console.log('dialog image pathway:')
+  {
+    // 标记往返：名称净化保证标记可按 ] 定界解析。
+    const rawRef = { attachmentId: 'sha256:abcd', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'a]b[c\n.png' }
+    const marker = service.imageMarkerOf(rawRef)
+    check('image marker built', marker.startsWith('[router:image:') && marker.endsWith(']') && !marker.includes(']b') && marker.includes('abc'))
+    const parsed = service.parseImageMarkers(`前文 ${marker} 后文`)
+    check('image marker round-trips', parsed.length === 1 && parsed[0].attachmentId === 'sha256:abcd' && parsed[0].mediaType === 'image/png' && parsed[0].name === 'abc.png')
+    check('image marker tolerates corrupt payload', service.parseImageMarkers('[router:image:not-json]').length === 0)
+    // 显式引用解析：标记原文 / ref JSON / 非法条目 / 去重。
+    const refs = service.parseImageRefs([marker, JSON.stringify({ attachmentId: 'sha256:ef12', mediaType: 'image/jpeg', bytes: 1, width: 1, height: 1 })])
+    check('parseImageRefs marker + json', refs.length === 2 && refs[0].attachmentId === 'sha256:abcd' && refs[1].attachmentId === 'sha256:ef12')
+    check('parseImageRefs dedupes', service.parseImageRefs([marker, marker]).length === 1)
+    let refsThrew = false
+    try { service.parseImageRefs(['plain words']) } catch (error) { refsThrew = String(error.message).includes('不是有效的图片引用') }
+    check('parseImageRefs rejects invalid', refsThrew)
+    refsThrew = false
+    try { service.parseImageRefs(['{"width":2}']) } catch (error) { refsThrew = String(error.message).includes('缺少 attachmentId') }
+    check('parseImageRefs rejects missing id', refsThrew)
+    // 视觉类 agent 选择：image 生成类型与无 image 能力者除外，按 id 排序。
+    const visionList = service.listImageVisionAgents().map(([id]) => id)
+    check('vision agents list', visionList.length === 2 && visionList[0] === 'coder' && visionList[1] === 'vision' && !visionList.includes('draw') && !visionList.includes('broken'))
+    const promptText = service.composeImagePromptText('识别这张图', [{ attachmentId: 'sha256:xyz', mediaType: 'image/png', bytes: 3, width: 1, height: 1 }], 'vision')
+    check('image prompt text guides route_agent', promptText.includes('识别这张图') && promptText.includes('[router:image:') && promptText.includes('route_agent') && promptText.includes('"vision"') && promptText.includes('attachmentIds'))
+
+    const pngB64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString('base64')
+    const savedBefore = savedImages.length
+    const injectedBefore = injectedMessages.length
+    const okFlow = await service.imagePrompt({ sessionId: 'sess-1', text: '识别这张图', images: [{ mediaType: 'image/png', data: pngB64, name: 'shot.png' }] })
+    check('imagePrompt ok flow', okFlow.ok === true && okFlow.agentId === 'coder')
+    check('imagePrompt saved via attachments', savedImages.length === savedBefore + 1 && savedImages[savedImages.length - 1].name === 'shot.png' && savedImages[savedImages.length - 1].mediaType === 'image/png')
+    check('imagePrompt injected user message', injectedMessages.length === injectedBefore + 1 && injectedMessages[injectedMessages.length - 1].role === 'user' && injectedMessages[injectedMessages.length - 1].content.length === 1 && injectedMessages[injectedMessages.length - 1].content[0].type === 'text')
+    const injectedText = injectedMessages[injectedMessages.length - 1].content[0].text
+    check('imagePrompt message carries marker + guidance', injectedText.includes('[router:image:') && injectedText.includes('route_agent') && injectedText.includes('"coder"') && service.parseImageMarkers(injectedText).length === 1)
+    check('imagePrompt message is text-only (model-safe)', injectedMessages[injectedMessages.length - 1].content.every((block) => block.type === 'text'))
+    // 显式目标与校验。
+    const explicit = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', agentId: 'vision', images: [{ mediaType: 'image/png', data: pngB64 }] })
+    check('imagePrompt explicit agent', explicit.ok === true && explicit.agentId === 'vision' && service.parseImageMarkers(injectedMessages[injectedMessages.length - 1].content[0].text).length === 1)
+    const badTarget = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', agentId: 'draw', images: [{ mediaType: 'image/png', data: pngB64 }] })
+    check('imagePrompt rejects draw as target', badTarget.ok === false && badTarget.message.includes('不可接收图片'))
+    const unknownTarget = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', agentId: 'nope', images: [{ mediaType: 'image/png', data: pngB64 }] })
+    check('imagePrompt rejects unknown agent', unknownTarget.ok === false)
+    const noImages = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: [] })
+    check('imagePrompt rejects empty images', noImages.ok === false && noImages.message.includes('缺少图片附件'))
+    const tooMany = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: Array.from({ length: 9 }, () => ({ mediaType: 'image/png', data: pngB64 })) })
+    check('imagePrompt enforces count limit', tooMany.ok === false && tooMany.message.includes('最多 8 张'))
+    const badBase64 = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: [{ mediaType: 'image/png', data: '!!!not-base64!!!' }] })
+    check('imagePrompt rejects invalid base64', badBase64.ok === false && badBase64.message.includes('base64'))
+    // 声明 MIME 不在白名单：按魔数嗅探为 png 后保存。
+    const sniffedFlow = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: [{ mediaType: 'image/bmp', data: pngB64 }] })
+    check('imagePrompt sniffs unsupported declared type', sniffedFlow.ok === true && savedImages[savedImages.length - 1].mediaType === 'image/png')
+    const unknownSession = await service.imagePrompt({ sessionId: 'sess-9', text: 'x', images: [{ mediaType: 'image/png', data: pngB64 }] })
+    check('imagePrompt rejects unknown session', unknownSession.ok === false && unknownSession.message.includes('sess-9'))
+    // 失败路径绝不注入会话消息。
+    const injectedAfterFailures = injectedMessages.length
+    const failingSession = await service.imagePrompt({ sessionId: 'sess-9', text: 'x', images: [{ mediaType: 'image/png', data: pngB64 }] })
+    check('imagePrompt failure injects nothing', failingSession.ok === false && injectedMessages.length === injectedAfterFailures)
+    // 总开关关闭：拒绝。
+    service.attach({ get: () => ({ enabled: false, agents: {} }) })
+    const disabled = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: [{ mediaType: 'image/png', data: pngB64 }] })
+    check('imagePrompt respects master switch', disabled.ok === false && disabled.message.includes('未启用'))
+    // imageData：读字节 → base64 与元数据。
+    const imageData = await service.imageData({ ref: { attachmentId: 'sha256:abcd', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'n.png' } })
+    check('imageData returns bytes', imageData.ok === true && imageData.data === Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64') && imageData.mediaType === 'image/png')
+    const imageDataMissing = await service.imageData({})
+    check('imageData rejects missing ref', imageDataMissing.ok === false && imageDataMissing.message.includes('缺少附件引用'))
+  }
+
   check('errorMessage', errorMessage(new Error('x')) === 'x' && errorMessage({ message: 'y' }) === 'y')
 }
 
@@ -705,8 +792,11 @@ console.log('apply wiring:')
     check('route_agent registered', registered && registered.name === 'route_agent')
     check('prompt section registered', sections.some((s) => s.name === 'router:agents' && s.order === 120 && s.text() === 'ROUTER-PROMPT'))
     check('tool timeout 20min (covers cli 15min default)', registered.timeoutMs === 20 * 60 * 1000)
-    check('tool parameters schema', registered.parameters && registered.parameters.properties && registered.parameters.properties.agent && registered.parameters.properties.task && registered.parameters.properties.attachments && registered.parameters.properties.attachments.type === 'array' && registered.parameters.properties.includeImages)
+    check('tool parameters schema', registered.parameters && registered.parameters.properties && registered.parameters.properties.agent && registered.parameters.properties.task && registered.parameters.properties.attachments && registered.parameters.properties.attachments.type === 'array' && registered.parameters.properties.includeImages && registered.parameters.properties.attachmentIds && registered.parameters.properties.attachmentIds.type === 'array')
     check('tool output has render', typeof registered.output.render === 'function' && typeof registered.execute === 'function')
+    // 图片渲染为纯文本标记（绝不产生图片块，避免文本模型历史被击穿）。
+    const rendered = registered.output.render({}, { ok: true, text: '已生成', image: { attachmentId: 'sha256:aa', mediaType: 'image/png', bytes: 4, width: 2, height: 2 }, usage: { inputTokens: 0, outputTokens: 0 } })
+    check('tool render emits marker not image block', rendered.every((block) => block.type === 'text') && rendered.some((block) => block.text.includes('[router:image:') && block.text.includes('sha256:aa')))
     await app.dispose()
   }
 
@@ -732,7 +822,7 @@ console.log('apply wiring:')
     const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
     await app
     check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
-    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 12 && registeredContribution.package === 'dsh-agent-router')
+    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 14 && registeredContribution.package === 'dsh-agent-router')
     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
     check('oauth callback route registered', webRoute && webRoute.kind === 'exact' && webRoute.path === '/router-oauth/callback' && typeof webRoute.handler === 'function')
     await app.dispose()

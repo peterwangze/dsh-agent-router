@@ -146,12 +146,13 @@ export async function runClientRender(check) {
 
   let rootElement = null
   let currentTree = null
+  let walkPrefix = 'root'
   async function settle(maxTurns = 40) {
     for (let turn = 0; turn < maxTurns; turn++) {
       if (dirty) {
         dirty = false
         renderErrors = []
-        currentTree = walk(rootElement, 'root')
+        currentTree = walk(rootElement, walkPrefix)
       }
       await new Promise((resolve) => setImmediate(resolve))
       if (!dirty) {
@@ -161,9 +162,16 @@ export async function runClientRender(check) {
     }
     return currentTree
   }
+  /** 换一棵组件树渲染（独立实例路径，避免与设置页共享 hook 槽位）。 */
+  async function renderInto(element, prefix, maxTurns = 40) {
+    rootElement = element
+    walkPrefix = prefix
+    dirty = true
+    return settle(maxTurns)
+  }
 
   // ── 装配：评估浏览器包 → mock ctx → apply → 渲染 ─────────────────────
-  const captured = {}
+  const captured = { registrations: [], listeners: [] }
   const fakeWindow = {
     __ModuleLoader__: { load: (payload) => { captured.bundle = payload } },
     location: { search: '', pathname: '/' },
@@ -188,13 +196,28 @@ export async function runClientRender(check) {
   // cli 登录状态可切换：'ok' = 已登录；'logged-out' = 未登录（Not logged in）。
   // 登录轮询、刷新状态与未登录红色提示的回归断言共用。
   let cliStatusMode = 'ok'
+  // 目录形态可切换：'withVision' = 有视觉 agent；'drawOnly' = 仅生图 agent
+  // （composer 图片按钮/发送条必须隐藏——生图 agent 不消费附件图片）。
+  let catalogMode = 'withVision'
+  let imagePromptFail = false
   const remoteMock = {
-    catalog: async () => ({ ok: true, value: { ok: true, enabled: true, defaults: { provider: 'deepseek-official', model: 'deepseek-v4-pro' }, agents: [
-      { id: 'codex', name: 'Codex 助手', type: 'cli', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', cliAgent: 'codexentry', effectiveProvider: 'cli:codexentry', effectiveModel: '', source: 'agent' },
-      { id: 'vision', name: '视觉', type: 'chat', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', effectiveProvider: 'deepseek-official', effectiveModel: 'deepseek-v4-pro', source: 'main' },
-    ], oauthAccounts: [], pools: [], cliAgents: [
-      { id: 'codexentry', name: 'Codex 子代理', enabled: true, command: 'codex', args: '', timeoutMs: 0, maxConcurrent: 1 },
-    ] } }),
+    catalog: async () => ({
+      ok: true,
+      value: {
+        ok: true, enabled: true, defaults: { provider: 'deepseek-official', model: 'deepseek-v4-pro' },
+        agents: catalogMode === 'drawOnly'
+          ? [
+            { id: 'draw', name: '画图', type: 'image', enabled: true, description: 'd', capabilities: ['image'], provider: 'openai', model: 'dall-e-3', account: '', effectiveProvider: 'openai', effectiveModel: 'dall-e-3', source: 'agent' },
+          ]
+          : [
+            { id: 'codex', name: 'Codex 助手', type: 'cli', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', cliAgent: 'codexentry', effectiveProvider: 'cli:codexentry', effectiveModel: '', source: 'agent' },
+            { id: 'vision', name: '视觉', type: 'chat', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', effectiveProvider: 'deepseek-official', effectiveModel: 'deepseek-v4-pro', source: 'main' },
+          ],
+        oauthAccounts: [], pools: [], cliAgents: [
+          { id: 'codexentry', name: 'Codex 子代理', enabled: true, command: 'codex', args: '', timeoutMs: 0, maxConcurrent: 1 },
+        ],
+      },
+    }),
     config: async () => ({ ok: true, value: { ok: true, enabled: true, revision: 1, writable: true, value: {
       enabled: true,
       agents: {
@@ -216,6 +239,16 @@ export async function runClientRender(check) {
       : { ok: true, value: { ok: true, loggedIn: true, message: '已登录' } },
     cliLogin: async () => ({ ok: true, value: { ok: true, message: '已在终端窗口启动' } }),
     cliModels: async () => ({ ok: true, value: { ok: true, message: '2 个模型', models: ['m1', 'm2'], source: 'cli' } }),
+    imagePrompt: async (request) => {
+      captured.imagePromptCalls.push(request)
+      return imagePromptFail
+        ? { ok: false, error: { message: '宿主拒绝：模型不可用' } }
+        : { ok: true, value: { ok: true, message: '已发送', agentId: request.agentId ?? '' } }
+    },
+    imageData: async (request) => {
+      captured.imageDataCalls.push(request)
+      return { ok: true, value: { ok: true, message: 'ok', mediaType: 'image/png', data: 'aGk=', width: 2, height: 2 } }
+    },
   }
   // 账号添加/编辑回归用记录：端点探测请求、llm-pi-ai 写入、凭据写入。
   // discoverMode 切 'fail' 模拟端点不可达（负向见证）。
@@ -256,18 +289,23 @@ export async function runClientRender(check) {
       register: (_ns, tables) => { Object.assign(zh, tables.zh) },
       bind: () => (key) => zh[key] ?? key,
     },
-    get: (key) => (key === 'connection' ? { api: apiMock } : undefined),
-    remote: { $mount: (contribution) => { captured.mount = contribution; return Promise.resolve() }, $on: () => () => {} },
+    get: (key) => (key === 'connection' ? { api: apiMock } : key === 'remote.router' ? remoteMock : undefined),
+    remote: { $mount: (contribution) => { captured.mount = contribution; return Promise.resolve() }, $on: (event, listener) => { captured.listeners.push({ event, listener }); return () => {} } },
     slots: {
-      inject: (_slot, register) => { captured.register = register(); return () => {} },
+      inject: (_slot, register) => { captured.registrations.push(register()); return () => {} },
       register: (descriptor, renderFn) => ({ ...descriptor, render: renderFn }),
     },
   }
   bundleExports.apply(ctx)
-  check('settings section registered', !!captured.register && captured.register.name === 'settings.section' && typeof captured.register.render === 'function')
-  // 浏览器侧 Remote 契约必须与宿主 rpc.js 同步包含 cli 三方法（曾漏加导致按钮全失效）。
+  const registrationOf = (name) => captured.registrations.find((reg) => reg && reg.name === name)
+  const settingsReg = registrationOf('settings.section')
+  check('settings section registered', !!settingsReg && typeof settingsReg.render === 'function')
+  check('composer image slots registered', !!registrationOf('conversation.input.right') && !!registrationOf('conversation.input.dock') && !!registrationOf('tool.call.toolview'))
+  check('toolview keyed to route_agent', registrationOf('tool.call.toolview') && registrationOf('tool.call.toolview').key === 'route_agent')
+  // 浏览器侧 Remote 契约必须与宿主 rpc.js 同步包含 cli 三方法与图片两方法（曾漏加导致按钮全失效）。
   check('client remotes include cli methods', !!captured.mount && ['cliStatus', 'cliLogin', 'cliModels'].every((method) => (captured.mount.descriptors ?? []).some((descriptor) => descriptor.method === method)))
-  rootElement = captured.register.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} })
+  check('client remotes include image methods', !!captured.mount && ['imagePrompt', 'imageData'].every((method) => (captured.mount.descriptors ?? []).some((descriptor) => descriptor.method === method)))
+  rootElement = settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} })
   dirty = true
   currentTree = await settle()
 
@@ -552,5 +590,148 @@ export async function runClientRender(check) {
       }
     }
     cliStatusMode = 'ok'
+  }
+
+  // ── 断言：对话框图片通路（composer 附件按钮 / 发送条 / route_agent 工具卡片）──
+  // 负向见证：旧版本既无附件按钮也无发送条（宿主准入直接拒绝图片），
+  // route_agent 生成图片以真实图片块写入工具结果（文本模型历史被击穿）。
+  const tOf = (key) => zh[key] ?? key
+  const imageToolReg = registrationOf('conversation.input.right')
+  const imageDockReg = registrationOf('conversation.input.dock')
+  const toolCardReg = registrationOf('tool.call.toolview')
+  const conversationCalls = { draftSeq: 0, pool: [] }
+  const conversationMock = {
+    createDraftImages: (files) => files.map((file) => {
+      conversationCalls.draftSeq += 1
+      const attachment = { id: `draft-${conversationCalls.draftSeq}`, previewUrl: 'blob:preview', file }
+      conversationCalls.pool.push(attachment)
+      return attachment
+    }),
+    draftImages: (ids) => conversationCalls.pool.filter((attachment) => ids.includes(attachment.id)),
+    releaseDraftImages: (attachments) => {
+      const ids = new Set(attachments.map((attachment) => attachment.id))
+      conversationCalls.pool = conversationCalls.pool.filter((attachment) => !ids.has(attachment.id))
+    },
+  }
+  const inputActionsCalls = []
+  const inputActionsMock = {
+    setDraft: (text) => inputActionsCalls.push(['setDraft', text]),
+    addImages: () => true,
+    removeImage: () => {},
+    pruneImages: (ids) => inputActionsCalls.push(['pruneImages', ids]),
+    submit: () => {},
+  }
+  let currentInput = { draft: '', imageIds: [] }
+  const useInputMock = () => currentInput
+  const fakeFile = { type: 'image/png', name: 'shot.png', arrayBuffer: async () => new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer }
+  captured.imagePromptCalls = []
+  captured.imageDataCalls = []
+
+  // 附件按钮：有视觉 agent 时渲染；仅有生图 agent 时隐藏。
+  {
+    const tree = await renderInto(imageToolReg.render({ t: tOf, router: () => remoteMock, conversation: () => conversationMock, inputActions: inputActionsMock }), 'imagetool')
+    const attachButton = findAll(tree, (node) => node && node.type === 'button' && node.props && node.props['aria-label'] === tOf('imageAttach'))
+    check('composer attach button renders with vision agent', attachButton.length === 1)
+    catalogMode = 'drawOnly'
+    const listener = captured.listeners.find((entry) => entry.event === 'settings/document-updated')
+    if (listener) listener.listener()
+    const hidden = await renderInto(imageToolReg.render({ t: tOf, router: () => remoteMock, conversation: () => conversationMock, inputActions: inputActionsMock }), 'imagetool')
+    const attachHidden = findAll(hidden, (node) => node && node.type === 'button' && node.props && node.props['aria-label'] === tOf('imageAttach'))
+    check('composer attach button hidden without vision agent', attachHidden.length === 0)
+    catalogMode = 'withVision'
+    listener && listener.listener()
+  }
+
+  // 发送条：草稿有图片 → 条带出现（数量 + agent 选择 + 发送按钮）；发送走插件 RPC 并清空草稿。
+  {
+    const image1 = conversationMock.createDraftImages([fakeFile])[0]
+    currentInput = { draft: '识别这张图', imageIds: [image1.id] }
+    const tree = await renderInto(imageDockReg.render({
+      t: tOf, router: () => remoteMock, conversation: () => conversationMock,
+      inputActions: inputActionsMock, sessionId: 'sess-1', useInput: useInputMock,
+    }), 'imagedock')
+    const strip = findAll(tree, (node) => node && node.type === 'div' && hasClass(node, 'dshrouter-dockstrip'))
+    check('dock strip renders with staged images', strip.length === 1 && textOf(strip[0]).includes(tOf('imageDockCount')(1)))
+    const select = findAll(strip[0], (node) => node && node.type === 'select')
+    check('dock lists vision agents sorted', select.length === 1 && textOf(select[0]).includes('codex') && textOf(select[0]).includes('vision'))
+    const sendButton = findAll(strip[0], (node) => node && node.type === 'button').find((node) => textOf(node) === tOf('imageSend'))
+    check('dock send button found', !!sendButton)
+    if (sendButton) {
+      sendButton.props.onClick()
+      await settle(60)
+      const call = captured.imagePromptCalls[captured.imagePromptCalls.length - 1]
+      const expectedData = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64')
+      check('imagePrompt payload carries session/text/agent', !!call && call.sessionId === 'sess-1' && call.text === '识别这张图' && call.agentId === 'codex')
+      check('imagePrompt payload serializes image bytes', !!call && call.images.length === 1 && call.images[0].mediaType === 'image/png' && call.images[0].name === 'shot.png' && call.images[0].data === expectedData)
+      check('send clears draft and releases images', inputActionsCalls.some(([op, value]) => op === 'setDraft' && value === '') && inputActionsCalls.some(([op, value]) => op === 'pruneImages' && Array.isArray(value) && value.length === 0) && conversationCalls.pool.length === 0)
+    }
+  }
+
+  // 发送失败：错误在条带内呈现，草稿与图片保留（绝不丢用户输入）。
+  {
+    const image2 = conversationMock.createDraftImages([fakeFile])[0]
+    currentInput = { draft: '再看一张', imageIds: [image2.id] }
+    imagePromptFail = true
+    const tree = await renderInto(imageDockReg.render({
+      t: tOf, router: () => remoteMock, conversation: () => conversationMock,
+      inputActions: inputActionsMock, sessionId: 'sess-1', useInput: useInputMock,
+    }), 'imagedock-fail')
+    const sendButton = findAll(tree, (node) => node && node.type === 'button').find((node) => textOf(node) === tOf('imageSend'))
+    check('dock failure send button found', !!sendButton)
+    if (sendButton) {
+      const clearsBefore = inputActionsCalls.filter(([op]) => op === 'setDraft').length
+      sendButton.props.onClick()
+      await settle(60)
+      check('dock failure shows host error', textOf(currentTree).includes('宿主拒绝：模型不可用'))
+      check('dock failure keeps draft and images', inputActionsCalls.filter(([op]) => op === 'setDraft').length === clearsBefore && conversationCalls.pool.some((attachment) => attachment.id === image2.id))
+    }
+    imagePromptFail = false
+  }
+
+  // 仅生图 agent：条带转为明确指引（不静默消失）。
+  {
+    currentInput = { draft: '', imageIds: ['ghost'] }
+    catalogMode = 'drawOnly'
+    const listener = captured.listeners.find((entry) => entry.event === 'settings/document-updated')
+    listener && listener.listener()
+    const tree = await renderInto(imageDockReg.render({
+      t: tOf, router: () => remoteMock, conversation: () => conversationMock,
+      inputActions: inputActionsMock, sessionId: 'sess-1', useInput: useInputMock,
+    }), 'imagedock-drawonly')
+    check('draw-only dock shows no-vision guidance', textOf(tree).includes(tOf('imageNoVision')))
+    catalogMode = 'withVision'
+    listener && listener.listener()
+    currentInput = { draft: '', imageIds: [] }
+  }
+
+  // route_agent 工具卡片：解析标记渲染缩略图；兼容旧会话真实图片块；运行态显示处理中。
+  {
+    const settledBlock = {
+      kind: 'tool-result',
+      seq: 1,
+      time: 1,
+      callId: 'c1',
+      call: { name: 'route_agent', argsRaw: '{"agent":"draw"}' },
+      callTime: 1,
+      content: [
+        { type: 'text', text: '已生成图片（1024x1024）\n[router:image:{"attachmentId":"sha256:tv","mediaType":"image/png","bytes":4,"width":2,"height":2,"name":"router-draw.png"}]' },
+        { type: 'text', text: '[openai/dall-e-3 · 输入 0 / 输出 0 tokens]' },
+        { type: 'image', attachment: { attachmentId: 'sha256:old', mediaType: 'image/png', bytes: 4, width: 2, height: 2 } },
+      ],
+      isError: false,
+      subCalls: [],
+    }
+    const tree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: settledBlock }), 'toolcard')
+    const imgs = findAll(tree, (node) => node && node.type === 'img')
+    check('tool card renders marker images', imgs.length === 2 && imgs.some((img) => img.props && img.props.src === 'data:image/png;base64,aGk='))
+    check('tool card hides marker text', !textOf(tree).includes('[router:image:') && textOf(tree).includes('已生成图片'))
+    check('tool card loads legacy image blocks', captured.imageDataCalls.some((call) => call.ref && call.ref.attachmentId === 'sha256:old') && captured.imageDataCalls.some((call) => call.ref && call.ref.attachmentId === 'sha256:tv'))
+    const runningBlock = { callId: 'c2', name: 'route_agent', argsRaw: '{}', turn: 1, step: 1, time: 1, callView: null, subCalls: [] }
+    const running = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: runningBlock }), 'toolcard-running')
+    check('tool card running state', textOf(running).includes(tOf('toolRunning')))
+    // 错误结果：展示错误文案，不渲染图片。
+    const failedBlock = { ...settledBlock, isError: true, error: { name: 'Error', code: 'X' } }
+    const failed = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: failedBlock }), 'toolcard-failed')
+    check('tool card error state', textOf(failed).includes(tOf('statsFail')))
   }
 }

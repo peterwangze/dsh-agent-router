@@ -168,6 +168,23 @@ window.__ModuleLoader__.load({
     const wCliStatusResult = wv.object({ ok: wv.boolean(), message: wv.string(), loggedIn: wv.boolean(true) })
     const wCliLoginResult = wv.object({ ok: wv.boolean(), message: wv.string() })
     const wCliModelsResult = wv.object({ ok: wv.boolean(), message: wv.string(), models: wv.array(wv.string()), source: wv.string(true) })
+    const wImagePromptRequest = wv.object({
+      sessionId: wv.string(), text: wv.string(), agentId: wv.string(true),
+      images: wv.array(wv.object({
+        mediaType: wv.string(), data: wv.string(), name: wv.string(true),
+      })),
+    })
+    const wImagePromptResult = wv.object({ ok: wv.boolean(), message: wv.string(), agentId: wv.string(true) })
+    const wImageDataRequest = wv.object({
+      ref: wv.object({
+        attachmentId: wv.string(), mediaType: wv.string(), bytes: wv.number(),
+        width: wv.number(), height: wv.number(), name: wv.string(true),
+      }),
+    })
+    const wImageDataResult = wv.object({
+      ok: wv.boolean(), message: wv.string(),
+      mediaType: wv.string(true), data: wv.string(true), width: wv.number(true), height: wv.number(true), name: wv.string(true),
+    })
 
     // ── Remote 契约（与宿主 lib/rpc.js 一致）────────────────────────────────
     function parameter(name, schema) {
@@ -191,6 +208,8 @@ window.__ModuleLoader__.load({
         { id: 'dsh-agent-router#router/cliStatus', service: 'router', namespace: 'router', method: 'cliStatus', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('CliStatusResult', wCliStatusResult) },
         { id: 'dsh-agent-router#router/cliLogin', service: 'router', namespace: 'router', method: 'cliLogin', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('CliLoginResult', wCliLoginResult) },
         { id: 'dsh-agent-router#router/cliModels', service: 'router', namespace: 'router', method: 'cliModels', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('CliModelsResult', wCliModelsResult) },
+        { id: 'dsh-agent-router#router/imagePrompt', service: 'router', namespace: 'router', method: 'imagePrompt', invocation: { kind: 'direct' }, parameters: [parameter('request', wImagePromptRequest)], result: resultOf('ImagePromptResult', wImagePromptResult) },
+        { id: 'dsh-agent-router#router/imageData', service: 'router', namespace: 'router', method: 'imageData', invocation: { kind: 'direct' }, parameters: [parameter('request', wImageDataRequest)], result: resultOf('ImageDataResult', wImageDataResult) },
       ],
     }
 
@@ -254,6 +273,26 @@ window.__ModuleLoader__.load({
 .dshrouter-category-head:hover{background:var(--dsw-alias-bg-hover,rgba(255,255,255,.03))}
 .dshrouter-category-title{font-size:14px;font-weight:500;line-height:22px}
 .dshrouter-category-body{border-top:1px solid rgba(140,140,140,.35);border-top:1px solid color-mix(in srgb,currentColor 20%,transparent);padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+/* 对话框图片通路：composer 附件按钮 / 发送条 / route_agent 工具卡片 */
+.dshrouter-imagetool{box-sizing:border-box;width:28px;height:28px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:15px;line-height:1}
+.dshrouter-imagetool:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.dshrouter-imagetool:disabled{opacity:.5;cursor:not-allowed}
+.dshrouter-dockstrip{box-sizing:border-box;width:100%;max-width:var(--dsh-composer-card-max-width);display:flex;align-items:center;gap:8px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-specific-input-major);border-radius:12px;padding:8px 12px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
+.dshrouter-dockstrip .dshrouter-dock-count{color:var(--dsw-alias-label-primary);font-weight:500}
+.dshrouter-dockselect{box-sizing:border-box;font:inherit;font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-input,transparent);border:1px solid var(--dsw-alias-border-l3);border-radius:8px;padding:2px 8px;outline:none;max-width:240px}
+.dshrouter-dockerror{color:var(--dsw-alias-state-error-primary)}
+.dshrouter-dockbutton{box-sizing:border-box;height:26px;font:inherit;font-size:12px;line-height:18px;cursor:pointer;border:none;border-radius:13px;padding:0 12px;display:inline-flex;align-items:center;gap:4px;background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground);flex:none}
+.dshrouter-dockbutton:hover:not(:disabled){filter:brightness(1.08)}
+.dshrouter-dockbutton:disabled{opacity:.5;cursor:not-allowed}
+.dshrouter-toolcard{border:1px solid var(--dsw-alias-border-l2);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);min-width:0}
+.dshrouter-toolcard-head{display:flex;align-items:center;gap:8px}
+.dshrouter-toolcard-title{font-size:13px;font-weight:500}
+.dshrouter-toolimages{display:flex;flex-wrap:wrap;gap:8px}
+.dshrouter-toolimage{display:block;border:1px solid var(--dsw-alias-border-l3);border-radius:8px;background:var(--dsw-alias-bg-base,transparent);object-fit:cover;width:160px;height:160px;cursor:zoom-in}
+.dshrouter-toolimage:hover{opacity:.9}
+.dshrouter-tooltext{white-space:pre-wrap;word-break:break-word;color:var(--dsw-alias-label-primary)}
+.dshrouter-toolmeta{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
+.dshrouter-toolerror{color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px}
 `
     const CSS_ID = 'dsh-agent-router'
     if (typeof document !== 'undefined' && document.querySelector('style[data-plugin-css=' + JSON.stringify(CSS_ID) + ']') === null) {
@@ -521,6 +560,19 @@ window.__ModuleLoader__.load({
       inherit: '继承',
       expand: '展开',
       collapse: '收起',
+      imageAttach: '添加图片',
+      imageSend: '发送给专业 agent',
+      imageSending: '发送中…',
+      imageDockHint: '主模型无法直接读取图片：请用右侧按钮把图片交给视觉 agent 分析',
+      imageDockCount: (n) => `已就绪 ${n} 张图片`,
+      imageStale: '部分图片已失效，请重新添加',
+      imageNoVision: '没有可接收图片的视觉 agent：请在 设置 → Agent 路由 中启用带 image 能力的专业 agent',
+      imagePickTitle: '选择图片',
+      imageLoadFailed: '图片加载失败，点击重试',
+      imagePreviewTitle: '原图预览',
+      toolRouteTitle: 'route_agent · 多模型路由',
+      toolRunning: '正在处理…',
+      toolImageLabel: '图片',
     }
     const en = {
       nav: 'Agent Routing',
@@ -778,6 +830,19 @@ window.__ModuleLoader__.load({
       inherit: 'Inherit',
       expand: 'Expand',
       collapse: 'Collapse',
+      imageAttach: 'Add images',
+      imageSend: 'Send to specialist agent',
+      imageSending: 'Sending…',
+      imageDockHint: 'The main model cannot read images directly: use the button on the right to send them to a vision agent',
+      imageDockCount: (n) => `${n} image(s) ready`,
+      imageStale: 'Some images are no longer available; add them again',
+      imageNoVision: 'No vision agent can receive images: enable a specialist agent with the image capability under Settings → Agent Routing',
+      imagePickTitle: 'Choose images',
+      imageLoadFailed: 'Image failed to load; click to retry',
+      imagePreviewTitle: 'Original image preview',
+      toolRouteTitle: 'route_agent · Multi-model routing',
+      toolRunning: 'Processing…',
+      toolImageLabel: 'Image',
     }
 
     // ── 工具函数 ────────────────────────────────────────────────────────────
@@ -3073,6 +3138,267 @@ window.__ModuleLoader__.load({
             el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: onClose }, t('close')))))
     }
 
+    // ── 对话框图片通路（composer 附件按钮 / 发送条 / route_agent 工具卡片）──
+    //
+    // 主模型为纯文本时，harness 的 prompt 准入会拒绝图片内容；插件因此
+    // 自建发送通路（router/imagePrompt）：附件图片经宿主保存为内容寻址
+    // 引用，以纯文本标记注入用户消息，视觉 agent 经 route_agent 分析，
+    // 结果同样以纯文本标记渲染——浏览器侧解析标记后经 router/imageData
+    // 取字节渲染缩略图（发送的图片与生成的图片都在对话卡片中可见）。
+
+    /** 模块级路由目录缓存：composer 组件共用（apply 内轮询刷新）。 */
+    const routerCatalog = {
+      value: null,
+      version: 0,
+      listeners: new Set(),
+    }
+    function setRouterCatalog(value) {
+      if (routerCatalog.value === value) return
+      routerCatalog.value = value
+      routerCatalog.version += 1
+      for (const listener of routerCatalog.listeners) listener()
+    }
+    /** 组件内订阅目录版本（兼容迷你 React 的 useState/useEffect）。 */
+    function useRouterCatalog() {
+      const [version, setVersion] = useState(routerCatalog.version)
+      useEffect(() => {
+        const listener = () => setVersion(routerCatalog.version)
+        routerCatalog.listeners.add(listener)
+        return () => { routerCatalog.listeners.delete(listener) }
+      }, [])
+      return routerCatalog.value
+    }
+    /** 目录中的视觉类 agent（capabilities 含 image 且非 image 生成类型），按 id 排序。 */
+    function visionAgentsOf(catalog) {
+      if (!catalog || catalog.ok !== true) return []
+      return (catalog.agents ?? [])
+        .filter((agent) => agent.enabled !== false && agent.type !== 'image' && (agent.capabilities ?? []).includes('image'))
+        .sort((a, b) => (a.id < b.id ? -1 : 1))
+    }
+    /** 从文本提取图片标记的引用（容忍损坏负载）。 */
+    function parseMarkersOf(text) {
+      const out = []
+      if (typeof text !== 'string') return out
+      const re = /\[router:image:([^\]\n]+)\]/g
+      let match
+      while ((match = re.exec(text)) !== null) {
+        try {
+          const ref = JSON.parse(match[1])
+          if (ref && typeof ref === 'object' && typeof ref.attachmentId === 'string' && ref.attachmentId) out.push(ref)
+        } catch { /* 非 JSON 负载：忽略 */ }
+      }
+      return out
+    }
+    /** 浏览器 File → base64（分块，兼容大图）。 */
+    function fileToBase64(file) {
+      return file.arrayBuffer().then((buffer) => {
+        let binary = ''
+        const bytes = new Uint8Array(buffer)
+        const chunk = 32768
+        for (let offset = 0; offset < bytes.length; offset += chunk) binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk))
+        return btoa(binary)
+      })
+    }
+
+    /** composer 工具行附件按钮：选图 → 原生草稿图片栏（附件栏预览/移除都走原生机制）。 */
+    function ImageAttachButton(props) {
+      const { t, router, conversation, inputActions } = props
+      const catalog = useRouterCatalog()
+      const [error, setError] = useState('')
+      const inputRef = useRef(null)
+      const agents = visionAgentsOf(catalog)
+      if (agents.length === 0) return null
+      const intake = (list) => {
+        setError('')
+        const conversationSvc = typeof conversation === 'function' ? conversation() : conversation
+        if (!conversationSvc || typeof conversationSvc.createDraftImages !== 'function' || !inputActions || typeof inputActions.addImages !== 'function') {
+          setError(t('imageNoVision'))
+          return
+        }
+        try {
+          const images = conversationSvc.createDraftImages(list)
+          if (!inputActions.addImages(images.map((image) => image.id))) conversationSvc.releaseDraftImages(images)
+        } catch (failure) {
+          setError(messageOf(failure))
+        }
+      }
+      return el('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 4 } },
+        el('input', {
+          ref: inputRef,
+          type: 'file',
+          accept: 'image/png,image/jpeg,image/webp,image/gif',
+          multiple: true,
+          style: { display: 'none' },
+          'aria-label': t('imagePickTitle'),
+          onChange: (event) => {
+            intake(Array.from(event.target.files ?? []))
+            event.target.value = ''
+          },
+        }),
+        el('button', {
+          type: 'button',
+          className: 'dshrouter-imagetool',
+          'aria-label': t('imageAttach'),
+          title: error || t('imageAttach'),
+          onClick: () => {
+            setError('')
+            if (inputRef.current) inputRef.current.click()
+          },
+        }, error ? '⚠' : '🖼'))
+    }
+
+    /** composer 上方发送条：草稿有图片时出现，选择视觉 agent 并走插件发送通路。 */
+    function ImagePromptDock(props) {
+      const { t, router, conversation, inputActions, sessionId, useInput } = props
+      const catalog = useRouterCatalog()
+      const input = typeof useInput === 'function' ? useInput() : undefined
+      const imageIds = input && Array.isArray(input.imageIds) ? input.imageIds : []
+      const [agentId, setAgentId] = useState('')
+      const [busy, setBusy] = useState(false)
+      const [error, setError] = useState('')
+      const agents = visionAgentsOf(catalog)
+      if (agents.length === 0) {
+        return imageIds.length > 0
+          ? el('div', { className: 'dshrouter-dockstrip' }, el('span', { className: 'dshrouter-dockerror' }, t('imageNoVision')))
+          : null
+      }
+      if (imageIds.length === 0) return null
+      const current = agents.some((agent) => agent.id === agentId) ? agentId : agents[0].id
+      const send = async () => {
+        const remote = typeof router === 'function' ? router() : router
+        const conversationSvc = typeof conversation === 'function' ? conversation() : conversation
+        if (!remote || typeof remote.imagePrompt !== 'function' || !conversationSvc || typeof conversationSvc.draftImages !== 'function') {
+          setError(t('imageNoVision'))
+          return
+        }
+        const draftImages = conversationSvc.draftImages(imageIds)
+        if (draftImages.length !== imageIds.length) {
+          if (inputActions && typeof inputActions.pruneImages === 'function') inputActions.pruneImages(draftImages.map((image) => image.id))
+          setError(t('imageStale'))
+          return
+        }
+        setBusy(true)
+        setError('')
+        try {
+          const images = []
+          for (const attachment of draftImages) {
+            images.push({
+              mediaType: attachment.file.type || '',
+              name: attachment.file.name || '',
+              data: await fileToBase64(attachment.file),
+            })
+          }
+          const response = await remote.imagePrompt({ sessionId: sessionId ?? '', text: input ? input.draft ?? '' : '', agentId: current, images })
+          if (!response.ok) {
+            setError(response.error && response.error.message ? response.error.message : t('imageSend'))
+            return
+          }
+          conversationSvc.releaseDraftImages(draftImages)
+          if (inputActions && typeof inputActions.pruneImages === 'function') inputActions.pruneImages([])
+          if (inputActions && typeof inputActions.setDraft === 'function') inputActions.setDraft('')
+        } catch (failure) {
+          setError(messageOf(failure))
+        } finally {
+          setBusy(false)
+        }
+      }
+      return el('div', { className: 'dshrouter-dockstrip', style: { flexWrap: 'wrap' } },
+        el('span', { className: 'dshrouter-dock-count' }, t('imageDockCount')(imageIds.length)),
+        el('span', null, t('imageDockHint')),
+        el('select', {
+          className: 'dshrouter-dockselect',
+          value: current,
+          'aria-label': t('agentsTitle'),
+          onChange: (event) => setAgentId(event.target.value),
+        }, ...agents.map((agent) => el('option', { value: agent.id, key: agent.id }, `${agent.name || agent.id} (${agent.id})`))),
+        el('button', { type: 'button', className: 'dshrouter-dockbutton', disabled: busy, onClick: send }, busy ? t('imageSending') : t('imageSend')),
+        error ? el('span', { className: 'dshrouter-dockerror' }, error) : null)
+    }
+
+    /** 单张图片缩略图：经 router/imageData 取字节渲染，失败可点击重试。 */
+    function RouteImage(props) {
+      const { t, router, ref, onOpen } = props
+      const [state, setState] = useState({ status: 'loading' })
+      const load = () => {
+        const remote = typeof router === 'function' ? router() : router
+        if (!remote || typeof remote.imageData !== 'function') {
+          setState({ status: 'error' })
+          return
+        }
+        setState({ status: 'loading' })
+        remote.imageData({ ref }).then((response) => {
+          if (response.ok && response.value && response.value.data) {
+            setState({
+              status: 'ready',
+              src: `data:${response.value.mediaType || 'image/png'};base64,${response.value.data}`,
+              alt: response.value.name || t('toolImageLabel'),
+            })
+          } else {
+            setState({ status: 'error' })
+          }
+        }, () => setState({ status: 'error' }))
+      }
+      useEffect(() => { load() }, [])
+      if (state.status === 'error') {
+        return el('button', { type: 'button', className: 'dshrouter-toolcard', onClick: load }, t('imageLoadFailed'))
+      }
+      if (state.status === 'ready') {
+        return el('img', {
+          className: 'dshrouter-toolimage',
+          src: state.src,
+          alt: state.alt,
+          onClick: () => onOpen({ src: state.src, alt: state.alt }),
+        })
+      }
+      return el('span', { className: 'dshrouter-toolmeta' }, t('toolRunning'))
+    }
+
+    /** route_agent 工具卡片：解析结果中的图片标记渲染缩略图（兼容旧会话的真实图片块）。 */
+    function RouteAgentToolCard(props) {
+      const { t, router, block } = props
+      const [lightbox, setLightbox] = useState(null)
+      if (!block || block.kind !== 'tool-result') {
+        return el('div', { className: 'dshrouter-toolcard' },
+          el('div', { className: 'dshrouter-toolcard-head' },
+            el('span', { className: 'dshrouter-toolcard-title' }, t('toolRouteTitle')),
+            el('span', { className: 'dshrouter-toolmeta' }, t('toolRunning'))))
+      }
+      const refs = []
+      const texts = []
+      for (const contentBlock of block.content ?? []) {
+        if (!contentBlock) continue
+        if (contentBlock.type === 'image' && contentBlock.attachment) {
+          refs.push(contentBlock.attachment)
+          continue
+        }
+        if (contentBlock.type === 'text' && typeof contentBlock.text === 'string') {
+          for (const ref of parseMarkersOf(contentBlock.text)) refs.push(ref)
+          const cleaned = contentBlock.text.replace(/\[router:image:[^\]\n]+\]/g, '').trim()
+          if (cleaned) texts.push(cleaned)
+        }
+      }
+      const name = block.call && typeof block.call.name === 'string' ? block.call.name : 'route_agent'
+      const open = (target) => setLightbox(target)
+      return el('div', { className: 'dshrouter-toolcard' },
+        el('div', { className: 'dshrouter-toolcard-head' },
+          el('span', { className: 'dshrouter-toolcard-title' }, t('toolRouteTitle')),
+          el('span', { className: 'dshrouter-toolmeta' }, name)),
+        block.isError === true ? el('span', { className: 'dshrouter-toolerror' }, block.error && block.error.message ? block.error.message : t('statsFail')) : null,
+        refs.length > 0 ? el('div', { className: 'dshrouter-toolimages' },
+          ...refs.map((ref, index) => el(RouteImage, {
+            t, router, ref, onOpen: open,
+            key: `${String(ref.attachmentId ?? '')}:${index}`,
+          }))) : null,
+        ...texts.map((text, index) => el('div', { className: 'dshrouter-tooltext', key: index }, text)),
+        lightbox ? el('div', { className: 'dshrouter-modal', onClick: (event) => { if (event.target === event.currentTarget) setLightbox(null) } },
+          el('div', { className: 'dshrouter-modal-body' },
+            el('h4', { className: 'dshrouter-modal-title' }, t('imagePreviewTitle')),
+            el('img', { src: lightbox.src, alt: lightbox.alt, style: { maxWidth: '100%', borderRadius: 8 } }),
+            el('div', { className: 'dshrouter-row' },
+              el('span', { className: 'dshrouter-spacer' }),
+              el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: () => setLightbox(null) }, t('close'))))) : null)
+    }
+
     // ── 插件装配 ────────────────────────────────────────────────────────────
     const NS = 'router'
     const inject = ['slots', 'locale', 'connection', 'remote']
@@ -3119,6 +3445,69 @@ window.__ModuleLoader__.load({
         remoteReady: props.remoteReady,
         t: props.t,
         $on: props.$on,
+      })))
+
+      // ── 对话框图片通路装配 ────────────────────────────────────────────
+      const routerRemote = () => ctx.get('remote.router') ?? null
+      const conversationFace = () => ctx.get('conversation')
+      // 目录轮询：供 composer 附件按钮/发送条判定视觉 agent 可用性。
+      const refreshCatalog = () => {
+        const remote = routerRemote()
+        if (!remote || typeof remote.catalog !== 'function') return
+        remote.catalog({}).then((response) => {
+          if (response && response.ok) setRouterCatalog(response.value ?? null)
+        }, () => undefined)
+      }
+      refreshCatalog()
+      remoteReady.then(() => refreshCatalog(), () => undefined)
+      const offSettingsForCatalog = $on('settings/document-updated', () => refreshCatalog())
+      const catalogTimer = window.setInterval(refreshCatalog, 30000)
+      ctx.effect(() => () => {
+        offSettingsForCatalog()
+        window.clearInterval(catalogTimer)
+      }, 'dsh-agent-router: composer catalog polling')
+      // conversation 插槽由 ui-conversation 声明：声明存在才注册，注册失败
+      // （如 key 冲突）只记录、绝不击穿插件其余功能（settings 页等不受影响）。
+      const safeRegister = (options, render) => {
+        try {
+          return ctx.slots.register(options, render)
+        } catch (error) {
+          console.error(`dsh-agent-router: slot "${options.name}" registration failed`, error)
+          return () => {}
+        }
+      }
+      ctx.slots.inject('conversation.input.right', () => safeRegister({
+        name: 'conversation.input.right',
+        id: 'router-image-attach',
+        order: 50,
+        inject: () => ({ router: routerRemote, conversation: conversationFace }),
+      }, (props) => el(ImageAttachButton, {
+        t,
+        router: props.router,
+        conversation: props.conversation,
+        inputActions: props.inputActions,
+      })))
+      ctx.slots.inject('conversation.input.dock', () => safeRegister({
+        name: 'conversation.input.dock',
+        id: 'router-image-dock',
+        order: 0,
+        inject: () => ({ router: routerRemote, conversation: conversationFace }),
+      }, (props) => el(ImagePromptDock, {
+        t,
+        router: props.router,
+        conversation: props.conversation,
+        inputActions: props.inputActions,
+        sessionId: props.sessionId,
+        useInput: props.useInput,
+      })))
+      ctx.slots.inject('tool.call.toolview', () => safeRegister({
+        name: 'tool.call.toolview',
+        key: 'route_agent',
+        inject: () => ({ router: routerRemote }),
+      }, (props) => el(RouteAgentToolCard, {
+        t,
+        router: props.router,
+        block: props.block,
       })))
     }
 
