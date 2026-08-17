@@ -196,10 +196,11 @@ console.log('RouterService:')
     },
     readImage: async (ref) => ({ ref, data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) }),
   })
-  // 对话框图片通路：会话 agent（followup 注入面）。
+  // 对话框图片通路：会话 agent（followup 注入面；cwd 由测试块按需设置）。
   const injectedMessages = []
+  const liveAgent = { followup: (message) => { injectedMessages.push(message) }, session: { header: { cwd: '' } } }
   root.provide('agents', {
-    get: (id) => (id === 'sess-1' ? { followup: (message) => { injectedMessages.push(message) } } : undefined),
+    get: (id) => (id === 'sess-1' ? liveAgent : undefined),
   })
   root.provide('fs', {
     resolve: async (path) => ({ displayPath: path.includes(':') || path.startsWith('/') ? path : `D:/work/example/${path}` }),
@@ -392,7 +393,7 @@ console.log('RouterService:')
   check('promptText lists agents', text.includes('vision') && text.includes('draw') && text.includes('route_agent') && !text.includes('off'))
   check('promptText pool meta', text.includes('OAuth 账号池:G池') && text.includes('2 个账号'))
   check('promptText delegation note', text.includes('可读写工作区任意文件') && text.includes('附件按需显式派发'))
-  check('promptText dialog image guidance', text.includes('[router:image:…]') && text.includes('attachmentIds'))
+  check('promptText dialog image guidance', text.includes('[用户附带图片]') && text.includes('files') && !text.includes('attachmentIds'))
   check('promptText cli meta', text.includes('子代理:'))
 
   // agent 类型委派：prompt 必须携带工作目录注入与图片附件块，子代理收到
@@ -699,45 +700,45 @@ console.log('RouterService:')
     check('attachments non-integer rejected', threw)
   }
 
-  // ── 对话框图片通路：标记往返 / 显式引用解析 / imagePrompt / imageData ──
+  // ── 对话框图片通路：工作区路径注入 / imagePrompt / imageData / 上下文附带 ──
   console.log('dialog image pathway:')
   {
-    // 标记往返：名称净化保证标记可按 ] 定界解析。
+    // 标记往返（生成图片展示用）：名称净化保证标记可按 ] 定界解析。
     const rawRef = { attachmentId: 'sha256:abcd', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'a]b[c\n.png' }
     const marker = service.imageMarkerOf(rawRef)
     check('image marker built', marker.startsWith('[router:image:') && marker.endsWith(']') && !marker.includes(']b') && marker.includes('abc'))
     const parsed = service.parseImageMarkers(`前文 ${marker} 后文`)
     check('image marker round-trips', parsed.length === 1 && parsed[0].attachmentId === 'sha256:abcd' && parsed[0].mediaType === 'image/png' && parsed[0].name === 'abc.png')
     check('image marker tolerates corrupt payload', service.parseImageMarkers('[router:image:not-json]').length === 0)
-    // 显式引用解析：标记原文 / ref JSON / 非法条目 / 去重。
-    const refs = service.parseImageRefs([marker, JSON.stringify({ attachmentId: 'sha256:ef12', mediaType: 'image/jpeg', bytes: 1, width: 1, height: 1 })])
-    check('parseImageRefs marker + json', refs.length === 2 && refs[0].attachmentId === 'sha256:abcd' && refs[1].attachmentId === 'sha256:ef12')
-    check('parseImageRefs dedupes', service.parseImageRefs([marker, marker]).length === 1)
-    let refsThrew = false
-    try { service.parseImageRefs(['plain words']) } catch (error) { refsThrew = String(error.message).includes('不是有效的图片引用') }
-    check('parseImageRefs rejects invalid', refsThrew)
-    refsThrew = false
-    try { service.parseImageRefs(['{"width":2}']) } catch (error) { refsThrew = String(error.message).includes('缺少 attachmentId') }
-    check('parseImageRefs rejects missing id', refsThrew)
     // 视觉类 agent 选择：image 生成类型与无 image 能力者除外，按 id 排序。
     const visionList = service.listImageVisionAgents().map(([id]) => id)
     check('vision agents list', visionList.length === 2 && visionList[0] === 'coder' && visionList[1] === 'vision' && !visionList.includes('draw') && !visionList.includes('broken'))
-    const promptText = service.composeImagePromptText('识别这张图', [{ attachmentId: 'sha256:xyz', mediaType: 'image/png', bytes: 3, width: 1, height: 1 }], 'vision')
-    check('image prompt text guides route_agent', promptText.includes('识别这张图') && promptText.includes('[router:image:') && promptText.includes('route_agent') && promptText.includes('"vision"') && promptText.includes('attachmentIds'))
+    const promptText = service.composeImagePromptText('识别这张图', ['D:/work/example/.router-files/router-img-x-0.png'], 'vision')
+    check('image prompt text guides route_agent via files', promptText.includes('识别这张图') && promptText.includes('[用户附带图片]') && promptText.includes('D:/work/example/.router-files/router-img-x-0.png') && promptText.includes('route_agent') && promptText.includes('"vision"') && promptText.includes('files 填这些路径') && !promptText.includes('[router:image:'))
 
     const pngB64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString('base64')
-    const savedBefore = savedImages.length
+    const pathModule = await import('node:path')
+    const fsModule = await import('node:fs')
+    const imageWorkDir = pathModule.join(ROOT_DIR, `.tmp-image-prompt-${process.pid}`)
+    fsModule.mkdirSync(imageWorkDir, { recursive: true })
+    liveAgent.session.header.cwd = imageWorkDir
     const injectedBefore = injectedMessages.length
     const okFlow = await service.imagePrompt({ sessionId: 'sess-1', text: '识别这张图', images: [{ mediaType: 'image/png', data: pngB64, name: 'shot.png' }] })
     check('imagePrompt ok flow', okFlow.ok === true && okFlow.agentId === 'coder')
-    check('imagePrompt saved via attachments', savedImages.length === savedBefore + 1 && savedImages[savedImages.length - 1].name === 'shot.png' && savedImages[savedImages.length - 1].mediaType === 'image/png')
     check('imagePrompt injected user message', injectedMessages.length === injectedBefore + 1 && injectedMessages[injectedMessages.length - 1].role === 'user' && injectedMessages[injectedMessages.length - 1].content.length === 1 && injectedMessages[injectedMessages.length - 1].content[0].type === 'text')
     const injectedText = injectedMessages[injectedMessages.length - 1].content[0].text
-    check('imagePrompt message carries marker + guidance', injectedText.includes('[router:image:') && injectedText.includes('route_agent') && injectedText.includes('"coder"') && service.parseImageMarkers(injectedText).length === 1)
+    const writtenPath = pathModule.join(imageWorkDir, '.router-files')
+    const writtenFiles = fsModule.existsSync(writtenPath) ? fsModule.readdirSync(writtenPath).filter((name) => name.startsWith('router-img-')) : []
+    check('imagePrompt saves to workspace files', writtenFiles.length === 1)
+    check('imagePrompt message carries path + files guidance', injectedText.includes('[用户附带图片]') && injectedText.includes(writtenFiles[0] ?? 'MISSING') && injectedText.includes('files 填这些路径') && injectedText.includes('"coder"') && !injectedText.includes('[router:image:'))
     check('imagePrompt message is text-only (model-safe)', injectedMessages[injectedMessages.length - 1].content.every((block) => block.type === 'text'))
+    if (writtenFiles.length === 1) {
+      const bytes = fsModule.readFileSync(pathModule.join(writtenPath, writtenFiles[0]))
+      check('imagePrompt writes real image bytes', bytes.length === 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47)
+    }
     // 显式目标与校验。
     const explicit = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', agentId: 'vision', images: [{ mediaType: 'image/png', data: pngB64 }] })
-    check('imagePrompt explicit agent', explicit.ok === true && explicit.agentId === 'vision' && service.parseImageMarkers(injectedMessages[injectedMessages.length - 1].content[0].text).length === 1)
+    check('imagePrompt explicit agent', explicit.ok === true && explicit.agentId === 'vision' && injectedMessages[injectedMessages.length - 1].content[0].text.includes('"vision"'))
     const badTarget = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', agentId: 'draw', images: [{ mediaType: 'image/png', data: pngB64 }] })
     check('imagePrompt rejects draw as target', badTarget.ok === false && badTarget.message.includes('不可接收图片'))
     const unknownTarget = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', agentId: 'nope', images: [{ mediaType: 'image/png', data: pngB64 }] })
@@ -748,24 +749,68 @@ console.log('RouterService:')
     check('imagePrompt enforces count limit', tooMany.ok === false && tooMany.message.includes('最多 8 张'))
     const badBase64 = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: [{ mediaType: 'image/png', data: '!!!not-base64!!!' }] })
     check('imagePrompt rejects invalid base64', badBase64.ok === false && badBase64.message.includes('base64'))
-    // 声明 MIME 不在白名单：按魔数嗅探为 png 后保存。
+    // 声明 MIME 不在白名单：按魔数嗅探为 png 后落盘。
     const sniffedFlow = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: [{ mediaType: 'image/bmp', data: pngB64 }] })
-    check('imagePrompt sniffs unsupported declared type', sniffedFlow.ok === true && savedImages[savedImages.length - 1].mediaType === 'image/png')
+    check('imagePrompt sniffs unsupported declared type', sniffedFlow.ok === true && fsModule.existsSync(pathModule.join(writtenPath, fsModule.readdirSync(writtenPath).filter((name) => name.startsWith('router-img-') && name.endsWith('.png')).pop() ?? 'nope')))
     const unknownSession = await service.imagePrompt({ sessionId: 'sess-9', text: 'x', images: [{ mediaType: 'image/png', data: pngB64 }] })
     check('imagePrompt rejects unknown session', unknownSession.ok === false && unknownSession.message.includes('sess-9'))
+    // 无工作目录：明确拒绝（绝不在错误位置写文件）。
+    liveAgent.session.header.cwd = ''
+    const noCwd = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: [{ mediaType: 'image/png', data: pngB64 }] })
+    check('imagePrompt rejects missing cwd', noCwd.ok === false && noCwd.message.includes('工作目录'))
+    liveAgent.session.header.cwd = imageWorkDir
     // 失败路径绝不注入会话消息。
     const injectedAfterFailures = injectedMessages.length
     const failingSession = await service.imagePrompt({ sessionId: 'sess-9', text: 'x', images: [{ mediaType: 'image/png', data: pngB64 }] })
     check('imagePrompt failure injects nothing', failingSession.ok === false && injectedMessages.length === injectedAfterFailures)
-    // 总开关关闭：拒绝。
+    // 总开关关闭：拒绝（随后恢复原 scope，供后续测试继续使用）。
+    const savedScope = service.scope
     service.attach({ get: () => ({ enabled: false, agents: {} }) })
     const disabled = await service.imagePrompt({ sessionId: 'sess-1', text: 'x', images: [{ mediaType: 'image/png', data: pngB64 }] })
     check('imagePrompt respects master switch', disabled.ok === false && disabled.message.includes('未启用'))
-    // imageData：读字节 → base64 与元数据。
+    service.attach(savedScope)
+    // imageData：读字节 → base64 与元数据（生成图片展示通路）。
     const imageData = await service.imageData({ ref: { attachmentId: 'sha256:abcd', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'n.png' } })
     check('imageData returns bytes', imageData.ok === true && imageData.data === Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64') && imageData.mediaType === 'image/png')
     const imageDataMissing = await service.imageData({})
     check('imageData rejects missing ref', imageDataMissing.ok === false && imageDataMissing.message.includes('缺少附件引用'))
+    // 清理临时工作目录。
+    try {
+      const tmpRouter = pathModule.join(imageWorkDir, '.router-files')
+      if (fsModule.existsSync(tmpRouter)) {
+        for (const name of fsModule.readdirSync(tmpRouter)) {
+          try { fsModule.rmSync(pathModule.join(tmpRouter, name), { force: true }) } catch { /* 继续清理其余文件 */ }
+        }
+        try { fsModule.rmdirSync(tmpRouter) } catch { /* 目录可能已被删除 */ }
+      }
+      fsModule.rmdirSync(imageWorkDir)
+    } catch { /* 沙箱拒绝清理时留待手动删除 */ }
+  }
+
+  // ── 带图片调用自动附带会话上下文（截图是对话上下文的一部分）────────
+  console.log('conversation context:')
+  {
+    const contextAgent = {
+      session: {
+        header: { cwd: 'D:/work/example', delegationDepth: 0 },
+        deriveMessages: () => [
+          { role: 'user', content: [{ type: 'text', text: '我在做一个登录页，改了表单提交逻辑' }] },
+          { role: 'assistant', content: [{ type: 'text', text: '好的，把报错信息发我看下' }] },
+          { role: 'user', content: [{ type: 'text', text: '看图 [router:image:{"attachmentId":"sha256:x","mediaType":"image/png","bytes":1,"width":1,"height":1}]' }] },
+        ],
+      },
+    }
+    lastChatRequest = null
+    const withContext = await service.run({ agentId: 'vision', task: '识别这张截图', images: [{ id: 'att-1', kind: 'image' }], exec: { agent: contextAgent } })
+    check('vision call carries conversation context', withContext.kind === 'chat' && lastChatRequest && lastChatRequest.messages[0].content.some((block) => block.type === 'text' && block.text.includes('[会话上下文（主会话最近对话）]') && block.text.includes('我在做一个登录页') && block.text.includes('把报错信息发我看下') && block.text.includes('[user]') && block.text.includes('[assistant]')))
+    check('vision context skips marker messages', lastChatRequest && lastChatRequest.messages[0].content.some((block) => block.type === 'text' && !block.text.includes('[router:image:')))
+    check('vision call returns injected images', withContext.images && withContext.images.length === 1 && withContext.images[0].id === 'att-1')
+    lastChatRequest = null
+    const withoutImages = await service.run({ agentId: 'vision', task: '纯文本任务', images: [], exec: { agent: contextAgent } })
+    check('text-only call carries no context section', withoutImages.kind === 'chat' && lastChatRequest && lastChatRequest.messages[0].content.some((block) => block.type === 'text' && block.text.includes('纯文本任务') && !block.text.includes('[会话上下文')))
+    const delegationBefore = delegationRequests.length
+    await service.run({ agentId: 'helper', task: '识别这张截图', images: [{ id: 'att-1', kind: 'image' }], exec: { agent: contextAgent } })
+    check('delegation carries conversation context', delegationRequests.length === delegationBefore + 1 && delegationRequests[delegationRequests.length - 1].prompt[0].text.includes('[主会话最近对话上下文]') && delegationRequests[delegationRequests.length - 1].prompt[0].text.includes('我在做一个登录页'))
   }
 
   check('errorMessage', errorMessage(new Error('x')) === 'x' && errorMessage({ message: 'y' }) === 'y')
@@ -792,11 +837,12 @@ console.log('apply wiring:')
     check('route_agent registered', registered && registered.name === 'route_agent')
     check('prompt section registered', sections.some((s) => s.name === 'router:agents' && s.order === 120 && s.text() === 'ROUTER-PROMPT'))
     check('tool timeout 20min (covers cli 15min default)', registered.timeoutMs === 20 * 60 * 1000)
-    check('tool parameters schema', registered.parameters && registered.parameters.properties && registered.parameters.properties.agent && registered.parameters.properties.task && registered.parameters.properties.attachments && registered.parameters.properties.attachments.type === 'array' && registered.parameters.properties.includeImages && registered.parameters.properties.attachmentIds && registered.parameters.properties.attachmentIds.type === 'array')
+    check('tool parameters schema', registered.parameters && registered.parameters.properties && registered.parameters.properties.agent && registered.parameters.properties.task && registered.parameters.properties.attachments && registered.parameters.properties.attachments.type === 'array' && registered.parameters.properties.includeImages && registered.parameters.properties.files && !registered.parameters.properties.attachmentIds)
     check('tool output has render', typeof registered.output.render === 'function' && typeof registered.execute === 'function')
     // 图片渲染为纯文本标记（绝不产生图片块，避免文本模型历史被击穿）。
-    const rendered = registered.output.render({}, { ok: true, text: '已生成', image: { attachmentId: 'sha256:aa', mediaType: 'image/png', bytes: 4, width: 2, height: 2 }, usage: { inputTokens: 0, outputTokens: 0 } })
-    check('tool render emits marker not image block', rendered.every((block) => block.type === 'text') && rendered.some((block) => block.text.includes('[router:image:') && block.text.includes('sha256:aa')))
+    // image（生成）与 images（视觉注入）都渲染为标记，供 toolview 显示缩略图。
+    const rendered = registered.output.render({}, { ok: true, text: '已生成', image: { attachmentId: 'sha256:aa', mediaType: 'image/png', bytes: 4, width: 2, height: 2 }, images: [{ attachmentId: 'sha256:bb', mediaType: 'image/jpeg', bytes: 4, width: 2, height: 2 }], usage: { inputTokens: 0, outputTokens: 0 } })
+    check('tool render emits markers not image blocks', rendered.every((block) => block.type === 'text') && rendered.filter((block) => block.text.includes('[router:image:')).length === 2 && rendered.some((block) => block.text.includes('sha256:aa')) && rendered.some((block) => block.text.includes('sha256:bb')))
     await app.dispose()
   }
 

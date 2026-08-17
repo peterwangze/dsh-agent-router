@@ -3141,10 +3141,11 @@ window.__ModuleLoader__.load({
     // ── 对话框图片通路（composer 附件按钮 / 发送条 / route_agent 工具卡片）──
     //
     // 主模型为纯文本时，harness 的 prompt 准入会拒绝图片内容；插件因此
-    // 自建发送通路（router/imagePrompt）：附件图片经宿主保存为内容寻址
-    // 引用，以纯文本标记注入用户消息，视觉 agent 经 route_agent 分析，
-    // 结果同样以纯文本标记渲染——浏览器侧解析标记后经 router/imageData
-    // 取字节渲染缩略图（发送的图片与生成的图片都在对话卡片中可见）。
+    // 自建发送通路（router/imagePrompt）：附件图片经宿主落盘到会话工作区
+    // .router-files/，以「用户附带图片 + 路径清单」注入用户消息，主模型
+    // 按既有 files 通路调用 route_agent，视觉调用自动附带会话上下文；
+    // 生成图片以纯文本标记渲染进工具结果，浏览器侧 toolview 解析标记后
+    // 经 router/imageData 取字节渲染缩略图（发送与生成的图片都可见）。
 
     /** 模块级路由目录缓存：composer 组件共用（apply 内轮询刷新）。 */
     const routerCatalog = {
