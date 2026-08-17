@@ -28,7 +28,7 @@ function check(label, condition) {
 //    解析器把关（stdio ignore：不进管道，兼容受限运行环境）。
 console.log('syntax:')
 {
-  for (const file of ['client.js', 'service.js', 'tool.js', 'index.js', 'rpc.js', 'schemas.js']) {
+  for (const file of ['client.js', 'service.js', 'tool.js', 'index.js', 'rpc.js', 'schemas.js', 'wrapper.js']) {
     const result = spawnSync(process.execPath, ['--check', join(LIB_DIR, file)], { stdio: 'ignore' })
     check(`lib/${file} parses`, result.status === 0)
   }
@@ -977,6 +977,83 @@ console.log('twin wrapper mechanism (real LlmRuntime):')
     textAssembler.push(chunk)
   }
   check('text turn delegates verbatim', textAssembler.finish.kind === 'stop' && delegateCalls[delegateCalls.length - 1].messages[0].content.length === 1 && delegateCalls[delegateCalls.length - 1].messages[0].content[0].text === '普通文本轮')
+}
+
+// 7.6 准入包装模块（L1）：门控注册 / 改写标记 / 热同步 / 卸载
+console.log('admission wrapper (L1):')
+{
+  const { installAdmissionWrapper, createTwinAdapter, rewriteImagesDeep, wrappableProviders, minimalImageRewrite, TWIN_SUFFIX } = await import('../lib/wrapper.js')
+  const root = new Context()
+  const llm = new LlmRuntime(root)
+  const delegateCalls = []
+  const textAdapter = {
+    providerInfo(provider) { return { id: provider, name: 'TextBrain' } },
+    providerRetryPolicy() { return undefined },
+    async listModels(provider) { return [{ provider, id: 'brain-1', name: 'Brain-1', inputModalities: ['text'] }] },
+    async resolveModel(provider, model) {
+      return { provider, id: model, name: model, inputModalities: ['text'], context: { contextWindow: 100_000 }, defaultMaxTokens: 4096 }
+    },
+    async *stream(options) {
+      delegateCalls.push(options)
+      for (const message of options.messages) if (contentHasImage(message.content)) throw new Error('UNSUPPORTED_CONTENT')
+      yield { type: 'block-start', index: 0, blockType: 'text' }
+      yield { type: 'text-delta', index: 0, text: 'ok' }
+      yield { type: 'block-end', index: 0, block: { type: 'text', text: 'ok' } }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    },
+  }
+  llm.registerAdapter(['text-provider'], textAdapter)
+  // 可变服务门控面。
+  const config = { enabled: true, visionAgents: [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]] }
+  const fakeService = {
+    isEnabled: () => config.enabled,
+    listImageVisionAgents: () => config.visionAgents,
+  }
+  // cordis 语义：events.dispatch('emit', …) 返回回调数组、由调用方执行
+  //（settings 服务与 LlmRuntime 均如此），测试按同款方式触发。
+  const fireSettingsUpdate = (ns, revision) => {
+    for (const callback of root.events.dispatch('emit', ['settings/document-updated', ns, revision])) callback(ns, revision)
+  }
+  // 1) 视觉 agent 存在 → twin 注册、声明 image、目录镜像。
+  const dispose = installAdmissionWrapper(root, fakeService)
+  check('wrapper registers twin when vision agent exists', llm.listProviders().some((entry) => entry.id === `text-provider${TWIN_SUFFIX}`))
+  const twinInfo = await llm.resolveModelInfo(`text-provider${TWIN_SUFFIX}`, 'brain-1')
+  check('wrapper twin declares image input', twinInfo.inputModalities.includes('image'))
+  const twinModels = await llm.listModels(`text-provider${TWIN_SUFFIX}`)
+  check('wrapper twin mirrors catalog', twinModels.length === 1 && twinModels[0].provider === `text-provider${TWIN_SUFFIX}` && twinModels[0].inputModalities.includes('image'))
+  // 2) 图片轮改写：委托方收到 route_agent/includeImages 标记，无裸图片块。
+  const imageMessage = createUserMessage({ content: [{ type: 'text', text: '看图' }, { type: 'image', attachment: { attachmentId: 'sha256:abc', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'shot.png' } }], source: { kind: 'user' } })
+  const assembler = new BlockAssembler()
+  for await (const chunk of llm.stream({ provider: `text-provider${TWIN_SUFFIX}`, model: 'brain-1', system: undefined, messages: [imageMessage] })) assembler.push(chunk)
+  const lastCall = delegateCalls[delegateCalls.length - 1]
+  check('wrapper image turn completes', assembler.finish.kind === 'stop')
+  check('wrapper delegate sees route_agent marker', lastCall && lastCall.messages[0].content.some((block) => block.type === 'text' && block.text.includes('route_agent') && block.text.includes('"vision"') && block.text.includes('includeImages') && block.text.includes('shot.png')) && lastCall.messages[0].content.every((block) => block.type !== 'image'))
+  // 3) 嵌套 tool-result 中的图片块同样被改写（原文本适配器会递归拒绝）。
+  const nestedResult = rewriteImagesDeep([{ type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }, { type: 'text', text: 'x' }] }], (block) => minimalImageRewrite(block, 'vision'))
+  check('rewriteImagesDeep reaches nested tool-result', nestedResult.changed === true && nestedResult.content[0].content.every((block) => block.type === 'text'))
+  // 4) 门控：关闭视觉 agent + settings 事件 → twin 卸载。
+  config.visionAgents = []
+  fireSettingsUpdate('router', 2)
+  check('wrapper drops twin when vision agents disabled', !llm.listProviders().some((entry) => entry.id === `text-provider${TWIN_SUFFIX}`))
+  // 5) 门控：总开关关闭 → 同样不注册。
+  config.enabled = false
+  config.visionAgents = [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]]
+  fireSettingsUpdate('router', 3)
+  check('wrapper respects master switch', !llm.listProviders().some((entry) => entry.id === `text-provider${TWIN_SUFFIX}`))
+  // 6) 恢复 + adapters 事件热同步；新 provider 出现即补 twin。
+  config.enabled = true
+  fireSettingsUpdate('router', 4)
+  llm.registerAdapter(['another-provider'], { ...textAdapter, providerInfo(provider) { return { id: provider, name: 'Another' } } })
+  check('wrapper hot-syncs on adapters event', llm.listProviders().some((entry) => entry.id === `another-provider${TWIN_SUFFIX}`))
+  check('wrappableProviders excludes twins', wrappableProviders(llm).every((provider) => !provider.endsWith(TWIN_SUFFIX)) && wrappableProviders(llm).includes('text-provider'))
+  // 7) 卸载器释放全部注册。
+  dispose()
+  check('wrapper uninstaller removes all twins', !llm.listProviders().some((entry) => String(entry.id).endsWith(TWIN_SUFFIX)))
+  // 8) createTwinAdapter 对已消失原适配器明确报错。
+  const orphan = createTwinAdapter(llm, 'missing-provider', 'vision')
+  let orphanRejected = false
+  try { await orphan.resolveModel('x', 'y') } catch (error) { orphanRejected = String(error.message).includes('no adapter registered') }
+  check('twin without original adapter fails loud', orphanRejected)
 }
 
 // 8. 平台安装入口（BOM 免疫在线命令 + 离线安装幂等；涉及系统宿主与本地 fixture 服务器）
