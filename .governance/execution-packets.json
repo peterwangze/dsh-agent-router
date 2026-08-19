@@ -1,73 +1,72 @@
 {
   "version": 1,
-  "generated_at": "2026-08-19T20:41:30",
+  "generated_at": "2026-08-19T21:05:00",
   "packets": {
     "MIG-001": {
       "task_id": "MIG-001",
       "priority": "P0",
-      "status": "进行中——Step 0-5a 完成（7cb2024/b7261d5/a23b338/374edfa/Step5a 提交；R1-R5 审查链全通过，EV-011~015）；当前单元 Step 5b（内部寻址迁移）未开始。注：execution-packet --write 在 lightweight 模板下产出 0 包（工具链已知问题，见 session-snapshot 已知问题清单），本包由 Coordinator 依据 plan-tracker + architecture-v3.md §8 Step 5b 行手工维护",
-      "goal": "MIG-001 v3 迁移 Step 5b（内部寻址迁移，N-1 部分）：lib/service.js 中 prepareChatFiles / materializeCliImages / selectAttachments 三个寻址调用点改经 M2 AttachmentRegistry（lib/attachments.js），收敛三处分散寻址为统一索引；顺带处理 R5 遗留 F-1（materialize 未注册 id 双读+补断言）与 F-2（read() displayPath 字符串 vs FsTarget 对象统一）",
+      "status": "进行中——Step 0-5b 完成（7cb2024/b7261d5/a23b338/374edfa/f89b8bd/Step5b 提交；R1-R6 审查链全通过，EV-011~016）；当前单元 = V-DSH-7 宿主附件 id 运行时验证（DEC-013 门禁：Step 5c/7 启动前 MUST 闭环）。注：execution-packet --write 在 lightweight 模板下产出 0 包（工具链已知问题），本包由 Coordinator 依据 plan-tracker + DEC-013 + V-DSH-7 手工维护",
+      "goal": "V-DSH-7 验证：确定宿主 dsh-attachment saveImage 返回的 attachmentId 实际格式（sha256:hex 或 opaque），并按结论决定 M2 索引策略——(a) 宿主确为 sha256 → 维持现状（isAttachmentId 守卫即正确）；(b) 宿主为 opaque → 设计决策：扩展 isAttachmentId 接受 opaque / 双轨索引 / 其他（升级用户决策，可能触发 ADR 修订与新迁移小步）",
       "product_success_contract": {
-        "user": "DSH 主 agent 用户与主 agent 自身（files 注入 / CLI 物化 / 附件派发三通路走统一编址面）",
-        "job_to_be_done": "三个内部寻址调用点经 M2 解析附件身份（id↔路径↔files 引用），使后续 Step 6/7 的 id 寻址（pre-step reminder / attachmentIds）有统一入口；行为对用户等价（迁移不改外部语义）",
+        "user": "DSH 主 agent 用户（M2 编址层真实生效是跨轮指代/attachmentIds 的前提）",
+        "job_to_be_done": "消除 §4.3.1 '与宿主一致：sha256' 假设与宿主类型契约 'opaque' 的矛盾，使 Step 5c/7 的设计建立在实证事实上",
         "non_goals": [
-          "本步不实现 RPC wire codec（uploadFile/readWorkspaceFile descriptor——Step 5c）",
-          "本步不实现 pre-step reminder（Step 6）、attachmentIds 参数（Step 7）、F11 输入入口（Step 8）、三级展示升级（Step 9）",
-          "本步不实现媒体白名单（audio/video 魔数判定 V-DSH-4 待验证）",
-          "流程证据不替代产品价值：迁移后行为必须有可运行测试断言证明等价"
+          "本单元不实现 Step 5c RPC wire / Step 6 pre-step / Step 7 attachmentIds",
+          "验证本身不修改产品代码；若结论为 opaque 且需设计变更，先出方案（ADR 修订/决策记录）再另起实现小步",
+          "流程证据不替代实证：结论必须指向宿主源码行号或运行态输出"
         ],
         "success_metrics": [
-          "用户可见结果（间接）：三通路（chat files 注入 / CLI 图片物化 / 对话附件派发）经统一注册表解析，为跨轮指代与 attachmentIds 铺路；外部行为零变化（smoke 既有断言全绿证明）",
-          "可运行验证：node tests/smoke.mjs 全绿 + tests/attachments.mjs 补迁移后断言（files 注入 / CLI 物化 / 附件派发经 M2）"
+          "可复查证据：宿主实现层源码引用（文件:行号）或运行态 saveImage 返回值样本",
+          "结论入账：V-DSH-7 行更新为已验证 + DEC 记录索引策略决策"
         ],
-        "competitive_baseline": "现状（Step 5a 前）service.js 三处分散寻址：prepareChatFiles 路径→ref / materializeCliImages ref→路径 / imageData id→字节——M2 已就位但未被调用（§5.1 问题陈述）；Step 5b 后三处统一经 M2 索引",
+        "competitive_baseline": "R6 已实证类型层契约（types.d.ts L8 opaque / brand.d.ts L3 opaque content-addressed）；本单元查实现层（saveImage 的 id 生成代码）",
         "done_definition": [
-          "产品成功证据（事实依据 + 目标对齐 + 用户影响 + 结构化事实）入账 evidence-log（EV-016）",
-          "独立 Code Reviewer 审查 APPROVED/APPROVED_WITH_NOTES（unresolved_blockers=0；降级模式披露：Coordinator 编辑 + 独立审查）",
-          "单步独立提交（commit message 携带 MIG-001）"
+          "验证证据（源码行号/运行态样本）入账 evidence-log",
+          "V-DSH-7 状态更新（architecture-v3.md §13 或决策记录）；若需设计变更 → 用户决策后 ADR/决策记录落账",
+          "Step 5c/7 启动门解除或明确后续路径"
         ]
       },
       "acceptance_contract": {
-        "scenario": "prepareChatFiles 注册路径并经 M2 解析 files 引用；materializeCliImages 经 M2 materialize 物化 CLI 图片；selectAttachments 经 M2 解析对话附件；三通路返回值与迁移前等价（既有断言不改语义全绿）；R5-F1 场景补断言（未注册 id 首次 materialize 单次读取）；R5-F2 统一 read() 的 fs.readBytes 调用形态",
-        "command": "node tests/smoke.mjs",
-        "expected_output": "ALL SMOKE TESTS PASSED（含 attachments 断言组 + 新增迁移断言，0 FAILURES）",
+        "scenario": "读取宿主 dsh-attachment 实现层源码（node_modules/@deepseek-ai/dsh-attachment/lib/ 下 saveImage/id 生成路径），或运行态调用 saveImage 采样返回 id；得出确定性格式结论",
+        "command": "node -e \"…采样脚本…\"（或源码引用即证据）",
+        "expected_output": "attachmentId 格式的确定性结论（sha256:hex 前缀 / 其他具体格式）+ 源码行号或运行输出",
         "last_run": {
-          "status": "passing-pre-5b",
-          "exit_code": 0,
-          "summary": "Step 5a 收尾全绿（EV-015：attachment registry (M2) 36 项 + 既有断言零回退）；5b 变更后须重跑并记录输出"
+          "status": "not-run",
+          "exit_code": null,
+          "summary": "V-DSH-7 未验证；R6 已完成类型契约层实证（opaque 标注）"
         },
-        "demo_evidence": ".governance/evidence-log.md EV-016（Step 5b）+ 测试运行输出"
+        "demo_evidence": ".governance/evidence-log.md EV-017（V-DSH-7 验证）"
       },
       "quality_budget": {
         "dimensions": {
           "correctness": {
-            "threshold": "attachments.mjs 断言组 + 新增迁移断言 + 既有 smoke 全量 0 失败",
-            "validation": "node tests/smoke.mjs",
+            "threshold": "结论直接指向实现代码（非推测）；如有运行态样本须可复现",
+            "validation": "源码引用复核 / 采样脚本重跑",
             "status": "pending",
-            "evidence": "本步收尾输出（EV-016）",
+            "evidence": "EV-017",
             "exception": ""
           },
           "regression": {
-            "threshold": "既有断言零回退——三通路外部语义不变（files 注入/CLI 物化/附件派发行为等价迁移）",
-            "validation": "node tests/smoke.mjs 既有断言逐项过（含 RouterService chat files / cli images / attachments 组）",
+            "threshold": "本单元零产品代码修改（纯验证）；如触发设计变更另起小步",
+            "validation": "git status 干净（仅治理记录变更）",
             "status": "pending",
-            "evidence": "本步收尾输出（EV-016）",
+            "evidence": "commit diff stat",
             "exception": ""
           },
           "scope": {
-            "threshold": "变更恰为：lib/service.js（三调用点迁移 + F-1/F-2 修复）+ tests/attachments.mjs（补断言）+ lib/attachments.js（仅 F-2 相关最小修正，如有）+ 治理记录；无 schemas.js/rpc.js（5c）/tool.js wrapper 语义（6/7）变更",
+            "threshold": "仅验证 + 治理记录更新",
             "validation": "git show --stat <commit>",
             "status": "pending",
-            "evidence": "commit diff stat（审查复核）",
+            "evidence": "commit diff stat",
             "exception": ""
           }
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "三寻址通路经统一注册表（外部行为等价；编址统一为后续 id 寻址步骤的基座）",
-        "demo_path": "node tests/smoke.mjs（attachments 断言组 + 既有 RouterService 断言）",
-        "scope_guard": "lib/service.js、tests/attachments.mjs、（如需）lib/attachments.js 最小修正、.governance/**",
-        "rollback_plan": "恢复内部寻址调用（功能等价，仅失去统一索引——迁移表 Step 5b 回滚列）",
+        "user_visible_slice": "无直接用户可见变化（事实验证单元，为后续步骤设计奠基）",
+        "demo_path": "源码引用/采样输出（EV-017）",
+        "scope_guard": ".governance/**、docs/architecture-v3.md（V-DSH-7 行状态）；零 lib/ 修改",
+        "rollback_plan": "不适用（纯记录单元）",
         "status": "pending",
         "evidence": "pending"
       },
@@ -79,39 +78,38 @@
           "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
         ],
         "auto_execute": [
-          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
-          "Commit normal single-task changes when validation, evidence, and review gates are satisfied."
+          "Run source inspection and local validation.",
+          "Update governance records (V-DSH-7 status, evidence, decision)."
         ],
         "assumption_record": {
-          "assumption": "R4 遗留 F-1（memorySegmentText 单行规整）/F-2（UTF-16 码元截断）非 5b 寻址范畴，顺带条件：仅当改动触及同文件相邻代码时一并处理，否则记入后续步骤",
-          "basis": "session-snapshot 下次会话优先级 #4：P2 遗留 F-1/F-2 顺带；两问题位于 wrapper.js/memory 语义，与 service.js 寻址迁移不同文件",
-          "reversibility": "均为局部纯函数修正，独立可回滚",
-          "validation": "smoke memory 段断言（若触及则补断言）",
-          "rollback": "不触及则零影响"
+          "assumption": "项目 node_modules 内的 dsh-attachment 与宿主实际运行版本同源（版本以 package-lock 为准）；若版本漂移则结论需标注适用版本",
+          "basis": "R6 实证即基于该包；lockfile 版本可引用",
+          "reversibility": "纯记录，无代码影响",
+          "validation": "引用 package.json/lock 版本号入证据",
+          "rollback": "不适用"
         },
-        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears. 若结论为 opaque 且需索引策略设计变更 → 该决策点 MUST 询问用户。"
       },
       "allowed_change_scope": [
-        "Only change files required by MIG-001 Step 5b: lib/service.js (three call-site migration + R5 F-1/F-2 fixes), tests/attachments.mjs (post-migration assertions), lib/attachments.js (minimal F-2-related fix if needed)",
-        "治理记录（.governance/**）按快速通道同步更新",
-        "Keep Step 5c (RPC wire), 6 (pre-step), 7+ out of this unit."
+        "Only verification work: read host package sources, optionally run a sampling script (no repo product code changes)",
+        "治理记录（.governance/**）与 docs/architecture-v3.md V-DSH-7 行按快速通道更新",
+        "Keep Step 5c/6/7+ implementation out of this unit."
       ],
       "required_evidence": [
         "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
-        "validation commands with exit_code and concise output summary",
-        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+        "validation commands with exit_code or source line references",
+        "decision record if index strategy changes (user decision required for design change)"
       ],
       "next_commands": [
         "node tests/smoke.mjs",
         "python \"D:/AI/agent/claude/coding/project_management_workflow/skills/software-project-governance/infra/verify_workflow.py\" check-governance"
       ],
       "done_definition": [
-        "迁移表 Step 5b 行验收满足：三调用点经 M2 且 attachments.mjs 迁移断言（files 注入/CLI 物化/附件派发）全绿",
-        "R5-F1 补断言（未注册 id 首次 materialize 单读）、R5-F2 read() 调用形态统一（FsTarget）",
-        "Code Reviewer has APPROVED the product-code change (independent reviewer instance; degraded-mode disclosure recorded).",
-        "Commit completed for this single step with task ID MIG-001."
+        "V-DSH-7 结论确定（源码行号/运行态样本可复查）并更新 §13 行与 evidence-log（EV-017）",
+        "若触发索引策略设计变更：用户决策 + 决策记录落账",
+        "Step 5c/7 启动门状态明确（解除/调整）"
       ],
-      "source": "docs/architecture-v3.md §8 迁移表 Step 5b 行（L775）+ 依赖说明（L788-792：5a→5b→5c 串行）；R5 遗留 F-1/F-2（review-MIG-001-R5.md）；R4 遗留 F-1/F-2（review-MIG-001-R4.md）"
+      "source": "DEC-013（R6 P1 落实）+ architecture-v3.md §13 V-DSH-7 行 + review-MIG-001-R6.md 宿主实证段"
     }
   }
 }

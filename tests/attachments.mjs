@@ -10,6 +10,7 @@ import { rmSync, readFileSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { AttachmentRegistry, isAttachmentId, contentHashId, ATTACHMENT_ID_RE, ATTACHMENT_REGISTRY_MAX_ENTRIES, ATTACHMENT_ERROR_CODES } from '../lib/attachments.js'
+import { RouterService } from '../lib/service.js'
 
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
 const WORKSPACE = join(ROOT_DIR, '.test-attachments-work')
@@ -174,6 +175,36 @@ export async function runAttachmentTests(check) {
     const matFile = await registry.materialize(fileEntry.id, { cwd: WORKSPACE, sessionId: sessionA })
     check('materialize returns workspacePath directly for non-image', matFile.path === fileEntry.workspacePath && matFile.entry.id === fileEntry.id)
 
+    // ── R5-F-1：未注册 id 首次物化单读（懒注册字节复用，不再二次 readImage）──
+    // 预置"宿主有、注册表无"的新附件（绕过注册表 saveImage），直接 materialize：
+    // 懒注册读一次 + 物化分支复用同一字节写盘 = 全程 1 次 readImage。
+    const freshBytes = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+    await attachments.saveImage({ data: freshBytes, mediaType: 'image/gif', name: 'fresh.gif' })
+    const freshId = contentHashId(freshBytes)
+    const beforeFresh = attachments.calls.readImage
+    const matFresh = await registry.materialize(freshId, { cwd: WORKSPACE, sessionId: 'session-F1' })
+    check('materialize unregistered id single host read (F-1)', attachments.calls.readImage === beforeFresh + 1 && matFresh.path === join(WORKSPACE, '.router-files', 'attachments', `${freshId.slice('sha256:'.length)}.gif`))
+    check('materialize unregistered id writes file bytes', readFileSync(matFresh.path).length === freshBytes.length)
+    const matFreshCached = await registry.materialize(freshId, { cwd: WORKSPACE, sessionId: 'session-F1' })
+    check('materialize unregistered id cached after first (F-1)', matFreshCached.path === matFresh.path && attachments.calls.readImage === beforeFresh + 1)
+
+    // ── R5-F-2：read() 对 workspacePath 条目经 fs.resolve 取 FsTarget 再 readBytes ──
+    // 严格 fs：readBytes 只接受 FsTarget 对象形态（与 registerPath/service.js 一致）。
+    {
+      const strictFs = makeFs({ [notesPath]: new TextEncoder().encode('hello 文本内容') })
+      strictFs.readBytes = async (target) => {
+        if (typeof target === 'string' || !target || typeof target.displayPath !== 'string') throw new Error('readBytes must receive FsTarget object')
+        return new TextEncoder().encode('hello 文本内容')
+      }
+      const strictRoot = new Context()
+      strictRoot.provide('attachments', makeAttachments())
+      strictRoot.provide('fs', strictFs)
+      const strictRegistry = new AttachmentRegistry(strictRoot)
+      const strictEntry = await strictRegistry.registerPath(notesPath, { cwd: WORKSPACE })
+      const strictRead = await strictRegistry.read(strictEntry.id)
+      check('read resolves FsTarget before fs.readBytes (F-2)', strictRead.bytes.length === 18 && strictRead.ref.name === 'notes.txt')
+    }
+
     // ── URL：注册（下载落盘 + 大小上限）──
     const fetched = []
     const realFetch = globalThis.fetch
@@ -238,6 +269,96 @@ export async function runAttachmentTests(check) {
     // ── close：清空全部状态 ──
     registry.close()
     check('close clears registry state', registry.entries.size === 0 && registry.pathIndex.size === 0 && registry.materialized.size === 0)
+  }
+
+  // ── Step 5b 迁移后断言：三调用点寻址经 M2（RouterService 接线）────────
+  console.log('step 5b addressing via M2:')
+  {
+    const MIG_PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01])
+    // 最小 RouterService 测试基建（与 smoke.mjs root.provide 同构；附件/文件
+    // 服务用本文件的契约一致 mock——saveImage 返回内容寻址 sha256 id）。
+    const makeRouterHarness = (files) => {
+      const attachments = makeAttachments()
+      const fs = makeFs(files ?? {})
+      const root = new Context()
+      root.provide('attachments', attachments)
+      root.provide('fs', fs)
+      root.provide('llm', {
+        resolveModelInfo: async () => ({ inputModalities: ['text', 'image'] }),
+        stream: async function* () {
+          yield { type: 'block-start', index: 0, blockType: 'text' }
+          yield { type: 'text-delta', index: 0, text: 'ok' }
+          yield { type: 'block-end', index: 0, block: { type: 'text', text: 'ok' } }
+          yield { type: 'finish', reason: { kind: 'stop' } }
+        },
+      })
+      const service = new RouterService(root)
+      service.attach({ get: () => ({ enabled: true, agents: { vision: { name: '视觉', type: 'chat', enabled: true, description: '看图', capabilities: ['image'], provider: 'openai', model: 'gpt-4o', maxRounds: 1 } } }) })
+      return { service, attachments, fs }
+    }
+
+    // files 注入经 M2：chat 类型 files 图片寻址结果注册进统一索引（注册表条目存在）。
+    {
+      const { service } = makeRouterHarness({ [join(WORKSPACE, 'shot.png')]: MIG_PNG_BYTES })
+      const run = await service.run({
+        agentId: 'vision',
+        task: '看图写摘要',
+        images: [],
+        files: ['shot.png'],
+        exec: { agent: { session: { header: { cwd: WORKSPACE, delegationDepth: 0 } } } },
+      })
+      const expectedId = contentHashId(MIG_PNG_BYTES)
+      check('chat files injection registers M2 entry', run.kind === 'chat' && (await service.registry.byId(expectedId))?.id === expectedId)
+      check('chat files image ref carries registry id', Array.isArray(run.images) && run.images.length === 1 && run.images[0].attachmentId === expectedId && run.images[0].name === 'shot.png' && run.images[0].mediaType === 'image/png')
+    }
+
+    // CLI 物化经 M2：materializeCliImages 对内容寻址附件经注册表物化
+    // （懒注册单读 + 会话作用域缓存；解析路径经过 registry）。
+    {
+      const { service, attachments } = makeRouterHarness({})
+      const cliBytes = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x03, 0x00, 0x01, 0x00])
+      await attachments.saveImage({ data: cliBytes, mediaType: 'image/gif', name: 'cli.gif' })
+      const cliId = contentHashId(cliBytes)
+      const cliDir = join(WORKSPACE, '.router-files')
+      const beforeCli = attachments.calls.readImage
+      const cliPaths = await service.materializeCliImages([{ attachmentId: cliId }], cliDir, 'stamp-x', 'session-CLI')
+      check('cli image materialize routes through M2 registry', cliPaths.length === 1 && cliPaths[0] === join(WORKSPACE, '.router-files', 'attachments', `${cliId.slice('sha256:'.length)}.gif`))
+      check('cli image materialize single read (F-1 via service)', attachments.calls.readImage === beforeCli + 1)
+      const beforeCli2 = attachments.calls.readImage
+      const cliPaths2 = await service.materializeCliImages([{ attachmentId: cliId }], cliDir, 'stamp-y', 'session-CLI')
+      check('cli image materialize session cache hit', cliPaths2.length === 1 && cliPaths2[0] === cliPaths[0] && attachments.calls.readImage === beforeCli2)
+      // 遗留 ref（无 attachmentId 的非内容寻址形态）不经注册表（注册表只索引
+      // 内容寻址 id）——走直接宿主读取回退；宿主 mock 无法解析遗留 id 时
+      // 单次读取失败即跳过（不抛错、不产生路径）。
+      const legacyPaths = await service.materializeCliImages([{ id: 'att-legacy-1', kind: 'image' }], cliDir, 'stamp-z', 'session-CLI')
+      check('cli materialize legacy ref skipped without registry', legacyPaths.length === 0 && attachments.calls.readImage === beforeCli2 + 1)
+    }
+
+    // 附件派发经 M2：selectAttachments 把派发到的内容寻址附件懒注册进注册表
+    // （统一索引）；非内容寻址遗留 ref 跳过。
+    {
+      const { service, attachments } = makeRouterHarness({})
+      const pickBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01])
+      await attachments.saveImage({ data: pickBytes, mediaType: 'image/png', name: 'pick.png' })
+      const pickId = contentHashId(pickBytes)
+      const pickAgent = {
+        session: {
+          deriveMessages: () => [
+            { role: 'user', content: [
+              { type: 'image', attachment: { attachmentId: pickId, mediaType: 'image/png', name: 'pick.png' } },
+              { type: 'image', attachment: { id: 'legacy-1', kind: 'image' } },
+            ] },
+          ],
+        },
+      }
+      const beforePick = attachments.calls.readImage
+      const picked = service.selectAttachments(pickAgent, { includeImages: true })
+      check('selectAttachments returns picked refs unchanged', picked.length === 2 && picked[0].attachmentId === pickId)
+      // fire-and-forget 注册：等微任务结算后注册表条目应已建立（懒注册单读）。
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      check('selectAttachments registers content-addressed id into M2', (await service.registry.byId(pickId))?.id === pickId && service.registry.entries.size === 1)
+      check('selectAttachments lazy registration single read', attachments.calls.readImage === beforePick + 1)
+    }
   }
   rmSync(WORKSPACE, { recursive: true, force: true })
 }
