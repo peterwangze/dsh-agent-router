@@ -762,7 +762,9 @@ console.log('apply wiring:')
   {
     let registered = null
     let sections = []
-    // 可变门控面：视觉 agent 列表 / 总开关（整轮路由判据）。
+    // stub 服务面：route_agent 执行契约（isEnabled / promptText / record）+
+    // 整轮路由回归夹具（listImageVisionAgents / resolveAgent / visionState
+    // 保留：若整轮路由被重新引入，下方 image-turn passthrough 断言会失败）。
     const visionState = { enabled: true, agents: [['vision', {}]] }
     const fakeRouter = {
       isEnabled: () => visionState.enabled,
@@ -787,26 +789,21 @@ console.log('apply wiring:')
     // image（生成）与 images（视觉注入）都渲染为标记，供 toolview 显示缩略图。
     const rendered = registered.output.render({}, { ok: true, text: '已生成', image: { attachmentId: 'sha256:aa', mediaType: 'image/png', bytes: 4, width: 2, height: 2 }, images: [{ attachmentId: 'sha256:bb', mediaType: 'image/jpeg', bytes: 4, width: 2, height: 2 }], usage: { inputTokens: 0, outputTokens: 0 } })
     check('tool render emits markers not image blocks', rendered.every((block) => block.type === 'text') && rendered.filter((block) => block.text.includes('[router:image:')).length === 2 && rendered.some((block) => block.text.includes('sha256:aa')) && rendered.some((block) => block.text.includes('sha256:bb')))
-    // ── 带图轮确定性整轮路由：agent/request 瀑布把含图轮切到视觉模型 ──
+    // ── 带图轮不再整轮路由（DEC-008 / X-1）：agent/request 对 config 原样返回 ──
+    // 整轮路由已移除，插件不再注册 agent/request——带图轮 = 主 agent 轮次，
+    // provider/model 恒为主模型（request/context 不变，D-1-1 指标基础）。
+    // 钩子未注册时瀑布返回默认 config 即为正确行为（防重新引入回归）。
     {
       const imageBlock = { type: 'image', attachment: { attachmentId: 'sha256:x', mediaType: 'image/png', bytes: 4, width: 2, height: 2 } }
       const agentOf = (messages) => ({ session: { deriveMessages: () => messages } })
       const defaultConfig = async () => ({ provider: 'text-provider', model: 'brain-1' })
       const runRequest = (messages) => root.events.waterfall('agent/request', { agent: agentOf(messages), turn: 1, step: 1, signal: undefined }, defaultConfig)
       const imageTurn = await runRequest([{ role: 'user', content: [{ type: 'text', text: '看图' }, imageBlock] }])
-      check('image turn routes to vision model', imageTurn.provider === 'openai' && imageTurn.model === 'gpt-4o')
+      check('image turn config passes through unchanged (no whole-turn routing)', imageTurn.provider === 'text-provider' && imageTurn.model === 'brain-1')
       const textTurn = await runRequest([{ role: 'user', content: [{ type: 'text', text: '纯文本' }] }])
-      check('text turn keeps default config', textTurn.provider === 'text-provider' && textTurn.model === 'brain-1')
+      check('text turn config passes through unchanged', textTurn.provider === 'text-provider' && textTurn.model === 'brain-1')
       const followupStep = await runRequest([{ role: 'user', content: [{ type: 'text', text: '看图' }, imageBlock] }, { role: 'assistant', content: [{ type: 'text', text: '已回答' }] }])
-      check('answered image turn keeps default config', followupStep.provider === 'text-provider')
-      visionState.agents = []
-      const noVision = await runRequest([{ role: 'user', content: [{ type: 'text', text: '看图' }, imageBlock] }])
-      check('image turn without vision agent keeps default', noVision.provider === 'text-provider')
-      visionState.agents = [['vision', {}]]
-      visionState.enabled = false
-      const disabled = await runRequest([{ role: 'user', content: [{ type: 'text', text: '看图' }, imageBlock] }])
-      check('image turn respects master switch', disabled.provider === 'text-provider')
-      visionState.enabled = true
+      check('answered image turn config passes through unchanged', followupStep.provider === 'text-provider' && followupStep.model === 'brain-1')
     }
     await app.dispose()
   }
