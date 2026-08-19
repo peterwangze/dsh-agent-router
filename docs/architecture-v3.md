@@ -854,7 +854,7 @@ RPC wire 面，每段独立可提交可回滚）；Step 5b 是 Step 7 的寻址�
 
 | ID | 假设（未验证） | 验证方法 | 影响（若证伪） |
 | --- | --- | --- | --- |
-| V-DSH-1 | pre-step 注入带 id 的 user 消息会被宿主持久化为会话事件（vision-router 注释宣称，index.js:4803-4806） | 宿主升级回归 + 运行态检查会话日志（注入后查事件） | Step 6 reminder 改走 wrapper system 形态（reminder 语义保留，通道①退化为通道②） |
+| V-DSH-1 | ~~pre-step 注入带 id 的 user 消息会被宿主持久化为会话事件~~ **✅ 已验证成立（2026-08-19，R8/EV-019）**：宿主 dsh-agent-loop L554 对 pre-step decision.messages 逐个 `session.append("user/message")`；dsh-session L1242-1254 要求 user/message 带非空 string id，createUserMessage 生成 uuid 满足（R8 报告宿主契约印证段，五包实读） | 已执行：宿主源码核验（R8） | 无需触发——持久化语义成立 |
 | V-DSH-2 | F11 inputActions 除 addImages 外支持文本/附件注入（精确签名未知，DEC-007 标注） | 宿主 dsh-client-ui 源码/d.ts（依赖安装后，V-R2 一并核验） | Step 8 fallback：pre-step 合成 user 消息注入路径文本（§5.5） |
 | V-DSH-3 | 宿主 dsh-client-ui-attachment 含 audio/video 播放组件（H-D3，RES-002 §9） | 依赖安装后核查包导出；否则 `<audio>/<video>` 原生标签兜底 | Step 9 L3 音频卡片形态（原生标签兜底已可用） |
 | V-DSH-4 | audio/video 魔数判定可扩展（detectImageMediaType 现仅 image，`service.js:416`） | 魔数表调研 + 单测（mp3/mp4/wav/webm 头字节） | 扩展名校验兜底（UNSUPPORTED_MEDIA 判定降级） |

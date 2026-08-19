@@ -29,7 +29,7 @@ function check(label, condition) {
 //    解析器把关（stdio ignore：不进管道，兼容受限运行环境）。
 console.log('syntax:')
 {
-  for (const file of ['client.js', 'service.js', 'tool.js', 'index.js', 'rpc.js', 'schemas.js', 'wrapper.js', 'memory.js', 'attachments.js']) {
+  for (const file of ['client.js', 'service.js', 'tool.js', 'index.js', 'rpc.js', 'schemas.js', 'wrapper.js', 'memory.js', 'attachments.js', 'prestep.js']) {
     const result = spawnSync(process.execPath, ['--check', join(LIB_DIR, file)], { stdio: 'ignore' })
     check(`lib/${file} parses`, result.status === 0)
   }
@@ -1249,6 +1249,102 @@ console.log('admission wrapper (L1):')
   let orphanRejected = false
   try { await orphan.resolveModel('x', 'y') } catch (error) { orphanRejected = String(error.message).includes('no adapter registered') }
   check('twin without original adapter fails loud', orphanRejected)
+}
+
+// 7.7 pre-step（v3 Step 6 / N-3）：图片轮 reminder 注入（带 id）+ 逃生组分级改写兜底
+// 宿主 agent/pre-step 契约（dsh-agent-loop）：waterfall 收到 { agent, messages, turn,
+// step, signal }，next() 产出默认 decision { kind:'enter', messages }——handler 返回
+// 修改后的 decision.messages，宿主把 decision.messages 追加为会话 user/message 事件
+//（V-DSH-1 持久化假设在宿主源码得到印证：pre-step 决策消息即会话事件）。本测试用
+// 与宿主同构的 events.waterfall 驱动，验证：① 图片轮注入带 id 的 reminder（包装路由
+// 不改写——主改写面留给 wrapper stream）；② 逃生组（非 -router 路由）经能力分级改写
+// 兜底——纯文本主模型无裸图块到达模型、原生多模态保真直传；③ 纯文本轮零注入（负向）。
+{
+  const { installPreStep, collectReminder, rewriteImageTurnsToMarkers } = await import('../lib/prestep.js')
+  const { WRAP_SUFFIX } = await import('../lib/wrapper.js')
+  const root = new Context()
+  const llm = new LlmRuntime(root)
+  // 逃生组用独立 provider 名（'escape-provider'/'mm-escape-provider'）：wrapper.js 的
+  // 能力查询缓存是模块级 60s TTL，避免与 7.5/7.6 块的历史探测键互相污染。
+  const escapeAdapter = {
+    providerInfo(provider) { return { id: provider, name: 'EscapeText' } },
+    providerRetryPolicy() { return undefined },
+    async listModels(provider) { return [{ provider, id: 'brain-1', name: 'Brain-1', inputModalities: ['text'] }] },
+    async resolveModel(provider, model) {
+      return { provider, id: model, name: model, inputModalities: ['text'], context: { contextWindow: 100_000 }, defaultMaxTokens: 4096 }
+    },
+    async *stream() { yield { type: 'finish', reason: { kind: 'stop' } } },
+  }
+  const mmEscapeAdapter = {
+    ...escapeAdapter,
+    async resolveModel(provider, model) {
+      return { provider, id: model, name: model, inputModalities: ['text', 'image'], context: { contextWindow: 100_000 }, defaultMaxTokens: 4096 }
+    },
+  }
+  llm.registerAdapter(['escape-provider'], escapeAdapter)
+  llm.registerAdapter(['mm-escape-provider'], mmEscapeAdapter)
+  // 可变门控面：与 7.6 块同款 fakeService 形状（isEnabled + 目录列表）。
+  const service = {
+    isEnabled: () => true,
+    listImageVisionAgents: () => [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]],
+    listImageGenerationAgents: () => [['draw', { name: '画图', type: 'image', enabled: true }]],
+  }
+  const dispose = installPreStep(root, service)
+  // 与宿主同构的瀑布驱动：默认 decision = { kind:'enter', messages: claimed 副本 }。
+  const dispatch = (agent, messages, turn = 1) =>
+    root.events.waterfall('agent/pre-step', { agent, messages, turn, step: 1, signal: undefined },
+      () => Promise.resolve({ kind: 'enter', messages: [...messages] }))
+  // 内容寻址 id 必须匹配 /^sha256:[0-9a-f]{64}$/i（M2 isAttachmentId 守卫）——
+  // reminder 只携带经 M2 寻址语义的内容寻址 id（架构 §8 Step 6：id 来自当轮附件块）。
+  const contentId = `sha256:${'a'.repeat(64)}`
+  const imageMessage = createUserMessage({ content: [{ type: 'text', text: '看图' }, { type: 'image', attachment: { attachmentId: contentId, mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'shot.png' } }], source: { kind: 'user' } })
+
+  // ① 图片轮（包装路由）：注入带 id 的 reminder（通道①），不改写（wrapper stream 主改写面）。
+  const twinAgent = { options: { provider: `escape-provider${WRAP_SUFFIX}`, model: 'brain-1' } }
+  const twinDecision = await dispatch(twinAgent, [imageMessage])
+  check('image turn on wrapper route injects plugin reminder', twinDecision.kind === 'enter' && twinDecision.messages.length === 2 && twinDecision.messages[1].role === 'user' && twinDecision.messages[1].source.kind === 'plugin')
+  check('reminder carries a message id (session validation)', typeof twinDecision.messages[1].id === 'string' && twinDecision.messages[1].id.length > 0)
+  check('reminder carries attachment id + route_agent instruction', twinDecision.messages[1].content.some((b) => b.type === 'text' && b.text.includes(contentId) && b.text.includes('route_agent') && b.text.includes('includeImages') && b.text.includes('"vision"')))
+  check('wrapper route keeps raw image block (no pre-step rewrite)', twinDecision.messages[0].content.some((b) => b.type === 'image'))
+
+  // ② 逃生组路由（纯文本主模型）：分级改写兜底——无裸图块到达模型（复用 Step 3 语义）。
+  const escapeAgent = { options: { provider: 'escape-provider', model: 'brain-1' } }
+  const escapeDecision = await dispatch(escapeAgent, [imageMessage])
+  check('escape-group image turn has no raw image block', escapeDecision.messages[0].content.every((b) => b.type !== 'image'))
+  check('escape rewrite embeds marker text with id', escapeDecision.messages[0].content.some((b) => b.type === 'text' && b.text.includes('route_agent') && b.text.includes('includeImages') && b.text.includes(contentId)))
+  check('escape-group turn also injects reminder', escapeDecision.messages.length === 2 && escapeDecision.messages[1].source.kind === 'plugin')
+
+  // ③ 逃生组 + 原生多模态主模型：能力判定保真直传（preserveImageInput 语义）。
+  const mmAgent = { options: { provider: 'mm-escape-provider', model: 'brain-1' } }
+  const mmDecision = await dispatch(mmAgent, [imageMessage])
+  check('native multimodal escape keeps raw image (passthrough)', mmDecision.messages[0].content.some((b) => b.type === 'image') && mmDecision.messages.length === 2)
+
+  // ④ 纯文本轮负向：零注入、零改写（同一对象引用返回）。
+  const textMessage = createUserMessage({ content: [{ type: 'text', text: '纯文本轮' }], source: { kind: 'user' } })
+  const textDecision = await dispatch(escapeAgent, [textMessage])
+  check('text-only turn unchanged (no reminder, no rewrite)', textDecision.messages.length === 1 && textDecision.messages[0] === textMessage)
+
+  // ⑤ 门控：总开关关闭 → 图片轮同样零介入（与 wrapper 门控同源）。
+  service.isEnabled = () => false
+  const gatedDecision = await dispatch(escapeAgent, [imageMessage])
+  check('pre-step gated by master switch', gatedDecision.messages.length === 1 && gatedDecision.messages[0] === imageMessage)
+  service.isEnabled = () => true
+
+  // ⑥ 单元面：collectReminder（M4 通道① builder）与逃生组改写器。
+  const reminderText = collectReminder(['sha256:a', 'sha256:b'], ['vision'])
+  check('collectReminder lists attachment ids and vision agents', reminderText.includes('sha256:a') && reminderText.includes('sha256:b') && reminderText.includes('"vision"') && reminderText.includes('route_agent'))
+  const noIdText = collectReminder([], [])
+  check('collectReminder tolerates empty ids', noIdText.includes('route_agent') && !noIdText.includes('附件 id'))
+  const nested = createUserMessage({ content: [{ type: 'text', text: 'x' }, { type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }] }], source: { kind: 'user' } })
+  const rewrittenNested = rewriteImageTurnsToMarkers([nested], { vision: ['vision'], generation: [] })
+  check('escape rewrite reaches nested tool-result', rewrittenNested[0].content[1].content.every((b) => b.type === 'text') && !rewrittenNested[0].content[1].content.some((b) => b.type === 'image'))
+  const untouched = createUserMessage({ content: [{ type: 'text', text: '纯文本' }], source: { kind: 'user' } })
+  check('escape rewrite leaves text-only message untouched', rewriteImageTurnsToMarkers([untouched], { vision: ['vision'], generation: [] })[0] === untouched)
+
+  // ⑦ 卸载器：移除注册后瀑布回到默认 decision（Step 6 回滚 = 卸载 pre-step 注册）。
+  dispose()
+  const disposedDecision = await dispatch(escapeAgent, [imageMessage])
+  check('pre-step uninstaller removes handler', disposedDecision.messages.length === 1 && disposedDecision.messages[0] === imageMessage)
 }
 
 // 8. 平台安装入口（BOM 免疫在线命令 + 离线安装幂等；涉及系统宿主与本地 fixture 服务器）
