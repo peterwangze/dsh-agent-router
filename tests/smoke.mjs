@@ -383,7 +383,7 @@ console.log('RouterService:')
   check('promptText lists agents', text.includes('vision') && text.includes('draw') && text.includes('route_agent') && !text.includes('off'))
   check('promptText pool meta', text.includes('OAuth 账号池:G池') && text.includes('2 个账号'))
   check('promptText delegation note', text.includes('可读写工作区任意文件') && text.includes('附件按需显式派发'))
-  check('promptText dialog image guidance', text.includes('[用户附带图片]') && text.includes('files') && !text.includes('attachmentIds'))
+  check('promptText no dead attachment-path rule', !text.includes('[用户附带图片]') && text.includes('files') && !text.includes('attachmentIds'))
   check('promptText cli meta', text.includes('子代理:'))
 
   // agent 类型委派：prompt 必须携带工作目录注入与图片附件块，子代理收到
@@ -1033,7 +1033,7 @@ console.log('admission wrapper (L1):')
   // 标记收集按 attachmentId 去重（历史轮不再重复注入 system）。
   const markerList = collectMarkers([imageMessage, imageMessage], [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: () => null }])
   check('collectMarkers dedupes by attachment', markerList.length === 1 && markerList[0].includes('sha256:abc'))
-  // 历史图不再标记：已由整轮路由处理过，后续文本轮不得重复注入（否则大脑重复路由）。
+  // 历史图不再标记：已回答轮次的图由视觉工具承接，后续文本轮不得重复注入（否则大脑重复路由）。
   const historicMarkers = collectMarkers([imageMessage, createUserMessage({ content: [{ type: 'text', text: '后续文本轮' }], source: { kind: 'user' } })], [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: () => null }])
   check('collectMarkers skips answered history images', historicMarkers.length === 0)
   // 3) 嵌套 tool-result 中的图片块同样被改写（原文本适配器会递归拒绝）。
