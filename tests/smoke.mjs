@@ -5,6 +5,7 @@ import { createHostContribution, ROUTER_REMOTE } from '../lib/rpc.js'
 import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine, cliWorkspaceHint } from '../lib/service.js'
 import { runClientRender } from './client-render.mjs'
 import { runInstallEntryTests } from './install-entry.mjs'
+import { runAttachmentTests } from './attachments.mjs'
 import { BlockAssembler, LlmRuntime, contentHasImage } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -28,7 +29,7 @@ function check(label, condition) {
 //    解析器把关（stdio ignore：不进管道，兼容受限运行环境）。
 console.log('syntax:')
 {
-  for (const file of ['client.js', 'service.js', 'tool.js', 'index.js', 'rpc.js', 'schemas.js', 'wrapper.js', 'memory.js']) {
+  for (const file of ['client.js', 'service.js', 'tool.js', 'index.js', 'rpc.js', 'schemas.js', 'wrapper.js', 'memory.js', 'attachments.js']) {
     const result = spawnSync(process.execPath, ['--check', join(LIB_DIR, file)], { stdio: 'ignore' })
     check(`lib/${file} parses`, result.status === 0)
   }
@@ -856,6 +857,9 @@ console.log('apply wiring:')
   // 客户端 UI 真实渲染（迷你 React 驱动整页，结构断言见 client-render.mjs）。
   console.log('client render:')
   await runClientRender(check)
+
+  // M2 附件编址层（v3 Step 5a，MIG-001）：三向映射/懒注册降级/物化缓存会话隔离。
+  await runAttachmentTests(check)
 }
 
 // 7.5 准入包装机制验证：真实 LlmRuntime 上的 twin 路由
