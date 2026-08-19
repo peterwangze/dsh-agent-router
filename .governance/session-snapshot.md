@@ -42,6 +42,7 @@
   - EV-015 入账；plan-tracker MIG-001 行更新；锁获取→释放完整执行
 - **执行包维护**：`execution-packet --write` 在 lightweight 模板下产出 0 包并清空既有包（工具链已知问题）→ Coordinator 依据 §8 Step 5b 行 + R4/R5 遗留手工恢复 MIG-001 Step 5b 执行包
 - R5 遗留登记：F-1（materialize 未注册 id 双读+无断言）/F-2（read() displayPath 字符串 vs FsTarget 不一致）→ Step 5b 一并处理
+- 收尾治理检查：check-governance 运行——本项目相关检查全 PASS（证据完整性/Gate 一致性/锁 schema/归档完整性/commit 关联 16/20）；FAIL 项经核实均为插件仓库侧存量误报（28c×19、Check 30 V2×2——详见已知问题清单），非本会话回归
 
 ## 未完成 / 已延期
 
@@ -55,7 +56,7 @@
 1. **Step 5b 派发**：按执行包（MIG-001 Step 5b 单元）spawn Developer 迁移三调用点 + R5-F1/F-2 修复 → 审查 R6 → EV-016 → 提交
 2. Step 5c：uploadFile/readWorkspaceFile wire codec + descriptor（schemas.js/rpc.js）
 3. Step 6（pre-step reminder，依赖 Step 3+5a/5b）；R4 遗留 F-1/F-2 顺带
-4. D-1 验收门测量；治理工具链已知问题（execution-packet --write 清空包 / check-governance 28c 误报 / lightweight 模板解析错位，插件仓库侧）
+4. D-1 验收门测量；治理工具链已知问题（均为插件仓库侧，本会话核实非本项目回归）：execution-packet --write 清空包 / check-governance 28c 误报（19 项）/ lightweight 模板解析错位（Check 1/2/16/23 对本项目任务/风险/Profile 解析为 0）/ **Check 30 V2 新核实（存量）**：ARCH-001 与 MIG-001 "missing R[0]"——检查器约定 R0=裸 review-{id}.md，本项目每步首审即 R1（R1-R5 为五个变更集各自首审，链内无跳轮）；修复需重写已提交审查文件名+EV 引用（篡改审计轨迹）故记录为误报不修复
 
 ## 用户偏好设置
 
