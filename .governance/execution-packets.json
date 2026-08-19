@@ -1,72 +1,72 @@
 {
   "version": 1,
-  "generated_at": "2026-08-19T21:05:00",
+  "generated_at": "2026-08-19T21:25:00",
   "packets": {
     "MIG-001": {
       "task_id": "MIG-001",
       "priority": "P0",
-      "status": "进行中——Step 0-5b 完成（7cb2024/b7261d5/a23b338/374edfa/f89b8bd/Step5b 提交；R1-R6 审查链全通过，EV-011~016）；当前单元 = V-DSH-7 宿主附件 id 运行时验证（DEC-013 门禁：Step 5c/7 启动前 MUST 闭环）。注：execution-packet --write 在 lightweight 模板下产出 0 包（工具链已知问题），本包由 Coordinator 依据 plan-tracker + DEC-013 + V-DSH-7 手工维护",
-      "goal": "V-DSH-7 验证：确定宿主 dsh-attachment saveImage 返回的 attachmentId 实际格式（sha256:hex 或 opaque），并按结论决定 M2 索引策略——(a) 宿主确为 sha256 → 维持现状（isAttachmentId 守卫即正确）；(b) 宿主为 opaque → 设计决策：扩展 isAttachmentId 接受 opaque / 双轨索引 / 其他（升级用户决策，可能触发 ADR 修订与新迁移小步）",
+      "status": "进行中——Step 0-5b 完成 + V-DSH-7 验证闭环（EV-017，DEC-014：宿主 id 实证 sha256:hex64，索引策略维持单轨，Step 5c/7 门禁解除）；当前单元 = Step 5c（RPC wire 面）。注：execution-packet --write 在 lightweight 模板下产出 0 包（工具链已知问题），本包由 Coordinator 手工维护",
+      "goal": "MIG-001 v3 迁移 Step 5c（RPC wire 面，N-1 部分）：uploadFile / readWorkspaceFile 的 wire codec + descriptor 落地（lib/schemas.js + lib/rpc.js，沿用现有 strict codec 风格；宿主实现可先于 Step 8 就位）",
       "product_success_contract": {
-        "user": "DSH 主 agent 用户（M2 编址层真实生效是跨轮指代/attachmentIds 的前提）",
-        "job_to_be_done": "消除 §4.3.1 '与宿主一致：sha256' 假设与宿主类型契约 'opaque' 的矛盾，使 Step 5c/7 的设计建立在实证事实上",
+        "user": "DSH 主 agent 用户与内置公开 Client（Step 8 F11 输入入口 / Step 9 L3 打开文件的未来调用方）",
+        "job_to_be_done": "RPC 面具备附件上传与工作区文件读取的 wire 契约——Step 8（AttachButton → uploadFile）与 Step 9（L3 打开文件 → readWorkspaceFile）的调用基座",
         "non_goals": [
-          "本单元不实现 Step 5c RPC wire / Step 6 pre-step / Step 7 attachmentIds",
-          "验证本身不修改产品代码；若结论为 opaque 且需设计变更，先出方案（ADR 修订/决策记录）再另起实现小步",
-          "流程证据不替代实证：结论必须指向宿主源码行号或运行态输出"
+          "本步不实现客户端调用方（AttachButton/卡片渲染——Step 8/9）",
+          "本步不实现 service 侧业务逻辑之外的 UI 交互",
+          "本步不实现 Step 6（pre-step）/Step 7（attachmentIds 参数）"
         ],
         "success_metrics": [
-          "可复查证据：宿主实现层源码引用（文件:行号）或运行态 saveImage 返回值样本",
-          "结论入账：V-DSH-7 行更新为已验证 + DEC 记录索引策略决策"
+          "codec 形状断言（沿用 strict codec 风格：parse/build 双向 + 拒绝缺字段）",
+          "smoke 回归全绿（既有断言零回退）"
         ],
-        "competitive_baseline": "R6 已实证类型层契约（types.d.ts L8 opaque / brand.d.ts L3 opaque content-addressed）；本单元查实现层（saveImage 的 id 生成代码）",
+        "competitive_baseline": "现有 wire codec 基建（schemas.js strict codec + rpc.js descriptor 注册，如 image RPC 组 imageData/cliStatus/cliModels）——Step 5c 按同构风格扩展 uploadFile/readWorkspaceFile",
         "done_definition": [
-          "验证证据（源码行号/运行态样本）入账 evidence-log",
-          "V-DSH-7 状态更新（architecture-v3.md §13 或决策记录）；若需设计变更 → 用户决策后 ADR/决策记录落账",
-          "Step 5c/7 启动门解除或明确后续路径"
+          "产品成功证据入账 evidence-log（EV-018）",
+          "独立 Code Reviewer 审查 APPROVED/APPROVED_WITH_NOTES（unresolved_blockers=0）",
+          "单步独立提交（commit message 携带 MIG-001）"
         ]
       },
       "acceptance_contract": {
-        "scenario": "读取宿主 dsh-attachment 实现层源码（node_modules/@deepseek-ai/dsh-attachment/lib/ 下 saveImage/id 生成路径），或运行态调用 saveImage 采样返回 id；得出确定性格式结论",
-        "command": "node -e \"…采样脚本…\"（或源码引用即证据）",
-        "expected_output": "attachmentId 格式的确定性结论（sha256:hex 前缀 / 其他具体格式）+ 源码行号或运行输出",
+        "scenario": "uploadFile/readWorkspaceFile codec parse 合法形状成功 + 拒绝缺字段/类型错误；descriptor 注册且与既有 RPC 组同构；无客户端调用方（wire 面，零行为影响）",
+        "command": "node tests/smoke.mjs",
+        "expected_output": "ALL SMOKE TESTS PASSED（含新 codec 断言，0 FAILURES）",
         "last_run": {
-          "status": "not-run",
-          "exit_code": null,
-          "summary": "V-DSH-7 未验证；R6 已完成类型契约层实证（opaque 标注）"
+          "status": "passing-pre-5c",
+          "exit_code": 0,
+          "summary": "Step 5b 收尾全绿（EV-016：49 attachments 断言 + 既有零回退）；5c 变更后重跑记录"
         },
-        "demo_evidence": ".governance/evidence-log.md EV-017（V-DSH-7 验证）"
+        "demo_evidence": ".governance/evidence-log.md EV-018（Step 5c）+ 测试运行输出"
       },
       "quality_budget": {
         "dimensions": {
           "correctness": {
-            "threshold": "结论直接指向实现代码（非推测）；如有运行态样本须可复现",
-            "validation": "源码引用复核 / 采样脚本重跑",
+            "threshold": "codec parse/build 双向正确 + 负向形状拒绝",
+            "validation": "node tests/smoke.mjs（wire codecs 断言组扩展）",
             "status": "pending",
-            "evidence": "EV-017",
+            "evidence": "EV-018",
             "exception": ""
           },
           "regression": {
-            "threshold": "本单元零产品代码修改（纯验证）；如触发设计变更另起小步",
-            "validation": "git status 干净（仅治理记录变更）",
+            "threshold": "既有断言零回退（纯 wire 面新增，无调用方）",
+            "validation": "node tests/smoke.mjs 既有断言逐项过",
             "status": "pending",
-            "evidence": "commit diff stat",
+            "evidence": "EV-018",
             "exception": ""
           },
           "scope": {
-            "threshold": "仅验证 + 治理记录更新",
+            "threshold": "变更恰为：lib/schemas.js + lib/rpc.js + 测试断言 + 治理记录；无 client.js（Step 8/9 UI）、无 tool.js/wrapper.js 变更",
             "validation": "git show --stat <commit>",
             "status": "pending",
-            "evidence": "commit diff stat",
+            "evidence": "commit diff stat（审查复核）",
             "exception": ""
           }
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "无直接用户可见变化（事实验证单元，为后续步骤设计奠基）",
-        "demo_path": "源码引用/采样输出（EV-017）",
-        "scope_guard": ".governance/**、docs/architecture-v3.md（V-DSH-7 行状态）；零 lib/ 修改",
-        "rollback_plan": "不适用（纯记录单元）",
+        "user_visible_slice": "无直接用户可见变化（wire 面，无调用方——Step 8/9 的基座）",
+        "demo_path": "node tests/smoke.mjs（wire codecs 断言组）",
+        "scope_guard": "lib/schemas.js、lib/rpc.js、tests/smoke.mjs（断言）、.governance/**",
+        "rollback_plan": "移除 RPC 注册（wire 面，无客户端调用方，零影响——迁移表 Step 5c 回滚列）",
         "status": "pending",
         "evidence": "pending"
       },
@@ -78,38 +78,38 @@
           "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
         ],
         "auto_execute": [
-          "Run source inspection and local validation.",
-          "Update governance records (V-DSH-7 status, evidence, decision)."
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit normal single-task changes when validation, evidence, and review gates are satisfied."
         ],
         "assumption_record": {
-          "assumption": "项目 node_modules 内的 dsh-attachment 与宿主实际运行版本同源（版本以 package-lock 为准）；若版本漂移则结论需标注适用版本",
-          "basis": "R6 实证即基于该包；lockfile 版本可引用",
-          "reversibility": "纯记录，无代码影响",
-          "validation": "引用 package.json/lock 版本号入证据",
-          "rollback": "不适用"
+          "assumption": "uploadFile/readWorkspaceFile 的 RPC 语义以架构 v3 §8 Step 5c/8/9 行描述为准（具体 payload 字段在设计稿交互段）；如设计稿未定义字段级契约，按既有 codec 风格最小实现并在审查中裁量",
+          "basis": "architecture-v3.md §8 L776/779-780 行 + §5 交互段；V-DSH-7 已解除格式疑虑（sha256 id 可入 wire 契约）",
+          "reversibility": "wire 面无调用方，回滚零影响",
+          "validation": "codec 断言 + R7 审查",
+          "rollback": "移除 RPC 注册"
         },
-        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears. 若结论为 opaque 且需索引策略设计变更 → 该决策点 MUST 询问用户。"
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "Only verification work: read host package sources, optionally run a sampling script (no repo product code changes)",
-        "治理记录（.governance/**）与 docs/architecture-v3.md V-DSH-7 行按快速通道更新",
-        "Keep Step 5c/6/7+ implementation out of this unit."
+        "Only change files required by MIG-001 Step 5c: lib/schemas.js, lib/rpc.js, tests/smoke.mjs (codec assertions)",
+        "治理记录（.governance/**）按快速通道同步更新",
+        "Keep Step 6 (pre-step), 7 (attachmentIds), 8/9 (client UI) out of this unit."
       ],
       "required_evidence": [
         "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
-        "validation commands with exit_code or source line references",
-        "decision record if index strategy changes (user decision required for design change)"
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence (R7) or explicit degraded review evidence that does not claim full separation"
       ],
       "next_commands": [
         "node tests/smoke.mjs",
         "python \"D:/AI/agent/claude/coding/project_management_workflow/skills/software-project-governance/infra/verify_workflow.py\" check-governance"
       ],
       "done_definition": [
-        "V-DSH-7 结论确定（源码行号/运行态样本可复查）并更新 §13 行与 evidence-log（EV-017）",
-        "若触发索引策略设计变更：用户决策 + 决策记录落账",
-        "Step 5c/7 启动门状态明确（解除/调整）"
+        "迁移表 Step 5c 行验收满足：uploadFile/readWorkspaceFile wire codec + descriptor 就位，codec 形状断言全绿",
+        "Code Reviewer has APPROVED the product-code change (independent reviewer instance; degraded-mode disclosure recorded).",
+        "Commit completed for this single step with task ID MIG-001."
       ],
-      "source": "DEC-013（R6 P1 落实）+ architecture-v3.md §13 V-DSH-7 行 + review-MIG-001-R6.md 宿主实证段"
+      "source": "docs/architecture-v3.md §8 迁移表 Step 5c 行（L776）+ 依赖说明（L788-791：5c 为 Step 8-9 的 RPC 基座）；DEC-014（V-DSH-7 闭环，门禁解除）"
     }
   }
 }

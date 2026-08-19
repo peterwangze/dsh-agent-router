@@ -860,7 +860,7 @@ RPC wire 面，每段独立可提交可回滚）；Step 5b 是 Step 7 的寻址�
 | V-DSH-4 | audio/video 魔数判定可扩展（detectImageMediaType 现仅 image，`service.js:416`） | 魔数表调研 + 单测（mp3/mp4/wav/webm 头字节） | 扩展名校验兜底（UNSUPPORTED_MEDIA 判定降级） |
 | V-DSH-5 | 主模型对三通道的实际响应率 ≥90%（RES-001 H2/U-3 延续） | Step 1 后即可启动 U-3 实测（不必等 Step 10） | BC-1 缓解选项（触发率不足时的强化路径） |
 | V-DSH-6 | imageMemory 全局作用域跨会话共享无隐私异议 | §14 D-5 用户决策 | 改会话级作用域（去重收益损失） |
-| V-DSH-7 | 宿主附件 id 运行时为 `sha256:hex` 内容寻址格式（§4.3.1 假设；R6 实证 dsh-attachment 类型契约仅承诺 opaque——types.d.ts L8 / brand.d.ts L3，语义内容寻址但未承诺格式） | 运行态检查宿主 saveImage 返回的 attachmentId 实际格式（真机会话或宿主实现层源码）；或宿主侧确认 | M2 注册表真实宿主下空转（当前优雅降级零回归，R6 逐行核验）；Step 5c/7 启动前 MUST 闭环——按结论扩展 isAttachmentId 或改双轨索引（DEC-013） |
+| V-DSH-7 | ~~宿主附件 id 运行时为 `sha256:hex` 内容寻址格式~~ **✅ 已验证成立（2026-08-19，EV-017）**：宿主默认后端 `dsh-attachment-local` `LocalAttachmentStore.saveImage` 产出 `attachmentId = sha256:<64位小写hex>`（saveImageFile L176 digest + L219 模板；存储层自身校验 `ID_PATTERN = /^sha256:([a-f0-9]{64})$/` L70；读取完整性校验 L244）。"opaque" 措辞为接口层（dsh-attachment 基类包）跨后端契约——不承诺格式但语义内容寻址；若宿主未来替换非 local 后端需复验 | 已执行：宿主实现层源码核验（D:\AIData\Caches\npm\_npx\1e7f6d9597241db0\node_modules\@deepseek-ai\dsh-attachment-local\lib\index.js） | 无需触发——M2 isAttachmentId 守卫与宿主默认后端格式精确匹配，索引策略维持现状（DEC-014）；遗留观察项：未来非 local 后端替换时复验 |
 
 ---
 
