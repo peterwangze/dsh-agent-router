@@ -1027,6 +1027,63 @@ console.log('admission wrapper (L1):')
     for await (const chunk of llm.stream({ provider: `text-provider${WRAP_SUFFIX}`, model: 'brain-1', system: undefined, messages: [loggedMessage] })) logAssembler.push(chunk)
     check('log keeps original image block (F3)', logAssembler.finish.kind === 'stop' && loggedMessage.content.some((block) => block.type === 'image') && !loggedMessage.content.some((block) => block.type === 'text' && block.text.includes('route_agent')))
   }
+  // ── 能力分级改写（v3 Step 3 / N-4）：原生多模态主模型 → 图片块保真直传 ──
+  // 注册一个原生多模态原适配器：resolveModel 声明 ['text','image']、stream
+  // 接受图片块不抛错。经其包装路由发带图消息 → 委托方收到原图（零改写、
+  // 零 system 标记）；能力探测失败（resolveModel 抛错）→ 回落安全改写。
+  {
+    const mmDelegateCalls = []
+    const mmAdapter = {
+      providerInfo(provider) { return { id: provider, name: 'NativeBrain' } },
+      providerRetryPolicy() { return undefined },
+      async listModels(provider) { return [{ provider, id: 'mm-1', name: 'MM-1', inputModalities: ['text', 'image'] }] },
+      async resolveModel(provider, model) {
+        // metaless-1：元数据缺失 inputModalities（不代表真实能力）——包装层
+        // 覆写声明后准入照常放行，但流内能力探测得 false → 安全回落改写
+        // （§5.2.3 BC-2 场景：宁可改写不可漏图击穿端点）。
+        if (model === 'metaless-1') return { provider, id: model, name: model, context: { contextWindow: 100_000 }, defaultMaxTokens: 4096 }
+        return { provider, id: model, name: model, inputModalities: ['text', 'image'], context: { contextWindow: 100_000 }, defaultMaxTokens: 4096 }
+      },
+      async *stream(options) {
+        mmDelegateCalls.push(options)
+        yield { type: 'block-start', index: 0, blockType: 'text' }
+        yield { type: 'text-delta', index: 0, text: 'mm-ok' }
+        yield { type: 'block-end', index: 0, block: { type: 'text', text: 'mm-ok' } }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      },
+    }
+    llm.registerAdapter(['mm-provider'], mmAdapter)
+    const fireAdapters = () => {
+      for (const callback of root.events.dispatch('emit', ['llm/adapters-updated'])) callback()
+    }
+    fireAdapters()
+    await tick()
+    // 直传分支：带图轮经包装路由 → 原适配器收到裸图片块（保真）、无 system 标记。
+    const mmImage = createUserMessage({ content: [{ type: 'text', text: '直接看图' }, { type: 'image', attachment: { attachmentId: 'sha256:mm', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'mm-shot.png' } }], source: { kind: 'user' } })
+    const mmAssembler = new BlockAssembler()
+    for await (const chunk of llm.stream({ provider: `mm-provider${WRAP_SUFFIX}`, model: 'mm-1', system: undefined, messages: [mmImage] })) mmAssembler.push(chunk)
+    const mmCall = mmDelegateCalls[mmDelegateCalls.length - 1]
+    check('native multimodal delegate sees raw image (preserveImageInput)', mmAssembler.finish.kind === 'stop' && !!mmCall && mmCall.messages[0].content.some((block) => block.type === 'image') && (mmCall.system === undefined || mmCall.system === null || mmCall.system === ''))
+    // 日志原件不变（F3 对直传分支同样成立）。
+    check('native passthrough keeps log original (F3)', mmImage.content.some((block) => block.type === 'image'))
+    // 文本轮直传：无改写、模型身份不变（文本轮零开销对多模态原模型同样成立）。
+    const mmText = createUserMessage({ content: [{ type: 'text', text: '纯文本' }], source: { kind: 'user' } })
+    for await (const chunk of llm.stream({ provider: `mm-provider${WRAP_SUFFIX}`, model: 'mm-1', system: undefined, messages: [mmText] })) mmAssembler.push(chunk)
+    const mmTextCall = mmDelegateCalls[mmDelegateCalls.length - 1]
+    check('native text turn delegates verbatim', !!mmTextCall && mmTextCall.messages[0].content.length === 1 && mmTextCall.messages[0].content[0].text === '纯文本')
+    // 能力探测失败回落：metaless-1 的 resolveModel 不含 inputModalities
+    //（元数据缺失）→ best-effort 判 false → 安全改写（无裸图块到达原适配器、
+    // system 带 route_agent 标记）。
+    const flakyImage = createUserMessage({ content: [{ type: 'text', text: '看图' }, { type: 'image', attachment: { attachmentId: 'sha256:flaky', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'f.png' } }], source: { kind: 'user' } })
+    const flakyAssembler = new BlockAssembler()
+    for await (const chunk of llm.stream({ provider: `mm-provider${WRAP_SUFFIX}`, model: 'metaless-1', system: undefined, messages: [flakyImage] })) flakyAssembler.push(chunk)
+    const flakyCall = mmDelegateCalls[mmDelegateCalls.length - 1]
+    check('capability probe failure falls back to safe rewrite', flakyAssembler.finish.kind === 'stop' && !!flakyCall && flakyCall.messages[0].content.every((block) => block.type !== 'image') && typeof flakyCall.system === 'string' && flakyCall.system.includes('route_agent'))
+    // 清理：注销 mm-provider 包装，避免污染后续门控断言（重新 fire adapters 事件）。
+    config.visionAgents = [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]]
+    fireAdapters()
+    await tick()
+  }
   // 图生图分流：识别 agent 与生图 agent 并存时，system 标记给大脑两个选项。
   const genMarker = minimalImageRewrite({ attachment: { attachmentId: 'sha256:g', mediaType: 'image/png', bytes: 1, width: 1, height: 1, name: 'ref.png' } }, { vision: ['vision'], generation: ['draw'] })
   check('marker offers recognition and generation routes', typeof genMarker === 'string' && genMarker.includes('视觉 agent') && genMarker.includes('"vision"') && genMarker.includes('生图 agent') && genMarker.includes('"draw"') && genMarker.includes('图生图') && genMarker.includes('includeImages'))
