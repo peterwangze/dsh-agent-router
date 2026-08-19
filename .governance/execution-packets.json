@@ -1,59 +1,60 @@
 {
   "version": 1,
-  "generated_at": "2026-08-19T23:10:00",
+  "generated_at": "2026-08-19T23:55:00",
   "packets": {
     "MIG-001": {
       "task_id": "MIG-001",
       "priority": "P0",
-      "status": "进行中——Step 0-6 完成（R1-R8 审查链全通过，EV-011~019；V-DSH-1/V-DSH-7 均经宿主源码印证）；当前单元 = Step 7（模态矩阵 + attachmentIds 参数）。注：execution-packet --write 在 lightweight 模板下产出 0 包（工具链已知问题），本包由 Coordinator 手工维护",
-      "goal": "MIG-001 v3 迁移 Step 7（模态矩阵，N-5/R-5/R-6）：capabilities 枚举化 + 方向语义；listAgentsByModality 泛化；MODALITY_ENTRIES 泛化（audio/video 条目占位）；route_agent 新增 attachmentIds 参数（依赖 Step 4 记忆段 id + Step 5b M2 id 解析）；顺带 R8-F-01（modalityState 门控前性能，两行级）",
+      "status": "进行中——Step 0-7 完成（R1-R9 审查链全通过，EV-011~020；核心通路功能闭环达成）；当前单元 = Step 8（F11 输入入口）。注：execution-packet --write 在 lightweight 模板下产出 0 包（工具链已知问题），本包由 Coordinator 手工维护（含 R9-F-18 建议的 scope/goal 一致性修正）",
+      "goal": "MIG-001 v3 迁移 Step 8（F11 输入入口，N-6）：AttachButton accept 扩展 + `router/uploadFile` service 实现（wire 已在 Step 5c 就位）+ 附件卡片 + 结构化路径文本进 draft；实现前 MUST 验证 V-DSH-2（F11 inputActions 精确签名——不可用时 fallback：pre-step 合成 user 消息注入路径文本 §5.5）；顺带 R7-F-01（result codec 错误形状断言）与 R8-F-02（context 追加 decision 映射/reject 透传/fail-safe catch 断言）",
       "product_success_contract": {
-        "user": "DSH 主 agent 用户（跨轮指代'刚才图里X'的完整闭环——attachmentIds 让主模型可用 id 引用历史附件）",
-        "job_to_be_done": "主模型通过 route_agent(attachmentIds) 引用已注册附件（含 imageMemory 记忆段中的 id）；模态能力矩阵泛化为 audio/video 留位（F11 输入与展示升级的前置）",
+        "user": "DSH 主 agent 用户（对话框可直接上传音频/视频/文档——落盘工作区 + 结构化路径提示进 draft）",
+        "job_to_be_done": "非图片附件有输入入口：用户点 F11 按钮选文件 → uploadFile RPC → 落盘 .router-files/ + M2 registerPath → 附件卡片显示 + 路径文本进 draft（主 agent 可见可引用）",
         "non_goals": [
-          "本步不实现 audio/video 的实际处理（魔数判定 V-DSH-4 / 播放组件 V-DSH-3 属 Step 8/9）",
-          "本步不实现 F11 输入 UI（Step 8）与三级展示（Step 9）"
+          "本步不实现 Step 9（三级展示/读文件预览/readWorkspaceFile service）",
+          "本步不实现 audio/video 魔数判定（V-DSH-4——扩展名/mediaType 兜底）与播放组件（V-DSH-3）"
         ],
         "success_metrics": [
-          "smoke 断言：attachmentIds 参数允许且经 M2 解析（含 imageMemory id）；矩阵查询用例；既有断言更新（smoke.mjs:785 附近断言 attachmentIds 允许）",
+          "client-render 断言：accept 扩展、uploadFile 调用、卡片渲染",
+          "smoke 断言：uploadFile service 行为（落盘+M2 注册+超限/非法拒绝）+ R7-F-01/R8-F-02 补齐",
           "既有断言零回退"
         ],
-        "competitive_baseline": "现状 route_agent 仅 files 路径/URL 寻址（Step 5b 前三处分散）；attachmentIds 后 id 寻址与路径寻址统一经 M2（§5.1 收敛完成）",
+        "competitive_baseline": "现状 F11 仅 addImages（image-only accept）；音频/视频/文档无输入入口（用户只能手动写路径）",
         "done_definition": [
-          "产品成功证据入账 evidence-log（EV-020）",
+          "产品成功证据入账 evidence-log（EV-021）",
           "独立 Code Reviewer 审查 APPROVED/APPROVED_WITH_NOTES（unresolved_blockers=0）",
           "单步独立提交（commit message 携带 MIG-001）"
         ]
       },
       "acceptance_contract": {
-        "scenario": "route_agent(attachmentIds=[历史 id]) 经 M2 解析注入对应附件；矩阵查询（agent×模态×方向）返回正确；audio/video 条目占位不影响 image 行为；R8-F-01 修复后纯文本步不再付 registry 全量遍历",
-        "command": "node tests/smoke.mjs",
-        "expected_output": "ALL SMOKE TESTS PASSED（含 attachmentIds/矩阵新断言，0 FAILURES）",
+        "scenario": "AttachButton 选择音频/视频/文档 → uploadFile → 落盘 + M2 注册 → 附件卡片 + draft 路径文本；图片仍走原 addImages 通道；超限（25MB）/非法输入拒绝",
+        "command": "node tests/smoke.mjs && node tests/client-render.mjs",
+        "expected_output": "ALL SMOKE TESTS PASSED + client-render 全绿（含新断言）",
         "last_run": {
-          "status": "passing-pre-7",
+          "status": "passing-pre-8",
           "exit_code": 0,
-          "summary": "Step 6 收尾全绿（EV-019：442 ok）；Step 7 变更后重跑记录"
+          "summary": "Step 7 收尾全绿（EV-020：469 ok）；Step 8 变更后重跑记录"
         },
-        "demo_evidence": ".governance/evidence-log.md EV-020（Step 7）+ 测试运行输出"
+        "demo_evidence": ".governance/evidence-log.md EV-021（Step 8）+ 测试运行输出"
       },
       "quality_budget": {
         "dimensions": {
           "correctness": {
-            "threshold": "attachmentIds 经 M2（byId/resolve）解析；矩阵枚举与方向语义正确；audio/video 占位不激活",
-            "validation": "node tests/smoke.mjs（新断言组）",
+            "threshold": "uploadFile 落盘 + registerPath + 错误路径（超限/非法 base64/写盘失败）；V-DSH-2 验证结论落地或降级",
+            "validation": "node tests/smoke.mjs + client-render",
             "status": "pending",
-            "evidence": "EV-020",
+            "evidence": "EV-021",
             "exception": ""
           },
           "regression": {
-            "threshold": "既有断言零回退（工具参数 schema/wrapper/编址断言链全部保持；smoke.mjs:785 附近断言按设计更新）",
-            "validation": "node tests/smoke.mjs",
+            "threshold": "既有断言零回退（469 smoke + client-render 全部保持）",
+            "validation": "双套件运行",
             "status": "pending",
-            "evidence": "EV-020",
+            "evidence": "EV-021",
             "exception": ""
           },
           "scope": {
-            "threshold": "变更恰为：lib/schemas.js + lib/service.js + lib/wrapper.js + lib/tool.js + 测试断言 + 治理记录；无 client.js（Step 8/9）",
+            "threshold": "变更恰为：lib/client.js + lib/service.js + tests/client-render.mjs + tests/smoke.mjs（R7-F-01/R8-F-02 断言）+ 治理记录；无 readWorkspaceFile service（Step 9）",
             "validation": "git show --stat <commit>",
             "status": "pending",
             "evidence": "commit diff stat（审查复核）",
@@ -62,10 +63,10 @@
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "主模型可 route_agent(attachmentIds) 引用历史图片（跨轮指代无需用户重传）；模态矩阵为 audio/video 扩展留位",
-        "demo_path": "node tests/smoke.mjs（attachmentIds 调用用例）",
-        "scope_guard": "lib/schemas.js、lib/service.js、lib/wrapper.js、lib/tool.js、tests/smoke.mjs、.governance/**",
-        "rollback_plan": "参数/枚举回滚（自由字符串仍兼容——迁移表 Step 7 回滚列）",
+        "user_visible_slice": "用户可上传任意类型文件进对话（落盘 + 路径可引用）——多模态输入的通用入口",
+        "demo_path": "node tests/client-render.mjs（accept/uploadFile/卡片断言）+ smoke（service 行为）",
+        "scope_guard": "lib/client.js、lib/service.js、tests/client-render.mjs、tests/smoke.mjs、.governance/**、（V-DSH-2 验证如需触 prestep.js 降级则声明最小改动）",
+        "rollback_plan": "按钮 accept 回退 image-only（迁移表 Step 8 回滚列）",
         "status": "pending",
         "evidence": "pending"
       },
@@ -77,38 +78,42 @@
           "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
         ],
         "auto_execute": [
-          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Run V-DSH-2 host source verification (read-only), local validation, focused code edits, and governance record updates.",
           "Commit normal single-task changes when validation, evidence, and review gates are satisfied."
         ],
         "assumption_record": {
-          "assumption": "audio/video 矩阵条目为占位（枚举与方向语义就位，实际 modality 处理待 V-DSH-3/4 验证后 Step 8/9 激活）；attachmentIds 解析复用 M2 byId/resolve（含懒注册）",
-          "basis": "architecture-v3.md §8 Step 7 行 + §13 V-DSH-3/4；M2 API（EV-015/016）",
-          "reversibility": "参数与枚举均可回滚（自由字符串兼容）",
-          "validation": "smoke 新断言 + R9 审查",
-          "rollback": "回退参数 schema 与枚举"
+          "assumption": "V-DSH-2（inputActions 除 addImages 外的注入签名）在 Developer 动手前经宿主源码核验（dsh-client-ui/d.ts——Coordinator 在 dispatch prompt 中提供核验要点或 Developer 自行核验并声明）；不可用时按 §5.5 fallback（pre-step 合成 user 消息注入路径文本）",
+          "basis": "architecture-v3.md §13 V-DSH-2 行 + §5.5 fallback 设计",
+          "reversibility": "accept 扩展与 uploadFile service 均可独立回退",
+          "validation": "宿主源码引用 + 断言",
+          "rollback": "accept 回退 image-only；uploadFile service 保留（wire 面无害）"
         },
         "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "Only change files required by MIG-001 Step 7: lib/schemas.js, lib/service.js, lib/wrapper.js, lib/tool.js, tests/smoke.mjs",
+        "Only change files required by MIG-001 Step 8: lib/client.js (AttachButton/卡片/draft), lib/service.js (uploadFile 实现), tests/client-render.mjs, tests/smoke.mjs (R7-F-01/R8-F-02 assertions)",
+        "V-DSH-2 核验为只读操作；如触发 §5.5 fallback 需触 prestep.js 时声明最小改动交 R10 裁量",
         "治理记录（.governance/**）按快速通道同步更新",
-        "Keep Step 8 (F11 UI + uploadFile service), 9 (gallery + readWorkspaceFile service) out of this unit."
+        "Keep Step 9 (readWorkspaceFile service + gallery) out of this unit."
       ],
       "required_evidence": [
         "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
         "validation commands with exit_code and concise output summary",
-        "independent review evidence (R9) or explicit degraded review evidence that does not claim full separation"
+        "V-DSH-2 verification conclusion (host source line references or runtime sample)",
+        "independent review evidence (R10) or explicit degraded review evidence that does not claim full separation"
       ],
       "next_commands": [
         "node tests/smoke.mjs",
+        "node tests/client-render.mjs",
         "python \"D:/AI/agent/claude/coding/project_management_workflow/skills/software-project-governance/infra/verify_workflow.py\" check-governance"
       ],
       "done_definition": [
-        "迁移表 Step 7 行验收满足：attachmentIds 用例 + 矩阵查询用例全绿；R8-F-01 修复",
+        "迁移表 Step 8 行验收满足：accept 扩展断言 + uploadFile 调用断言 + 卡片渲染断言全绿；V-DSH-2 结论入账",
+        "R7-F-01（result codec 错误形状断言）与 R8-F-02（context 追加映射/reject 透传/fail-safe catch 断言）补齐",
         "Code Reviewer has APPROVED the product-code change (independent reviewer instance; degraded-mode disclosure recorded).",
         "Commit completed for this single step with task ID MIG-001."
       ],
-      "source": "docs/architecture-v3.md §8 迁移表 Step 7 行（L778）+ 依赖说明（L790-791：attachmentIds 依赖 Step 4 记忆段 id 与 Step 5b id 解析，均已满足）；R8-F-01 遗留（review-MIG-001-R8.md）"
+      "source": "docs/architecture-v3.md §8 迁移表 Step 8 行（L779）+ §5.5 fallback + §13 V-DSH-2；R7-F-01（review-MIG-001-R7.md）/R8-F-02（review-MIG-001-R8.md）/R9-F-18（执行包一致性修正已落实）"
     }
   }
 }

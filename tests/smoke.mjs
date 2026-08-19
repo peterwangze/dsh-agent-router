@@ -1,6 +1,6 @@
 // dsh-agent-router 冒烟测试：模块解析 + schema 默认值 + RPC 校验器 + 服务核心逻辑。
 import { Context } from '@deepseek-ai/cordis'
-import { routerSchema, wireCodecs } from '../lib/schemas.js'
+import { routerSchema, wireCodecs, MODALITY_VALUES, MODALITY_DIRECTIONS, normalizeCapabilities } from '../lib/schemas.js'
 import { createHostContribution, ROUTER_REMOTE } from '../lib/rpc.js'
 import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine, cliWorkspaceHint } from '../lib/service.js'
 import { runClientRender } from './client-render.mjs'
@@ -109,6 +109,14 @@ console.log('wire codecs:')
   check('readWorkspaceFileRequest rejects wrong type', rwTypeThrew)
   const rwRes = wireCodecs.readWorkspaceFileResult.parse({ ok: true, dataBase64: 'aGVsbG8=', mediaType: 'audio/wav', name: 'a.wav' })
   check('readWorkspaceFileResult parses', rwRes.ok === true && rwRes.dataBase64 === 'aGVsbG8=' && rwRes.mediaType === 'audio/wav' && rwRes.code === undefined)
+  // v3 Step 7（N-5/R-5/R-6）：模态枚举（§4.3.2 M5）+ capabilities 归一（未知值
+  // 兼容放行）+ catalog 每 agent 模态能力 wire 面（ModalityCapability 形状）。
+  const modalityCapAgent = wireCodecs.catalogResult.parse({ ok: true, enabled: true, defaults: { provider: 'p', model: 'm' }, agents: [{ id: 'vision', name: '视觉', type: 'chat', enabled: true, description: '', capabilities: ['image'], provider: '', model: '', account: '', effectiveProvider: 'p', effectiveModel: 'm', source: 'agent', modalities: { consume: ['image', 'text'], produce: ['text'] } }], oauthAccounts: [] })
+  check('catalogResult parses agent modalities wire field', modalityCapAgent.agents[0].modalities.consume.includes('image') && modalityCapAgent.agents[0].modalities.produce.includes('text'))
+  check('MODALITY_VALUES enum (R-5)', MODALITY_VALUES.length === 5 && MODALITY_VALUES[0] === 'image' && MODALITY_VALUES.includes('audio') && MODALITY_VALUES.includes('video') && MODALITY_VALUES.includes('text') && MODALITY_VALUES.includes('file'))
+  check('MODALITY_DIRECTIONS', MODALITY_DIRECTIONS.length === 2 && MODALITY_DIRECTIONS[0] === 'consume' && MODALITY_DIRECTIONS[1] === 'produce')
+  const normCaps = normalizeCapabilities(['image', 'translate', 'web', 'audio'])
+  check('normalizeCapabilities enum-aware (unknown tolerated)', normCaps.known.length === 2 && normCaps.known[0] === 'image' && normCaps.known[1] === 'audio' && normCaps.unknown.length === 2 && normCaps.unknown.includes('translate') && normCaps.unknown.includes('web'))
 }
 
 // 3. typert 贡献形状
@@ -306,6 +314,7 @@ console.log('RouterService:')
   check('catalog oauth agent account', catalog.agents.find((entry) => entry.id === 'vchat').account === 'oauth')
   check('catalog pools', catalog.pools.length === 1 && catalog.pools[0].id === 'gpool' && catalog.pools[0].strategy === 'healthy' && catalog.pools[0].accounts.length === 2 && catalog.pools[0].accountHealth.length === 2)
   check('catalog pool agent', catalog.agents.find((entry) => entry.id === 'pchat').account === 'pool:gpool' && catalog.agents.find((entry) => entry.id === 'pchat').source === 'pool')
+  check('catalog carries per-agent modality capability', catalog.agents.find((entry) => entry.id === 'vision').modalities.consume.includes('image') && catalog.agents.find((entry) => entry.id === 'draw').modalities.produce.includes('image') && catalog.agents.find((entry) => entry.id === 'coder').modalities.produce.includes('image'))
 
   // OAuth 账号解析与直连调用
   const vchat = await service.resolveAgent('vchat')
@@ -741,6 +750,23 @@ console.log('RouterService:')
     // image），供图生图/文生图；识别类 chat/agent 与无 image 能力的 cli 除外。
     const generationList = service.listImageGenerationAgents().map(([id]) => id)
     check('generation agents list', generationList.length === 3 && generationList[0] === 'coder' && generationList[1] === 'codergen' && generationList[2] === 'draw' && !generationList.includes('vision') && !generationList.includes('coderbad'))
+    // v3 Step 7（N-5/R-5/R-6）：模态能力矩阵（§4.3.2 M5）——modalityOfAgent
+    // 默认映射 + capabilities 覆盖（方向语义），listAgentsByModality 模态×方向泛化。
+    const shapeOf = (agent) => service.modalityOfAgent(agent)
+    check('matrix chat default text/text', shapeOf({ type: 'chat' }).consume.includes('text') && !shapeOf({ type: 'chat' }).consume.includes('image'))
+    check('matrix chat+image consumes image', shapeOf({ type: 'chat', capabilities: ['image'] }).consume.includes('image') && !shapeOf({ type: 'chat', capabilities: ['image'] }).produce.includes('image'))
+    check('matrix agent consumes file', shapeOf({ type: 'agent' }).consume.includes('file'))
+    check('matrix cli+image produces image', shapeOf({ type: 'cli', capabilities: ['image'] }).produce.includes('image') && !shapeOf({ type: 'cli', capabilities: ['image'] }).consume.includes('image'))
+    check('matrix image type produces image (not consumes)', shapeOf({ type: 'image' }).produce.includes('image') && !shapeOf({ type: 'image' }).consume.includes('image'))
+    check('matrix speech consumes audio', shapeOf({ type: 'speech' }).consume.includes('audio') && shapeOf({ type: 'speech' }).produce.includes('text'))
+    check('matrix unknown capability tolerated', shapeOf({ type: 'chat', capabilities: ['translate'] }).consume.includes('text') && !shapeOf({ type: 'chat', capabilities: ['translate'] }).consume.includes('translate'))
+    const consumeImage = service.listAgentsByModality('image', 'consume').map(([id]) => id)
+    check('listAgentsByModality consume image = vision list', consumeImage.length === 1 && consumeImage[0] === 'vision')
+    const produceImage = service.listAgentsByModality('image', 'produce').map(([id]) => id)
+    check('listAgentsByModality produce image = generation list', produceImage.length === 3 && produceImage[0] === 'coder' && produceImage[1] === 'codergen' && produceImage[2] === 'draw')
+    check('listAgentsByModality default direction consume', service.listAgentsByModality('image')[0][0] === 'vision')
+    check('listAgentsByModality no audio/video agents yet', service.listAgentsByModality('audio', 'consume').length === 0 && service.listAgentsByModality('video', 'consume').length === 0)
+    check('listAgentsByModality unknown modality empty', service.listAgentsByModality('bogus').length === 0)
     // imageData：读字节 → base64 与元数据（生成图片展示通路）。
     const imageData = await service.imageData({ ref: { attachmentId: 'sha256:abcd', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'n.png' } })
     check('imageData returns bytes', imageData.ok === true && imageData.data === Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64') && imageData.mediaType === 'image/png')
@@ -791,6 +817,30 @@ console.log('RouterService:')
     clearImageMemory()
   }
 
+  // v3 Step 7（N-8）：attachmentIds 内容寻址解析（经 M2 统一编址，含懒注册降级
+  // W-2）——合法 id 经宿主 readImage 建立条目返回 ref；非法格式 / 未知 id 明确报错。
+  console.log('attachmentIds resolution (M2):')
+  {
+    const idsAgent = { session: { header: { cwd: 'D:/work/example' }, deriveMessages: () => [] } }
+    const knownId = `sha256:${'b'.repeat(64)}`
+    const refs = await service.resolveAttachmentIds([knownId], { agent: idsAgent })
+    check('attachmentIds resolve via M2 (lazy register)', refs.length === 1 && refs[0].attachmentId === knownId && refs[0].mediaType === 'image/png' && typeof refs[0].bytes === 'number')
+    const deduped = await service.resolveAttachmentIds([knownId, knownId], { agent: idsAgent })
+    check('attachmentIds dedupe within list', deduped.length === 1)
+    let badFormat = false
+    try { await service.resolveAttachmentIds(['att-1', 'sha256:short'], { agent: idsAgent }) } catch (error) { badFormat = String(error.message).includes('内容寻址') }
+    check('attachmentIds non-content-addressed rejected', badFormat)
+    let unknownRejected = false
+    const attachmentsSvc = service.ctx.get('attachments')
+    const originalRead = attachmentsSvc.readImage
+    attachmentsSvc.readImage = async () => { throw new Error('no such attachment') }
+    try { await service.resolveAttachmentIds([`sha256:${'c'.repeat(64)}`], { agent: idsAgent }) } catch (error) { unknownRejected = String(error.message).includes('附件不可解析') }
+    attachmentsSvc.readImage = originalRead
+    check('attachmentIds unknown id rejected (ATTACHMENT_UNKNOWN)', unknownRejected)
+    const noExec = await service.resolveAttachmentIds([knownId])
+    check('attachmentIds resolve without exec (id-only)', noExec.length === 1 && noExec[0].attachmentId === knownId)
+  }
+
   check('errorMessage', errorMessage(new Error('x')) === 'x' && errorMessage({ message: 'y' }) === 'y')
 }
 
@@ -825,7 +875,7 @@ console.log('apply wiring:')
     check('route_agent registered', registered && registered.name === 'route_agent')
     check('prompt section registered', sections.some((s) => s.name === 'router:agents' && s.order === 120 && s.text() === 'ROUTER-PROMPT'))
     check('tool timeout 20min (covers cli 15min default)', registered.timeoutMs === 20 * 60 * 1000)
-    check('tool parameters schema', registered.parameters && registered.parameters.properties && registered.parameters.properties.agent && registered.parameters.properties.task && registered.parameters.properties.attachments && registered.parameters.properties.attachments.type === 'array' && registered.parameters.properties.includeImages && registered.parameters.properties.files && !registered.parameters.properties.attachmentIds)
+    check('tool parameters schema', registered.parameters && registered.parameters.properties && registered.parameters.properties.agent && registered.parameters.properties.task && registered.parameters.properties.attachments && registered.parameters.properties.attachments.type === 'array' && registered.parameters.properties.includeImages && registered.parameters.properties.files && registered.parameters.properties.attachmentIds && registered.parameters.properties.attachmentIds.type === 'array' && registered.parameters.properties.attachmentIds.items.type === 'string')
     check('tool output has render', typeof registered.output.render === 'function' && typeof registered.execute === 'function')
     // 图片渲染为纯文本标记（绝不产生图片块，避免文本模型历史被击穿）。
     // image（生成）与 images（视觉注入）都渲染为标记，供 toolview 显示缩略图。
@@ -848,6 +898,39 @@ console.log('apply wiring:')
       check('answered image turn config passes through unchanged', followupStep.provider === 'text-provider' && followupStep.model === 'brain-1')
     }
     await app.dispose()
+  }
+
+  // ── route_agent attachmentIds 调用（v3 Step 7 / N-8）：附件 id 直接派发 ──
+  // 经 M2 解析（stub 模拟懒注册结果）与 attachments/includeImages 正交可组合
+  //（按附件 id 去重并集）；跨通道同 id 只派发一次。
+  {
+    let tool2 = null
+    let executed = null
+    const memId = `sha256:${'e'.repeat(64)}`
+    const logId = `sha256:${'d'.repeat(64)}`
+    let logRef = { id: 'att-1', kind: 'image', attachmentId: logId, mediaType: 'image/png', bytes: 4, width: 2, height: 2 }
+    const fakeRouter2 = {
+      isEnabled: () => true,
+      selectAttachments: () => [logRef],
+      resolveAttachmentIds: async (ids) => ids.map((id) => ({ id, kind: 'image', attachmentId: id, mediaType: 'image/png', bytes: 4, width: 2, height: 2 })),
+      resolveAgent: async (id) => (id === 'vision' ? { provider: 'openai', model: 'gpt-4o' } : { error: 'stub' }),
+      run: async (input) => { executed = input; return { text: '识别完成' } },
+      record: () => {},
+    }
+    const root2 = new Context()
+    await root2.plugin({ name: 'stub-router2', apply: (ctx) => ctx.provide('router', fakeRouter2) })
+    await root2.plugin({ name: 'stub-tools2', apply: (ctx) => ctx.provide('tools', { register: (definition) => { tool2 = definition; return () => {} } }) })
+    await root2.plugin({ name: 'stub-prompt2', apply: (ctx) => ctx.provide('systemPrompt', { section: () => () => {} }) })
+    const app2 = root2.plugin({ name: 'smoke-tool2', inject: toolModule.inject, apply: toolModule.apply })
+    await app2
+    const out = await tool2.execute({ agent: 'vision', task: '识别', attachmentIds: [memId], includeImages: true }, { agent: { session: { header: { cwd: 'D:/work/example' } } }, signal: undefined })
+    check('route_agent attachmentIds merged with includeImages', executed && executed.images.length === 2 && executed.images.some((ref) => ref.attachmentId === memId) && executed.images.some((ref) => ref.attachmentId === logId) && out.ok === true && out.text === '识别完成')
+    // 跨通道去重：attachmentIds 与日志附件同 id → 并集去重后 1 条。
+    logRef = { ...logRef, attachmentId: memId }
+    executed = null
+    await tool2.execute({ agent: 'vision', task: '识别', attachmentIds: [memId] }, { agent: { session: { header: { cwd: 'D:/work/example' } } }, signal: undefined })
+    check('route_agent attachmentIds dedupe across channels', executed && executed.images.length === 1 && executed.images[0].attachmentId === memId)
+    await app2.dispose()
   }
 
   // ── index apply ──
@@ -992,7 +1075,7 @@ console.log('twin wrapper mechanism (real LlmRuntime):')
 // 7.6 准入包装模块（L1）：门控注册 / 改写标记 / 热同步 / 卸载
 console.log('admission wrapper (L1):')
 {
-  const { installAdmissionWrapper, createWrapAdapter, rewriteContentDeep, wrappableProviders, minimalImageRewrite, collectMarkers, collectMemorySegments, memorySegmentText, MEMORY_SEGMENT_MAX, WRAP_SUFFIX } = await import('../lib/wrapper.js')
+  const { installAdmissionWrapper, createWrapAdapter, rewriteContentDeep, wrappableProviders, minimalImageRewrite, collectMarkers, collectMemorySegments, memorySegmentText, MEMORY_SEGMENT_MAX, WRAP_SUFFIX, MODALITY_ENTRIES } = await import('../lib/wrapper.js')
   const root = new Context()
   const llm = new LlmRuntime(root)
   const delegateCalls = []
@@ -1031,6 +1114,12 @@ console.log('admission wrapper (L1):')
     listImageVisionAgents: () => config.visionAgents,
     listImageGenerationAgents: () => config.generationAgents,
   }
+  // v3 Step 7（N-5/R-6）：MODALITY_ENTRIES 泛化——image 激活 + audio/video 占位
+  //（不激活，无处理实现；只占位结构与门控，新增模态 = 追加条目不改骨架）。
+  check('MODALITY_ENTRIES has image + audio/video placeholders', MODALITY_ENTRIES.length === 3 && MODALITY_ENTRIES[0].modality === 'image' && MODALITY_ENTRIES[1].modality === 'audio' && MODALITY_ENTRIES[2].modality === 'video')
+  const imageGate = MODALITY_ENTRIES[0].stateOf(fakeService)
+  check('MODALITY_ENTRIES image gate still matrix-driven', imageGate && Array.isArray(imageGate.vision) && imageGate.vision[0] === 'vision' && Array.isArray(imageGate.generation))
+  check('MODALITY_ENTRIES audio/video placeholders inactive', MODALITY_ENTRIES[1].stateOf(fakeService) === null && MODALITY_ENTRIES[2].stateOf(fakeService) === null)
   // cordis 语义：events.dispatch('emit', …) 返回回调数组、由调用方执行
   //（settings 服务与 LlmRuntime 均如此），测试按同款方式触发。
   // settings 服务顺序：bumpRevision（发 document-updated，resolved 尚未提交）
@@ -1304,7 +1393,7 @@ console.log('admission wrapper (L1):')
   const twinDecision = await dispatch(twinAgent, [imageMessage])
   check('image turn on wrapper route injects plugin reminder', twinDecision.kind === 'enter' && twinDecision.messages.length === 2 && twinDecision.messages[1].role === 'user' && twinDecision.messages[1].source.kind === 'plugin')
   check('reminder carries a message id (session validation)', typeof twinDecision.messages[1].id === 'string' && twinDecision.messages[1].id.length > 0)
-  check('reminder carries attachment id + route_agent instruction', twinDecision.messages[1].content.some((b) => b.type === 'text' && b.text.includes(contentId) && b.text.includes('route_agent') && b.text.includes('includeImages') && b.text.includes('"vision"')))
+  check('reminder carries attachment id + route_agent instruction', twinDecision.messages[1].content.some((b) => b.type === 'text' && b.text.includes(contentId) && b.text.includes('route_agent') && b.text.includes('includeImages') && b.text.includes('attachmentIds') && b.text.includes('"vision"')))
   check('wrapper route keeps raw image block (no pre-step rewrite)', twinDecision.messages[0].content.some((b) => b.type === 'image'))
 
   // ② 逃生组路由（纯文本主模型）：分级改写兜底——无裸图块到达模型（复用 Step 3 语义）。
@@ -1332,7 +1421,7 @@ console.log('admission wrapper (L1):')
 
   // ⑥ 单元面：collectReminder（M4 通道① builder）与逃生组改写器。
   const reminderText = collectReminder(['sha256:a', 'sha256:b'], ['vision'])
-  check('collectReminder lists attachment ids and vision agents', reminderText.includes('sha256:a') && reminderText.includes('sha256:b') && reminderText.includes('"vision"') && reminderText.includes('route_agent'))
+  check('collectReminder lists attachment ids and vision agents', reminderText.includes('sha256:a') && reminderText.includes('sha256:b') && reminderText.includes('"vision"') && reminderText.includes('route_agent') && reminderText.includes('attachmentIds'))
   const noIdText = collectReminder([], [])
   check('collectReminder tolerates empty ids', noIdText.includes('route_agent') && !noIdText.includes('附件 id'))
   const nested = createUserMessage({ content: [{ type: 'text', text: 'x' }, { type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }] }], source: { kind: 'user' } })
