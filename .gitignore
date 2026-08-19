@@ -11,3 +11,12 @@ node_modules/
 
 # 发布产物
 *.tar.gz
+
+# 调研参考源码（npm pack 拉取，不入库）
+.tmp-research/
+
+# CLI 冒烟测试临时目录
+.tmp-cli-smoke-*/
+
+# 检查工具目录
+.inspect-vision-router/
