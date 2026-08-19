@@ -483,6 +483,12 @@ decideRewrite(provider, model):
   │      同款语义，本项目实测教训：宁可改写不可漏图击穿 C-3）
 ```
 
+> **注（F-R3-5，实现澄清）**：`decideRewrite` 的能力查询对象是**原适配器**的
+> `resolveModel(provider, model)`（实现为 `wrapper.js` 的 `sourceAcceptsModality`），
+> 不是 twin 包装路由——包装路由的聚合声明恒含已启用模态（准入放行所需），
+> 用它做能力源会让"直传判定"永远为真、安全回落改写沦为死分支。§5.2.2 的
+> 60s 缓存同样键在原适配器命名空间（`provider\0model\0modality`）。
+
 **本项目语境 vs 参考实现的三处取舍**（任务禁止"参考实现如此"当唯一理由）：
 
 | # | 参考实现（vision-router） | 本项目取舍 | 理由 |

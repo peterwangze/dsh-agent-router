@@ -3,7 +3,7 @@
 | 项 | 值 |
 |---|---|
 | Task ID | ARCH-001-REVIEW-R2 |
-| Round | R2（前轮引用：.governance/review-ARCH-001.md R1，NEEDS_CHANGE） |
+| Round | R2（前轮引用：.governance/review-ARCH-001-R1.md R1，NEEDS_CHANGE；原文件名 review-ARCH-001.md 于 2026-08-19 规范化为 -R1 后缀） |
 | 审查对象 | docs/architecture-v3.md（返工后 885 行） |
 | 审查人 | Design Reviewer Agent（subagent 9cf1485e，同一实例复审，只读） |
 | 结论 | **APPROVED_WITH_NOTES**，`unresolved_blockers=0` |

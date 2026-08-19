@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-19T16:30:00",
+  "packets": {
+    "MIG-001": {
+      "task_id": "MIG-001",
+      "priority": "P0",
+      "status": "进行中——Step 4（imageMemory N-2/R-3）实施中",
+      "goal": "MIG-001 v3 迁移 Step 4（imageMemory，N-2/R-3）：进程内 Map + route_agent 成功回写 + 历史图 → system 记忆段（TTL/LRU/单条上限/最近 N 条）",
+      "product_success_contract": {
+        "user": "DSH 主 agent 用户（纯文本主模型 + 对话框图片工作流）",
+        "job_to_be_done": "图片轮之后用文本追问“刚才图里 X”时，主 agent 凭 system 记忆段中的识别描述回答，无需用户重新上传或重新描述图片",
+        "non_goals": [
+          "本步不实现附件统一编址层（Step 5）与 attachmentIds 参数（记忆段文本中的指引是 §5.3 规范原文的前瞻引用，参数面后续步骤落地）",
+          "本步不实现 pre-step reminder（Step 6）、三级展示升级与模态矩阵",
+          "流程证据不替代产品价值：记忆段必须真实进入委托 system 输入并被测试断言"
+        ],
+        "success_metrics": [
+          "用户可见结果：图片轮后文本追问轮，委托主模型的 system 含“此前识别”记忆段（描述 + 附件 id + 不可信证据标注），历史图块从模型输入移除（跨轮指代 FR-4 基础）",
+          "可运行验证：node tests/smoke.mjs 全绿——新增 imageMemory 断言组（回写/命中/未命中/TTL 边界/LRU 淘汰与刷新/最近 5 条上限/当前轮去重）",
+          "可运行验证：既有断言零回退（Step 0-3 断言链全部保持，回归保护 RISK-001 缓解）"
+        ],
+        "competitive_baseline": "dsh-vision-router 同构能力（rewriteHistoryImages + 进程内缓存，index.js:959-982/2777）；本项目按 T-1 取舍将记忆描述放 system 层而非 user 消息层",
+        "done_definition": [
+          "产品成功证据（事实依据 + 目标对齐 + 用户影响 + 结构化事实）入账 evidence-log（EV-014）",
+          "独立 Code Reviewer 审查 APPROVED（降级模式披露：Coordinator 编辑 + 独立审查，不构成完全分离）"
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "用户上传图片 → 视觉 agent 识别（回写 imageMemory）→ 用户文本追问“刚才图里X” → 主模型 system 收到记忆段并据此回答",
+        "command": "node tests/smoke.mjs",
+        "expected_output": "ALL SMOKE TESTS PASSED（含 imageMemory 新断言组，0 FAILURES）",
+        "last_run": {
+          "status": "pending-step-4-run",
+          "exit_code": null,
+          "summary": "Step 3 收尾全绿（EV-013，a23b338）；Step 4 变更后重跑并记录输出"
+        },
+        "demo_evidence": ".governance/evidence-log.md EV-014（Step 4）+ 测试运行输出"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "correctness": {
+            "threshold": "全量冒烟测试 0 失败",
+            "validation": "node tests/smoke.mjs",
+            "status": "pending",
+            "evidence": "本步收尾输出（EV-014）",
+            "exception": ""
+          },
+          "regression": {
+            "threshold": "既有断言零回退（Step 0-3 断言链全部保持）",
+            "validation": "node tests/smoke.mjs 既有断言逐项过",
+            "status": "pending",
+            "evidence": "本步收尾输出（EV-014）",
+            "exception": ""
+          },
+          "scope": {
+            "threshold": "变更集恰为迁移表 Step 4 行所列文件 + memory 模块（M4 分解）+ effect 清理（§5.3 移除点）+ F-R3-5 文档注记（EV-013 顺带项）",
+            "validation": "git show --stat <commit>",
+            "status": "pending",
+            "evidence": "commit diff stat（审查复核）",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "图片轮后文本追问获得基于图片内容的回答（跨轮指代，D-1-5 指标基础）",
+        "demo_path": "node tests/smoke.mjs（memory segment 断言组）",
+        "scope_guard": "lib/memory.js（新增）、lib/service.js（回写点）、lib/wrapper.js（记忆段消费）、lib/index.js（卸载清理）、tests/smoke.mjs（断言）、docs/architecture-v3.md（§5.2.1 能力源注记 F-R3-5）",
+        "rollback_plan": "停用记忆段——collectMemorySegments 返回空数组（或移除 stream 接入）即回 Step 3 行为（迁移表 Step 4 回滚列：历史图回 Step 3 行为）",
+        "status": "in_progress",
+        "evidence": "pending"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "记忆段文本按 §5.3 通道② 原文（含 route_agent(attachmentIds:[id]) 前瞻指引）实现，attachmentIds 参数本体不在本步落地",
+          "basis": "architecture-v3.md §5.3 通道② 规范文本 + R2 审查通过的定稿（review-ARCH-001-R2.md）",
+          "reversibility": "记忆段文本是纯字符串，参数面在 Step 5b/6 落地前可随时调整措辞，无接口破坏",
+          "validation": "smoke 断言：记忆段含 attachmentId 与不可信标注；不依赖 attachmentIds 参数存在",
+          "rollback": "改写记忆段模板字符串即可，无状态迁移"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by MIG-001 Step 4 (imageMemory): lib/memory.js, lib/service.js, lib/wrapper.js, lib/index.js, tests/smoke.mjs, docs/architecture-v3.md",
+        "治理记录（.governance/**）按快速通道同步更新（执行包/证据/快照）",
+        "Keep Step 5+ (attachments layer, attachmentIds param, pre-step) and unrelated refactors out of this unit."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "node tests/smoke.mjs",
+        "python \"D:/AI/agent/claude/coding/project_management_workflow/skills/software-project-governance/infra/verify_workflow.py\" check-governance"
+      ],
+      "done_definition": [
+        "迁移表 Step 4 行验收满足：记忆段进 system、含 attachmentId、TTL/LRU 边界断言全绿",
+        "Code Reviewer has APPROVED the product-code change (independent reviewer instance; degraded-mode disclosure recorded).",
+        "Commit completed for this single step with task ID MIG-001."
+      ],
+      "source": "plan-tracker.md##任务跟踪 MIG-001 行 + docs/architecture-v3.md §8 迁移表 Step 4 行（手工补包：verify_workflow 解析器仅识别 ## 当前活跃事项 节，lightweight 模板为 ## 任务跟踪——格式错位已知，见会话披露）"
+    }
+  }
+}

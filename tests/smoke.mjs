@@ -28,7 +28,7 @@ function check(label, condition) {
 //    解析器把关（stdio ignore：不进管道，兼容受限运行环境）。
 console.log('syntax:')
 {
-  for (const file of ['client.js', 'service.js', 'tool.js', 'index.js', 'rpc.js', 'schemas.js', 'wrapper.js']) {
+  for (const file of ['client.js', 'service.js', 'tool.js', 'index.js', 'rpc.js', 'schemas.js', 'wrapper.js', 'memory.js']) {
     const result = spawnSync(process.execPath, ['--check', join(LIB_DIR, file)], { stdio: 'ignore' })
     check(`lib/${file} parses`, result.status === 0)
   }
@@ -749,6 +749,23 @@ console.log('RouterService:')
     check('delegation carries conversation context', delegationRequests.length === delegationBefore + 1 && delegationRequests[delegationRequests.length - 1].prompt[0].text.includes('[主会话最近对话上下文]') && delegationRequests[delegationRequests.length - 1].prompt[0].text.includes('我在做一个登录页'))
   }
 
+  // ── imageMemory 服务端回写（v3 Step 4 / M6 写入点）：视觉 agent 成功 ──
+  // 返回 → 附件通道图片（attachmentId 存在）写入跨轮缓存；无 attachmentId
+  // 的 ref 与非视觉 agent（生图/委派）不回写（"此前识别"语义不成立）。
+  console.log('imageMemory write-back (M6):')
+  {
+    const { rememberImage, recallImage, clearImageMemory, imageMemorySize } = await import('../lib/memory.js')
+    clearImageMemory()
+    const wbAgent = { session: { header: { cwd: 'D:/work/example', delegationDepth: 0 }, deriveMessages: () => [] } }
+    const wbRun = await service.run({ agentId: 'vision', task: '识别这张图', images: [{ attachmentId: 'sha256:wb', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'wb.png' }], exec: { agent: wbAgent } })
+    check('vision dispatch writes imageMemory', wbRun.kind === 'chat' && recallImage('sha256:wb') !== null && typeof recallImage('sha256:wb').text === 'string' && recallImage('sha256:wb').text.length > 0)
+    await service.run({ agentId: 'helper', task: '识别这张截图', images: [{ id: 'att-9', kind: 'image', attachmentId: 'sha256:nonvision' }], exec: { agent: wbAgent } })
+    check('non-vision dispatch does not write imageMemory', imageMemorySize() === 1 && recallImage('sha256:nonvision') === null)
+    await service.run({ agentId: 'vision', task: '识别这张图', images: [{ id: 'att-10', kind: 'image' }], exec: { agent: wbAgent } })
+    check('ref without attachmentId does not write imageMemory', imageMemorySize() === 1)
+    clearImageMemory()
+  }
+
   check('errorMessage', errorMessage(new Error('x')) === 'x' && errorMessage({ message: 'y' }) === 'y')
 }
 
@@ -947,7 +964,7 @@ console.log('twin wrapper mechanism (real LlmRuntime):')
 // 7.6 准入包装模块（L1）：门控注册 / 改写标记 / 热同步 / 卸载
 console.log('admission wrapper (L1):')
 {
-  const { installAdmissionWrapper, createWrapAdapter, rewriteContentDeep, wrappableProviders, minimalImageRewrite, collectMarkers, WRAP_SUFFIX } = await import('../lib/wrapper.js')
+  const { installAdmissionWrapper, createWrapAdapter, rewriteContentDeep, wrappableProviders, minimalImageRewrite, collectMarkers, collectMemorySegments, memorySegmentText, MEMORY_SEGMENT_MAX, WRAP_SUFFIX } = await import('../lib/wrapper.js')
   const root = new Context()
   const llm = new LlmRuntime(root)
   const delegateCalls = []
@@ -1093,6 +1110,81 @@ console.log('admission wrapper (L1):')
   // 历史图不再标记：已回答轮次的图由视觉工具承接，后续文本轮不得重复注入（否则大脑重复路由）。
   const historicMarkers = collectMarkers([imageMessage, createUserMessage({ content: [{ type: 'text', text: '后续文本轮' }], source: { kind: 'user' } })], [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: () => null }])
   check('collectMarkers skips answered history images', historicMarkers.length === 0)
+
+  // ── imageMemory（v3 Step 4 / N-2 / R-3）：历史图 → system 记忆段 ──────────
+  // 单元面：回写/读取/TTL 边界/LRU 淘汰与刷新/文本规整与截断/条数上限；
+  // 集成面：真实 twin 路由上图片轮后文本追问轮的 system 注入与消息层零痕迹。
+  {
+    const { rememberImage, recallImage, clearImageMemory, imageMemorySize, IMAGE_MEMORY_MAX_ENTRIES, IMAGE_MEMORY_TTL_MS, IMAGE_MEMORY_TEXT_MAX } = await import('../lib/memory.js')
+    clearImageMemory()
+    // 单元：回写 + 读取往返；文本规整为单行；非法入参拒绝。
+    check('remember/recall round-trips', rememberImage('sha256:u1', '一张架构图：五层结构') === true && recallImage('sha256:u1')?.text === '一张架构图：五层结构')
+    rememberImage('sha256:norm', '第一行\n\n第二行   多空格')
+    check('memory text normalized to single line', recallImage('sha256:norm')?.text === '第一行 第二行 多空格')
+    rememberImage('sha256:cap', 'x'.repeat(IMAGE_MEMORY_TEXT_MAX + 100))
+    check('memory text capped at limit', recallImage('sha256:cap')?.text.length === IMAGE_MEMORY_TEXT_MAX)
+    check('invalid id/text rejected', rememberImage('', 'x') === false && rememberImage('sha256:e', '   ') === false && recallImage('') === null)
+    // 单元：TTL 边界（到期即失效）。
+    rememberImage('sha256:ttl', '过期测试', 1_000)
+    check('recall within TTL hits', recallImage('sha256:ttl', 1_000 + IMAGE_MEMORY_TTL_MS - 1)?.text === '过期测试')
+    check('recall at TTL expiry misses', recallImage('sha256:ttl', 1_000 + IMAGE_MEMORY_TTL_MS) === null)
+    // 单元：LRU 淘汰（超限逐出最旧）与命中刷新（recency）。
+    clearImageMemory()
+    for (let index = 0; index <= IMAGE_MEMORY_MAX_ENTRIES; index++) rememberImage(`sha256:lru${index}`, `lru${index}`, 5_000 + index)
+    check('LRU evicts oldest beyond cap', recallImage('sha256:lru0', 6_000) === null && recallImage(`sha256:lru${IMAGE_MEMORY_MAX_ENTRIES}`, 6_000)?.text === `lru${IMAGE_MEMORY_MAX_ENTRIES}`)
+    recallImage('sha256:lru1', 6_000)
+    rememberImage('sha256:lru-new', 'new', 7_000)
+    check('recall refreshes LRU recency', recallImage('sha256:lru1', 7_000) !== null && recallImage('sha256:lru2', 7_000) === null)
+    // 单元：collectMemorySegments 条数上限（最近 N 条按写入时间）。
+    //（写入时间用真实时钟基准的递增值——collectMemorySegments 内部读取
+    //  用真实时钟，伪造 at=1_000 会被 TTL 判过期。）
+    clearImageMemory()
+    const capBase = Date.now()
+    for (let index = 0; index < 8; index++) rememberImage(`sha256:m${index}`, `描述${index}`, capBase + index)
+    const imageEntry = { modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: () => null }
+    const manyHistory = [createUserMessage({ content: Array.from({ length: 8 }, (_, index) => ({ type: 'image', attachment: { attachmentId: `sha256:m${index}`, mediaType: 'image/png', bytes: 1, width: 1, height: 1, name: `m${index}.png` } })), source: { kind: 'user' } }), createUserMessage({ content: [{ type: 'text', text: '追问' }], source: { kind: 'user' } })]
+    const cappedSegments = collectMemorySegments(manyHistory, [imageEntry])
+    check('memory segments capped at recent 5', MEMORY_SEGMENT_MAX === 5 && cappedSegments.length === 5 && cappedSegments[0].includes('描述7') && !cappedSegments.some((segment) => segment.includes('描述0') || segment.includes('描述1') || segment.includes('描述2')))
+    // 单元：记忆段格式——含附件 id、描述与"不可信证据"标注（BC-4）。
+    const singleSegment = memorySegmentText('arch.png', 'sha256:fmt', '五层架构图')
+    check('memory segment carries id and untrust annotation', singleSegment.includes('此前识别') && singleSegment.includes('附件 id sha256:fmt') && singleSegment.includes('五层架构图') && singleSegment.includes('不可信证据'))
+    // 单元：当前轮同 id 的图不做记忆段双注入（marker 已承载）。
+    clearImageMemory()
+    rememberImage('sha256:both', '同图重发')
+    const currentTurnMessage = createUserMessage({ content: [{ type: 'text', text: '再看一次' }, { type: 'image', attachment: { attachmentId: 'sha256:both', mediaType: 'image/png', bytes: 1, width: 1, height: 1, name: 'again.png' } }], source: { kind: 'user' } })
+    const historyOnly = createUserMessage({ content: [{ type: 'image', attachment: { attachmentId: 'sha256:both', mediaType: 'image/png', bytes: 1, width: 1, height: 1, name: 'again.png' } }], source: { kind: 'user' } })
+    check('current-turn image not double-injected as memory', collectMemorySegments([historyOnly, currentTurnMessage], [imageEntry]).length === 0)
+    // 单元：未命中历史图 → 无记忆段（Step 3 行为保持）。
+    clearImageMemory()
+    const coldHistory = createUserMessage({ content: [{ type: 'image', attachment: { attachmentId: 'sha256:cold', mediaType: 'image/png', bytes: 1, width: 1, height: 1, name: 'cold.png' } }], source: { kind: 'user' } })
+    const coldFollowUp = createUserMessage({ content: [{ type: 'text', text: '刚才图里是什么' }], source: { kind: 'user' } })
+    check('memory miss yields no segment (Step 3 behavior)', collectMemorySegments([coldHistory, coldFollowUp], [imageEntry]).length === 0)
+    // 集成：图片轮（已回答）后文本追问轮，经 twin 路由——system 收到记忆段、
+    // 消息层零图片痕迹、无当前轮 marker（历史轮不重复注入行为指令）。
+    clearImageMemory()
+    rememberImage('sha256:hist', '一张架构图：最上层是适配层')
+    const histImageMessage = createUserMessage({ content: [{ type: 'text', text: '看这张架构图' }, { type: 'image', attachment: { attachmentId: 'sha256:hist', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'arch.png' } }], source: { kind: 'user' } })
+    const answeredTurn = createAssistantMessage({ content: [{ type: 'text', text: '已识别，见工具结果' }], provider: 'text-provider', model: 'brain-1' })
+    const followUpTurn = createUserMessage({ content: [{ type: 'text', text: '刚才图里最上层是什么' }], source: { kind: 'user' } })
+    const memAssembler = new BlockAssembler()
+    for await (const chunk of llm.stream({ provider: `text-provider${WRAP_SUFFIX}`, model: 'brain-1', system: undefined, messages: [histImageMessage, answeredTurn, followUpTurn] })) memAssembler.push(chunk)
+    const memCall = delegateCalls[delegateCalls.length - 1]
+    check('follow-up text turn injects memory segment into system', memAssembler.finish.kind === 'stop' && typeof memCall.system === 'string' && memCall.system.includes('此前识别') && memCall.system.includes('sha256:hist') && memCall.system.includes('一张架构图'))
+    check('memory turn keeps message layer clean', memCall.messages.every((message) => (message.content ?? []).every((block) => block.type !== 'image' && !(block.type === 'text' && block.text.includes('route_agent')))))
+    check('history turn injects no current-turn marker', typeof memCall.system === 'string' && !memCall.system.includes('includeImages'))
+    // 集成：当前轮新图 + 历史已识别图并存 → marker（当轮指令）与记忆段
+    //（历史描述）同时进 system，且互不混淆。
+    rememberImage('sha256:old', '旧图：登录页截图')
+    const oldImageTurn = createUserMessage({ content: [{ type: 'image', attachment: { attachmentId: 'sha256:old', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'old.png' } }], source: { kind: 'user' } })
+    const oldAnswer = createAssistantMessage({ content: [{ type: 'text', text: '已识别旧图' }], provider: 'text-provider', model: 'brain-1' })
+    const newImageTurn = createUserMessage({ content: [{ type: 'text', text: '再看看这张新的' }, { type: 'image', attachment: { attachmentId: 'sha256:newimg', mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'new.png' } }], source: { kind: 'user' } })
+    const mixedAssembler = new BlockAssembler()
+    for await (const chunk of llm.stream({ provider: `text-provider${WRAP_SUFFIX}`, model: 'brain-1', system: undefined, messages: [oldImageTurn, oldAnswer, newImageTurn] })) mixedAssembler.push(chunk)
+    const mixedCall = delegateCalls[delegateCalls.length - 1]
+    check('marker and memory segment coexist per turn boundary', mixedAssembler.finish.kind === 'stop' && typeof mixedCall.system === 'string' && mixedCall.system.includes('includeImages') && mixedCall.system.includes('sha256:newimg') && mixedCall.system.includes('此前识别') && mixedCall.system.includes('sha256:old') && !mixedCall.system.includes('此前识别：一张架构图'))
+    check('memory does not leak into other ids segments', typeof mixedCall.system === 'string' && !mixedCall.system.includes('sha256:hist'))
+    clearImageMemory()
+  }
   // 3) 嵌套 tool-result 中的图片块同样被改写（原文本适配器会递归拒绝）。
   const nestedResult = rewriteContentDeep([{ type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }, { type: 'text', text: 'x' }] }], [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: () => null }])
   check('rewriteContentDeep reaches nested tool-result', nestedResult.changed === true && nestedResult.content[0].content.every((block) => block.type === 'text'))
