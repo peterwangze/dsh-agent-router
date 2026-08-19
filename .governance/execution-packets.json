@@ -1,60 +1,59 @@
 {
   "version": 1,
-  "generated_at": "2026-08-19T21:25:00",
+  "generated_at": "2026-08-19T22:30:00",
   "packets": {
     "MIG-001": {
       "task_id": "MIG-001",
       "priority": "P0",
-      "status": "进行中——Step 0-5b 完成 + V-DSH-7 验证闭环（EV-017，DEC-014：宿主 id 实证 sha256:hex64，索引策略维持单轨，Step 5c/7 门禁解除）；当前单元 = Step 5c（RPC wire 面）。注：execution-packet --write 在 lightweight 模板下产出 0 包（工具链已知问题），本包由 Coordinator 手工维护",
-      "goal": "MIG-001 v3 迁移 Step 5c（RPC wire 面，N-1 部分）：uploadFile / readWorkspaceFile 的 wire codec + descriptor 落地（lib/schemas.js + lib/rpc.js，沿用现有 strict codec 风格；宿主实现可先于 Step 8 就位）",
+      "status": "进行中——Step 0-5c 完成（R1-R7 审查链全通过，EV-011~018）；当前单元 = Step 6（pre-step reminder + 逃生组兜底）。注：execution-packet --write 在 lightweight 模板下产出 0 包（工具链已知问题），本包由 Coordinator 手工维护",
+      "goal": "MIG-001 v3 迁移 Step 6（pre-step reminder + 逃生组兜底，N-3）：注册 `agent/pre-step`（带 id 的 reminder user 消息；非包装路由时分级改写兜底）——复用 Step 3 的能力判定与改写语义 + Step 5a/5b 的 M2 寻址",
       "product_success_contract": {
-        "user": "DSH 主 agent 用户与内置公开 Client（Step 8 F11 输入入口 / Step 9 L3 打开文件的未来调用方）",
-        "job_to_be_done": "RPC 面具备附件上传与工作区文件读取的 wire 契约——Step 8（AttachButton → uploadFile）与 Step 9（L3 打开文件 → readWorkspaceFile）的调用基座",
+        "user": "DSH 主 agent 用户（带图轮获得带附件 id 的 reminder 提示；逃生组路由下模型不收到裸图块）",
+        "job_to_be_done": "图片轮经 pre-step 注入带 id 的 reminder（识别/生成路径提示 + 跨轮指代锚点）；非包装路由（逃生组）下提供分级改写兜底，防 UNSUPPORTED_CONTENT",
         "non_goals": [
-          "本步不实现客户端调用方（AttachButton/卡片渲染——Step 8/9）",
-          "本步不实现 service 侧业务逻辑之外的 UI 交互",
-          "本步不实现 Step 6（pre-step）/Step 7（attachmentIds 参数）"
+          "本步不实现 Step 7（attachmentIds 参数/模态矩阵）、Step 8（F11 输入 UI）、Step 9（三级展示）",
+          "本步不修改 Step 3 已有的 wrapper 分级改写语义（只复用）"
         ],
         "success_metrics": [
-          "codec 形状断言（沿用 strict codec 风格：parse/build 双向 + 拒绝缺字段）",
-          "smoke 回归全绿（既有断言零回退）"
+          "smoke 断言：图片轮 pre-step 注入 reminder（带 id）；逃生组路由下无裸图块到达模型",
+          "既有断言零回退（wrapper 行为不变）"
         ],
-        "competitive_baseline": "现有 wire codec 基建（schemas.js strict codec + rpc.js descriptor 注册，如 image RPC 组 imageData/cliStatus/cliModels）——Step 5c 按同构风格扩展 uploadFile/readWorkspaceFile",
+        "competitive_baseline": "参考实现 vision-router 的 pre-step 机制（'图片轮=工具调用轮'——RES-002 解剖）；本项目 wrapper-only 形态（Step 3）缺 user 层 reminder 通道",
         "done_definition": [
-          "产品成功证据入账 evidence-log（EV-018）",
+          "产品成功证据入账 evidence-log（EV-019）",
           "独立 Code Reviewer 审查 APPROVED/APPROVED_WITH_NOTES（unresolved_blockers=0）",
           "单步独立提交（commit message 携带 MIG-001）"
         ]
       },
       "acceptance_contract": {
-        "scenario": "uploadFile/readWorkspaceFile codec parse 合法形状成功 + 拒绝缺字段/类型错误；descriptor 注册且与既有 RPC 组同构；无客户端调用方（wire 面，零行为影响）",
+        "scenario": "图片轮触发 pre-step（reminder user 消息含附件 id）；逃生组（非包装路由）图片轮经分级改写兜底（无裸图块到达模型）；纯文本轮无 pre-step 注入",
         "command": "node tests/smoke.mjs",
-        "expected_output": "ALL SMOKE TESTS PASSED（含新 codec 断言，0 FAILURES）",
+        "expected_output": "ALL SMOKE TESTS PASSED（含 pre-step 新断言，0 FAILURES）",
         "last_run": {
-          "status": "passing-pre-5c",
+          "status": "passing-pre-6",
           "exit_code": 0,
-          "summary": "Step 5b 收尾全绿（EV-016：49 attachments 断言 + 既有零回退）；5c 变更后重跑记录"
+          "summary": "Step 5c 收尾全绿（EV-018：426 ok）；Step 6 变更后重跑记录"
         },
-        "demo_evidence": ".governance/evidence-log.md EV-018（Step 5c）+ 测试运行输出"
+        "demo_evidence": ".governance/evidence-log.md EV-019（Step 6）+ 测试运行输出"
       },
       "quality_budget": {
         "dimensions": {
           "correctness": {
-            "threshold": "codec parse/build 双向正确 + 负向形状拒绝",
-            "validation": "node tests/smoke.mjs（wire codecs 断言组扩展）",
+            "threshold": "pre-step 触发条件正确（图片轮/非包装路由）；reminder 含 id；兜底改写语义与 Step 3 一致",
+            "validation": "node tests/smoke.mjs（新断言组）",
             "status": "pending",
-            "evidence": "EV-018",
+            "evidence": "EV-019",
             "exception": ""
           },
           "regression": {
-            "threshold": "既有断言零回退（纯 wire 面新增，无调用方）",
+            "threshold": "既有断言零回退（wrapper twin/分级改写/imageMemory 断言链全部保持）",
             "validation": "node tests/smoke.mjs 既有断言逐项过",
             "status": "pending",
-            "evidence": "EV-018",
+            "evidence": "EV-019",
             "exception": ""
           },
           "scope": {
-            "threshold": "变更恰为：lib/schemas.js + lib/rpc.js + 测试断言 + 治理记录；无 client.js（Step 8/9 UI）、无 tool.js/wrapper.js 变更",
+            "threshold": "变更恰为：lib/tool.js 或新增 lib/prestep.js + 测试断言 + 治理记录；无 schemas.js/rpc.js（7）/client.js（8/9）变更",
             "validation": "git show --stat <commit>",
             "status": "pending",
             "evidence": "commit diff stat（审查复核）",
@@ -63,10 +62,10 @@
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "无直接用户可见变化（wire 面，无调用方——Step 8/9 的基座）",
-        "demo_path": "node tests/smoke.mjs（wire codecs 断言组）",
-        "scope_guard": "lib/schemas.js、lib/rpc.js、tests/smoke.mjs（断言）、.governance/**",
-        "rollback_plan": "移除 RPC 注册（wire 面，无客户端调用方，零影响——迁移表 Step 5c 回滚列）",
+        "user_visible_slice": "带图轮获得带 id 的 reminder（模型可识别'用户发了图'并获指代锚点）；逃生组不再裸图直撞",
+        "demo_path": "node tests/smoke.mjs（pre-step 断言组）",
+        "scope_guard": "lib/tool.js、（如需）lib/prestep.js、tests/smoke.mjs、.governance/**",
+        "rollback_plan": "卸载 pre-step 注册（wrapper-only 仍可用——迁移表 Step 6 回滚列）",
         "status": "pending",
         "evidence": "pending"
       },
@@ -82,34 +81,34 @@
           "Commit normal single-task changes when validation, evidence, and review gates are satisfied."
         ],
         "assumption_record": {
-          "assumption": "uploadFile/readWorkspaceFile 的 RPC 语义以架构 v3 §8 Step 5c/8/9 行描述为准（具体 payload 字段在设计稿交互段）；如设计稿未定义字段级契约，按既有 codec 风格最小实现并在审查中裁量",
-          "basis": "architecture-v3.md §8 L776/779-780 行 + §5 交互段；V-DSH-7 已解除格式疑虑（sha256 id 可入 wire 契约）",
-          "reversibility": "wire 面无调用方，回滚零影响",
-          "validation": "codec 断言 + R7 审查",
-          "rollback": "移除 RPC 注册"
+          "assumption": "pre-step 注入的 user 消息会被宿主持久化为会话事件（V-DSH-1，vision-router 注释宣称 index.js:4803-4806）；若宿主不持久化，reminder 语义仍在当轮生效，跨轮锚点由 imageMemory（Step 4）承担——降级路径已在 §13 定义",
+          "basis": "architecture-v3.md §13 V-DSH-1 行 + §5 交互段 pre-step 设计",
+          "reversibility": "pre-step 注册可卸载（回滚列）",
+          "validation": "smoke pre-step 断言（注入形态）+ V-DSH-1 运行态验证列为后续观察",
+          "rollback": "卸载 pre-step 注册，wrapper-only 形态可用"
         },
         "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "Only change files required by MIG-001 Step 5c: lib/schemas.js, lib/rpc.js, tests/smoke.mjs (codec assertions)",
+        "Only change files required by MIG-001 Step 6: lib/tool.js (or new lib/prestep.js), tests/smoke.mjs (assertions)",
         "治理记录（.governance/**）按快速通道同步更新",
-        "Keep Step 6 (pre-step), 7 (attachmentIds), 8/9 (client UI) out of this unit."
+        "Keep Step 7 (attachmentIds/modality matrix), 8 (client UI), 9 (gallery) out of this unit."
       ],
       "required_evidence": [
         "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
         "validation commands with exit_code and concise output summary",
-        "independent review evidence (R7) or explicit degraded review evidence that does not claim full separation"
+        "independent review evidence (R8) or explicit degraded review evidence that does not claim full separation"
       ],
       "next_commands": [
         "node tests/smoke.mjs",
         "python \"D:/AI/agent/claude/coding/project_management_workflow/skills/software-project-governance/infra/verify_workflow.py\" check-governance"
       ],
       "done_definition": [
-        "迁移表 Step 5c 行验收满足：uploadFile/readWorkspaceFile wire codec + descriptor 就位，codec 形状断言全绿",
+        "迁移表 Step 6 行验收满足：图片轮 pre-step 注入 reminder（带 id）断言 + 逃生组无裸图块断言全绿",
         "Code Reviewer has APPROVED the product-code change (independent reviewer instance; degraded-mode disclosure recorded).",
         "Commit completed for this single step with task ID MIG-001."
       ],
-      "source": "docs/architecture-v3.md §8 迁移表 Step 5c 行（L776）+ 依赖说明（L788-791：5c 为 Step 8-9 的 RPC 基座）；DEC-014（V-DSH-7 闭环，门禁解除）"
+      "source": "docs/architecture-v3.md §8 迁移表 Step 6 行（L777）+ 依赖说明（L786-788：依赖 Step 3 与 5a/5b，均已满足）；§13 V-DSH-1（pre-step 持久化假设与降级）"
     }
   }
 }

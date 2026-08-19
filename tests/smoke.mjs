@@ -87,6 +87,28 @@ console.log('wire codecs:')
   check('imageDataRequest parses', dataReq.ref.attachmentId === 'sha256:x' && dataReq.ref.name === undefined)
   const dataRes = wireCodecs.imageDataResult.parse({ ok: true, message: 'ok', mediaType: 'image/png', data: 'aGk=', width: 2, height: 2 })
   check('imageDataResult parses', dataRes.ok === true && dataRes.data === 'aGk=')
+  const upReq = wireCodecs.uploadFileRequest.parse({ name: 'a.wav', mediaType: 'audio/wav', dataBase64: 'aGVsbG8=' })
+  check('uploadFileRequest parses', upReq.name === 'a.wav' && upReq.mediaType === 'audio/wav' && upReq.dataBase64 === 'aGVsbG8=')
+  const upRt = wireCodecs.uploadFileRequest.parse({ name: 'a.wav', mediaType: 'audio/wav', dataBase64: 'aGk=', extra: 1 })
+  check('uploadFileRequest round-trips (unknown pass-through)', upRt.name === 'a.wav' && upRt.extra === 1)
+  let upThrew = false
+  try { wireCodecs.uploadFileRequest.parse({ name: 'a.wav', mediaType: 'audio/wav' }) } catch { upThrew = true }
+  check('uploadFileRequest rejects missing dataBase64', upThrew)
+  let upTypeThrew = false
+  try { wireCodecs.uploadFileRequest.parse({ name: 42, mediaType: 'audio/wav', dataBase64: 'aGk=' }) } catch { upTypeThrew = true }
+  check('uploadFileRequest rejects wrong type', upTypeThrew)
+  const upRes = wireCodecs.uploadFileResult.parse({ ok: true, path: '.router-files/a.wav', attachmentId: 'sha256:x', name: 'a.wav' })
+  check('uploadFileResult parses', upRes.ok === true && upRes.path === '.router-files/a.wav' && upRes.attachmentId === 'sha256:x' && upRes.message === undefined && upRes.code === undefined)
+  const rwReq = wireCodecs.readWorkspaceFileRequest.parse({ path: '.router-files/a.wav' })
+  check('readWorkspaceFileRequest parses', rwReq.path === '.router-files/a.wav')
+  let rwThrew = false
+  try { wireCodecs.readWorkspaceFileRequest.parse({}) } catch { rwThrew = true }
+  check('readWorkspaceFileRequest rejects missing path', rwThrew)
+  let rwTypeThrew = false
+  try { wireCodecs.readWorkspaceFileRequest.parse({ path: 42 }) } catch { rwTypeThrew = true }
+  check('readWorkspaceFileRequest rejects wrong type', rwTypeThrew)
+  const rwRes = wireCodecs.readWorkspaceFileResult.parse({ ok: true, dataBase64: 'aGVsbG8=', mediaType: 'audio/wav', name: 'a.wav' })
+  check('readWorkspaceFileResult parses', rwRes.ok === true && rwRes.dataBase64 === 'aGVsbG8=' && rwRes.mediaType === 'audio/wav' && rwRes.code === undefined)
 }
 
 // 3. typert 贡献形状
@@ -94,10 +116,12 @@ console.log('rpc contribution:')
 {
   const contribution = createHostContribution()
   check('face host', contribution.face === 'host')
-  check('13 invocations', contribution.invocations.length === 13)
-  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 13 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
+  check('15 invocations', contribution.invocations.length === 15)
+  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 15 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
   check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))
   check('image RPC descriptors present', contribution.invocations.some((d) => d.method === 'imageData'))
+  check('uploadFile RPC descriptor present', contribution.invocations.some((d) => d.method === 'uploadFile' && d.id === 'dsh-agent-router#router/uploadFile'))
+  check('readWorkspaceFile RPC descriptor present', contribution.invocations.some((d) => d.method === 'readWorkspaceFile' && d.id === 'dsh-agent-router#router/readWorkspaceFile'))
   const cliStatusCodec = wireCodecs.cliStatusResult.parse({ ok: true, message: '已登录', loggedIn: true })
   check('cliStatusResult parses', cliStatusCodec.ok === true && cliStatusCodec.loggedIn === true)
   const cliModelsCodec = wireCodecs.cliModelsResult.parse({ ok: true, message: 'm', models: ['a'] })
@@ -848,7 +872,7 @@ console.log('apply wiring:')
     const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
     await app
     check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
-    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 13 && registeredContribution.package === 'dsh-agent-router')
+    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 15 && registeredContribution.package === 'dsh-agent-router')
     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
     check('oauth callback route registered', webRoute && webRoute.kind === 'exact' && webRoute.path === '/router-oauth/callback' && typeof webRoute.handler === 'function')
     await app.dispose()
