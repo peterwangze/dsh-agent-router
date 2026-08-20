@@ -1,115 +1,17 @@
 {
   "version": 1,
-  "generated_at": "2026-08-20T19:30:00",
+  "generated_at": "2026-08-20T19:55:00",
   "packets": {
     "MIG-001": {
       "task_id": "MIG-001",
       "priority": "P0",
-      "status": "进行中——Step 0-9 完成（R1-R13 审查链全通过含两次返工复审，EV-011~022；V-DSH-1/2/3/7 闭环）；当前单元 = Step 10（D-1 成功标准观测——MIG-001 收官）。注：execution-packet --write 在 lightweight 模板下产出 0 包（工具链已知问题），本包由 Coordinator 手工维护",
-      "goal": "MIG-001 v3 迁移 Step 10（成功标准观测，N-9）：D-1 五指标观测点落地——①request/context 恒主模型 ②图片到达视觉输入 ③route_agent 触发率 ④编址往返一致 ⑤跨轮指代成功；形式=观测脚本（tests/ 或 smoke 扩展）+ 指标记录；同时汇集逃生组三项取舍观测（R8 P3：user 层标记复述风险/日志层原件缺失/跨轮历史图块）与 V-DSH-5（主模型三通道响应率）的观测面",
-      "product_success_contract": {
-        "user": "DSH 主 agent 用户（迁移成功的量化证明——DEC-012 验收门）",
-        "job_to_be_done": "五指标可测量可复查：自动化观测点（脚本可重复运行）+ 当前基线记录；D-1 门判定标准明确（哪些指标可在单机环境测、哪些需真实使用样本）",
-        "non_goals": [
-          "本步不修复观测中发现的指标未达问题（那是新任务——观测为 MIG-001 收官，发现的缺陷走变更控制）",
-          "不在无真实多模态账号的环境伪造'通过'——指标如实记录，单机可测部分自动化，不可测部分记录测量方法与当前状态"
-        ],
-        "success_metrics": [
-          "观测脚本可运行（exit 0）+ 输出五指标量化值或 not-measurable 声明",
-          "指标记录入 evidence-log（EV-023）——D-1 门状态判定（满足/部分满足/待实测）"
-        ],
-        "competitive_baseline": "DEC-012 D-1 五条指标（恒主模型 100%/图片到达视觉输入 100%/触发率 ≥90%/编址往返 100%/跨轮指代 ≥80%）",
-        "done_definition": [
-          "观测产出 + 指标记录入账（EV-023）",
-          "独立 Code Reviewer 审查 APPROVED/APPROVED_WITH_NOTES（unresolved_blockers=0）",
-          "单步独立提交——MIG-001 完结（plan-tracker 状态更新 + DEC-003 解除评估转用户决策）"
-        ]
-      },
-      "acceptance_contract": {
-        "scenario": "运行观测脚本 → 五指标逐一输出（量化值或不可测声明+测量方法）；既有断言零回退",
-        "command": "node tests/smoke.mjs && node tests/<观测脚本>.mjs",
-        "expected_output": "ALL SMOKE TESTS PASSED + 观测脚本输出五指标报告",
-        "last_run": {
-          "status": "passing-pre-10",
-          "exit_code": 0,
-          "summary": "Step 9 收尾全绿（EV-022：534 ok）"
-        },
-        "demo_evidence": ".governance/evidence-log.md EV-023（Step 10 指标记录）+ 观测脚本输出"
-      },
-      "quality_budget": {
-        "dimensions": {
-          "correctness": {
-            "threshold": "观测点度量的是 D-1 定义的指标本体（不是代理指标的漂移版本）；断言化观测在旧实现下可判别",
-            "validation": "脚本运行 + 断言",
-            "status": "pending",
-            "evidence": "EV-023",
-            "exception": ""
-          },
-          "regression": {
-            "threshold": "既有 534 断言零回退",
-            "validation": "node tests/smoke.mjs",
-            "status": "pending",
-            "evidence": "EV-023",
-            "exception": ""
-          },
-          "scope": {
-            "threshold": "变更恰为：观测脚本（新增 tests/ 或 smoke 扩展）+ 必要的最小埋点（如观测 hook——声明后交 R14 裁量）+ 治理记录",
-            "validation": "git show --stat <commit>",
-            "status": "pending",
-            "evidence": "commit diff stat",
-            "exception": ""
-          }
-        }
-      },
-      "vertical_slice": {
-        "user_visible_slice": "无直接 UI 变化（观测单元——量化证明）",
-        "demo_path": "node tests/<观测脚本>.mjs（五指标报告）",
-        "scope_guard": "tests/**、（如需）lib/ 最小观测埋点（声明）、.governance/**",
-        "rollback_plan": "观测为增量，无回滚需求（迁移表 Step 10 回滚列：—）",
-        "status": "pending",
-        "evidence": "pending"
-      },
-      "interruption_policy": {
-        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
-        "critical_triggers": [
-          "Ask the user when product intent is unclear.",
-          "Ask the user when acceptance standard or done criteria are unclear.",
-          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
-        ],
-        "auto_execute": [
-          "Run observation script development, local validation, and governance record updates.",
-          "Commit normal single-task changes when validation, evidence, and review gates are satisfied."
-        ],
-        "assumption_record": {
-          "assumption": "D-1 五指标中：①④可在现有测试基建完全自动化（wrapper/twin 机制与 M2 编址已有断言面）；②⑤需真实多模态会话样本（单机无真实视觉模型账号——记录测量方法+当前 not-measurable）；③触发率需使用统计（同②⑤处理）",
-          "basis": "DEC-012 D-1 定义 + 现有测试基建能力（smoke 的 LlmRuntime twin/真实宿主 mock）",
-          "reversibility": "纯增量观测",
-          "validation": "脚本运行输出 + R14 审查",
-          "rollback": "不适用"
-        },
-        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears. MIG-001 完结后的 DEC-003 解除评估 MUST 用户决策。"
-      },
-      "allowed_change_scope": [
-        "Only change files required by MIG-001 Step 10: new observation script under tests/, smoke extension if chosen, minimal lib/ observation hooks (declared, R14 discretion)",
-        "治理记录（.governance/**）按快速通道同步更新",
-        "发现的指标未达问题记录为新风险/任务线索——不在本单元修复"
-      ],
-      "required_evidence": [
-        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON（五指标逐一：值/不可测声明/测量方法）",
-        "observation script run output (exit_code + 报告)",
-        "independent review evidence (R14) or explicit degraded review evidence"
-      ],
+      "status": "已完成（2026-08-20）——Step 0-10 全 13 单元闭环；R1-R14 审查链全通过（含 R10→R11、R12→R13 两次返工复审）；EV-011~023；D-1 门判定：满足×2 + 部分满足×2 + 待实测×1（观测脚本 tests/metrics.mjs，31 项自动化观测）。遗留转后续域：R14-F-01 测试卫生 + P3 记录项 + D-1 待实测项 + R4 F-1/F-2（DEV-002/真实使用评估）。本包为终态记录，不再驱动执行",
+      "goal": "[终态] v3 迁移全部完成——本包仅作历史记录保留",
       "next_commands": [
         "node tests/smoke.mjs",
-        "python \"D:/AI/agent/claude/coding/project_management_workflow/skills/software-project-governance/infra/verify_workflow.py\" check-governance"
+        "node tests/metrics.mjs"
       ],
-      "done_definition": [
-        "五指标观测落地：可自动化部分有脚本+断言；不可测部分有测量方法+当前状态记录",
-        "D-1 门状态判定入账（满足/部分满足/待实测——如部分满足，新风险/任务线索入账）",
-        "Code Reviewer has APPROVED (independent reviewer instance; degraded-mode disclosure recorded).",
-        "Commit completed for this single step with task ID MIG-001 → MIG-001 完结（plan-tracker 状态终态化）"
-      ],
-      "source": "docs/architecture-v3.md §8 迁移表 Step 10 行（L781）+ §14 D-1 五指标定义（DEC-012）+ §13 V-DSH-5；R8 逃生组取舍观测项（review-MIG-001-R8.md）"
+      "source": "MIG-001 完结记录（EV-023）"
     }
   }
 }
