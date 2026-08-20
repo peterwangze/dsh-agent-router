@@ -21,8 +21,8 @@
 |---|---|
 | 项目名称 | dsh-agent-router |
 | 当前阶段 | development (6/11) |
-| 总任务数 | 7 |
-| 已完成 | 5 |
+| 总任务数 | 8 |
+| 已完成 | 6 |
 | 阻塞中 | 0 |
 | 关键风险数 | 1（RISK-001 活跃——48h 观察期义务） |
 | 最近 Gate 结论 | G4 待评（MIG-001 完结 + v0.2.0 已发布；CI 面仍缺——RISK-001） |
@@ -51,6 +51,7 @@
 | DEV-001 | development | v0.1.8 行为基线回归验证 | 跑通 tests/smoke.mjs + client-render.mjs，记录 whole-turn 图片路由默认化（c2648d2/963b4f5）后的基线输出 | 待开始 | P1 |
 | DEV-002 | development | 核心通路自动化测试补强 | routing/takeover 关键路径具备可重复测试（当前仅 4 个冒烟测试文件） | 待开始 | P1 |
 | DEV-003 | release | v0.2.0 发布收尾（DEC-015 升级） | 版本 bump 0.2.0 + CHANGELOG（v3 迁移全量记录）+ README 徽章/安装命令同步 + tarball 离线安装验证 + tag v0.2.0 + 归档触发检测 | **已完成（本提交=v0.2.0 发布提交）**——Release agent 三件套 + Developer bump/README + Release Reviewer APPROVED（W-1 有条件发布裁决入 risk-log，48h 观察期义务 DEV-001/002 关闭决策；W-3 回滚范围表述已修正）；tarball/tag 随本提交执行 | P1 |
+| GOV-001 | development（治理快速通道） | 项目质量原则固化与持续改进机制建立 | 7 条原则 + 4 条编程要求立版（project-principles.md P-v1，含执行锚点映射）+ AGENTS.md 会话投影 + 持续演进协议（decision-log 入账制 + P-vN 版本化，质量基线只升不降） | **已完成**——DEC-016 决策入账 + EV-025 证据入账；check-governance 28 issues 经事实核查均为 pre-existing（插件仓自审计误期望 + 历史复审命名约定），无 GOV-001 引入项；原则文本与用户 2026-08-20 会话指令逐字一致 | P1 |
 
 ## 版本规划
 
@@ -78,6 +79,7 @@
 
 - 版本范围变更走变更控制流程；临时任务先判定优先级再纳入版本
 - 发布收尾必须运行归档触发检测（`python <plugin_home>/infra/archive.py migrate --auto --dry-run`，`<plugin_home>` 来自 resolve_entry.py）
+- 发布复盘时 MUST 检查 `.governance/project-principles.md` 是否需要演进（P-vN，DEC-016 持续改进协议）
 
 ## 需求跟踪矩阵
 
