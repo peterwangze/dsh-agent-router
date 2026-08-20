@@ -2,7 +2,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { routerSchema, wireCodecs, MODALITY_VALUES, MODALITY_DIRECTIONS, normalizeCapabilities } from '../lib/schemas.js'
 import { createHostContribution, ROUTER_REMOTE } from '../lib/rpc.js'
-import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine, cliWorkspaceHint } from '../lib/service.js'
+import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine, cliWorkspaceHint, detectAudioVideoMediaType } from '../lib/service.js'
 import { runClientRender } from './client-render.mjs'
 import { runInstallEntryTests } from './install-entry.mjs'
 import { runAttachmentTests } from './attachments.mjs'
@@ -238,7 +238,16 @@ console.log('RouterService:')
     readImage: async (ref) => ({ ref, data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) }),
   })
   root.provide('fs', {
-    resolve: async (path) => ({ displayPath: path.includes(':') || path.startsWith('/') ? path : `D:/work/example/${path}` }),
+    // resolve 对齐宿主形态（dsh-fs-local）：返回 { displayPath, targetKey }，
+    // 相对路径按 opts.cwd 解析（宿主 resolveLocalTarget 同语义；沿用旧 mock
+    // 的正斜杠拼接风格，既有断言依赖该形态）；默认无符号链接（targetKey =
+    // displayPath）——F-1 逃逸夹具在 readWorkspaceFile 块内临时换挂注入
+    // "词法通过但 realpath 逃逸"的 targetKey。
+    resolve: async (path, opts) => {
+      const cwd = opts && typeof opts.cwd === 'string' && opts.cwd ? opts.cwd : ''
+      const displayPath = path.includes(':') || path.startsWith('/') ? path : (cwd ? `${cwd}/${path}` : `D:/work/example/${path}`)
+      return { displayPath, targetKey: displayPath }
+    },
     stat: async (target) => {
       const displayPath = String(target?.displayPath ?? '')
       if (displayPath.includes('missing')) return undefined
@@ -536,7 +545,9 @@ console.log('RouterService:')
       check('cli workspace hint restricted', cliWorkspaceHint('/w', 'workspace-write').includes('受沙箱限制') && cliWorkspaceHint('/w', 'read-only').includes('受沙箱限制') && cliWorkspaceHint('/w', 'on').includes('受沙箱限制'))
       check('cli workspace hint unrestricted', cliWorkspaceHint('/w', 'danger-full-access').includes('未启用 CLI 沙箱') && cliWorkspaceHint('/w', '').includes('未启用 CLI 沙箱') && !cliWorkspaceHint('/w', 'danger-full-access').includes('受沙箱限制'))
       const cliFilesRun = await service.run({ agentId: 'coder', task: '处理文件', images: [], files: ['notes.txt'], exec: { agent: fakeParentCli } })
-      check('cli files paths injected', cliFilesRun.kind === 'cli' && cliFilesRun.text.includes('待处理文件') && cliFilesRun.text.includes('D:/work/example/notes.txt'))
+      // 相对路径按会话 cwd（tmpDir）解析注入（mock resolve 对齐宿主：cwd 感知）；
+      // 断言的路径以实际 cwd 为准，不再依赖旧 mock 的固定前缀。
+      check('cli files paths injected', cliFilesRun.kind === 'cli' && cliFilesRun.text.includes('待处理文件') && cliFilesRun.text.includes(tmpDir) && cliFilesRun.text.includes('notes.txt'))
       // 经 cliAgent 引用子代理条目执行：使用条目 command/args，而非 agent 内嵌字段。
       const cliRefRun = await service.run({ agentId: 'coderref', task: '引用运行', images: [], exec: { agent: fakeParentCli } })
       check('cli run via entry reference', cliRefRun.kind === 'cli' && cliRefRun.text.includes('引用运行') && cliRefRun.text.includes('工作目录：'))
@@ -924,6 +935,179 @@ console.log('RouterService:')
     } finally {
       try {
         const routerFiles = pathModule.join(tmpDir, '.router-files')
+        if (fsModule.existsSync(routerFiles)) {
+          for (const name of fsModule.readdirSync(routerFiles)) {
+            try { fsModule.rmSync(pathModule.join(routerFiles, name), { force: true }) } catch { /* 继续清理其余文件 */ }
+          }
+          try { fsModule.rmdirSync(routerFiles) } catch { /* 目录可能已被删除 */ }
+        }
+        try { fsModule.rmdirSync(tmpDir) } catch { /* 沙箱拒绝清理时留待手动删除 */ }
+      } catch { /* 忽略清理失败 */ }
+    }
+  }
+
+  // R12 F-3（P2）：detectAudioVideoMediaType 六魔数分支直接单测——R12 指出仅
+  // WAV 经真实字节路径覆盖，mp3(ID3)/flac/ogg/mp4(ftyp)/webm(EBML) 零直接
+  // 用例；此处每分支一条正例 + 截断头（长度不足守卫）与误判负例。
+  console.log('detectAudioVideoMediaType (F-3):')
+  {
+    const magic = (...bytes) => new Uint8Array(bytes)
+    check('magic wav RIFF/WAVE', detectAudioVideoMediaType(magic(0x52, 0x49, 0x46, 0x46, 0x24, 0, 0, 0, 0x57, 0x41, 0x56, 0x45)) === 'audio/wav')
+    check('magic mp3 ID3', detectAudioVideoMediaType(magic(0x49, 0x44, 0x33, 0x04, 0x00)) === 'audio/mpeg')
+    check('magic flac fLaC', detectAudioVideoMediaType(magic(0x66, 0x4c, 0x61, 0x43, 0x00, 0x00)) === 'audio/flac')
+    check('magic ogg OggS', detectAudioVideoMediaType(magic(0x4f, 0x67, 0x67, 0x53, 0x00, 0x02)) === 'audio/ogg')
+    check('magic mp4 ftyp', detectAudioVideoMediaType(magic(0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d)) === 'video/mp4')
+    check('magic webm EBML', detectAudioVideoMediaType(magic(0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x01)) === 'video/webm')
+    // 截断头（长度不足守卫不越界，也不误判）。
+    check('magic truncated wav', detectAudioVideoMediaType(magic(0x52, 0x49, 0x46, 0x46, 0x24, 0, 0, 0)) === undefined)
+    check('magic truncated id3', detectAudioVideoMediaType(magic(0x49, 0x44)) === undefined)
+    check('magic truncated flac', detectAudioVideoMediaType(magic(0x66, 0x4c)) === undefined)
+    check('magic truncated ogg', detectAudioVideoMediaType(magic(0x4f, 0x67)) === undefined)
+    check('magic truncated ftyp', detectAudioVideoMediaType(magic(0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79)) === undefined)
+    check('magic truncated ebml', detectAudioVideoMediaType(magic(0x1a, 0x45)) === undefined)
+    // 负例：RIFF 但非 WAVE（AVI 容器）；未知字节；空数据。
+    check('magic riff-not-wave undefined', detectAudioVideoMediaType(magic(0x52, 0x49, 0x46, 0x46, 0x24, 0, 0, 0, 0x41, 0x56, 0x49, 0x20)) === undefined)
+    check('magic unknown bytes undefined', detectAudioVideoMediaType(magic(0x00, 0x01, 0x02, 0x03)) === undefined)
+    check('magic empty data undefined', detectAudioVideoMediaType(new Uint8Array(0)) === undefined)
+  }
+
+  // v3 Step 9（三级展示 L3 / N-7）：router/readWorkspaceFile service——工作区
+  // 边界校验（`..`/绝对路径规范化后必须仍在工作区内，PATH_OUTSIDE_WORKSPACE）
+  // → fs.resolve/stat → 大小 ≤25MB（FILE_TOO_LARGE）→ readBytes →
+  // { ok:true, dataBase64, mediaType?, name }；越界/超限/读失败 → { ok:false,
+  // message, code }（错误码语义清晰）。工作区来源同 uploadFile（rememberWorkspace
+  // ——一致限制声明：浏览器 RPC 的 direct invocation 不携带会话上下文，目标取
+  // 最近一次 run() 记录的会话 cwd）。
+  console.log('readWorkspaceFile (L3):')
+  {
+    const pathModule = await import('node:path')
+    const fsModule = await import('node:fs')
+    const osModule = await import('node:os')
+    const tmpDir = pathModule.join(osModule.tmpdir(), `dsh-agent-router-read-${Date.now()}`)
+    const routerFiles = pathModule.join(tmpDir, '.router-files')
+    fsModule.mkdirSync(routerFiles, { recursive: true })
+    // 真实符号链接夹具的工作区外目标（兄弟目录；finally 兜底清理）。
+    let outsideDir = ''
+    // RIFF/WAVE 魔数头（mediaType 嗅探用）。
+    const wavBytes = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x24, 0, 0, 0, 0x57, 0x41, 0x56, 0x45, 0x01, 0x02])
+    fsModule.writeFileSync(pathModule.join(routerFiles, 'voice.wav'), wavBytes)
+    try {
+      // 工作区锚定：与 uploadFile 同源（rememberWorkspace——最近一次 run() 的 cwd）。
+      await service.run({ agentId: 'vision', task: 'workspace anchor', images: [], exec: { agent: { session: { header: { cwd: tmpDir, delegationDepth: 0 } } } } })
+      check('read workspace anchored from run exec', service.lastWorkspace && service.lastWorkspace.cwd === tmpDir)
+      const base64 = (bytes) => Buffer.from(bytes).toString('base64')
+      const fsService = service.ctx.get('fs')
+      // 成功：绝对路径（工作区内）→ 临时换挂真实 readBytes（同 uploadFile 碰撞
+      // 用例先例）真实读盘 → 魔数嗅探 mediaType（RIFF/WAVE → audio/wav）。
+      const originalReadBytes = fsService.readBytes
+      fsService.readBytes = async (target) => fsModule.readFileSync(String(target?.displayPath ?? ''))
+      let okRead
+      try {
+        okRead = await service.readWorkspaceFile({ path: pathModule.join(routerFiles, 'voice.wav') })
+      } finally {
+        fsService.readBytes = originalReadBytes
+      }
+      check('readWorkspaceFile reads workspace file (magic mediaType)', okRead.ok === true && okRead.dataBase64 === base64(wavBytes) && okRead.mediaType === 'audio/wav' && okRead.name === 'voice.wav')
+      // 相对路径（默认 mock readBytes 非魔数字节 → 扩展名回退 mediaType）。
+      const relRead = await service.readWorkspaceFile({ path: '.router-files/voice.wav' })
+      check('readWorkspaceFile accepts relative in-workspace path', relRead.ok === true && relRead.dataBase64 === base64([0xff, 0xfe, 0x00]) && relRead.mediaType === 'audio/wav' && relRead.name === 'voice.wav')
+      // 越界拒绝：`..` 逃逸 / 工作区外绝对路径 → PATH_OUTSIDE_WORKSPACE（规范化判定）。
+      const escape = await service.readWorkspaceFile({ path: '../secret.txt' })
+      check('readWorkspaceFile rejects parent escape (PATH_OUTSIDE_WORKSPACE)', escape.ok === false && escape.code === 'PATH_OUTSIDE_WORKSPACE')
+      const outsideAbs = await service.readWorkspaceFile({ path: pathModule.join(tmpDir, '..', 'outside.txt') })
+      check('readWorkspaceFile rejects absolute outside workspace (PATH_OUTSIDE_WORKSPACE)', outsideAbs.ok === false && outsideAbs.code === 'PATH_OUTSIDE_WORKSPACE')
+      // 缺失 path → INVALID_REQUEST；无工作区 → WORKSPACE_UNAVAILABLE（同 uploadFile）。
+      const missing = await service.readWorkspaceFile({})
+      check('readWorkspaceFile missing path rejected (INVALID_REQUEST)', missing.ok === false && missing.code === 'INVALID_REQUEST')
+      const savedWorkspace = service.lastWorkspace
+      service.lastWorkspace = null
+      const noWs = await service.readWorkspaceFile({ path: '.router-files/voice.wav' })
+      service.lastWorkspace = savedWorkspace
+      check('readWorkspaceFile without workspace rejected (WORKSPACE_UNAVAILABLE)', noWs.ok === false && noWs.code === 'WORKSPACE_UNAVAILABLE')
+      // 文件不存在 → FILE_NOT_FOUND（fs.resolve 放行 + stat 未命中）。
+      const notFound = await service.readWorkspaceFile({ path: '.router-files/missing.wav' })
+      check('readWorkspaceFile missing file rejected (FILE_NOT_FOUND)', notFound.ok === false && notFound.code === 'FILE_NOT_FOUND')
+      // 超限：stat.size > 25MB → FILE_TOO_LARGE（读前判定，不浪费读）。
+      const originalStat = fsService.stat
+      fsService.stat = async () => ({ type: 'file', version: 1, size: 25 * 1024 * 1024 + 1 })
+      const big = await service.readWorkspaceFile({ path: '.router-files/voice.wav' })
+      fsService.stat = originalStat
+      check('readWorkspaceFile over 25MB rejected (FILE_TOO_LARGE)', big.ok === false && big.code === 'FILE_TOO_LARGE' && big.message.includes('25MB'))
+      // 目录 → FILE_NOT_FOUND（目录不可作为文件预览）。
+      const originalStat2 = fsService.stat
+      fsService.stat = async () => ({ type: 'directory', version: 1 })
+      const dirRead = await service.readWorkspaceFile({ path: '.router-files' })
+      fsService.stat = originalStat2
+      check('readWorkspaceFile rejects directory (FILE_NOT_FOUND)', dirRead.ok === false && dirRead.code === 'FILE_NOT_FOUND')
+      // 读失败：readBytes 抛错 → READ_FAILED（明确错误码，不静默）。
+      const originalRead = fsService.readBytes
+      fsService.readBytes = async () => { throw new Error('disk io error') }
+      const readFail = await service.readWorkspaceFile({ path: '.router-files/voice.wav' })
+      fsService.readBytes = originalRead
+      check('readWorkspaceFile read failure rejected (READ_FAILED)', readFail.ok === false && readFail.code === 'READ_FAILED')
+      // F-1（R12 P0）：符号链接/联接逃逸——词法判定通过但 realpath 逃逸。
+      // 宿主 fs.resolve 的 targetKey = realpath(displayPath)（dsh-fs-local 跟随
+      // 符号链接/NTFS 联接），stat/readBytes 全经 targetKey 操作。smoke mock
+      // 已扩展 targetKey 形态（默认 targetKey = displayPath，无链接）；此处注入
+      // "词法在工作区内、realpath 指向工作区外"的 resolve——旧代码（无二次
+      // 校验）下该请求会经链接读穿工作区外字节并返回 ok:true，断言判别力成立。
+      const originalResolve = fsService.resolve
+      fsService.resolve = async (path, opts) => {
+        const cwd = opts && typeof opts.cwd === 'string' && opts.cwd ? opts.cwd : ''
+        const displayPath = path.includes(':') || path.startsWith('/') ? path : `${cwd}/${path}`
+        if (String(path).endsWith('link.mp3')) return { displayPath, targetKey: 'D:/outside/secret.txt' }
+        return { displayPath, targetKey: displayPath }
+      }
+      const symlinkEscape = await service.readWorkspaceFile({ path: 'link.mp3' })
+      fsService.resolve = originalResolve
+      check('readWorkspaceFile rejects symlink/junction escape (PATH_OUTSIDE_WORKSPACE)', symlinkEscape.ok === false && symlinkEscape.code === 'PATH_OUTSIDE_WORKSPACE')
+      // fs.contains 优先分支（R12：宿主提供 contains——targetKey 包含判定）：
+      // contains 恒 false → 工作区内文件也被拒，证明宿主分支被征询而非忽略。
+      const originalContains = fsService.contains
+      fsService.contains = () => false
+      const containsDeny = await service.readWorkspaceFile({ path: '.router-files/voice.wav' })
+      fsService.contains = originalContains
+      check('readWorkspaceFile honors fs.contains denial (PATH_OUTSIDE_WORKSPACE)', containsDeny.ok === false && containsDeny.code === 'PATH_OUTSIDE_WORKSPACE')
+      // 真实符号链接/联接夹具（尽力而为）：Windows 目录联接（junction，无需
+      // 管理员/开发者模式）与 POSIX 文件符号链接指向工作区外文件——resolve 以
+      // realpath 作 targetKey 时二次校验必须拒绝。创建失败（无符号链接权限）
+      // 则跳过；判别力已由上方 mock 注入用例保证。
+      try {
+        // 工作区外目标必须是 tmpDir 的兄弟目录（在工作区内则 realpath 仍被
+        // 包含，夹具失效——realpath 逃逸必须真实逃逸）。
+        outsideDir = pathModule.join(pathModule.dirname(tmpDir), `dsh-agent-router-outside-${Date.now()}`)
+        fsModule.mkdirSync(outsideDir, { recursive: true })
+        fsModule.writeFileSync(pathModule.join(outsideDir, 'secret.txt'), 'TOP SECRET')
+        const linkPath = pathModule.join(tmpDir, 'secret-link')
+        if (process.platform === 'win32') {
+          fsModule.symlinkSync(outsideDir, linkPath, 'junction')
+        } else {
+          fsModule.symlinkSync(pathModule.join(outsideDir, 'secret.txt'), linkPath, 'file')
+        }
+        const realResolve = async (path, opts) => {
+          const cwd = opts && typeof opts.cwd === 'string' && opts.cwd ? opts.cwd : ''
+          const displayPath = path.includes(':') || path.startsWith('/') ? path : `${cwd}/${path}`
+          return { displayPath, targetKey: fsModule.realpathSync(displayPath) }
+        }
+        fsService.resolve = realResolve
+        const viaLink = process.platform === 'win32' ? pathModule.join(linkPath, 'secret.txt') : linkPath
+        const realLinkEscape = await service.readWorkspaceFile({ path: viaLink })
+        fsService.resolve = originalResolve
+        check('readWorkspaceFile rejects real symlink/junction escape (PATH_OUTSIDE_WORKSPACE)', realLinkEscape.ok === false && realLinkEscape.code === 'PATH_OUTSIDE_WORKSPACE')
+        // Windows 联接需 rmdirSync 移除（目录重解析点；unlinkSync 会 EPERM），
+        // POSIX 文件符号链接用 unlinkSync；均失败时 rmSync 兜底（不跟随链接目标）。
+        try {
+          if (process.platform === 'win32') fsModule.rmdirSync(linkPath)
+          else fsModule.unlinkSync(linkPath)
+        } catch {
+          try { fsModule.rmSync(linkPath, { force: true, recursive: true }) } catch { /* 清理尽力而为 */ }
+        }
+      } catch { /* 无符号链接权限：跳过真实夹具（mock 注入用例已保证判别力） */ }
+    } finally {
+      try {
+        if (outsideDir) {
+          try { fsModule.rmSync(outsideDir, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
+        }
         if (fsModule.existsSync(routerFiles)) {
           for (const name of fsModule.readdirSync(routerFiles)) {
             try { fsModule.rmSync(pathModule.join(routerFiles, name), { force: true }) } catch { /* 继续清理其余文件 */ }

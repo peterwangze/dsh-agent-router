@@ -171,7 +171,7 @@ export async function runClientRender(check) {
   }
 
   // ── 装配：评估浏览器包 → mock ctx → apply → 渲染 ─────────────────────
-  const captured = { registrations: [], listeners: [], uploadFileCalls: [] }
+  const captured = { registrations: [], listeners: [], uploadFileCalls: [], readWorkspaceFileCalls: [] }
   const fakeWindow = {
     __ModuleLoader__: { load: (payload) => { captured.bundle = payload } },
     location: { search: '', pathname: '/' },
@@ -194,6 +194,8 @@ export async function runClientRender(check) {
         queueMicrotask(() => { if (typeof this.onload === 'function') this.onload() })
       }
     },
+    // L3 打开文件预览（Step 9）：blob URL 由宿主浏览器 API 提供——测试打桩。
+    URL: { createObjectURL: () => 'blob:mock-preview', revokeObjectURL: () => {} },
   }
   new Function('window', source)(fakeWindow)
   check('client bundle evaluates', !!captured.bundle && captured.bundle.id === 'dsh-agent-router' && typeof captured.bundle.factory === 'function')
@@ -211,6 +213,9 @@ export async function runClientRender(check) {
   let catalogMode = 'withVision'
   // F11 上传失败模式：true 时 remoteMock.uploadFile 返回 ok:false（错误码形状）。
   let uploadFailMode = false
+  // L3 打开文件失败模式（Step 9）：true 时 remoteMock.readWorkspaceFile 返回
+  // ok:false（错误码形状）；mediaType 按路径扩展名派生（audio/video/doc）。
+  let readFileFailMode = false
   const remoteMock = {
     catalog: async () => ({
       ok: true,
@@ -262,6 +267,14 @@ export async function runClientRender(check) {
       captured.uploadFileCalls.push(request)
       if (uploadFailMode) return { ok: true, value: { ok: false, message: '文件超过大小上限', code: 'FILE_TOO_LARGE' } }
       return { ok: true, value: { ok: true, path: `.router-files/${request.name}`, attachmentId: `sha256:${'f'.repeat(64)}`, name: request.name } }
+    },
+    readWorkspaceFile: async (request) => {
+      captured.readWorkspaceFileCalls.push(request)
+      if (readFileFailMode) return { ok: true, value: { ok: false, message: '文件路径超出会话工作区', code: 'PATH_OUTSIDE_WORKSPACE' } }
+      const path = String(request.path ?? '')
+      const lower = path.toLowerCase()
+      const mediaType = lower.endsWith('.mp4') ? 'video/mp4' : lower.endsWith('.doc') ? 'application/msword' : 'audio/wav'
+      return { ok: true, value: { ok: true, dataBase64: 'aGVsbG8=', mediaType, name: path.split('/').pop() } }
     },
   }
   // 账号添加/编辑回归用记录：端点探测请求、llm-pi-ai 写入、凭据写入。
@@ -793,5 +806,89 @@ export async function runClientRender(check) {
     const failedBlock = { ...settledBlock, isError: true, error: { name: 'Error', code: 'X' } }
     const failed = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: failedBlock }), 'toolcard-failed')
     check('tool card error state', textOf(failed).includes(tOf('statsFail')))
+  }
+
+  // v3 Step 9（三级展示 L3 / N-7）：route_agent 工具卡片 L3——调用参数 filePath /
+  // files（非 URL 条目）→ 路径文本 + 「打开文件」→ remote.readWorkspaceFile →
+  // blob 预览（audio/video 原生标签兜底，V-DSH-3 降级路径 / 其他类型下载）；
+  // 打开失败显示错误码可重试。L1/L2 gallery 形态：多图并排容器（对齐宿主
+  // ImageGallery 语义，同构实现——不强求 import 宿主组件）。
+  {
+    const l3Block = {
+      kind: 'tool-result',
+      seq: 3,
+      time: 3,
+      callId: 'c3',
+      call: { name: 'route_agent', argsRaw: '{"agent":"speech","task":"转写这段音频","filePath":".router-files/voice.wav"}' },
+      callTime: 3,
+      content: [{ type: 'text', text: '转写完成：你好' }],
+      isError: false,
+      subCalls: [],
+    }
+    const openButtonsOf = (tree) => findAll(tree, (node) => node && node.type === 'button' && textOf(node).includes(tOf('openFile')))
+    captured.readWorkspaceFileCalls = []
+    readFileFailMode = false
+    const l3Tree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: l3Block }), 'toolcard-l3')
+    const pathRows = findAll(l3Tree, (node) => hasClass(node, 'dshrouter-toolpath'))
+    check('tool card renders L3 path text', pathRows.length === 1 && textOf(pathRows[0]).includes('.router-files/voice.wav'))
+    const openButtons = openButtonsOf(l3Tree)
+    check('tool card renders open-file button', openButtons.length === 1)
+    if (openButtons.length === 1) {
+      openButtons[0].props.onClick()
+      currentTree = await settle()
+      check('open-file calls readWorkspaceFile with path', captured.readWorkspaceFileCalls.length === 1 && captured.readWorkspaceFileCalls[0].path === '.router-files/voice.wav')
+      const audios = findAll(currentTree, (node) => node && node.type === 'audio')
+      check('audio player renders with blob source (native fallback)', audios.length === 1 && audios[0].props && audios[0].props.controls === true && typeof audios[0].props.src === 'string' && audios[0].props.src.startsWith('blob:'))
+    }
+    // 打开失败：错误码提示渲染（可重试），不渲染播放器。
+    readFileFailMode = true
+    captured.readWorkspaceFileCalls = []
+    const failTree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: l3Block }), 'toolcard-l3-fail')
+    const failButtons = openButtonsOf(failTree)
+    if (failButtons.length === 1) {
+      failButtons[0].props.onClick()
+      currentTree = await settle()
+      check('open-file failure shows code without player', textOf(currentTree).includes('PATH_OUTSIDE_WORKSPACE') && findAll(currentTree, (node) => node.type === 'audio').length === 0)
+    }
+    readFileFailMode = false
+    // 视频 → <video controls>；二进制/文档 → 下载链接；URL 条目不产生 L3 行。
+    const mixedBlock = { ...l3Block, call: { name: 'route_agent', argsRaw: '{"agent":"vision","task":"处理文件","files":[".router-files/clip.mp4",".router-files/notes.doc","https://example.com/x.png"]}' } }
+    captured.readWorkspaceFileCalls = []
+    const mixedTree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: mixedBlock }), 'toolcard-l3-mixed')
+    const mixedPaths = findAll(mixedTree, (node) => hasClass(node, 'dshrouter-toolpath'))
+    check('L3 files list skips URL entries', mixedPaths.length === 2)
+    const mixedButtons = openButtonsOf(mixedTree)
+    check('L3 renders open-file per file', mixedButtons.length === 2)
+    if (mixedButtons.length === 2) {
+      mixedButtons[0].props.onClick()
+      currentTree = await settle()
+      const videos = findAll(currentTree, (node) => node && node.type === 'video')
+      check('video renders with native controls', videos.length === 1 && videos[0].props && videos[0].props.controls === true && typeof videos[0].props.src === 'string' && videos[0].props.src.startsWith('blob:'))
+      const second = openButtonsOf(currentTree)
+      if (second.length > 0) {
+        second[0].props.onClick()
+        currentTree = await settle()
+        const links = findAll(currentTree, (node) => node && node.type === 'a' && typeof node.props?.download === 'string')
+        check('binary/doc renders download link', links.length === 1 && links[0].props.href && links[0].props.href.startsWith('blob:') && links[0].props.download === 'notes.doc')
+      }
+    }
+    // L1/L2 gallery 形态：多图并排容器（两张图：标记 + 旧会话真实图片块）。
+    const galleryBlock = {
+      kind: 'tool-result',
+      seq: 4,
+      time: 4,
+      callId: 'c4',
+      call: { name: 'route_agent', argsRaw: '{"agent":"draw"}' },
+      callTime: 4,
+      content: [
+        { type: 'text', text: '已生成图片（1024x1024）\n[router:image:{"attachmentId":"sha256:tv","mediaType":"image/png","bytes":4,"width":2,"height":2,"name":"router-draw.png"}]' },
+        { type: 'image', attachment: { attachmentId: 'sha256:old', mediaType: 'image/png', bytes: 4, width: 2, height: 2 } },
+      ],
+      isError: false,
+      subCalls: [],
+    }
+    const galleryTree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: galleryBlock }), 'toolcard-gallery')
+    const gallery = findAll(galleryTree, (node) => hasClass(node, 'dshrouter-toolgallery'))
+    check('tool card renders image gallery container', gallery.length === 1)
   }
 }
