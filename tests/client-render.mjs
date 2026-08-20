@@ -171,7 +171,7 @@ export async function runClientRender(check) {
   }
 
   // ── 装配：评估浏览器包 → mock ctx → apply → 渲染 ─────────────────────
-  const captured = { registrations: [], listeners: [] }
+  const captured = { registrations: [], listeners: [], uploadFileCalls: [] }
   const fakeWindow = {
     __ModuleLoader__: { load: (payload) => { captured.bundle = payload } },
     location: { search: '', pathname: '/' },
@@ -184,6 +184,16 @@ export async function runClientRender(check) {
     clearTimeout: () => {},
     confirm: () => true,
     open: () => {},
+    // F11 附件上传（Step 8）：AttachButton 经 FileReader 读字节 → base64 →
+    // router/uploadFile RPC。测试用假 FileReader（与真实浏览器同构：readAsDataURL
+    // 产出 data: URL，onload 异步回调）；文件字节由夹具的 _base64 字段提供。
+    FileReader: class {
+      readAsDataURL(file) {
+        const base64 = typeof file._base64 === 'string' && file._base64 ? file._base64 : 'aGk='
+        this.result = `data:${file.type || 'application/octet-stream'};base64,${base64}`
+        queueMicrotask(() => { if (typeof this.onload === 'function') this.onload() })
+      }
+    },
   }
   new Function('window', source)(fakeWindow)
   check('client bundle evaluates', !!captured.bundle && captured.bundle.id === 'dsh-agent-router' && typeof captured.bundle.factory === 'function')
@@ -199,6 +209,8 @@ export async function runClientRender(check) {
   // 目录形态可切换：'withVision' = 识别+生图；'drawOnly' = 仅生图 agent；
   // 'none' = 无任何多模态 agent（附件按钮隐藏、接管解除）。
   let catalogMode = 'withVision'
+  // F11 上传失败模式：true 时 remoteMock.uploadFile 返回 ok:false（错误码形状）。
+  let uploadFailMode = false
   const remoteMock = {
     catalog: async () => ({
       ok: true,
@@ -245,6 +257,11 @@ export async function runClientRender(check) {
     imageData: async (request) => {
       captured.imageDataCalls.push(request)
       return { ok: true, value: { ok: true, message: 'ok', mediaType: 'image/png', data: 'aGk=', width: 2, height: 2 } }
+    },
+    uploadFile: async (request) => {
+      captured.uploadFileCalls.push(request)
+      if (uploadFailMode) return { ok: true, value: { ok: false, message: '文件超过大小上限', code: 'FILE_TOO_LARGE' } }
+      return { ok: true, value: { ok: true, path: `.router-files/${request.name}`, attachmentId: `sha256:${'f'.repeat(64)}`, name: request.name } }
     },
   }
   // 账号添加/编辑回归用记录：端点探测请求、llm-pi-ai 写入、凭据写入。
@@ -313,6 +330,7 @@ export async function runClientRender(check) {
   // 浏览器侧 Remote 契约必须与宿主 rpc.js 同步包含 cli 三方法与 imageData（曾漏加导致按钮全失效）。
   check('client remotes include cli methods', !!captured.mount && ['cliStatus', 'cliLogin', 'cliModels'].every((method) => (captured.mount.descriptors ?? []).some((descriptor) => descriptor.method === method)))
   check('client remotes include image methods', !!captured.mount && (captured.mount.descriptors ?? []).some((descriptor) => descriptor.method === 'imageData'))
+  check('client remotes include uploadFile', !!captured.mount && (captured.mount.descriptors ?? []).some((descriptor) => descriptor.method === 'uploadFile' && descriptor.id === 'dsh-agent-router#router/uploadFile'))
   rootElement = settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} })
   dirty = true
   currentTree = await settle()
@@ -632,6 +650,89 @@ export async function runClientRender(check) {
     check('composer attach button hidden without multimodal agent', attachHidden.length === 0)
     catalogMode = 'withVision'
     listener && listener.listener()
+  }
+
+  // F11 附件上传（v3 Step 8 / N-6）：attach 输入 accept 扩展非图片类型；非图片
+  // 经 remote.uploadFile 上传（字节 base64）→ 成功渲染附件卡片 + 结构化路径文本
+  // 经 inputActions.setDraft 追加进 draft；失败显示错误提示；图片文件仍走原生
+  // addImages 原通道（uploadFile 不接管图片——避免双通道）。
+  {
+    const fileInputOf = (tree) => findAll(tree, (node) => node && node.type === 'input' && node.props && node.props.type === 'file')[0]
+    const draftState = { value: '已有草稿文本' }
+    const addImagesCalls = []
+    const setDraftCalls = []
+    const conversationUpload = {
+      createDraftImages: (files) => files.map((file, index) => ({ id: `draft-${index}-${file.name}`, previewUrl: 'blob:preview', file })),
+      releaseDraftImages: () => {},
+    }
+    const inputActionsUpload = {
+      addImages: (ids) => { addImagesCalls.push(ids); return true },
+      setDraft: (text) => { setDraftCalls.push(text) },
+    }
+    const f11Props = () => ({
+      t: tOf,
+      router: () => remoteMock,
+      conversation: () => conversationUpload,
+      inputActions: inputActionsUpload,
+      useInput: (selector) => selector({ draft: draftState.value }),
+    })
+    catalogMode = 'withVision'
+    const listener = captured.listeners.find((entry) => entry.event === 'settings/document-updated')
+    if (listener) listener.listener()
+    await new Promise((resolve) => setImmediate(resolve))
+    captured.uploadFileCalls = []
+    uploadFailMode = false
+    const f11Tree = await renderInto(imageToolReg.render(f11Props()), 'imagetool-f11')
+    const fileInput = fileInputOf(f11Tree)
+    check('attach input accept extended to non-image', !!fileInput && typeof fileInput.props.accept === 'string' && fileInput.props.accept.includes('audio/') && fileInput.props.accept.includes('video/') && fileInput.props.accept.includes('.pdf'))
+    // 上传成功：卡片渲染 + uploadFile RPC 载荷 + setDraft 追加路径文本。
+    if (fileInput) {
+      fileInput.props.onChange({ target: { files: [{ name: 'voice.wav', type: 'audio/wav', _base64: 'aGVsbG8=' }], value: '' } })
+      currentTree = await settle()
+      const cards = findAll(currentTree, (node) => hasClass(node, 'dshrouter-attachcard'))
+      check('upload success renders attachment card', cards.length === 1 && textOf(cards[0]).includes('voice.wav') && textOf(cards[0]).includes('.router-files/voice.wav'))
+      check('uploadFile RPC called with name/mediaType/base64', captured.uploadFileCalls.length === 1 && captured.uploadFileCalls[0].name === 'voice.wav' && captured.uploadFileCalls[0].mediaType === 'audio/wav' && captured.uploadFileCalls[0].dataBase64 === 'aGVsbG8=')
+      check('upload success appends path text via setDraft', setDraftCalls.length === 1 && setDraftCalls[0].startsWith('已有草稿文本') && setDraftCalls[0].includes('[附件: 音频 voice.wav 路径 .router-files/voice.wav]'))
+      // 上传失败：同一组件实例上失败（先成功已渲染 1 张卡）→ 错误提示渲染
+      // （错误码可见）且不追加卡片（判别：卡片数保持 1——旧断言在全新实例上
+      // 断言空 cards 恒真，无判别力，F-05）。
+      uploadFailMode = true
+      const failInput = fileInputOf(currentTree)
+      if (failInput) {
+        failInput.props.onChange({ target: { files: [{ name: 'big.bin', type: 'application/octet-stream', _base64: 'Ymln' }], value: '' } })
+        currentTree = await settle()
+        const failCards = findAll(currentTree, (node) => hasClass(node, 'dshrouter-attachcard'))
+        check('upload failure shows error without extra card', failCards.length === 1 && textOf(currentTree).includes('FILE_TOO_LARGE'))
+      }
+      uploadFailMode = false
+      // 图片 + 视频混选：图片仍走原生 addImages（不进 uploadFile），视频走 uploadFile。
+      const mixedTree = await renderInto(imageToolReg.render(f11Props()), 'imagetool-f11-mixed')
+      const mixedInput = fileInputOf(mixedTree)
+      if (mixedInput) {
+        mixedInput.props.onChange({ target: { files: [
+          { name: 'shot.png', type: 'image/png', _base64: 'aGk=' },
+          { name: 'clip.mp4', type: 'video/mp4', _base64: 'bXA0' },
+        ], value: '' } })
+        currentTree = await settle()
+        check('image routes to native addImages, video to uploadFile', addImagesCalls.length === 1 && addImagesCalls[0][0] === 'draft-0-shot.png' && captured.uploadFileCalls.some((call) => call.name === 'clip.mp4') && captured.uploadFileCalls.some((call) => call.name === 'clip.mp4' && call.mediaType === 'video/mp4'))
+      }
+      // F-01（P1 回归）：多非图片文件一次选选 → 全部路径文本累积后一次 setDraft
+      // （旧实现逐文件整体覆盖渲染期快照，除最后一项外全部路径文本丢失）。
+      const multiBefore = setDraftCalls.length
+      const multiTree = await renderInto(imageToolReg.render(f11Props()), 'imagetool-f11-multi')
+      const multiInput = fileInputOf(multiTree)
+      if (multiInput) {
+        multiInput.props.onChange({ target: { files: [
+          { name: 'notes.doc', type: 'application/msword', _base64: 'YQ==' },
+          { name: 'data.csv', type: 'text/csv', _base64: 'Yg==' },
+        ], value: '' } })
+        currentTree = await settle()
+        const multiDrafts = setDraftCalls.slice(multiBefore)
+        const multiCards = findAll(currentTree, (node) => hasClass(node, 'dshrouter-attachcard'))
+        check('multi non-image upload accumulates all paths in one setDraft', multiDrafts.length === 1 && multiCards.length === 2 && multiDrafts[0].startsWith('已有草稿文本') && multiDrafts[0].includes('[附件: 文档 notes.doc 路径 .router-files/notes.doc]') && multiDrafts[0].includes('[附件: 文档 data.csv 路径 .router-files/data.csv]'))
+      }
+    }
+    catalogMode = 'withVision'
   }
 
   // 模型接管（无 UI 条目）：视觉开启 → 自动切包装组；已接管幂等；关闭 → 切回原 provider。

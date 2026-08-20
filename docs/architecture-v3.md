@@ -855,7 +855,7 @@ RPC wire 面，每段独立可提交可回滚）；Step 5b 是 Step 7 的寻址�
 | ID | 假设（未验证） | 验证方法 | 影响（若证伪） |
 | --- | --- | --- | --- |
 | V-DSH-1 | ~~pre-step 注入带 id 的 user 消息会被宿主持久化为会话事件~~ **✅ 已验证成立（2026-08-19，R8/EV-019）**：宿主 dsh-agent-loop L554 对 pre-step decision.messages 逐个 `session.append("user/message")`；dsh-session L1242-1254 要求 user/message 带非空 string id，createUserMessage 生成 uuid 满足（R8 报告宿主契约印证段，五包实读） | 已执行：宿主源码核验（R8） | 无需触发——持久化语义成立 |
-| V-DSH-2 | F11 inputActions 除 addImages 外支持文本/附件注入（精确签名未知，DEC-007 标注） | 宿主 dsh-client-ui 源码/d.ts（依赖安装后，V-R2 一并核验） | Step 8 fallback：pre-step 合成 user 消息注入路径文本（§5.5） |
+| V-DSH-2 | ~~F11 inputActions 除 addImages 外支持文本/附件注入~~ **✅ 已验证（2026-08-20，Coordinator 宿主契约实读 + Step 8 落地）**：`InputActions` 公共面 = setDraft/addImages(仅图片)/removeImage/pruneImages/submit（dsh-client-ui-conversation contract.d.ts L65-76）——**无任意文件注入 API**（假设部分证伪），但 `setDraft` 为单一公共 draft 写通道，§4.4.2「结构化路径文本进 draft」主设计即宿主支持形态；文件字节经插件 slot UI + router/uploadFile RPC（Step 8 已落地，§5.5 fallback 不需要） | 已执行：宿主契约实读（contract.d.ts/slots.d.ts）+ Step 8 实现（EV-021） | 无需触发 |
 | V-DSH-3 | 宿主 dsh-client-ui-attachment 含 audio/video 播放组件（H-D3，RES-002 §9） | 依赖安装后核查包导出；否则 `<audio>/<video>` 原生标签兜底 | Step 9 L3 音频卡片形态（原生标签兜底已可用） |
 | V-DSH-4 | audio/video 魔数判定可扩展（detectImageMediaType 现仅 image，`service.js:416`） | 魔数表调研 + 单测（mp3/mp4/wav/webm 头字节） | 扩展名校验兜底（UNSUPPORTED_MEDIA 判定降级） |
 | V-DSH-5 | 主模型对三通道的实际响应率 ≥90%（RES-001 H2/U-3 延续） | Step 1 后即可启动 U-3 实测（不必等 Step 10） | BC-1 缓解选项（触发率不足时的强化路径） |

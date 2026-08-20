@@ -6,6 +6,7 @@ import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_S
 import { runClientRender } from './client-render.mjs'
 import { runInstallEntryTests } from './install-entry.mjs'
 import { runAttachmentTests } from './attachments.mjs'
+import { isAttachmentId } from '../lib/attachments.js'
 import { BlockAssembler, LlmRuntime, contentHasImage } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -109,6 +110,20 @@ console.log('wire codecs:')
   check('readWorkspaceFileRequest rejects wrong type', rwTypeThrew)
   const rwRes = wireCodecs.readWorkspaceFileResult.parse({ ok: true, dataBase64: 'aGVsbG8=', mediaType: 'audio/wav', name: 'a.wav' })
   check('readWorkspaceFileResult parses', rwRes.ok === true && rwRes.dataBase64 === 'aGVsbG8=' && rwRes.mediaType === 'audio/wav' && rwRes.code === undefined)
+  // R7-F-01（Step 8 补齐）：result codec 错误形状（ok:false + message/code 填值，
+  // 对应 §4.3.5 错误码 UNSUPPORTED_MEDIA / FILE_TOO_LARGE / UPLOAD_FAILED /
+  // PATH_OUTSIDE_WORKSPACE）与 result 类型错误拒绝——Step 8/9 service 实现的
+  // wire 契约面（错误码经此形状返回），与 request codec 的类型拒绝判别对称。
+  const upErr = wireCodecs.uploadFileResult.parse({ ok: false, message: '文件超过大小上限', code: 'FILE_TOO_LARGE' })
+  check('uploadFileResult error shape parses (ok:false + code)', upErr.ok === false && upErr.message === '文件超过大小上限' && upErr.code === 'FILE_TOO_LARGE' && upErr.path === undefined && upErr.attachmentId === undefined && upErr.name === undefined)
+  let upErrTypeThrew = false
+  try { wireCodecs.uploadFileResult.parse({ ok: 'yes', message: 'x' }) } catch { upErrTypeThrew = true }
+  check('uploadFileResult rejects wrong ok type', upErrTypeThrew)
+  const rwErr = wireCodecs.readWorkspaceFileResult.parse({ ok: false, message: '路径越界', code: 'PATH_OUTSIDE_WORKSPACE' })
+  check('readWorkspaceFileResult error shape parses (ok:false + code)', rwErr.ok === false && rwErr.message === '路径越界' && rwErr.code === 'PATH_OUTSIDE_WORKSPACE' && rwErr.dataBase64 === undefined && rwErr.mediaType === undefined)
+  let rwErrTypeThrew = false
+  try { wireCodecs.readWorkspaceFileResult.parse({ ok: 'no' }) } catch { rwErrTypeThrew = true }
+  check('readWorkspaceFileResult rejects wrong ok type', rwErrTypeThrew)
   // v3 Step 7（N-5/R-5/R-6）：模态枚举（§4.3.2 M5）+ capabilities 归一（未知值
   // 兼容放行）+ catalog 每 agent 模态能力 wire 面（ModalityCapability 形状）。
   const modalityCapAgent = wireCodecs.catalogResult.parse({ ok: true, enabled: true, defaults: { provider: 'p', model: 'm' }, agents: [{ id: 'vision', name: '视觉', type: 'chat', enabled: true, description: '', capabilities: ['image'], provider: '', model: '', account: '', effectiveProvider: 'p', effectiveModel: 'm', source: 'agent', modalities: { consume: ['image', 'text'], produce: ['text'] } }], oauthAccounts: [] })
@@ -841,6 +856,85 @@ console.log('RouterService:')
     check('attachmentIds resolve without exec (id-only)', noExec.length === 1 && noExec[0].attachmentId === knownId)
   }
 
+  // v3 Step 8（F11 输入入口 / N-6）：router/uploadFile service——base64 解码 →
+  // 图片魔数拒绝（双通道规避）→ 大小校验 → 落盘 .router-files/（文件名消毒）
+  // → M2 registerPath 注册 → { ok:true, path, attachmentId, name }；非法
+  // base64 / 写盘失败 / 无工作区 → { ok:false, message, code }（错误码清晰）。
+  console.log('uploadFile (F11):')
+  {
+    const pathModule = await import('node:path')
+    const fsModule = await import('node:fs')
+    const osModule = await import('node:os')
+    const tmpDir = pathModule.join(osModule.tmpdir(), `dsh-agent-router-upload-${Date.now()}`)
+    fsModule.mkdirSync(tmpDir, { recursive: true })
+    try {
+      // 工作区解析：浏览器 RPC 的 direct invocation 不携带会话上下文（宿主网关
+      // exact-arguments 断言只放行 request），目标工作区取最近一次 run() 记录的
+      // 会话 cwd（最近一次执行会话的工作区；全新会话首条消息即上传 → 无记录 →
+      // WORKSPACE_UNAVAILABLE，F-03：不做"必然已运行"假设）。
+      await service.run({ agentId: 'vision', task: 'workspace anchor', images: [], exec: { agent: { session: { header: { cwd: tmpDir, delegationDepth: 0 } } } } })
+      check('upload workspace anchored from run exec', service.lastWorkspace && service.lastWorkspace.cwd === tmpDir)
+      const base64 = (bytes) => Buffer.from(bytes).toString('base64')
+      // 成功：音频落盘 + M2 注册（内容寻址 id + workspacePath 物理载体）。
+      const okUpload = await service.uploadFile({ name: 'voice.wav', mediaType: 'audio/wav', dataBase64: base64([0x52, 0x49, 0x46, 0x46, 0x01, 0x02]) })
+      const expectedPath = pathModule.join(tmpDir, '.router-files', 'voice.wav')
+      check('uploadFile writes file and registers', okUpload.ok === true && okUpload.path === expectedPath && okUpload.name === 'voice.wav' && isAttachmentId(okUpload.attachmentId) && fsModule.existsSync(expectedPath))
+      check('uploadFile registers M2 entry (id + path)', (await service.registry.byId(okUpload.attachmentId))?.id === okUpload.attachmentId && service.registry.byPath(expectedPath)?.id === okUpload.attachmentId)
+      // 文件名消毒沿用既有惯例（downloadToWorkspace 同款字符集 [A-Za-z0-9._-]）。
+      const sanitized = await service.uploadFile({ name: 'a b/wav', mediaType: 'audio/wav', dataBase64: base64([1, 2, 3]) })
+      check('uploadFile sanitizes file name', sanitized.ok === true && sanitized.name === 'a_b_wav' && sanitized.path === pathModule.join(tmpDir, '.router-files', 'a_b_wav'))
+      // F-02（P1 回归）：同名不同内容两次上传 → 第二条追加去重后缀落盘，绝不
+      // 静默覆盖已注册附件（内容寻址承诺 id↔bytes，D-1-4）；两文件并存、注册表
+      // 两条目各自可读回原字节。注意：smoke 的 fs.readBytes mock 恒返回固定
+      // 字节（M2 id 失真），本用例临时改挂真实读盘以校验真实内容哈希。
+      const fsService = service.ctx.get('fs')
+      const originalReadBytes = fsService.readBytes
+      fsService.readBytes = async (target) => fsModule.readFileSync(String(target?.displayPath ?? ''))
+      let firstDoc, secondDoc
+      try {
+        firstDoc = await service.uploadFile({ name: 'notes.docx', mediaType: 'application/octet-stream', dataBase64: base64([1, 2, 3]) })
+        secondDoc = await service.uploadFile({ name: 'notes.docx', mediaType: 'application/octet-stream', dataBase64: base64([9, 9, 9]) })
+      } finally {
+        fsService.readBytes = originalReadBytes
+      }
+      const firstDocPath = pathModule.join(tmpDir, '.router-files', 'notes.docx')
+      const secondDocPath = pathModule.join(tmpDir, '.router-files', 'notes.docx-1')
+      check('uploadFile dedupes colliding sanitized names', firstDoc.ok === true && secondDoc.ok === true && firstDoc.path === firstDocPath && secondDoc.name === 'notes.docx-1' && secondDoc.path === secondDocPath && fsModule.existsSync(firstDocPath) && fsModule.existsSync(secondDocPath))
+      check('uploadFile collision keeps both M2 entries byte-correct', firstDoc.attachmentId !== secondDoc.attachmentId && (await service.registry.byId(firstDoc.attachmentId))?.id === firstDoc.attachmentId && (await service.registry.byId(secondDoc.attachmentId))?.id === secondDoc.attachmentId && service.registry.byPath(firstDocPath)?.id === firstDoc.attachmentId && service.registry.byPath(secondDocPath)?.id === secondDoc.attachmentId && Buffer.compare(fsModule.readFileSync(firstDocPath), Buffer.from([1, 2, 3])) === 0 && Buffer.compare(fsModule.readFileSync(secondDocPath), Buffer.from([9, 9, 9])) === 0)
+      // 大小校验：>25MB → FILE_TOO_LARGE 明确错误码（§4.3.5 校验序列）。
+      const big = await service.uploadFile({ name: 'big.bin', mediaType: 'application/octet-stream', dataBase64: base64(new Uint8Array(25 * 1024 * 1024 + 1)) })
+      check('uploadFile over 25MB rejected (FILE_TOO_LARGE)', big.ok === false && big.code === 'FILE_TOO_LARGE' && big.message.includes('25MB'))
+      // 非法 base64 → INVALID_BASE64。
+      const bad = await service.uploadFile({ name: 'x.bin', mediaType: 'application/octet-stream', dataBase64: 'not-valid-!!' })
+      check('uploadFile invalid base64 rejected (INVALID_BASE64)', bad.ok === false && bad.code === 'INVALID_BASE64')
+      // F-04（P2 回归）：解码前大小预检——超大载荷（且为非法 base64）在解码前
+      // 被拒：若先解码必为 INVALID_BASE64，预检先行使之为 FILE_TOO_LARGE
+      // （判别解码顺序；wire codec 无大小上限，R7 F-03）。
+      const huge = await service.uploadFile({ name: 'huge.bin', mediaType: 'application/octet-stream', dataBase64: '!'.repeat(Math.ceil(26 * 1024 * 1024 * 4 / 3) + 16) })
+      check('uploadFile pre-checks payload size before decode (FILE_TOO_LARGE)', huge.ok === false && huge.code === 'FILE_TOO_LARGE' && huge.message.includes('25MB'))
+      // 图片魔数 → UNSUPPORTED_MEDIA（uploadFile 不接管图片，避免双通道）。
+      const png = await service.uploadFile({ name: 'shot.png', mediaType: 'image/png', dataBase64: base64([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) })
+      check('uploadFile rejects image magic (UNSUPPORTED_MEDIA)', png.ok === false && png.code === 'UNSUPPORTED_MEDIA')
+      // 无会话工作区 → WORKSPACE_UNAVAILABLE 明确报错（可用性黑洞消除）。
+      const savedWorkspace = service.lastWorkspace
+      service.lastWorkspace = null
+      const noWs = await service.uploadFile({ name: 'x.wav', mediaType: 'audio/wav', dataBase64: base64([1, 2]) })
+      service.lastWorkspace = savedWorkspace
+      check('uploadFile without workspace rejected (WORKSPACE_UNAVAILABLE)', noWs.ok === false && noWs.code === 'WORKSPACE_UNAVAILABLE')
+    } finally {
+      try {
+        const routerFiles = pathModule.join(tmpDir, '.router-files')
+        if (fsModule.existsSync(routerFiles)) {
+          for (const name of fsModule.readdirSync(routerFiles)) {
+            try { fsModule.rmSync(pathModule.join(routerFiles, name), { force: true }) } catch { /* 继续清理其余文件 */ }
+          }
+          try { fsModule.rmdirSync(routerFiles) } catch { /* 目录可能已被删除 */ }
+        }
+        try { fsModule.rmdirSync(tmpDir) } catch { /* 沙箱拒绝清理时留待手动删除 */ }
+      } catch { /* 忽略清理失败 */ }
+    }
+  }
+
   check('errorMessage', errorMessage(new Error('x')) === 'x' && errorMessage({ message: 'y' }) === 'y')
 }
 
@@ -1429,6 +1523,27 @@ console.log('admission wrapper (L1):')
   check('escape rewrite reaches nested tool-result', rewrittenNested[0].content[1].content.every((b) => b.type === 'text') && !rewrittenNested[0].content[1].content.some((b) => b.type === 'image'))
   const untouched = createUserMessage({ content: [{ type: 'text', text: '纯文本' }], source: { kind: 'user' } })
   check('escape rewrite leaves text-only message untouched', rewriteImageTurnsToMarkers([untouched], { vision: ['vision'], generation: [] })[0] === untouched)
+
+  // ⑧ R8-F-02 补齐：宿主真实 decision 形态的映射对齐——宿主默认 decision 为
+  // [...claimed, context]（context 为运行时上下文 user 消息，同引用对齐之外
+  // 的尾部追加项）：映射须把 index=-1 的 context 原样透传，同时 claimed 前 N 项
+  // 照常改写；reject decision 原样透传（不注入 reminder）；handler 内部异常
+  // fail-safe 降级为原 decision（绝不击穿宿主 agent 循环）。
+  const contextMessage = createUserMessage({ content: [{ type: 'text', text: '运行时上下文' }], source: { kind: 'user' } })
+  const contextDispatch = (agent, messages) =>
+    root.events.waterfall('agent/pre-step', { agent, messages, turn: 1, step: 1, signal: undefined },
+      () => Promise.resolve({ kind: 'enter', messages: [...messages, contextMessage] }))
+  const contextDecision = await contextDispatch(escapeAgent, [imageMessage])
+  check('context-appended decision maps rewrite + passthrough (index=-1)', contextDecision.kind === 'enter' && contextDecision.messages.length === 3 && contextDecision.messages[0].content.every((b) => b.type !== 'image') && contextDecision.messages[1] === contextMessage && contextDecision.messages[2].source.kind === 'plugin')
+  const rejectDecision = await root.events.waterfall('agent/pre-step', { agent: escapeAgent, messages: [imageMessage], turn: 1, step: 1, signal: undefined },
+    () => Promise.resolve({ kind: 'reject', reason: 'blocked' }))
+  check('reject decision passes through untouched', rejectDecision.kind === 'reject' && rejectDecision.reason === 'blocked' && rejectDecision.messages === undefined)
+  // fail-safe：让 handler try 体内的 sessionProvider 抛错（agent.options.provider
+  // getter 抛异常——sessionProvider 的 try 只包 requestHeader，options 读取不兜底）
+  // → 捕获后返回原 decision（无 reminder、无改写）。
+  const throwingOptionsAgent = { options: { get provider() { throw new Error('boom') } } }
+  const failSafeDecision = await dispatch(throwingOptionsAgent, [imageMessage])
+  check('handler exception falls back to original decision (fail-safe)', failSafeDecision.kind === 'enter' && failSafeDecision.messages.length === 1 && failSafeDecision.messages[0] === imageMessage)
 
   // ⑦ 卸载器：移除注册后瀑布回到默认 decision（Step 6 回滚 = 卸载 pre-step 注册）。
   dispose()
