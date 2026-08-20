@@ -22,10 +22,10 @@
 | 项目名称 | dsh-agent-router |
 | 当前阶段 | development (6/11) |
 | 总任务数 | 7 |
-| 已完成 | 4 |
-| 阻塞中 | 0（DEV-003 待 DEC-003 解除评估——用户决策） |
-| 关键风险数 | 2（RISK-002 建议关闭——见 risk-log） |
-| 最近 Gate 结论 | G4 待评（MIG-001 完结，开发+测试证据链齐备——EV-011~023/R1-R14） |
+| 已完成 | 5 |
+| 阻塞中 | 0 |
+| 关键风险数 | 1（RISK-001 活跃——48h 观察期义务） |
+| 最近 Gate 结论 | G4 待评（MIG-001 完结 + v0.2.0 已发布；CI 面仍缺——RISK-001） |
 | 最近复盘日期 | — |
 
 ## Gate 状态跟踪（lightweight 7 合并 Gate）
@@ -50,7 +50,7 @@
 | MIG-001 | development | v3 迁移实施 Step 0-10（DEC-012） | 按架构 v3 §8 迁移路径逐步实施：Step 0 基线测试 → Step 1 移除整轮路由 → … → Step 10；每步独立提交+测试全绿；验收门 = D-1 五条指标（DEC-012） | **已完成**——Step 0-10 全 13 单元闭环（7cb2024/b7261d5/a23b338/374edfa/f89b8bd/f294c3c/98f04a3/2c4b194/1f17ea8/12a8c71/e88dfb2/0554c5d + Step 10 本提交）；R1-R14 审查链全通过（含两次 NEEDS_CHANGE→返工→复审闭环）；EV-011~023；V-DSH-1/2/3/7 闭环（1/2/7 验证成立/可用，3 证伪走原生兜底）；**D-1 门判定：满足×2（恒主模型/编址往返 100% 自动化）+ 部分满足×2（图片到达/跨轮指代——机制面 100% 端到端待实测）+ 待实测×1（触发率——U-3 真实统计）**；观测脚本 tests/metrics.mjs（31 项）；遗留转后续域：R14-F-01 测试卫生（DEV-002）+ P3 记录项 + D-1 待实测项（真实使用后评估）+ R4 F-1/F-2 | P0 |
 | DEV-001 | development | v0.1.8 行为基线回归验证 | 跑通 tests/smoke.mjs + client-render.mjs，记录 whole-turn 图片路由默认化（c2648d2/963b4f5）后的基线输出 | 待开始 | P1 |
 | DEV-002 | development | 核心通路自动化测试补强 | routing/takeover 关键路径具备可重复测试（当前仅 4 个冒烟测试文件） | 待开始 | P1 |
-| DEV-003 | release | v0.1.8 发布收尾 | 发布说明/CHANGELOG + tarball + tag（package.json 已 0.1.8，最新 tag v0.1.7） | 阻塞（依赖 RES-001 结论——DEC-003 发布暂停） | P1 |
+| DEV-003 | release | v0.2.0 发布收尾（DEC-015 升级） | 版本 bump 0.2.0 + CHANGELOG（v3 迁移全量记录）+ README 徽章/安装命令同步 + tarball 离线安装验证 + tag v0.2.0 + 归档触发检测 | **已完成（本提交=v0.2.0 发布提交）**——Release agent 三件套 + Developer bump/README + Release Reviewer APPROVED（W-1 有条件发布裁决入 risk-log，48h 观察期义务 DEV-001/002 关闭决策；W-3 回滚范围表述已修正）；tarball/tag 随本提交执行 | P1 |
 
 ## 版本规划
 
