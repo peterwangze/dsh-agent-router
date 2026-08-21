@@ -6,6 +6,8 @@ import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_S
 import { runClientRender } from './client-render.mjs'
 import { runInstallEntryTests } from './install-entry.mjs'
 import { runAttachmentTests } from './attachments.mjs'
+import { runOauthCredentialTests } from './oauth-credentials.mjs'
+import { runLoopbackTests } from './oauth-loopback.mjs'
 import { isAttachmentId } from '../lib/attachments.js'
 import { BlockAssembler, LlmRuntime, contentHasImage } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
@@ -1259,6 +1261,10 @@ console.log('apply wiring:')
 
   // M2 附件编址层（v3 Step 5a，MIG-001）：三向映射/懒注册降级/物化缓存会话隔离。
   await runAttachmentTests(check)
+
+  // EVO-002 Step 2/3：ChatGPT preset 凭据模块 + 1455 惰性 loopback 回调服务。
+  await runOauthCredentialTests(check)
+  await runLoopbackTests(check)
 }
 
 // 7.5 准入包装机制验证：真实 LlmRuntime 上的 twin 路由
