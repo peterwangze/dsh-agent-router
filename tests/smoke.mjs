@@ -8,12 +8,14 @@ import { runInstallEntryTests } from './install-entry.mjs'
 import { runAttachmentTests } from './attachments.mjs'
 import { runOauthCredentialTests } from './oauth-credentials.mjs'
 import { runLoopbackTests } from './oauth-loopback.mjs'
+import { OauthCredentialStore, CHATGPT_PRESET } from '../lib/oauth-credentials.js'
 import { isAttachmentId } from '../lib/attachments.js'
 import { BlockAssembler, LlmRuntime, contentHasImage } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -451,6 +453,122 @@ console.log('RouterService:')
     check('oauth chat files text inlined', oauthFilesRun.kind === 'chat' && oauthFilesRun.text.includes('hello 文本内容'))
   } finally {
     globalThis.fetch = realFetch
+  }
+
+  // ── EVO-002 Step 4b：ChatGPT preset 授权流分支（oauthBegin / oauthTokenExchange /
+  // resolveOauthToken 三点 preset 分流 + kill-switch + 惰性 loopback + 凭据四元组
+  // 落盘 + ensureFresh 集成）。独立 service 与临时凭据目录——主夹具零改动，
+  // 通用账号行为零改变由上方既有断言全绿证明（P3）。
+  console.log('oauth preset branch (EVO-002 Step 4b):')
+  {
+    const presetWork = mkdtempSync(join(tmpdir(), 'router-preset-'))
+    const fakeJwt = (accountId, sig) => {
+      const b64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
+      return `${b64url({ alg: 'RS256', typ: 'JWT' })}.${b64url({ 'https://api.openai.com/auth': { chatgpt_account_id: accountId } })}.${sig}`
+    }
+    const accessJwt = fakeJwt('acct-cgpt-1', 'sig-exchange')
+    const refreshJwt = fakeJwt('acct-cgpt-1', 'sig-refresh')
+    const presetRoot = new Context()
+    presetRoot.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
+    let oauthExperimental = false
+    const presetCredFile = join(presetWork, 'cgpt-auth.json')
+    const presetService = new RouterService(presetRoot)
+    presetService.attach({ get: () => ({
+      enabled: true,
+      oauthExperimental,
+      oauthAccounts: {
+        // 同名字段故意填干扰值：preset 语义 = 常量预填（零配置），账号内
+        // authUrl/tokenUrl/clientId/scope 必须被忽略（roadmap §3.4 条目 1）。
+        cgpt: { name: 'ChatGPT', enabled: true, preset: 'chatgpt-codex', credentialFile: presetCredFile, authUrl: 'https://evil.example/authorize', tokenUrl: 'https://evil.example/token', clientId: 'WRONG', scope: 'WRONG', protocol: 'openai-completions', baseURL: 'https://chatgpt.com/backend-api' },
+        odd: { name: '未知预设', enabled: true, preset: 'mystery-preset' },
+      },
+      agents: {},
+    })})
+    let refreshMode = 'ok'
+    const presetFetches = []
+    const realFetch4b = globalThis.fetch
+    globalThis.fetch = async (url, options) => {
+      presetFetches.push({ url: String(url), init: options })
+      if (String(url) === CHATGPT_PRESET.tokenUrl) {
+        const body = new URLSearchParams(String(options?.body ?? ''))
+        if (body.get('grant_type') === 'authorization_code') {
+          return { ok: true, json: async () => ({ access_token: accessJwt, refresh_token: 'REFRESH-4B-1', expires_in: 3600, token_type: 'bearer' }) }
+        }
+        if (body.get('grant_type') === 'refresh_token') {
+          if (refreshMode === '401') return { ok: false, status: 401, json: async () => ({ error: 'could-not-parse-token' }) }
+          return { ok: true, json: async () => ({ access_token: refreshJwt, refresh_token: 'REFRESH-4B-2', expires_in: 864000 }) }
+        }
+      }
+      return { ok: false, status: 404, text: async () => 'not found' }
+    }
+    try {
+      // 1. kill-switch（§3.6 第③层）：oauthExperimental 默认 false → 明确拒绝。
+      const killed = await presetService.oauthBegin({ accountId: 'cgpt' })
+      check('preset begin kill-switch closed by default', killed.ok === false && killed.message.includes('实验通路已关闭'))
+      oauthExperimental = true
+      // 2. 惰性 loopback 未就绪（1455 被占，E4 降级链入口）→ 明确报错。
+      presetService.codexLoopbackStarter = async () => ({ ready: false, reason: 'EADDRINUSE', dispose: () => {} })
+      const notReady = await presetService.oauthBegin({ accountId: 'cgpt' })
+      check('preset begin rejects when 1455 loopback not ready', notReady.ok === false && notReady.message.includes('1455') && notReady.message.includes('占用'))
+      // 3. 正常路径：preset 常量预填 + PKCE/state + H3-4 附加参数 + originator。
+      presetService.codexLoopbackStarter = async () => ({ ready: true, port: 1455, dispose: () => {} })
+      const pbegin = await presetService.oauthBegin({ accountId: 'cgpt', redirectUri: 'https://ignored.example/cb' })
+      // URLSearchParams 编码（空格→+、:/→%3A%2F）与实现同机制推导期望值。
+      const scopeParam = new URLSearchParams([['scope', CHATGPT_PRESET.scope]]).toString()
+      const redirectParam = new URLSearchParams([['redirect_uri', CHATGPT_PRESET.redirectUri]]).toString()
+      check('preset begin builds authorize url from CHATGPT_PRESET', pbegin.ok === true
+        && pbegin.authUrl.startsWith(`${CHATGPT_PRESET.authUrl}?`)
+        && pbegin.authUrl.includes(`client_id=${CHATGPT_PRESET.clientId}`)
+        && pbegin.authUrl.includes(scopeParam)
+        && pbegin.authUrl.includes(redirectParam)
+        && pbegin.authUrl.includes(`state=${pbegin.state}`))
+      check('preset begin carries PKCE + H3-4 params + originator', pbegin.authUrl.includes('response_type=code') && pbegin.authUrl.includes('code_challenge=') && pbegin.authUrl.includes('code_challenge_method=S256') && pbegin.authUrl.includes('id_token_add_organizations=true') && pbegin.authUrl.includes('codex_cli_simplified_flow=true') && pbegin.authUrl.includes('originator='))
+      check('preset begin ignores same-named account fields (zero-config)', !pbegin.authUrl.includes('evil.example') && !pbegin.authUrl.includes('WRONG'))
+      check('preset begin registers pending session', presetService.oauthPending.get(pbegin.state)?.accountId === 'cgpt' && typeof presetService.oauthPending.get(pbegin.state)?.verifier === 'string' && presetService.oauthPending.get(pbegin.state)?.redirectUri === CHATGPT_PRESET.redirectUri)
+      // 4. 未知 preset → 消费点校验明确报错（schemas Step 1 放行语义的闭合）。
+      const odd = await presetService.oauthBegin({ accountId: 'odd' })
+      check('preset begin unknown preset rejected', odd.ok === false && odd.message.includes('未知预设类型'))
+      // 5. exchange preset：fake token 响应（含 refresh_token/expires_in）→
+      //    完整四元组凭据落盘（roadmap §3.4 条目 2），wire 形状沿用现有 codec。
+      const beforeExchange = Date.now()
+      const pex = await presetService.oauthTokenExchange({ code: 'pc-1', state: pbegin.state })
+      const afterExchange = Date.now()
+      check('preset exchange succeeds with wire expiresIn', pex.ok === true && pex.expiresIn === 3600)
+      const exchangeCall = presetFetches.find((call) => call.url === CHATGPT_PRESET.tokenUrl)
+      const exchangeBody = new URLSearchParams(String(exchangeCall?.init?.body ?? ''))
+      check('preset exchange posts preset tokenUrl with PKCE and no secret', exchangeBody.get('client_id') === CHATGPT_PRESET.clientId && exchangeBody.get('code') === 'pc-1' && exchangeBody.get('grant_type') === 'authorization_code' && !!exchangeBody.get('code_verifier') && !exchangeBody.has('client_secret'))
+      const savedDoc = JSON.parse(readFileSync(presetCredFile, 'utf8'))
+      check('preset exchange persists full credential quad', savedDoc.version === 1 && savedDoc.credential.type === 'oauth' && savedDoc.credential.access === accessJwt && savedDoc.credential.refresh === 'REFRESH-4B-1' && savedDoc.credential.accountId === 'acct-cgpt-1')
+      check('preset exchange expires is absolute ms', savedDoc.credential.expires > beforeExchange + 3_590_000 && savedDoc.credential.expires <= afterExchange + 3_601_000)
+      check('preset pending consumed after exchange', !presetService.oauthPending.has(pbegin.state))
+      // 6a. resolveOauthToken preset：新鲜凭据 → 零网络直接返回 access。
+      const callsBeforeResolve = presetFetches.length
+      const freshToken = await presetService.resolveOauthToken(presetService.getOAuthAccount('cgpt'))
+      check('preset resolve returns access without network when fresh', freshToken === accessJwt && presetFetches.length === callsBeforeResolve)
+      // 6b. 临期凭据 → ensureFresh 触发刷新（fake fetch）返回新 access + 盘上覆写。
+      const seedStore = new OauthCredentialStore(presetCredFile)
+      await seedStore.write({ type: 'oauth', access: 'ACCESS-STALE-4B', refresh: 'REFRESH-STALE-4B', expires: Date.now() + 30_000, accountId: 'acct-cgpt-1' })
+      const refreshedToken = await presetService.resolveOauthToken(presetService.getOAuthAccount('cgpt'))
+      const refreshedDoc = JSON.parse(readFileSync(presetCredFile, 'utf8'))
+      check('preset resolve refreshes expiring credential via ensureFresh', refreshedToken === refreshJwt && presetFetches.length === callsBeforeResolve + 1)
+      check('preset resolve rotating refresh overwrites disk document', refreshedDoc.credential.access === refreshJwt && refreshedDoc.credential.refresh === 'REFRESH-4B-2')
+      // 6c. 刷新 401（REFRESH_FAILED 终态）→ 对齐 401 重登文案 + status 元数据转发
+      //    （R4 转发语义：timedOut=瞬时域、status=HTTP 终态域，不吞掉）。
+      await seedStore.write({ type: 'oauth', access: 'ACCESS-STALE-4B', refresh: 'REFRESH-STALE-4B', expires: Date.now() + 30_000, accountId: 'acct-cgpt-1' })
+      refreshMode = '401'
+      let refreshError = null
+      try { await presetService.resolveOauthToken(presetService.getOAuthAccount('cgpt')) } catch (error) { refreshError = error }
+      check('preset resolve REFRESH_FAILED aligns re-login wording', !!refreshError && refreshError.message.includes('重新登录'))
+      check('preset resolve forwards error.status metadata (not swallowed)', !!refreshError && refreshError.status === 401)
+      // 6d. 无凭据文件 → 明确报错（未登录，需先授权）。
+      const missingAccount = { ...presetService.getOAuthAccount('cgpt'), credentialFile: join(presetWork, 'missing.json') }
+      let noCredError = null
+      try { await presetService.resolveOauthToken(missingAccount) } catch (error) { noCredError = error }
+      check('preset resolve without credential file errors clearly', !!noCredError && noCredError.message.includes('登录'))
+    } finally {
+      globalThis.fetch = realFetch4b
+      try { rmSync(presetWork, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
+    }
   }
 
   const text = service.promptText()
@@ -1252,6 +1370,11 @@ console.log('apply wiring:')
     check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 15 && registeredContribution.package === 'dsh-agent-router')
     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
     check('oauth callback route registered', webRoute && webRoute.kind === 'exact' && webRoute.path === '/router-oauth/callback' && typeof webRoute.handler === 'function')
+    // R3 F-3：真实 service 上断言惰性注入点——apply 后 starter 可用但 1455
+    // 未监听（替代 oauth-loopback.mjs 对测试自建 fixture 的同义反复断言）。
+    const wiredService = root.get('router')
+    check('codex loopback starter injected by apply (lazy seam)', typeof wiredService?.codexLoopbackStarter === 'function')
+    check('codex loopback stays unstarted after apply (lazy)', wiredService?.codexLoopbackReady !== true)
     await app.dispose()
   }
 
