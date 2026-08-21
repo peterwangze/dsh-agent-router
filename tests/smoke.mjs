@@ -82,6 +82,7 @@ console.log('schemas:')
   // 未知值放行、消费点校验（OAUTH_PRESET_VALUES 常量供后续步骤与 UI 消费）。
   const c = routerSchema({})
   check('default oauthExperimental=false (§3.6 默认关闭)', c.oauthExperimental === false)
+  check('default takeoverDefaultModel=false (FIX-002 默认不接管)', c.takeoverDefaultModel === false)
   const d = routerSchema({ oauthAccounts: { legacy: { name: 'L' } } })
   check('oauth entry preset defaults to empty (P3 既有配置零破坏)', d.oauthAccounts.legacy.preset === '')
   check('oauth entry credentialFile defaults to empty', d.oauthAccounts.legacy.credentialFile === '')
@@ -1543,10 +1544,12 @@ console.log('admission wrapper (L1):')
     },
   })
   const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
-  // 可变服务门控面。
-  const config = { enabled: true, visionAgents: [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]], generationAgents: [] }
+  // 可变服务门控面。takeoverDefaultModel: true 维持本段既有接管断言语义
+  //（FIX-002 后默认 false——不开启则默认模型永不被触碰）。
+  const config = { enabled: true, takeoverDefaultModel: true, visionAgents: [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]], generationAgents: [] }
   const fakeService = {
     isEnabled: () => config.enabled,
+    getState: () => config,
     listImageVisionAgents: () => config.visionAgents,
     listImageGenerationAgents: () => config.generationAgents,
   }
@@ -1767,6 +1770,17 @@ console.log('admission wrapper (L1):')
   await tick()
   check('wrapper hot-syncs on adapters event', llm.listProviders().some((entry) => entry.id === `another-provider${WRAP_SUFFIX}`))
   check('wrapper re-takes over default model', defaultSelection.provider === `text-provider${WRAP_SUFFIX}`)
+  // 6b) FIX-002 用户主权：一次性接管后用户手动改回原生 → 后续 sync 事件
+  //（session 切换/adapters/设置变更）不再强制覆盖回 twin。
+  defaultSelection = { provider: 'text-provider', model: 'brain-1' }
+  fireSettingsCommit('router')
+  await tick()
+  check('user revert respected after one-shot takeover (FIX-002)', defaultSelection.provider === 'text-provider')
+  // 6c) FIX-002 开关关闭：默认模型永不被触碰（flag=false 时 sync 直接跳过接管）。
+  config.takeoverDefaultModel = false
+  fireSettingsCommit('router')
+  await tick()
+  check('takeover off never touches default model (FIX-002)', defaultSelection.provider === 'text-provider')
   check('wrappableProviders excludes twins', wrappableProviders(llm).every((provider) => !provider.endsWith(WRAP_SUFFIX)) && wrappableProviders(llm).includes('text-provider'))
   // 7) 卸载器释放全部注册并恢复默认模型。
   dispose()
