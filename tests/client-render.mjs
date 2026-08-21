@@ -220,7 +220,7 @@ export async function runClientRender(check) {
     catalog: async () => ({
       ok: true,
       value: {
-        ok: true, enabled: true, defaults: { provider: 'deepseek-official', model: 'deepseek-v4-pro' },
+        ok: true, enabled: true, takeoverDefaultModel: true, defaults: { provider: 'deepseek-official', model: 'deepseek-v4-pro' },
         agents: catalogMode === 'drawOnly'
           ? [
             { id: 'draw', name: '画图', type: 'image', enabled: true, description: 'd', capabilities: ['image'], provider: 'openai', model: 'dall-e-3', account: '', effectiveProvider: 'openai', effectiveModel: 'dall-e-3', source: 'agent' },

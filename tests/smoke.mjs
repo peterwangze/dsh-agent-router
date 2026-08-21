@@ -348,6 +348,7 @@ console.log('RouterService:')
 
   const catalog = await service.catalog()
   check('catalog lists enabled only', catalog.agents.length === 18 && catalog.agents.every((entry) => entry.id !== 'off'))
+  check('catalog mirrors takeover switch (FIX-002 客户端接管开关)', catalog.takeoverDefaultModel === false)
   check('catalog effective', catalog.agents.find((entry) => entry.id === 'vision').effectiveModel === 'deepseek-v4-pro')
   check('catalog cli type kept', catalog.agents.find((entry) => entry.id === 'coder').type === 'cli')
   check('catalog cli no main-model leak', catalog.agents.find((entry) => entry.id === 'coder').effectiveModel === '' && catalog.agents.find((entry) => entry.id === 'coder').effectiveProvider === 'cli:coder' && catalog.agents.find((entry) => entry.id === 'coder').source === 'agent')
