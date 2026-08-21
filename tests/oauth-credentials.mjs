@@ -6,7 +6,10 @@
  * undefined）、delete 幂等、原子写无残留、owner-only（POSIX）、accountIdFromJwt
  * （H3-7）、ensureFresh（零网络快路径 / rotating refresh 全文档重写 / 401 终态）、
  * 并发锁串行化（fetch 恰一次）、锁超时与陈旧接管、resolveCredentialPath（F-01：
- * credentialFile 回退默认路径，DSH_HOME → ~/.dsh）、P7 脱敏（诊断不含 token 值）。
+ * credentialFile 回退默认路径，DSH_HOME → ~/.dsh）、P7 脱敏（诊断不含 token 值）、
+ * R2 P2 加固（Step 4a）：刷新超时 F-01a（timedOut 标记 + 锁释放 + signal 接线）、
+ * 锁所有权校验 F-01b（接管后不误删继任者锁——实例级 token）、锁元数据写失败
+ * 清理 F-02（writeLockMeta 注入失败钩子，跨平台确定性模拟）。
  *
  * 与 attachments.mjs 同构：导出 runOauthCredentialTests(check) 供 smoke.mjs 接线；
  * 另带独立入口（node tests/oauth-credentials.mjs 直接运行，exit 0/1）。
@@ -16,7 +19,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, un
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { OauthCredentialStore, CHATGPT_PRESET, CREDENTIAL_ERROR_CODES, REFRESH_MARGIN_MS, accountIdFromJwt, resolveCredentialPath, defaultCredentialPath } from '../lib/oauth-credentials.js'
+import { OauthCredentialStore, CHATGPT_PRESET, CREDENTIAL_ERROR_CODES, REFRESH_MARGIN_MS, REFRESH_TIMEOUT_MS, CREDENTIAL_LOCK_STALE_MS, accountIdFromJwt, resolveCredentialPath, defaultCredentialPath } from '../lib/oauth-credentials.js'
 import { OAUTH_PRESET_VALUES } from '../lib/schemas.js'
 
 /** 伪造 JWT（header.payload.signature；payload 为 base64url JSON）。 */
@@ -58,6 +61,7 @@ export async function runOauthCredentialTests(check) {
       && CHATGPT_PRESET.deviceUrls.verification === 'https://auth.openai.com/codex/device')
     check('preset registered in OAUTH_PRESET_VALUES (Step 1 consistency)', OAUTH_PRESET_VALUES.includes(CHATGPT_PRESET.preset))
     check('refresh margin is 120s per §3.3', REFRESH_MARGIN_MS === 120_000)
+    check('refresh timeout default stays below lock stale window (F-01a)', REFRESH_TIMEOUT_MS === 25_000 && REFRESH_TIMEOUT_MS < CREDENTIAL_LOCK_STALE_MS)
 
     // ── 2/3/4/5/6. 存取面：round-trip / 严格校验 / delete / 原子写 / 权限 ──
     console.log('credential document store:')
@@ -194,6 +198,26 @@ export async function runOauthCredentialTests(check) {
     try { await halfStore.ensureFresh(staleCred, { fetchImpl: halfFetch }) } catch (error) { halfRejected = error.code === CREDENTIAL_ERROR_CODES.REFRESH_FAILED }
     check('response missing refresh_token rejected (rotating overwrite is mandatory)', halfRejected)
 
+    // ── F-01a（R2 P2）：refresh fetch 超时 → REFRESH_FAILED（timedOut 标记）+ 锁释放 ──
+    console.log('refresh timeout (F-01a):')
+    const tmoPath = join(work, 'tmo.json')
+    const tmoStore = new OauthCredentialStore(tmoPath)
+    await tmoStore.write(staleCred)
+    let sawSignal = null
+    const hangFetch = (url, init) => new Promise((_, reject) => {
+      // 模拟 undici 行为：尊重 init.signal，超时中止时以错误 reject（永不 resolve）。
+      sawSignal = init.signal
+      init.signal.addEventListener('abort', () => reject(new Error('This operation was aborted')))
+    })
+    let tmoError = null
+    try { await tmoStore.ensureFresh(staleCred, { fetchImpl: hangFetch, timeoutMs: 50 }) } catch (error) { tmoError = error }
+    check('hanging refresh fails as REFRESH_FAILED with timedOut marker', !!tmoError && tmoError.code === CREDENTIAL_ERROR_CODES.REFRESH_FAILED && tmoError.timedOut === true)
+    check('timeout message carries timeout marker without token values (P7)', !!tmoError && /timeout/i.test(tmoError.message) && !tmoError.message.includes('SECRET-ACCESS-XYZ') && !tmoError.message.includes('SECRET-REFRESH-ABC'))
+    check('abort signal is wired into fetch init (cooperative cancellation)', sawSignal instanceof AbortSignal)
+    check('lock released after refresh timeout', !readdirSync(work).some((name) => name === 'tmo.json.lock'))
+    const tmoRetry = await tmoStore.ensureFresh(staleCred, { fetchImpl: async () => refreshOk('A11-new', 'R11-new', 864000) })
+    check('follow-up ensureFresh proceeds immediately (no lock poisoning)', tmoRetry.access === 'A11-new')
+
     // ── 9. 并发：锁串行化 + 锁内重读 → fetch 恰一次（BC-E6 ③）──────────────
     console.log('concurrency & locking:')
     const concPath = join(work, 'conc.json')
@@ -240,6 +264,43 @@ export async function runOauthCredentialTests(check) {
     })
     check('stale lock is taken over and refresh proceeds', takeoverCalls === 1 && takeoverOut.access === 'A10-new')
     check('taken-over lock is released after use', !readdirSync(work).some((name) => name === 'conc.json.lock'))
+
+    // ── F-01b（R2 P2）：锁所有权校验——接管后原持有者不误删继任者的锁 ──────────
+    console.log('lock ownership (F-01b):')
+    const ownPath = join(work, 'own.json')
+    const ownStore = new OauthCredentialStore(ownPath)
+    const ownCred = { type: 'oauth', access: 'A12', refresh: 'R12', expires: Date.now() + 10_000, accountId: 'acct-12' }
+    await ownStore.write(ownCred)
+    let takeoverInjected = false
+    const successorMeta = JSON.stringify({ pid: process.pid, at: Date.now(), token: 'successor-instance-token' })
+    const ownFetch = async () => {
+      // 模拟刷新挂起期间锁被继任者接管：同 pid、不同 token（实例级令牌才检得出）。
+      writeFileSync(`${ownPath}.lock`, successorMeta)
+      takeoverInjected = true
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      return refreshOk('A12-new', 'R12-new', 864000)
+    }
+    const ownOut = await ownStore.ensureFresh(ownCred, { fetchImpl: ownFetch })
+    check('refresh completes under simulated takeover', takeoverInjected && ownOut.access === 'A12-new')
+    const successorLock = readdirSync(work).some((name) => name === 'own.json.lock') ? readFileSync(`${ownPath}.lock`, 'utf8') : ''
+    check('original holder keeps successor lock intact (token mismatch skips unlink)', successorLock === successorMeta)
+    unlinkSync(`${ownPath}.lock`)
+
+    // ── F-02（R2 P2）：锁元数据写失败 → 清理已创建锁文件（不留 ≤30s 毒化窗口）──
+    console.log('lock meta failure cleanup (F-02):')
+    const metaPath = join(work, 'metafail.json')
+    const metaStore = new OauthCredentialStore(metaPath, { writeLockMeta: () => { throw new Error('simulated ENOSPC while writing lock metadata') } })
+    const metaCred = { type: 'oauth', access: 'A13', refresh: 'R13', expires: Date.now() + 10_000, accountId: 'acct-13' }
+    await metaStore.write(metaCred)
+    let metaFetchCalls = 0
+    let metaError = null
+    try {
+      await metaStore.ensureFresh(metaCred, { fetchImpl: async () => { metaFetchCalls++; return refreshOk('A13-new', 'R13-new', 864000) } })
+    } catch (error) { metaError = error }
+    check('lock meta write failure throws CREDENTIAL_FILE_UNWRITABLE', !!metaError && metaError.code === CREDENTIAL_ERROR_CODES.CREDENTIAL_FILE_UNWRITABLE)
+    check('failed lock meta write cleaned the lock file before any network call', !readdirSync(work).some((name) => name === 'metafail.json.lock') && metaFetchCalls === 0)
+    const metaRetry = await new OauthCredentialStore(metaPath).ensureFresh(metaCred, { fetchImpl: async () => refreshOk('A13-new', 'R13-new', 864000) })
+    check('no poisoned window: immediate retry with a clean store succeeds', metaRetry.access === 'A13-new')
 
     // ── 11. resolveCredentialPath（F-01：credentialFile 回退默认路径）────────
     console.log('resolveCredentialPath (F-01):')
