@@ -1408,6 +1408,11 @@ console.log('twin wrapper mechanism (real LlmRuntime):')
     async resolveModel(provider, model) {
       return { provider, id: model, name: model, inputModalities: ['text'], context: { contextWindow: 100_000 }, defaultMaxTokens: 4096 }
     },
+    // FIX-001：宿主 0.1.1-rc.2 adapterStream 每次分发先调 prepareCall——
+    // 对象字面量夹具必须显式实现（绑定自身方法，镜像宿主基类默认语义）。
+    async prepareCall(provider, model, signal) {
+      return { model: await textAdapter.resolveModel(provider, model, signal), stream: (options) => textAdapter.stream(options) }
+    },
     async *stream(options) {
       delegateCalls.push(options)
       for (const message of options.messages) {
@@ -1432,6 +1437,10 @@ console.log('twin wrapper mechanism (real LlmRuntime):')
     async resolveModel(_provider, model, signal) {
       const base = await llm.registration('text-provider').adapter.resolveModel('text-provider', model, signal)
       return { ...base, provider: twinRoute, inputModalities: ['text', 'image'] }
+    },
+    // FIX-001：宿主 0.1.1-rc.2 prepared-dispatch 契约——夹具 twin 同样需要。
+    async prepareCall(provider, model, signal) {
+      return { model: await twinAdapter.resolveModel(provider, model, signal), stream: (options) => twinAdapter.stream(options) }
     },
     async *stream(options) {
       // 图片块改写：文本大脑收到的是证据文本，日志层保留原件（L3 语义）。
@@ -1478,12 +1487,14 @@ console.log('twin wrapper mechanism (real LlmRuntime):')
   check('image turn via twin completes', assembler.finish.kind === 'stop' && twinText === 'delegated-ok')
   check('delegate saw rewritten text, not raw image', delegateCalls.length === 1 && delegateCalls[0].messages[0].content.some((block) => block.type === 'text' && block.text.includes('调用视觉工具查看')) && delegateCalls[0].messages[0].content.every((block) => block.type !== 'image'))
   // 4) 负向见证：裸图片块直接进原适配器必然失败（twin 是唯一放行路径）。
-  //  rc.7 语义：适配器异常被转换为终态 finish 错误块（与 agent-loop 一致）。
+  //  rc.2 语义演进（FIX-001 适配）：宿主 adapterStream 在文本模型边界直接投影
+  //  剥离图片块（projectImagesForTextModel）——裸图永不达文本适配器。负向
+  //  见证的新形态：宿主边界强制兜底（不依赖适配器自拒），投影后正常完成。
   const rawAssembler = new BlockAssembler()
   for await (const chunk of llm.stream({ provider: 'text-provider', model: 'brain-1', system: undefined, messages: [imageMessage] })) {
     rawAssembler.push(chunk)
   }
-  check('raw route rejects image blocks (negative witness)', rawAssembler.finish.kind === 'error' && String(rawAssembler.finish.failure?.message ?? '').includes('UNSUPPORTED_CONTENT'))
+  check('raw route projects image blocks at host boundary (negative witness)', rawAssembler.finish.kind === 'stop' && delegateCalls[delegateCalls.length - 1].messages[0].content.every((block) => block.type !== 'image'))
   // 5) 文本轮原样委托（改写零开销、模型身份不变）。
   const textMessage = createUserMessage({ content: [{ type: 'text', text: '普通文本轮' }], source: { kind: 'user' } })
   const textAssembler = new BlockAssembler()
@@ -1506,6 +1517,10 @@ console.log('admission wrapper (L1):')
     async listModels(provider) { return [{ provider, id: 'brain-1', name: 'Brain-1', inputModalities: ['text'] }] },
     async resolveModel(provider, model) {
       return { provider, id: model, name: model, inputModalities: ['text'], context: { contextWindow: 100_000 }, defaultMaxTokens: 4096 }
+    },
+    // FIX-001：宿主 0.1.1-rc.2 prepared-dispatch 契约。
+    async prepareCall(provider, model, signal) {
+      return { model: await textAdapter.resolveModel(provider, model, signal), stream: (options) => textAdapter.stream(options) }
     },
     async *stream(options) {
       delegateCalls.push(options)
@@ -1598,6 +1613,10 @@ console.log('admission wrapper (L1):')
         // （§5.2.3 BC-2 场景：宁可改写不可漏图击穿端点）。
         if (model === 'metaless-1') return { provider, id: model, name: model, context: { contextWindow: 100_000 }, defaultMaxTokens: 4096 }
         return { provider, id: model, name: model, inputModalities: ['text', 'image'], context: { contextWindow: 100_000 }, defaultMaxTokens: 4096 }
+      },
+      // FIX-001：宿主 0.1.1-rc.2 prepared-dispatch 契约。
+      async prepareCall(provider, model, signal) {
+        return { model: await mmAdapter.resolveModel(provider, model, signal), stream: (options) => mmAdapter.stream(options) }
       },
       async *stream(options) {
         mmDelegateCalls.push(options)
@@ -1783,12 +1802,21 @@ console.log('admission wrapper (L1):')
     async resolveModel(provider, model) {
       return { provider, id: model, name: model, inputModalities: ['text'], context: { contextWindow: 100_000 }, defaultMaxTokens: 4096 }
     },
+    // FIX-001：宿主 0.1.1-rc.2 prepared-dispatch 契约。
+    async prepareCall(provider, model, signal) {
+      return { model: await escapeAdapter.resolveModel(provider, model, signal), stream: (options) => escapeAdapter.stream(options) }
+    },
     async *stream() { yield { type: 'finish', reason: { kind: 'stop' } } },
   }
   const mmEscapeAdapter = {
     ...escapeAdapter,
     async resolveModel(provider, model) {
       return { provider, id: model, name: model, inputModalities: ['text', 'image'], context: { contextWindow: 100_000 }, defaultMaxTokens: 4096 }
+    },
+    // FIX-001：spread 复制的 prepareCall 闭包绑定 escapeAdapter.resolveModel
+    //（纯文本元数据）会导致多模态直传被投影剥图——必须覆写为绑定自身。
+    async prepareCall(provider, model, signal) {
+      return { model: await mmEscapeAdapter.resolveModel(provider, model, signal), stream: (options) => mmEscapeAdapter.stream(options) }
     },
   }
   llm.registerAdapter(['escape-provider'], escapeAdapter)
