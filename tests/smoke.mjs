@@ -1,6 +1,6 @@
 // dsh-agent-router 冒烟测试：模块解析 + schema 默认值 + RPC 校验器 + 服务核心逻辑。
 import { Context } from '@deepseek-ai/cordis'
-import { routerSchema, wireCodecs, MODALITY_VALUES, MODALITY_DIRECTIONS, normalizeCapabilities } from '../lib/schemas.js'
+import { routerSchema, wireCodecs, MODALITY_VALUES, MODALITY_DIRECTIONS, normalizeCapabilities, OAUTH_PRESET_VALUES } from '../lib/schemas.js'
 import { createHostContribution, ROUTER_REMOTE } from '../lib/rpc.js'
 import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine, cliWorkspaceHint, detectAudioVideoMediaType } from '../lib/service.js'
 import { runClientRender } from './client-render.mjs'
@@ -72,6 +72,20 @@ console.log('schemas:')
   check('dict entry resolves defaults', b.agents.vision.type === 'chat' && b.agents.vision.enabled === true && b.agents.vision.maxRounds === 1 && b.agents.vision.imageSize === '1024x1024')
   check('cli fields resolve defaults', b.agents.vision.command === '' && b.agents.vision.args === '' && b.agents.vision.timeoutMs === 0 && b.agents.vision.maxConcurrent === 1)
   check('name kept', b.agents.vision.name === 'V')
+  // EVO-002 Step 1（C-1 ChatGPT 订阅 OAuth / ADR-005 / roadmap §3.2 E2-a + §3.6）：
+  // preset/credentialFile 字段与 oauthExperimental 开关的 schema 层扩展——纯声明式、
+  // 零运行时行为变更。关闭词汇表沿用自由字符串先例（protocol/type/strategy）：
+  // 未知值放行、消费点校验（OAUTH_PRESET_VALUES 常量供后续步骤与 UI 消费）。
+  const c = routerSchema({})
+  check('default oauthExperimental=false (§3.6 默认关闭)', c.oauthExperimental === false)
+  const d = routerSchema({ oauthAccounts: { legacy: { name: 'L' } } })
+  check('oauth entry preset defaults to empty (P3 既有配置零破坏)', d.oauthAccounts.legacy.preset === '')
+  check('oauth entry credentialFile defaults to empty', d.oauthAccounts.legacy.credentialFile === '')
+  const e = routerSchema({ oauthExperimental: true, oauthAccounts: { cgpt: { name: 'ChatGPT', preset: 'chatgpt-codex', credentialFile: 'X:\\path.json' } } })
+  check('preset/credentialFile/oauthExperimental explicit values kept', e.oauthExperimental === true && e.oauthAccounts.cgpt.preset === 'chatgpt-codex' && e.oauthAccounts.cgpt.credentialFile === 'X:\\path.json')
+  const f = routerSchema({ oauthAccounts: { odd: { preset: 'foo' } } })
+  check('unknown preset tolerated (R-5 放行语义)', f.oauthAccounts.odd.preset === 'foo')
+  check('OAUTH_PRESET_VALUES frozen + chatgpt-codex (P5 泛化)', Object.isFrozen(OAUTH_PRESET_VALUES) && OAUTH_PRESET_VALUES.length === 1 && OAUTH_PRESET_VALUES[0] === 'chatgpt-codex')
 }
 
 // 2. wire codec
