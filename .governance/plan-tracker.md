@@ -21,12 +21,12 @@
 |---|---|
 | 项目名称 | dsh-agent-router |
 | 当前阶段 | development (6/11) |
-| 总任务数 | 10 |
-| 已完成 | 6 |
+| 总任务数 | 13 |
+| 已完成 | 8 |
 | 阻塞中 | 0 |
 | 已关闭 | 1（DEV-001——DEC-017 重定义关闭，观测义务并入 DEV-002） |
-| 关键风险数 | 1（RISK-001 活跃——观察期义务已履行，回归保护主轨道 = DEV-002） |
-| 最近 Gate 结论 | G4 待评（MIG-001 完结 + v0.2.0 已发布；CI 面仍缺——RISK-001） |
+| 关键风险数 | 1（RISK-001 活跃——主轨道 = DEV-002 + 演进路线） |
+| 最近 Gate 结论 | G4 待评（v0.2.0 已发布；CI 面仍缺——RISK-001；v0.3.x 演进已定稿 DEC-020） |
 | 最近复盘日期 | — |
 
 ## Gate 状态跟踪（lightweight 7 合并 Gate）
@@ -53,6 +53,9 @@
 | DEV-002 | development | 核心通路自动化测试补强 | routing/takeover 关键路径具备可重复测试（当前仅 4 个冒烟测试文件） | 待开始 | P1 |
 | DEV-003 | release | v0.2.0 发布收尾（DEC-015 升级） | 版本 bump 0.2.0 + CHANGELOG（v3 迁移全量记录）+ README 徽章/安装命令同步 + tarball 离线安装验证 + tag v0.2.0 + 归档触发检测 | **已完成（本提交=v0.2.0 发布提交）**——Release agent 三件套 + Developer bump/README + Release Reviewer APPROVED（W-1 有条件发布裁决入 risk-log，48h 观察期义务 DEV-001/002 关闭决策；W-3 回滚范围表述已修正）；tarball/tag 随本提交执行 | P1 |
 | GOV-001 | development（治理快速通道） | 项目质量原则固化与持续改进机制建立 | 7 条原则 + 4 条编程要求立版（project-principles.md P-v1，含执行锚点映射）+ AGENTS.md 会话投影 + 持续演进协议（decision-log 入账制 + P-vN 版本化，质量基线只升不降） | **已完成**——DEC-016 决策入账 + EV-025 证据入账；check-governance 28 issues 经事实核查均为 pre-existing（插件仓自审计误期望 + 历史复审命名约定），无 GOV-001 引入项；原则文本与用户 2026-08-20 会话指令逐字一致 | P1 |
+| EVO-001 | development（v0.3.0 前置） | H2 运行时 PoC（C-1 实施第一步门禁，DEC-020） | 独立测试 profile 安装 yoke233/dsh-openai-codex-auth → 用户在场登录 ChatGPT → P1-P6 六步验证（凭据落盘 owner-only/用量面板/带图对话/token 过期自动刷新/失败形态样本/登出清理）；附加 V-EVO-2b（stream:false 直测）+ V-EVO-2c（originator 观测） | 待开始（需用户在场配合登录） | P0 |
+| EVO-002 | development（v0.3.0） | C-1 ChatGPT 订阅 OAuth 实施（ADR-005） | 按 evolution-roadmap-v1 §3 实施：schemas preset/credentialFile/oauthExperimental → lib/oauth-credentials.js → 1455 loopback → oauthBegin/Exchange preset 分支 → runOauthChat codex-responses 分支 → 账号卡 UI + ToS 确认 + 登出删除（含 W-5 删账号联动凭据清理）→ C-9 埋点；每步独立提交 + Code Reviewer 审查 + 534+ 断言零回退；~18 改造点/~1140 行 | 待开始（阻塞于 EVO-001 PoC 通过） | P0 |
+| EVO-003 | development（v0.3.1） | C-3 统计持久化实施（ADR-006，可与 EVO-002 并行开发） | lib/stats.js 分离（service.js 2965 基线净减 ~220）+ DSH_HOME 按天 JSONL + 异步批量 flush + 数据安全四件套单测 + 成本单价表 + CSV 导出 + W-4 persist 开关往返语义；~14 改造点/~1000 行 | 待开始 | P1 |
 | RES-003 | research | 战略对齐与演进调研（DEC-017 方向授权） | ① 目的对齐审查：当前实现 vs 插件本源目的（扩展主 agent 能力边界 / 主 agent 专注主路径 / 任意多模态 agent 扩展 / 多模态账号配置 / 无头模式调用）② 易用性+用户吸引力+粘性评估（安装/配置/统计体验现状）③ 三方向差距分析：A 账号配置易用性（api key 配置 / cli 无头模式 / oauth 一键登录——参考 opencodex / 账号池管理）；B 专业 Agent 调用成功率与交互效果（实际产出+交互界面）；C 统计专业性与持久化+安装配置体验 ④ 演进候选方向与优先级输入（供 ARCH-002） | **已完成——审查 APPROVED_WITH_NOTES**（review-RES-003.md：unresolved_blockers=0；0 BLOCKING/2 WARNING/3 SUGGESTION；40 处抽查 0 不符；W 级经 DEC-018 落实）。核心结论：未偏离目的；OAuth 从未被 DEC 否定（被否定的是 gcloud 公开 Client 路线）；Top3 = ChatGPT 订阅 OAuth（Q1 前置）→ 统计持久化（Q3 已裁 DSH_HOME+90d）→ 成功率闭环；Q4 已裁不引入免费链 | P0 |
 | ARCH-002 | architecture | 演进路径与方案设计（依赖 RES-003 结论） | 基于 RES-003 产出：演进路线图（阶段划分+版本规划建议）+ 分方向方案设计（含 oauth/账号池可行性边界）+ 风险与回滚分析；供 D-6 演进定稿决策用 | **已完成——审查 APPROVED_WITH_NOTES**（review-ARCH-002.md：unresolved_blockers=0；0 BLOCKING/5 WARNING/3 SUGGESTION；28 处抽查；独立蓝军 5 条）。产出：evolution-roadmap-v1.md（662 行）——v0.3.0~v0.3.3 四版本分期 + H3 源码级验证 16 项（Codex OAuth 全协议事实固化）+ ADR-005/006/007 + S-2 量化 + proposed DEC-020。W 级 5 处已修/3 处绑定实施任务书（W-4→v0.3.1/W-5+S-3→v0.3.0）。待 D-6 用户定稿 | P0 |
 
@@ -65,7 +68,10 @@
 | v0.1.7 | 已发布 | 2026-08-17 | 多模态账号 / 用量统计 / 五种执行通路 | — | tag v0.1.7 + tarball |
 | v0.1.8 | **已取消（被 v0.2.0 取代，DEC-015）** | — | whole-turn 图片消息路由默认化、附件按钮泛化、image-to-image | — | 范围被 v3 迁移架构级超越 |
 | v0.2.0 | **已发布（2026-08-20）** | 2026-08-20 | v3 附件路由架构全量（MIG-001）/ D-1 验收门 | MIG-001, DEV-003 | tag v0.2.0 + tarball + CHANGELOG |
-| v0.3.x | 规划中（战略演进——待 RES-003/ARCH-002 定范围，DEC-017） | 待定 | 三方向：账号配置易用性（api key/cli 无头/oauth/账号池）· 调用成功率与交互效果 · 统计专业性与持久化 | RES-003, ARCH-002 + 待拆分实施任务 | 演进路线图 + 分阶段交付 |
+| **v0.3.0** | 规划中（DEC-020 D-6 定稿——首阶段启动） | 待定 | ChatGPT 订阅接入（C-1）：preset 账号 + 独立凭据文件 + 1455 回调 + 设备码后备 + codex-responses 协议分支 + Q2 per-protocol 能力接口 + 合规三层 kill-switch + C-9 埋点启动；**W-5/S-3 绑定**（删账号联动凭据清理 + 锁超时定义） | EVO-001（H2 PoC 前置门禁）, EVO-002（C-1 实施） | 一键登录端到端 + 出口条件六项（§2.1） |
+| **v0.3.1** | 规划中 | 待定 | 统计持久化与专业指标（C-3）：lib/stats.js 分离 + DSH_HOME 按天 JSONL + 数据安全四件套 + 成本估算 + CSV 导出；**W-4 绑定**（persist 开关往返语义） | EVO-003 | 重启保留 + 按天聚合/p50/p95/成本 + 出口条件八项 |
+| **v0.3.2** | 规划中 | 待定 | 成功率闭环（C-4+C-5）：五分类 + 预算制重试 + 诊断卡 + doctor 预检 + C-9 报告 | 待拆分（EVO-004 域） | 失败分类覆盖 + 重试预算 + C-9 实测报告 |
+| **v0.3.3** | 规划中 | 待定 | 二梯队收敛：C-6 池泛化 + C-7 onboarding 向导（+C-8 官方安装通道可选） | 待拆分（EVO-005 域） | 池泛化 + 首次成功 3 分钟向导 |
 
 ### 版本里程碑
 
