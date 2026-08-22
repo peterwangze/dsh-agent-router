@@ -524,7 +524,7 @@ console.log('RouterService:')
         && pbegin.authUrl.includes(scopeParam)
         && pbegin.authUrl.includes(redirectParam)
         && pbegin.authUrl.includes(`state=${pbegin.state}`))
-      check('preset begin carries PKCE + H3-4 params + originator', pbegin.authUrl.includes('response_type=code') && pbegin.authUrl.includes('code_challenge=') && pbegin.authUrl.includes('code_challenge_method=S256') && pbegin.authUrl.includes('id_token_add_organizations=true') && pbegin.authUrl.includes('codex_cli_simplified_flow=true') && pbegin.authUrl.includes('originator='))
+      check('preset begin carries PKCE + H3-4 params + originator', pbegin.authUrl.includes('response_type=code') && pbegin.authUrl.includes('code_challenge=') && pbegin.authUrl.includes('code_challenge_method=S256') && pbegin.authUrl.includes('id_token_add_organizations=true') && pbegin.authUrl.includes('codex_cli_simplified_flow=true') && pbegin.authUrl.includes('originator=dsh-agent-router'))
       check('preset begin ignores same-named account fields (zero-config)', !pbegin.authUrl.includes('evil.example') && !pbegin.authUrl.includes('WRONG'))
       check('preset begin registers pending session', presetService.oauthPending.get(pbegin.state)?.accountId === 'cgpt' && typeof presetService.oauthPending.get(pbegin.state)?.verifier === 'string' && presetService.oauthPending.get(pbegin.state)?.redirectUri === CHATGPT_PRESET.redirectUri)
       // 4. 未知 preset → 消费点校验明确报错（schemas Step 1 放行语义的闭合）。
@@ -570,6 +570,173 @@ console.log('RouterService:')
     } finally {
       globalThis.fetch = realFetch4b
       try { rmSync(presetWork, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
+    }
+  }
+
+  // ── EVO-002 Step 5：codex-responses 协议分支（runOauthChat 派发 + SSE 事件链
+  // 聚合——EV-028 P3 实证 stream:false 被拒，SSE 为唯一路径）+ R5-F1 调用期
+  // kill-switch（§3.6 ③：resolveOauthToken preset 入口单点覆盖 runOauthChat 与
+  // oauthDiscover 两消费方）。独立 service + 临时凭据目录 + fetch 覆盖——主夹具
+  // 零污染；SSE 十二事件链按 EV-028 形态复刻（delta 拼接与 output_item.done
+  // 双路径同文返回 POC-OK）。
+  console.log('oauth codex-responses branch (EVO-002 Step 5):')
+  {
+    const codexWork = mkdtempSync(join(tmpdir(), 'router-codex-'))
+    const fakeJwt5 = (accountId, sig) => {
+      const b64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
+      return `${b64url({ alg: 'RS256', typ: 'JWT' })}.${b64url({ 'https://api.openai.com/auth': { chatgpt_account_id: accountId } })}.${sig}`
+    }
+    const accessJwt5 = fakeJwt5('acct-cgpt-5', 'sig-step5')
+    const refreshedJwt5 = fakeJwt5('acct-cgpt-5', 'sig-step5-refreshed')
+    const codexCredFile = join(codexWork, 'codex-auth.json')
+    const bareCredFile = join(codexWork, 'bare-auth.json')
+    const codexRoot = new Context()
+    codexRoot.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
+    codexRoot.provide('attachments', { readImage: async () => ({ data: Uint8Array.from([1, 2, 3]), ref: { mediaType: 'image/png' } }) })
+    let oauthExperimental5 = false
+    const codexService = new RouterService(codexRoot)
+    codexService.attach({ get: () => ({
+      enabled: true,
+      oauthExperimental: oauthExperimental5,
+      oauthAccounts: {
+        cgpt: { name: 'ChatGPT订阅', enabled: true, preset: 'chatgpt-codex', credentialFile: codexCredFile, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', models: ['gpt-5.4-mini'] },
+        bare: { name: '零配置', enabled: true, preset: 'chatgpt-codex', credentialFile: bareCredFile, protocol: 'codex-responses', models: ['gpt-5.4'] },
+        gcodex: { name: '通用codex', enabled: true, protocol: 'codex-responses', baseURL: 'https://example.invalid/api', tokenRef: 'NOPE', models: ['m'] },
+      },
+      agents: {
+        cgptchat: { name: 'CGPT', type: 'chat', enabled: true, account: 'cgpt', systemPrompt: '你是测试助手', maxTokens: 1024, temperature: 0.2 },
+        cgptbare: { name: 'CGPT裸', type: 'chat', enabled: true, account: 'bare' },
+        gcodexchat: { name: '通用codex', type: 'chat', enabled: true, account: 'gcodex' },
+      },
+    })})
+    const seedStore5 = new OauthCredentialStore(codexCredFile)
+    await seedStore5.write({ type: 'oauth', access: accessJwt5, refresh: 'REFRESH-5-SEED', expires: Date.now() + 3_600_000, accountId: 'acct-cgpt-5' })
+    // SSE 流响应（ReadableStream 分帧：event: + data: 行、\n\n 分隔——pi-ai
+    // parseSSE 同款帧法；解析只取 data: 行）。
+    const sseResponse5 = (events) => ({
+      ok: true,
+      status: 200,
+      body: new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder()
+          for (const event of events) {
+            controller.enqueue(encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`))
+          }
+          controller.close()
+        },
+      }),
+    })
+    // EV-028 P3 十二事件链复刻：4×delta 与 output_item.done 双路径同文。
+    const chain5 = (deltas, doneText, usage = { input_tokens: 29, output_tokens: 8 }) => [
+      { type: 'response.created', response: { id: 'resp_5' } },
+      { type: 'response.in_progress', response: { id: 'resp_5' } },
+      { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'msg_5' } },
+      { type: 'response.content_part.added', output_index: 0, content_index: 0 },
+      ...deltas.map((delta) => ({ type: 'response.output_text.delta', output_index: 0, delta })),
+      { type: 'response.output_text.done', output_index: 0, text: deltas.join('') },
+      { type: 'response.content_part.done', output_index: 0, content_index: 0 },
+      { type: 'response.output_item.done', output_index: 0, item: { type: 'message', id: 'msg_5', content: [{ type: 'output_text', text: doneText }] } },
+      { type: 'response.completed', response: { id: 'resp_5', usage } },
+    ]
+    let codexMode5 = {}
+    const codexFetches5 = []
+    const realFetch5 = globalThis.fetch
+    globalThis.fetch = async (url, options) => {
+      codexFetches5.push({ url: String(url), init: options })
+      if (String(url) === CHATGPT_PRESET.tokenUrl && new URLSearchParams(String(options?.body ?? '')).get('grant_type') === 'refresh_token') {
+        return { ok: true, json: async () => ({ access_token: refreshedJwt5, refresh_token: 'REFRESH-5-NEW', expires_in: 864000 }) }
+      }
+      if (String(url).endsWith('/codex/responses')) {
+        if (codexMode5.sse) return sseResponse5(typeof codexMode5.sse === 'function' ? codexMode5.sse() : codexMode5.sse)
+        if (codexMode5.http) return codexMode5.http
+      }
+      return { ok: false, status: 404, text: async () => 'not found' }
+    }
+    const run5 = async (agentId, task, extra = {}) => {
+      try { return { result: await codexService.run({ agentId, task, images: [], ...extra }) } } catch (error) { return { error } }
+    }
+    try {
+      // 1. R5-F1 调用期 kill-switch：凭据在盘且新鲜，但 oauthExperimental=false →
+      //    调用明确报"实验通路已关闭"，且零网络（读凭据后的刷新/调用请求都
+      //    不得越过开关——R5-F1 义务原文）。
+      const killed = await run5('cgptchat', 'x')
+      check('codex call blocked while oauthExperimental=false (R5-F1)', !!killed.error && killed.error.message.includes('实验通路已关闭') && codexFetches5.length === 0)
+      let killResolveError = null
+      try { await codexService.resolveOauthToken(codexService.getOAuthAccount('cgpt')) } catch (error) { killResolveError = error }
+      check('codex kill-switch guards resolveOauthToken (oauthDiscover path)', !!killResolveError && killResolveError.message.includes('实验通路已关闭') && codexFetches5.length === 0)
+      oauthExperimental5 = true
+      // 2. 未知 preset 在 resolve 侧同样拒绝（与 begin 侧同一闭合语义）。
+      let unknownPresetError = null
+      try { await codexService.resolveOauthToken({ preset: 'mystery-preset' }) } catch (error) { unknownPresetError = error }
+      check('codex resolve unknown preset rejected', !!unknownPresetError && unknownPresetError.message.includes('未知预设类型'))
+      // 3. codex-responses 协议挂在非 preset 账号 → 明确报错（无四元组凭据则
+      //    无法构造 chatgpt-account-id 头；引导使用 ChatGPT 预设账号）。
+      const genericRun = await run5('gcodexchat', 'x')
+      check('codex-responses on non-preset account rejected with preset guidance', !!genericRun.error && genericRun.error.message.includes('预设'))
+      // 4. 主路径：SSE 聚合 → 文本 + usage；端点 / 头 / 请求体形状逐项（E5/H3-8/9）。
+      codexMode5 = { sse: chain5(['POC', '-', 'OK'], 'POC-OK') }
+      const codexRun = await run5('cgptchat', 'SSE-测试')
+      check('codex run aggregates SSE deltas into final text with usage', codexRun.result?.kind === 'chat' && codexRun.result?.text === 'POC-OK' && codexRun.result?.usage?.inputTokens === 29 && codexRun.result?.usage?.outputTokens === 8)
+      const codexCall = codexFetches5[codexFetches5.length - 1]
+      check('codex request posts to chatgpt.com/backend-api/codex/responses', codexCall?.url === 'https://chatgpt.com/backend-api/codex/responses')
+      const codexHeaders = codexCall?.init?.headers ?? {}
+      check('codex headers carry bearer/account-id/originator/SSE beta (H3-9/E5)', codexHeaders.Authorization === `Bearer ${accessJwt5}` && codexHeaders['chatgpt-account-id'] === 'acct-cgpt-5' && codexHeaders.originator === 'dsh-agent-router' && codexHeaders.accept === 'text/event-stream' && codexHeaders['OpenAI-Beta'] === 'responses=experimental' && codexHeaders['Content-Type'] === 'application/json')
+      const codexBody = JSON.parse(codexCall?.init?.body ?? '{}')
+      check('codex body is Responses shape with stream:true (EV-028 P5)', codexBody.model === 'gpt-5.4-mini' && codexBody.store === false && codexBody.stream === true && codexBody.instructions === '你是测试助手' && Array.isArray(codexBody.include) && codexBody.include.includes('reasoning.encrypted_content') && codexBody.max_output_tokens === 1024 && codexBody.temperature === 0.2)
+      check('codex input carries user input_text part', Array.isArray(codexBody.input) && codexBody.input[0]?.role === 'user' && codexBody.input[0]?.content?.[0]?.type === 'input_text' && codexBody.input[0]?.content?.[0]?.text?.includes('SSE-测试'))
+      // 5. 图片输入 → input_image 内容块（E5 请求体形状，input_text 之后追加）。
+      codexMode5 = { sse: chain5(['图'], '图') }
+      const codexImageRun = await run5('cgptchat', '看图', { images: [{ attachmentId: 'att-5', mediaType: 'image/png' }] })
+      const codexImageBody = JSON.parse(codexFetches5[codexFetches5.length - 1]?.init?.body ?? '{}')
+      const imagePart = codexImageBody.input?.[0]?.content?.[1]
+      check('codex body carries input_image part for image attachments', codexImageRun.result?.text === '图' && codexImageBody.input?.[0]?.content?.length === 2 && imagePart?.type === 'input_image' && typeof imagePart?.image_url === 'string' && imagePart.image_url.startsWith('data:image/png;base64,'))
+      // 6. output_item.done 缺席 → delta 拼接兜底；到场则以其为准（pi-ai 槽位语义）。
+      codexMode5 = { sse: [
+        { type: 'response.created', response: {} },
+        { type: 'response.output_text.delta', output_index: 0, delta: 'POC' },
+        { type: 'response.output_text.delta', output_index: 0, delta: '-OK' },
+        { type: 'response.completed', response: { usage: { input_tokens: 3, output_tokens: 4 } } },
+      ] }
+      const deltaOnly = await run5('cgptchat', 'x')
+      check('codex falls back to delta text when output_item.done absent', deltaOnly.result?.text === 'POC-OK' && deltaOnly.result?.usage?.inputTokens === 3)
+      codexMode5 = { sse: chain5(['WR', 'ONG'], 'POC-OK') }
+      const itemPreferred = await run5('cgptchat', 'x')
+      check('codex prefers output_item.done text over raw deltas (slot semantics)', itemPreferred.result?.text === 'POC-OK')
+      // 7. 错误面：response.failed / error 事件 / HTTP 401 / 429 resets_at / 截断。
+      codexMode5 = { sse: [{ type: 'response.failed', response: { error: { code: 'server_error', message: 'boom' } } }] }
+      const failedRun = await run5('cgptchat', 'x')
+      check('codex response.failed event surfaces code and message', !!failedRun.error && failedRun.error.message.includes('server_error') && failedRun.error.message.includes('boom'))
+      codexMode5 = { sse: [{ type: 'error', error: { code: 'rate_limited', message: 'slow down' } }] }
+      const errorEventRun = await run5('cgptchat', 'x')
+      check('codex error event surfaces message', !!errorEventRun.error && errorEventRun.error.message.includes('slow down'))
+      codexMode5 = { http: { ok: false, status: 401, text: async () => JSON.stringify({ error: { message: 'could-not-parse-token' } }) } }
+      const authRun = await run5('cgptchat', 'x')
+      check('codex HTTP 401 aligns re-login wording', !!authRun.error && authRun.error.message.includes('重新登录'))
+      codexMode5 = { http: { ok: false, status: 429, text: async () => JSON.stringify({ error: { code: 'usage_limit_reached', plan_type: 'plus', resets_at: Math.floor(Date.now() / 1000) + 120 } }) } }
+      const limitRun = await run5('cgptchat', 'x')
+      check('codex HTTP 429 parses resets_at minutes (H3-14)', !!limitRun.error && limitRun.error.message.includes('分钟后重置') && limitRun.error.message.includes('plus'))
+      codexMode5 = { sse: [{ type: 'response.created', response: {} }, { type: 'response.output_text.delta', output_index: 0, delta: 'half' }] }
+      const truncatedRun = await run5('cgptchat', 'x')
+      check('codex stream without terminal event rejected', !!truncatedRun.error && truncatedRun.error.message.includes('终态'))
+      // 8. 调用期临期自动刷新：stale 凭据 → ensureFresh 先刷（rotating 盘上覆写）
+      //    再以新 access 发起调用（Authorization 头 = 刷新后 token）。
+      await seedStore5.write({ type: 'oauth', access: 'ACCESS-STALE-5', refresh: 'REFRESH-STALE-5', expires: Date.now() + 30_000, accountId: 'acct-cgpt-5' })
+      codexMode5 = { sse: chain5(['刷'], '刷') }
+      const afterRefresh = await run5('cgptchat', '刷新')
+      const refreshedCall = codexFetches5[codexFetches5.length - 1]
+      const refreshedDoc5 = JSON.parse(readFileSync(codexCredFile, 'utf8'))
+      check('codex call refreshes expiring credential and uses fresh access', afterRefresh.result?.text === '刷' && refreshedCall?.init?.headers?.Authorization === `Bearer ${refreshedJwt5}` && refreshedDoc5.credential?.refresh === 'REFRESH-5-NEW')
+      // 9. 零配置：无 baseURL 的 preset 账号 → 默认端点（pi-ai resolveCodexUrl
+      //    同款三级归一：空 → chatgpt.com/backend-api/codex/responses）。
+      await seedStore5.write({ type: 'oauth', access: accessJwt5, refresh: 'REFRESH-5-SEED', expires: Date.now() + 3_600_000, accountId: 'acct-cgpt-5' })
+      const bareSeed = new OauthCredentialStore(bareCredFile)
+      await bareSeed.write({ type: 'oauth', access: accessJwt5, refresh: 'REFRESH-BARE', expires: Date.now() + 3_600_000, accountId: 'acct-cgpt-5' })
+      codexMode5 = { sse: chain5(['零'], '零') }
+      const bareRun = await run5('cgptbare', 'x')
+      check('codex baseURL defaults to chatgpt backend-api (zero-config)', bareRun.result?.text === '零' && codexFetches5[codexFetches5.length - 1]?.url === 'https://chatgpt.com/backend-api/codex/responses')
+    } finally {
+      globalThis.fetch = realFetch5
+      try { rmSync(codexWork, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
     }
   }
 

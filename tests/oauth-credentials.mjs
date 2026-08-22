@@ -218,6 +218,44 @@ export async function runOauthCredentialTests(check) {
     const tmoRetry = await tmoStore.ensureFresh(staleCred, { fetchImpl: async () => refreshOk('A11-new', 'R11-new', 864000) })
     check('follow-up ensureFresh proceeds immediately (no lock poisoning)', tmoRetry.access === 'A11-new')
 
+    // ── R4-F1（Step 5 升格必闭）：headers 落定后 body 相位停滞（response.json()
+    // 挂起）——超时 timer 覆盖须扩展至 payload 解析之后（abort 会 reject 进行中
+    // 的 body 读取），否则 headers-后-stall 可持锁越窗触发陈旧接管重叠（并连带
+    // 消解 R5-F3 同实例 lockToken 退化角）。注入 json 尊重 init.signal（协作式
+    // 前提，同 hangFetch 模式）。
+    console.log('refresh body-phase stall timeout (R4-F1):')
+    const bjPath = join(work, 'bodyhang.json')
+    const bjStore = new OauthCredentialStore(bjPath)
+    await bjStore.write(staleCred)
+    let bjSawSignal = null
+    const stallJsonFetch = async (url, init) => ({
+      ok: true,
+      status: 200,
+      json: () => new Promise((_, reject) => {
+        // 模拟 undici：body 读取尊重 signal——停滞服务器形态下只有 abort 能终止。
+        bjSawSignal = init.signal
+        init.signal.addEventListener('abort', () => reject(new Error('body read aborted')))
+      }),
+    })
+    let bjError = null
+    let bjSettled = false
+    // race 护栏：若超时未覆盖 body 相位（R4-F1 修复前形态），json() 永不落定——
+    // 2s 后按未决判 FAIL，测试不得挂死。
+    await Promise.race([
+      bjStore.ensureFresh(staleCred, { fetchImpl: stallJsonFetch, timeoutMs: 60 }).then(
+        () => { bjSettled = true },
+        (error) => { bjSettled = true; bjError = error },
+      ),
+      new Promise((resolve) => setTimeout(resolve, 2_000)),
+    ])
+    check('body-phase stall fails as REFRESH_FAILED with timedOut marker (R4-F1)', bjSettled && !!bjError && bjError.code === CREDENTIAL_ERROR_CODES.REFRESH_FAILED && bjError.timedOut === true)
+    check('body-phase timeout message stays fixed-format and redacted (P7)', bjSettled && !!bjError && /timeout/i.test(bjError.message) && !bjError.message.includes('SECRET-ACCESS-XYZ') && !bjError.message.includes('SECRET-REFRESH-ABC'))
+    check('body-phase stall still wires signal into fetch init', bjSawSignal instanceof AbortSignal)
+    check('lock released after body-phase timeout', bjSettled && !readdirSync(work).some((name) => name === 'bodyhang.json.lock'))
+    let bjRetry = null
+    try { bjRetry = await bjStore.ensureFresh(staleCred, { fetchImpl: async () => refreshOk('A12-new', 'R12-new', 864000) }) } catch { bjRetry = null }
+    check('follow-up ensureFresh proceeds after body-phase timeout', bjRetry?.access === 'A12-new')
+
     // ── 9. 并发：锁串行化 + 锁内重读 → fetch 恰一次（BC-E6 ③）──────────────
     console.log('concurrency & locking:')
     const concPath = join(work, 'conc.json')
