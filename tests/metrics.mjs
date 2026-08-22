@@ -24,6 +24,10 @@ import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/
 import { RouterService } from '../lib/service.js'
 import { AttachmentRegistry, isAttachmentId, contentHashId, ATTACHMENT_ERROR_CODES } from '../lib/attachments.js'
 import { rememberImage, recallImage, clearImageMemory } from '../lib/memory.js'
+import { CHATGPT_PRESET } from '../lib/oauth-credentials.js'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 // ── 观测结果收集 ──────────────────────────────────────────────────────────────
 const results = []
@@ -630,6 +634,85 @@ async function observeDiscrimination() {
   })
 }
 
+// ── 观测 ⑥（C-9-1）：OAuth 登录旅程埋点（EVO-002 Step 6 启动；v0.3.2 出报告）──
+// 可完全自动化：直构 RouterService 走完整旅程——begin（kill-switch 拒绝留事件）
+// → 开关开 → begin/exchange（登录事件 + 凭据落盘）→ codex 调用（SSE 桩采样）
+// → logout（删除事件 + 文件消失）。判别性：oauthEvents 缺失（旧代码无埋点）
+// 或事件负载含 token 值（P7 违规）→ 观测失败。
+async function observeOauthTelemetry() {
+  const detail = []
+  const checks = []
+  let crash = null
+  try {
+    const work = mkdtempSync(join(tmpdir(), 'router-c9-'))
+    const fakeJwt = (accountId) => {
+      const b64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
+      return `${b64url({ alg: 'RS256', typ: 'JWT' })}.${b64url({ 'https://api.openai.com/auth': { chatgpt_account_id: accountId } })}.sig-c9`
+    }
+    const access = fakeJwt('acct-c9')
+    const credFile = join(work, 'c9-auth.json')
+    const root = new Context()
+    root.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
+    let experimental = false
+    const service = new RouterService(root)
+    service.attach({ get: () => ({
+      enabled: true,
+      oauthExperimental: experimental,
+      oauthTosAccepted: true,
+      oauthProxyUrl: '',
+      oauthAccounts: { cgpt: { name: 'ChatGPT订阅', enabled: true, preset: 'chatgpt-codex', credentialFile: credFile, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', models: ['gpt-5.4-mini'] } },
+      agents: { cgptchat: { name: 'CGPT', type: 'chat', enabled: true, account: 'cgpt' } },
+    }) })
+    service.codexLoopbackStarter = async () => ({ ready: true, port: 1455, dispose: () => {} })
+    const realFetch = globalThis.fetch
+    globalThis.fetch = async (url) => {
+      if (String(url) === CHATGPT_PRESET.tokenUrl) {
+        return { ok: true, json: async () => ({ access_token: access, refresh_token: 'REFRESH-C9', expires_in: 3600, token_type: 'bearer' }) }
+      }
+      if (String(url).endsWith('/codex/responses')) {
+        return { ok: true, status: 200, body: new ReadableStream({ start(controller) {
+          const encoder = new TextEncoder()
+          controller.enqueue(encoder.encode(`event: response.output_text.delta\ndata: ${JSON.stringify({ type: 'response.output_text.delta', output_index: 0, delta: 'C9-OK' })}\n\n`))
+          controller.enqueue(encoder.encode(`event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: { usage: { input_tokens: 1, output_tokens: 2 } } })}\n\n`))
+          controller.close()
+        } }) }
+      }
+      return { ok: false, status: 404, text: async () => 'not found' }
+    }
+    try {
+      const blocked = await service.oauthBegin({ accountId: 'cgpt' })
+      checks.push(['kill-switch begin 拒绝且留事件', blocked.ok === false && service.oauthEvents.some((event) => event.kind === 'preset_begin_fail' && event.reason === 'kill_switch')])
+      experimental = true
+      const begin = await service.oauthBegin({ accountId: 'cgpt' })
+      const exchange = await service.oauthTokenExchange({ code: 'c9', state: begin.state })
+      checks.push(['登录旅程事件链（begin_ok + login_ok）', begin.ok === true && exchange.ok === true && service.oauthEvents.some((event) => event.kind === 'preset_begin_ok') && service.oauthEvents.some((event) => event.kind === 'preset_login_ok')])
+      const run = await service.run({ agentId: 'cgptchat', task: 'C-9 采样调用' })
+      checks.push(['codex 调用通路采样成功', run.kind === 'chat' && run.text === 'C9-OK'])
+      const logout = await service.oauthLogout({ accountId: 'cgpt' })
+      checks.push(['登出删除凭据 + logout 事件', logout.ok === true && !existsSync(credFile) && service.oauthEvents.some((event) => event.kind === 'preset_logout')])
+      const eventsText = JSON.stringify(service.oauthEvents)
+      checks.push(['事件负载零 token 值（P7）', !eventsText.includes('sig-c9') && !eventsText.includes('REFRESH-C9')])
+      detail.push(`事件种类: ${[...new Set(service.oauthEvents.map((event) => event.kind))].join(', ')}`)
+    } finally {
+      globalThis.fetch = realFetch
+      try { rmSync(work, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
+    }
+  } catch (error) { crash = error }
+  if (crash) {
+    checks.push(['观测无异常崩溃', false])
+    detail.push(String(crash && crash.message))
+  }
+  const failed = checks.filter(([, ok]) => !ok)
+  for (const [name, ok] of checks) detail.push(`${ok ? '✓' : '✗'} ${name}`)
+  record({
+    id: 'C-9-1',
+    name: 'OAuth 登录旅程埋点（C-9 v0.3.0 启动：登录/调用/登出事件 + P7 零 token）',
+    status: failed.length === 0 ? 'pass' : 'fail',
+    detail,
+    evidence: ['RouterService.oauthEvents（内存环形缓冲 100 条）', 'oauthBegin/oauthTokenExchange/run/oauthLogout 直构链'],
+  })
+}
+
 // ── 主流程：逐项观测 + 汇总 ─────────────────────────────────────────────────
 console.log('=== dsh-agent-router D-1 METRICS OBSERVATION (MIG-001 Step 10) ===')
 console.log('定义来源: DEC-012 定稿 + docs/architecture-v3.md §11（成功标准候选指标评审定稿）')
@@ -648,6 +731,8 @@ console.log('')
 observeEscapeTradeoffs()
 console.log('')
 await observeDiscrimination()
+console.log('')
+await observeOauthTelemetry()
 console.log('')
 
 // ── D-1 门判定汇总 ───────────────────────────────────────────────────────────
