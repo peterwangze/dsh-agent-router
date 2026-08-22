@@ -61,7 +61,8 @@ import { Context } from '@deepseek-ai/cordis'
 import { RouterService } from '../lib/service.js'
 import { AttachmentRegistry, isAttachmentId, ATTACHMENT_REGISTRY_MAX_ENTRIES, ATTACHMENT_FETCH_TIMEOUT_MS, ATTACHMENT_ERROR_CODES } from '../lib/attachments.js'
 import { installAdmissionWrapper, WRAP_SUFFIX, MODALITY_ENTRIES, minimalImageRewrite } from '../lib/wrapper.js'
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -297,6 +298,52 @@ console.log('B. attachmentIds 统一编址 (M2):')
   }
   check('[B12] isAttachmentId 格式判别（64hex 大小写容忍/其余拒绝）', isAttachmentId(IMG_A) && isAttachmentId(`sha256:${'A'.repeat(64)}`) && !isAttachmentId('att-1') && !isAttachmentId(`sha256:${'a'.repeat(63)}`))
 }
+// B13（FIX-003 判别）：宿主 readImage 对裸 id ref 做元数据校验失败（21:28 宿主演进
+// 实证：readImageFile byteLength!==undefined → ATTACHMENT_CORRUPT）后，懒注册自取证
+// 降级——读 DSH_HOME/attachments/v1/objects/<sha256 前2>/<hex> + 探测尺寸构造完整 ref，
+// 再走宿主 readImage（完整 ref 校验通过）/或内容哈希兜底。判别：旧代码（唯一 catch
+// → undefined）在该场景下 byId 必 undefined → ATTACHMENT_UNKNOWN；新代码必恢复。
+{
+  console.log('B13. 懒注册自取证降级（FIX-003）:')
+  const tmpHome = mkdtempSync(join(tmpdir(), 'dsh-router-attach-'))
+  const prevDshHome = process.env.DSH_HOME
+  try {
+    process.env.DSH_HOME = tmpHome
+    // 构造一个真实 PNG 最小对象（912x510 尺寸；内容哈希作为 id）。
+    const png = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from([0x00, 0x00, 0x00, 0x0d]),
+      Buffer.from([0x49, 0x48, 0x44, 0x52]),
+      Buffer.from([0x00, 0x00, 0x03, 0x90, 0x00, 0x00, 0x01, 0xfe]), // 912 x 510
+      Buffer.from([0x08, 0x02, 0x00, 0x00, 0x00]),
+      Buffer.from(Array.from({ length: 64 }, (_, i) => i & 0xff)),
+    ])
+    const sha = createHash('sha256').update(png).digest('hex')
+    const id = `sha256:${sha}`
+    const objDir = join(tmpHome, 'attachments', 'v1', 'objects', sha.slice(0, 2))
+    mkdirSync(objDir, { recursive: true })
+    writeFileSync(join(objDir, sha), png)
+    // 独立 root：宿主面裸 id ref 一律拒绝（元数据校验语义）；完整 ref 才放行。
+    const regRoot = new Context()
+    regRoot.provide('attachments', {
+      readImage: async (ref) => {
+        const idOnly = String(ref?.attachmentId ?? '')
+        if (typeof ref?.width !== 'number' || typeof ref?.bytes !== 'number') throw new Error(`Stored attachment metadata does not match its reference (${idOnly.slice(0, 20)}…)`)
+        if (idOnly !== id) throw new Error('no such attachment')
+        return { ref: { attachmentId: id, mediaType: 'image/png', bytes: png.length, width: 912, height: 510 }, data: new Uint8Array(png) }
+      },
+    })
+    const reg = new AttachmentRegistry(regRoot)
+    const entry = await reg.byId(id)
+    check('[B13a] 宿主元数据校验失败时懒注册自取证恢复', !!entry && entry.mediaType === 'image/png' && entry.width === 912 && entry.height === 510 && entry.bytes === png.length)
+    const byIdAgain = await reg.byId(id)
+    check('[B13b] 自取证注册后二次命中零宿主读取', !!byIdAgain && byIdAgain === entry)
+  } finally {
+    if (prevDshHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = prevDshHome
+    rmSync(tmpHome, { recursive: true, force: true })
+  }
+}
 
 // ── [C] route_agent 工具全链路（真实 tool.js + 真实 service）──────────────────
 console.log('C. route_agent 工具全链路:')
@@ -453,6 +500,43 @@ console.log('D. 模态路由:')
     const cat2 = await service.catalog()
     check('[D14] catalog 镜像开关 true', cat2.takeoverDefaultModel === true)
     delete svcConfig.takeoverDefaultModel
+  }
+  // D15（FIX-003 判别）：真实宿主形态——llm.listProviders() 的 provider 条目只有
+  // {id,name}（prepareRoutes :1174 实证），declared 目录标记在
+  // llm.listConfigurableProviders()（registerConfigurableProviders 发布）。旧代码
+  // 只查 listProviders → 任何 provider 的 declared 恒 undefined → "declared 路由
+  // 跳过预检"例外从不生效（真实宿主下 opencode-go-new/qwen3.7-plus 必被预检拒）。
+  // 判别：若仍走旧判定（或预检未跳过），带图调用必被"不支持图片输入"拒绝 → FAIL。
+  {
+    console.log('D15. declared 预检例外（listConfigurableProviders 权威源）:')
+    const oldLlm = svcRoot.get('llm')
+    const d15Requests = []
+    // 临时替换 llm fixture 的目录面（真实宿主形态：listProviders 无 declared）。
+    // cordis 不允许重复 provide——通过替换对象方法实现（finally 恢复）。
+    const origListProviders = oldLlm.listProviders
+    const origListConfigurableProviders = oldLlm.listConfigurableProviders
+    const origResolveModelInfo = oldLlm.resolveModelInfo
+    const origStream = oldLlm.stream
+    oldLlm.listProviders = async () => [{ id: 'relay', provider: 'relay' }]
+    oldLlm.listConfigurableProviders = async () => [{ id: 'relay', provider: 'relay', displayName: 'Relay', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'relay'], declared: true }]
+    oldLlm.resolveModelInfo = async () => ({ inputModalities: ['text'] })
+    oldLlm.stream = async function* (request) {
+      d15Requests.push(request)
+      yield { type: 'block-start', index: 0, blockType: 'text' }
+      yield { type: 'text-delta', index: 0, text: 'OK' }
+      yield { type: 'block-end', index: 0, block: { type: 'text', text: 'OK' } }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    }
+    try {
+      const out = await service.run({ agentId: 'relay', task: '看图', images: [{ attachmentId: IMG_A, mediaType: 'image/png', bytes: 4, width: 2, height: 2 }], exec: execOf() })
+      const request = d15Requests[d15Requests.length - 1]
+      check('[D15] 真实宿主 declared 判定（listConfigurableProviders 优先）跳过预检', out.ok !== false && d15Requests.length === 1 && (request?.messages?.[0]?.content ?? []).some((block) => block.type === 'image'))
+    } finally {
+      oldLlm.listProviders = origListProviders
+      oldLlm.listConfigurableProviders = origListConfigurableProviders
+      oldLlm.resolveModelInfo = origResolveModelInfo
+      oldLlm.stream = origStream
+    }
   }
 }
 
