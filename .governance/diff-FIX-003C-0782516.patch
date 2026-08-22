@@ -1,0 +1,117 @@
+commit 078251671e024758eb82e9fbc7b1996f5ac16245
+Author: peterwangze <1337917121@qq.com>
+Date:   Sat Aug 22 22:20:34 2026 +0800
+
+    FIX-003C: R1 审查遗留三修——F-1 dshHomeAttachmentsRoot env 缺省回退补 .dsh（对齐宿主 resolveDshHome 默认）+ F-2 WebP 长度门 24→30（VP8X 截断头返回 undefined 而非 {1,1}）+ F-3 补 B13c/d/e/f 判别断言（内容哈希兜底接受/哈希不符拒绝/env 回退/VP8X 截断）；routing-paths 102/102 + smoke 849/0 零回退
+
+diff --git a/lib/attachments.js b/lib/attachments.js
+index 053d27d..39d3659 100644
+--- a/lib/attachments.js
++++ b/lib/attachments.js
+@@ -132,6 +132,10 @@ export function probeImageDimensions(data) {
+     return w > 0 && h > 0 ? { width: w, height: h } : undefined
+   }
+   if (u8[0] === 0x52 && u8[1] === 0x49 && u8[2] === 0x46 && u8[3] === 0x46 && u8[8] === 0x57 && u8[9] === 0x45 && u8[10] === 0x42 && u8[11] === 0x50 && u8[12] === 0x56 && u8[13] === 0x50) {
++    // WebP 分支最小长度：VP8X 需读到 u8[29]（offset 24/27 起 3 字节宽高）——
++    // 统一以 30 为门槛（FIX-003C F-2：24-29 字节截断头此前越界位运算归 0
++    // → 返回 {1,1} 而非 undefined，仅元数据失真）。
++    if (u8.length < 30) return undefined
+     if (u8[14] === 0x38 && u8[15] === 0x58) {
+       // VP8X：24 位宽高 -1（offset 24/27）
+       const w = 1 + (u8[24] | (u8[25] << 8) | (u8[26] << 16))
+@@ -140,7 +144,6 @@ export function probeImageDimensions(data) {
+     }
+     if (u8[14] === 0x38 && u8[15] === 0x4c) {
+       // VP8L：14 位宽高 -1（span 从 byte21 低 4 位起）
+-      if (u8.length < 25) return undefined
+       const w = 1 + ((u8[21] & 0x3f) | ((u8[22] & 0x0f) << 6))
+       const h = 1 + (((u8[22] >> 4) & 0x0f) | ((u8[23] & 0x03) << 4) | ((u8[23] >> 6) & 0x30))
+       return w > 0 && h > 0 ? { width: w, height: h } : undefined
+@@ -419,9 +422,10 @@ export class AttachmentRegistry {
+     return { ref, data }
+   }
+ 
+-  /** 宿主附件库根目录（DSH_HOME/attachments/v1；env 缺失回退 ~/.dsh——EV-028 事实）。 */
++  /** 宿主附件库根目录（DSH_HOME/attachments/v1；env 缺失回退 ~/.dsh——EV-028 事实、
++   *  与宿主 resolveDshHome 默认 join(homedir(), '.dsh') 对齐；FIX-003C F-1）。 */
+   dshHomeAttachmentsRoot() {
+-    const home = typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME ? process.env.DSH_HOME : homedir()
++    const home = typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME ? process.env.DSH_HOME : join(homedir(), '.dsh')
+     return join(home, 'attachments', 'v1')
+   }
+ 
+diff --git a/tests/routing-paths.mjs b/tests/routing-paths.mjs
+index 23c0611..80d8d6b 100644
+--- a/tests/routing-paths.mjs
++++ b/tests/routing-paths.mjs
+@@ -59,11 +59,11 @@
+ 
+ import { Context } from '@deepseek-ai/cordis'
+ import { RouterService } from '../lib/service.js'
+-import { AttachmentRegistry, isAttachmentId, ATTACHMENT_REGISTRY_MAX_ENTRIES, ATTACHMENT_FETCH_TIMEOUT_MS, ATTACHMENT_ERROR_CODES } from '../lib/attachments.js'
++import { AttachmentRegistry, isAttachmentId, ATTACHMENT_REGISTRY_MAX_ENTRIES, ATTACHMENT_FETCH_TIMEOUT_MS, ATTACHMENT_ERROR_CODES, probeImageDimensions } from '../lib/attachments.js'
+ import { installAdmissionWrapper, WRAP_SUFFIX, MODALITY_ENTRIES, minimalImageRewrite } from '../lib/wrapper.js'
+ import { mkdtempSync, rmSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+ import { createHash } from 'node:crypto'
+-import { tmpdir } from 'node:os'
++import { tmpdir, homedir } from 'node:os'
+ import { join, dirname } from 'node:path'
+ import { fileURLToPath } from 'node:url'
+ 
+@@ -338,6 +338,56 @@ console.log('B. attachmentIds 统一编址 (M2):')
+     check('[B13a] 宿主元数据校验失败时懒注册自取证恢复', !!entry && entry.mediaType === 'image/png' && entry.width === 912 && entry.height === 510 && entry.bytes === png.length)
+     const byIdAgain = await reg.byId(id)
+     check('[B13b] 自取证注册后二次命中零宿主读取', !!byIdAgain && byIdAgain === entry)
++    // B13c（FIX-003C F-3 判别）：宿主恒拒（裸 id 与完整 ref 均 throw）+ 对象内容哈希
++    // 与 id 一致 → 内容哈希兜底接受。判别：兜底分支缺失（唯一 catch → undefined）→
++    // !!entryC 必败。
++    {
++      const regRootStrict = new Context()
++      regRootStrict.provide('attachments', {
++        readImage: async () => { throw new Error('host always refuses') },
++      })
++      const regC = new AttachmentRegistry(regRootStrict)
++      const entryC = await regC.byId(id)
++      check('[B13c] 宿主恒拒时内容哈希兜底接受', !!entryC && entryC.mediaType === 'image/png' && entryC.bytes === png.length && entryC.width === 912 && entryC.height === 510)
++    }
++    // B13d（FIX-003C F-3 判别）：对象字节与 id 内容寻址不符（冒充/半写）→ 兜底拒绝
++    // undefined。判别：哈希门缺失（接受任何合法 PNG 对象字节）→ byId 返回条目必败。
++    {
++      const badPng = Buffer.concat([png.subarray(0, png.length - 1), Buffer.from([(png[png.length - 1] + 1) & 0xff])])
++      const badSha = createHash('sha256').update(badPng).digest('hex')
++      const badId = `sha256:${badSha}`
++      const badDir = join(tmpHome, 'attachments', 'v1', 'objects', badSha.slice(0, 2))
++      mkdirSync(badDir, { recursive: true })
++      writeFileSync(join(badDir, badSha), png) // 目录名=badId 哈希，内容=原 png（哈希不符）
++      const regRootBad = new Context()
++      regRootBad.provide('attachments', {
++        readImage: async () => { throw new Error('host always refuses') },
++      })
++      const regD = new AttachmentRegistry(regRootBad)
++      const entryD = await regD.byId(badId)
++      check('[B13d] 内容寻址哈希不符时兜底拒绝', entryD === undefined)
++    }
++    // B13e（FIX-003C F-1 判别）：DSH_HOME env 缺省 → 回退 homedir()/.dsh/attachments/v1
++    //（与宿主 resolveDshHome 默认一致）。判别：旧代码（homedir() 无 .dsh）→ 路径
++    // 不含 ".dsh" 段必败——纯拼接断言，不触真实用户目录。
++    {
++      const prevEnv = process.env.DSH_HOME
++      try {
++        delete process.env.DSH_HOME
++        const regE = new AttachmentRegistry(new Context())
++        check('[B13e] env 缺省回退 homedir()/.dsh/attachments/v1', regE.dshHomeAttachmentsRoot() === join(homedir(), '.dsh', 'attachments', 'v1'))
++      } finally {
++        if (prevEnv !== undefined) process.env.DSH_HOME = prevEnv
++      }
++    }
++    // B13f（FIX-003C F-2 判别）：VP8X 截断头（24-29 字节，按规范 VP8X payload 需 ≥30）
++    // → undefined 而非 {1,1}。判别：长度门缺失（读越界位运算归 0 → {1,1}）→ 必败。
++    {
++      const vp8xTrunc = new Uint8Array(27)
++      vp8xTrunc.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x58], 0)
++      vp8xTrunc[16] = 0x0a // chunk size 10
++      check('[B13f] VP8X 截断头（<30 字节）返回 undefined', probeImageDimensions(vp8xTrunc) === undefined)
++    }
+   } finally {
+     if (prevDshHome === undefined) delete process.env.DSH_HOME
+     else process.env.DSH_HOME = prevDshHome
