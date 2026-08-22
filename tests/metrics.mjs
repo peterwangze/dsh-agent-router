@@ -204,6 +204,11 @@ async function observeImageArrival() {
     async resolveModel(provider, model) {
       return { provider, id: model, name: model, inputModalities: ['text', 'image'], context: { contextWindow: 100_000 }, defaultMaxTokens: 4096 }
     },
+    // FIX-001（metrics 侧补齐）：宿主 0.1.1-rc.2 prepared-dispatch 契约——
+    // 对象字面量夹具必须显式实现（smoke 夹具已修，此处同类）。
+    async prepareCall(provider, model, signal) {
+      return { model: await mmAdapter.resolveModel(provider, model, signal), stream: (options) => mmAdapter.stream(options) }
+    },
     async *stream(options) {
       mmCalls.push(options)
       yield { type: 'block-start', index: 0, blockType: 'text' }

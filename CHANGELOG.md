@@ -3,6 +3,42 @@
 > dsh-agent-router 的版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 > 内部注解（提交号 / EV 编号）供追溯，用户可忽略。
 
+## v0.2.1 — 2026-08-22
+
+### 摘要
+
+**P0 热修版本**——承载 2026-08-22 两个生产故障修复与一个行为修正。核心变化一句话：**多模态"接管"从默认强制改为默认关闭（用户主权），并修复宿主 dsh-llm 更新导致的多模态消息全量失败**。
+
+### 修复
+
+- **多模态消息全量失败（宿主接口演进兼容，FIX-001）**
+  - 症状：宿主 dsh-llm 更新（0.1.1-rc.2，npx cache 静默刷新）后，所有多模态消息报 `registration.adapter.prepareCall is not a function`。
+  - 根因：新宿主每次分发先调 `adapter.prepareCall`（prepared-dispatch 契约）；本插件 twin 包装适配器为手工对象字面量（无基类继承），缺该方法即全量断裂。
+  - 修复：twin 显式实现 `prepareCall` 并绑定 twin 自身方法（prepared 分发不得绕过 twin 的改写/直传逻辑）；6 处测试夹具同步修复；新增**适配器接口奇偶回归测试**（动态枚举宿主基类方法——宿主未来新增方法而插件未跟进时测试即红，RISK-003 看护网）（commit f1c4c91；R6 审查 + FIX-001b 返工 cba0d98）。
+- **模型选择被强制覆盖（双层接管行为修正，FIX-002/FIX-002b）**
+  - 症状：① 切换会话（含起子代理）后，用户手动选回的模型被强制切回多模态包装路由；② 纯文本消息也被强制经包装路由（中间层故障被放大为全量故障）。
+  - 根因：两个独立的接管面均无开关且无用户主权保护——服务端默认模型接管（三个同步触发点无条件执行）+ 客户端会话级接管（effect 依赖 sessionId，起子代理即触发强制切换）。
+  - 修复：新增 `router.takeoverDefaultModel` 配置（**默认 false**）统一约束两层——关闭时包装路由仅出现在模型列表（用户手动选用），默认模型与会话选择永不被触碰；显式开启后为一次性接管（记住来源，用户改回即尊重）；关闭开关/禁用插件时恢复原 provider；旧版本遗留的强制接管选择在首次同步时自动还原（commit d264f03 + 5c8f2dc；DEC-022 用户裁决）。
+
+### 新增
+
+- **`router.takeoverDefaultModel` 配置开关**（默认 false）：多模态自动接管的可选开关（见上）；schema 字段 + catalog 镜像（客户端可见）。
+
+### 变更
+
+- **ChatGPT 订阅 OAuth 服务层就位（不可见预置，EVO-002 Step 1-4b 部分）**：凭据模块（原子写/文件锁/自动刷新）、1455 惰性回调服务、授权流 preset 分支已进入 main——全部由 `router.oauthExperimental`（默认 false）与默认关闭保护，**用户零可见**；完整功能（协议分支/UI/设备码）将在 v0.3.0 发布。
+
+### 已知问题
+
+- 接管关闭（默认）时，多模态能力需要用户在模型列表手动选 `xxx + 多模态` 组，或在设置中显式开启 `takeoverDefaultModel`（换来零操作体验，代价是自动切组）。
+- EVO-002 Step 5+（codex-responses 协议分支/客户端 UI/设备码）未包含在本版本——`oauthExperimental` 保持关闭即无影响。
+
+### 版本说明
+
+- **版本号**：缺陷修正 + 向后兼容的新配置开关（默认值不改变合规行为，改变的是缺陷行为本身）→ patch 级 **v0.2.1**。
+- **发布范围**：v0.2.0（2026-08-20 tag）以来 main 全部提交——EVO-002 Step 1-4b（11c42c0 / 8ba6ab18 / 128cb810 / a2567db / 564e18c，OAuth 地基，kill-switch 默认关闭）+ FIX-001/001b（f1c4c91 / cba0d98）+ FIX-002/002b（d264f03 / 5c8f2dc）。
+- **验证基线**：`node tests/smoke.mjs` 656 断言全绿；`tests/adapter-parity.mjs` 14 断言（首次真实运行，R6-F1 修复后）；oauth-credentials 75 / oauth-loopback 20；R6 独立审查链闭环（APPROVED_WITH_NOTES + 绑定条件全落地）。
+
 ## v0.2.0 — 2026-08-20
 
 ### 摘要
