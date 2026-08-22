@@ -1,0 +1,195 @@
+commit a484469240bccaf9f62948e5aaa90969f2c8662d
+Author: peterwangze <1337917121@qq.com>
+Date:   Sun Aug 23 01:13:10 2026 +0800
+
+    FIX-005: route_agent 引导按主模型能力条件化——①prestep reminder 分级（能力判定提前共用：wrapper 分支剥 -router 探测原适配器，与 wrapper stream 语义对齐；accepts=true 不注入 reminder，accepts=false/失败保持注入+逃生组改写 C-3）②tool.js route_agent 描述追加中性句（普通看图无需路由，仅深析/跨轮旧图再查/显式要求）③service.js promptText 目录段同义中性句 ④routing-paths [G] 段 6 判别断言 + smoke ③ 语义同步（原生多模态零注入）；红相 4 FAIL→绿相 108/108（102+6）+ smoke 856 全绿 + stats 99/metrics/parity 14/oauth 80
+
+diff --git a/lib/prestep.js b/lib/prestep.js
+index 954a8f9..fd4e997 100644
+--- a/lib/prestep.js
++++ b/lib/prestep.js
+@@ -201,19 +201,28 @@ export function installPreStep(ctx, service) {
+       const provider = sessionProvider(agent)
+       const model = sessionModel(agent)
+       const onWrapperRoute = typeof provider === 'string' && provider.endsWith(WRAP_SUFFIX)
+-      let rewritten = null
+-      if (!onWrapperRoute) {
+-        const original = () => {
+-          try {
+-            const llm = ctx.get('llm')
+-            return llm && typeof llm.registration === 'function' ? llm.registration(provider)?.adapter : undefined
+-          } catch {
+-            return undefined
+-          }
++      // FIX-005：能力判定提前共用（原生多模态全链路一致——wrapper 分支剥 -router 探测
++      // 原适配器；与 wrapper stream L343 语义对齐：判定 key=原 provider\0model\0image，
++      // modal 缓存命中共享，无重复开销）。accepts=true → 不注入 reminder（主模型已
++      // 原生看图，行为引导是误导——用户 429 误调实案）；accepts=false/探测失败 →
++      // 注入保持（C-3：纯文本主模型的行为指令载体）。
++      const probeProvider = onWrapperRoute && provider.length > WRAP_SUFFIX.length
++        ? provider.slice(0, -WRAP_SUFFIX.length)
++        : provider
++      const original = () => {
++        try {
++          const llm = ctx.get('llm')
++          return llm && typeof llm.registration === 'function' ? llm.registration(probeProvider)?.adapter : undefined
++        } catch {
++          return undefined
+         }
+-        const accepts = await sourceAcceptsModality(original, provider, model, 'image')
+-        // 能力探测失败 → false → 安全回落改写（§5.2.3：宁可改写不可漏图击穿 C-3）。
+-        if (!accepts) rewritten = rewriteImageTurnsToMarkers(claimed, state)
++      }
++      const accepts = await sourceAcceptsModality(original, probeProvider, model, 'image')
++      let rewritten = null
++      if (!onWrapperRoute && !accepts) {
++        // 逃生组改写（C-3：纯文本主模型不见裸图块）——能力探测失败 → false → 安全
++        // 回落改写（§5.2.3：宁可改写不可漏图击穿）。
++        rewritten = rewriteImageTurnsToMarkers(claimed, state)
+       }
+       const decisionMessages = Array.isArray(decision.messages) ? decision.messages : []
+       const out = rewritten
+@@ -222,7 +231,9 @@ export function installPreStep(ctx, service) {
+             return index >= 0 && rewritten[index] !== message ? rewritten[index] : message
+           })
+         : decisionMessages
+-      return { ...decision, messages: [...out, reminder] }
++      // FIX-005：reminder 条件注入——原生多模态（accepts=true）不注入（零引导）；
++      // 纯文本/探测失败 → 现状（[...out, reminder]）。
++      return { ...decision, messages: accepts ? out : [...out, reminder] }
+     } catch (error) {
+       // fail-safe：本钩子异常不得击穿宿主 agent 循环——降级为不介入（reminder
+       // 缺失时通道②标记仍承载行为指令；逃生组改写失败时宿主准入会明确拒绝，
+diff --git a/lib/service.js b/lib/service.js
+index 9290ffe..56d4491 100644
+--- a/lib/service.js
++++ b/lib/service.js
+@@ -2905,6 +2905,7 @@ export class RouterService extends TypertRemoteService {
+       '- agent 类型专业 agent 可读写工作区任意文件：在 `task` 里写明文件路径（相对/绝对均可），产物写入工作区并在结果中报告路径。',
+       '- `files`：工作区文件路径或 http(s) URL 列表（一次可传多个不同类型）。chat 类型按内容能力化分发：图片文件内联注入（要求该 agent 声明 image 能力）、文本文件内联进 task、其余二进制需 agent 类型；agent 类型把路径注入子代理由其用 fs 工具自行读取；URL 由宿主下载到工作区 .router-files/ 后按同样规则分发。',
+       '- 未配置模型的 agent 自动复用主 agent 当前模型。',
++      '- 当前轮图片若已由主模型原生查看，普通看图无需调用 `route_agent`；仅专业深度分析、跨轮旧图再查（附件 id 来自记忆段或图片标记）或用户显式要求的图像任务才路由。',
+       '- 调用后把返回结果原样呈现给用户，不要自行重复分析或改写结论。',
+     ].join('\n')
+   }
+diff --git a/lib/tool.js b/lib/tool.js
+index 2c99e0d..52c5cbf 100644
+--- a/lib/tool.js
++++ b/lib/tool.js
+@@ -65,6 +65,7 @@ export function apply(ctx) {
+       '`attachmentIds`：内容寻址附件 id 数组（如 `sha256:<64位hex>`，来自 imageMemory 记忆段或 `[router:image:]` 标记中的 id）。跨轮指代：主 agent 从记忆段拿到 id 可直接精确再看原图。经 M2 附件统一编址解析（含懒注册降级）；非法/未知 id 明确报错；与 `attachments`/`includeImages` 正交可组合（按附件去重）。',
+       '`files`：工作区文件路径或 http(s) URL 列表，一次可传多个不同类型。chat 类型按内容分发（图片文件内联注入，需该 agent 声明 image 能力；文本文件内联进 task；其余二进制请改传 agent 类型）；agent 类型把路径注入子代理由其用 fs 工具读取；cli 类型同样把路径注入无头 CLI 子代理（由其自身工具读取）；URL 由宿主下载到工作区 .router-files/ 后按同样规则分发。对话框上传的图片走 `includeImages`/`attachments` 附件通道，不经 `files`。',
+       '`filePath`：语音识别（speech）类 agent 需要——工作区内音频文件的绝对或相对路径。',
++      '普通看图无需路由：当前轮图片已由主模型原生查看时，无需调用本工具；仅在需要专业深度分析（截图/图表/OCR 精度）、跨轮旧图再查（`attachmentIds` 来自记忆段或图片标记）或用户显式要求的图像任务时才路由。',
+       'agent 类型的专业 agent 会自动收到会话工作目录：处理工作区任意文件（PDF/音频/视频/代码等）时在 `task` 里写明路径即可，产物写入工作区并在结果中报告路径。',
+       'cli 类型的专业 agent 是无头 CLI 子代理（codex / claude / gemini 等）：使用 CLI 自身登录态（首次需在终端运行 `codex login` 等完成登录），任务经 stdin 注入、在工作区内自动执行，图片附件落盘为工作区文件路径。',
+     ].join('\n'),
+diff --git a/tests/routing-paths.mjs b/tests/routing-paths.mjs
+index 80d8d6b..483ba30 100644
+--- a/tests/routing-paths.mjs
++++ b/tests/routing-paths.mjs
+@@ -61,6 +61,7 @@ import { Context } from '@deepseek-ai/cordis'
+ import { RouterService } from '../lib/service.js'
+ import { AttachmentRegistry, isAttachmentId, ATTACHMENT_REGISTRY_MAX_ENTRIES, ATTACHMENT_FETCH_TIMEOUT_MS, ATTACHMENT_ERROR_CODES, probeImageDimensions } from '../lib/attachments.js'
+ import { installAdmissionWrapper, WRAP_SUFFIX, MODALITY_ENTRIES, minimalImageRewrite } from '../lib/wrapper.js'
++import { installPreStep } from '../lib/prestep.js'
+ import { mkdtempSync, rmSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+ import { createHash } from 'node:crypto'
+ import { tmpdir, homedir } from 'node:os'
+@@ -933,6 +934,78 @@ console.log('F. takeover 客户端会话级:')
+     && sessionCurrent.get('sess-b').provider === 'gateway')
+ }
+ 
++// ── [G] prestep 分级：原生多模态不注入 reminder / 纯文本保持 / wrapper 分支同判（FIX-005）
++// 判别性：修复前 installPreStep 对含图轮无条件注入 reminder（prestep.js L225）——
++// 原生多模态主模型也收到"请调用 route_agent 工具"引导 → 主 agent 被误导调（用户
++// 429 配额误调实案）；修复后 accepts=true 不注入（G1/G3 旧代码必败），accepts=false
++// 保持现状注入 + 逃生组改写（G2/G4 旧代码即绿——现状保持判别）。
++{
++  const REMINDER_SUBSTR = '请调用 route_agent 工具'
++  const NEUTRAL_SUBSTR = '已由主模型原生查看'
++  const mkStubLlm = () => ({
++    registration: (provider) => ({
++      adapter: {
++        resolveModel: async () => ({ inputModalities: provider === 'deepseek-official' ? ['text', 'image'] : ['text'] }),
++      },
++    }),
++    stream: async function* () { yield { type: 'finish', reason: { kind: 'stop' } } },
++  })
++  const runPreStep = async (cfg) => {
++    let handler
++    const ctx = {
++      get: (key) => (key === 'llm' ? cfg.llm : undefined),
++      on: (_event, fn) => { handler = fn; return () => undefined },
++      logger: { warn: () => undefined },
++    }
++    installPreStep(ctx, service)
++    const messages = cfg.messages
++    const decision = await handler(
++      { agent: { options: { provider: cfg.provider, model: cfg.model } }, messages, turn: 0, step: 0, signal: undefined },
++      async () => ({ kind: 'enter', messages }),
++    )
++    return decision.messages
++  }
++  const imgMessages = () => [{ role: 'user', content: [{ type: 'image', attachment: { attachmentId: IMG_C, name: 't.png', mediaType: 'image/png', bytes: 4, width: 2, height: 2 } }] }]
++  const hasReminder = (msgs) => msgs.some((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'text' && typeof b.text === 'string' && b.text.includes(REMINDER_SUBSTR)))
++  const hasImageBlock = (msgs) => msgs.some((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'image'))
++
++  // G1 原生多模态（非 wrapper）：accepts=true → 不注入 reminder + 图片块保留（未改写）——
++  // 旧代码：无条件注入 → hasReminder 必败。
++  {
++    const out = await runPreStep({ llm: mkStubLlm(), provider: 'deepseek-official', model: 'vision-exp', messages: imgMessages() })
++    check('[G1] 原生多模态：不注入 route_agent reminder（图片保留）', !hasReminder(out) && hasImageBlock(out))
++  }
++  // G2 纯文本：accepts=false → 注入保持 + 逃生组改写（图片块 → 标记文本，无 image 块）——
++  // 现状行为保持判别（误删保护：C-3 纯文本主模型不见裸图块）。
++  {
++    const out = await runPreStep({ llm: mkStubLlm(), provider: 'text-only-prov', model: 't1', messages: imgMessages() })
++    check('[G2] 纯文本主模型：reminder 注入保持 + 改写无裸图块', hasReminder(out) && !hasImageBlock(out))
++  }
++  // G3 wrapper 分支原生多模态：provider 剥 -router 探测原能力 → 不注入——
++  // 旧代码 wrapper 分支不探测（onWrapperRoute 跳过）→ 无条件注入 → 必败。
++  {
++    const out = await runPreStep({ llm: mkStubLlm(), provider: 'deepseek-official-router', model: 'vision-exp', messages: imgMessages() })
++    check('[G3] wrapper 分支原生多模态：不注入 reminder（provider 剥离判定）', !hasReminder(out))
++  }
++  // G4 wrapper 分支纯文本：注入保持（不改写——wrapper stream 在模型输入层改写，防双改写）。
++  {
++    const out = await runPreStep({ llm: mkStubLlm(), provider: 'text-only-prov-router', model: 't1', messages: imgMessages() })
++    check('[G4] wrapper 分支纯文本：reminder 保持注入', hasReminder(out))
++  }
++  // G5 tool.js route_agent 描述含中性句（静态断言：读源码文本——判别性：句中词"已由
++  // 主模型原生查看"仅在描述追加后出现）+ 既有指导保留（不得删改）。
++  {
++    const toolSrc = readFileSync(join(LIB_DIR, 'tool.js'), 'utf8')
++    check('[G5] route_agent 描述含中性句且既有指导保留', toolSrc.includes(NEUTRAL_SUBSTR) && toolSrc.includes('只有当任务明确匹配某个专业 agent 的能力时'))
++  }
++  // G6 service.promptText 目录段含中性句（运行断言：真实 service 实例）——
++  // 判别性：中性词仅在 promptText 使用规则追加后出现。
++  {
++    const prompt = service.promptText()
++    check('[G6] promptText 目录段含中性句', typeof prompt === 'string' && prompt.includes(NEUTRAL_SUBSTR))
++  }
++}
++
+ // ── 终态摘要（CLI runner：非空输出 + PASS/FAIL 计数 + exit 语义）──────────────
+ const total = pass + fail
+ console.log(`\nrouting-paths: ${pass}/${total} passed, ${fail} failed`)
+diff --git a/tests/smoke.mjs b/tests/smoke.mjs
+index 8962d11..0eca537 100644
+--- a/tests/smoke.mjs
++++ b/tests/smoke.mjs
+@@ -2373,9 +2373,12 @@ console.log('admission wrapper (L1):')
+   check('escape-group turn also injects reminder', escapeDecision.messages.length === 2 && escapeDecision.messages[1].source.kind === 'plugin')
+ 
+   // ③ 逃生组 + 原生多模态主模型：能力判定保真直传（preserveImageInput 语义）。
++  // FIX-005（2026-08-23）：原生多模态（accepts=true）不注入 reminder——主模型已
++  // 原生看图，行为引导是误导（用户 429 误调实案）；零注入 = 单消息保真直传。
+   const mmAgent = { options: { provider: 'mm-escape-provider', model: 'brain-1' } }
+   const mmDecision = await dispatch(mmAgent, [imageMessage])
+-  check('native multimodal escape keeps raw image (passthrough)', mmDecision.messages[0].content.some((b) => b.type === 'image') && mmDecision.messages.length === 2)
++  check('native multimodal escape keeps raw image (passthrough)', mmDecision.messages[0].content.some((b) => b.type === 'image') && mmDecision.messages.length === 1)
++  check('native multimodal escape injects no reminder (FIX-005)', mmDecision.messages.every((m) => !(m.source && m.source.kind === 'plugin')))
+ 
+   // ④ 纯文本轮负向：零注入、零改写（同一对象引用返回）。
+   const textMessage = createUserMessage({ content: [{ type: 'text', text: '纯文本轮' }], source: { kind: 'user' } })
