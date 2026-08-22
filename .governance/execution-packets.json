@@ -271,6 +271,27 @@
       "next_commands": ["node tests/routing-paths.mjs", "node tests/smoke.mjs"],
       "done_definition": ["F-1/F-2/F-3 三修落点明确 + routing-paths 101/101（98+3）+ smoke 850/0（849 基线）零回退 + commit（FIX-003C 前缀）", "Code Reviewer 审查 APPROVED"],
       "source": "review-FIX-003-R1.md（F-1/F-2/F-3）+ EV-054 台账 + 用户 2026-08-23 候选确认"
+    },
+    "FIX-005": {
+      "task_id": "FIX-005",
+      "priority": "P1",
+      "status": "派发中（2026-08-23，Developer fork——用户提案落地：条件化引导）",
+      "goal": "route_agent 引导/注入按主模型能力条件化：原生多模态（accepts=true）不注入 reminder/不引导误调；纯文本主模型（C-3 图丢失防护）保持现状；工具/目录描述中性化（普通看图无需路由，深析/跨轮/显式任务才调用）",
+      "accepted_thresholds": {
+        "bug_identifier": "prestep.js installPreStep L181-235——reminder（L195-196 构建 + L225 注入）无条件（accepts 判定只在非 wrapper 分支用于改写，reminder 路径未分级）",
+        "user_proposal": "主模型原生多模态时不应注入 route_agent 主动引导（用户 2026-08-23：\"我发给的就是多模态模型，为什么还是会被接管\"）"
+      },
+      "allowed_change_scope": ["lib/prestep.js", "lib/tool.js（route_agent 描述中性句）", "lib/service.js（系统提示目录段中性句）", "tests/smoke.mjs", "tests/routing-paths.mjs"],
+      "quality_budget": {
+        "dimensions": {
+          "correctness": {"threshold": "accepts=true → 不注入 reminder；accepts=false/探测失败 → 现状保持（C-3）", "validation": "判别性断言（mock 原 adapter resolveModel 两态）", "status": "planned", "evidence": "routing-paths 新增块", "exception": ""},
+          "coverage": {"threshold": "原生/纯文本/wrapper 分支三态 + tool 描述静态断言 + smoke 856 零回退", "validation": "断言计数 + smoke 输出", "status": "planned", "evidence": "tests 输出", "exception": ""},
+          "maintainability": {"threshold": "判定单点复用 sourceAcceptsModality（不复制实现）；wrapper 分支 provider 剥离语义对齐 wrapper.js L343", "validation": "Code Reviewer 检查", "status": "planned", "evidence": "review 报告", "exception": ""}
+        }
+      },
+      "required_evidence": ["evidence-log entry", "全量测试网输出（P-v2 P4 门控：routing-paths/smoke/stats/metrics/parity/oauth-credentials）", "Code Reviewer 审查（review-FIX-005-R*.md）"],
+      "done_definition": ["子项 1-4 全闭 + 全量测试网零回退 + 独立 commit（FIX-005 前缀） + Code Reviewer APPROVED"],
+      "source": "plan-tracker.md FIX-005 行 + 用户提案（2026-08-23 多模态误调观察）+ wrapper.js/sourceAcceptsModality 判定 + prestep.js 源码定位"
     }
   }
 }
