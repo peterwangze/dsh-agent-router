@@ -220,6 +220,9 @@ export async function runClientRender(check) {
   let experimentalOn = false
   let presetMode = 'none'
   let confirmMode = true
+  // EVO-002 Step 7（R7-F4 判别）：true 时 remoteMock.oauthLogout 返回
+  // ok:false（store.delete 失败形态——凭据文件残留 + 无重试入口的旧行为判别）。
+  let logoutFailMode = false
   // F11 上传失败模式：true 时 remoteMock.uploadFile 返回 ok:false（错误码形状）。
   let uploadFailMode = false
   // L3 打开文件失败模式（Step 9）：true 时 remoteMock.readWorkspaceFile 返回
@@ -269,7 +272,12 @@ export async function runClientRender(check) {
     stats: async () => ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [] } }),
     save: async (request) => { captured.saveOps.push(...((request && request.ops) ?? [])); return { ok: true, value: { ok: true, revision: 1 } } },
     oauthBegin: async (request) => { captured.beginCalls.push(request); return { ok: true, value: { ok: true, message: '授权 URL 已生成', authUrl: 'https://auth.openai.com/oauth/authorize?x=1', state: 'st-6' } } },
-    oauthLogout: async (request) => { captured.oauthLogoutCalls.push(request); return { ok: true, value: { ok: true, message: '已登出并删除 ChatGPT 凭据文件' } } },
+    oauthLogout: async (request) => {
+      captured.oauthLogoutCalls.push(request)
+      return logoutFailMode
+        ? { ok: true, value: { ok: false, message: '登出失败（删除凭据文件）：模拟磁盘错误' } }
+        : { ok: true, value: { ok: true, message: '已登出并删除 ChatGPT 凭据文件' } }
+    },
     reset: async () => ({ ok: true, value: { ok: true } }),
     test: async () => ({ ok: true, value: { ok: true, message: 'ok' } }),
     cliStatus: async () => cliStatusMode === 'logged-out'
@@ -927,6 +935,32 @@ export async function runClientRender(check) {
       const poolOps6 = captured.saveOps.filter((op) => op.path.join('/') === 'pools/main/accounts')
       const unsetOps6 = captured.saveOps.filter((op) => op.op === 'unset' && op.path.join('/') === 'oauthAccounts/chatgpt')
       check('step6: delete cleans credential + pool refs + entry (W-5)', captured.oauthLogoutCalls.length === 1 && poolOps6.length === 1 && Array.isArray(poolOps6[0].value) && poolOps6[0].value.length === 0 && unsetOps6.length === 1)
+    }
+    // ── EVO-002 Step 7：R7 收尾（F1 渲染过滤 / F4 吞错 / F2 成功文案）──
+    // 判别性：F1 旧代码通用区 summary 含 preset 账号（计数 1）→ 断言 (0) 必败；
+    // F4 旧代码忽略 ok:false 继续 unset + 弹成功提示 → 断言 unset 缺席 + 失败
+    // 文案必败；F2 旧代码复用 oauthTokenBack → 断言 presetDeleted 必败。
+    {
+      const tree7 = await renderSettings6('step7-f1')
+      check('step7: generic oauth area excludes preset accounts (R7-F1)', textOf(tree7).includes(tOf('oauthSummary')(0)))
+      // F4：oauthLogout 返回 ok:false → 账号条目保留（可重试）+ 展示失败消息。
+      logoutFailMode = true
+      captured.oauthLogoutCalls.length = 0
+      captured.saveOps.length = 0
+      const delFail7 = buttonsOf(tree7).find((node) => textOf(node) === tOf('presetDelete'))
+      if (delFail7) delFail7.props.onClick()
+      await settle()
+      const unsetFail7 = captured.saveOps.filter((op) => op.op === 'unset' && op.path.join('/') === 'oauthAccounts/chatgpt')
+      check('step7: logout failure keeps account entry (retry path, R7-F4)', captured.oauthLogoutCalls.length === 1 && unsetFail7.length === 0)
+      check('step7: logout failure surfaces error message (R7-F4)', textOf(currentTree).includes('登出失败'))
+      // F2：成功删除后提示用 presetDeleted 文案（非 oauthTokenBack）。
+      logoutFailMode = false
+      captured.saveOps.length = 0
+      const delOk7 = buttonsOf(currentTree).find((node) => textOf(node) === tOf('presetDelete'))
+      if (delOk7) delOk7.props.onClick()
+      await settle()
+      check('step7: delete success notice uses presetDeleted copy (R7-F2)', textOf(currentTree).includes(tOf('presetDeleted')) && !textOf(currentTree).includes(tOf('oauthTokenBack')))
+      logoutFailMode = false
     }
     // 复位（不污染后续块）。
     experimentalOn = false
