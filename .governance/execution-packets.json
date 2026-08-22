@@ -16,8 +16,8 @@
     "EVO-002": {
       "task_id": "EVO-002",
       "priority": "P0",
-      "status": "进行中——Step 1 ✅；Step 2 ✅；Step 3 ✅（DEC-021）；Step 4a ✅ 加固（R2 P2 清零）；Step 4b ✅ 授权流（564e18c，R5，EV-033，R3 P2 清零）；Step 5 协议分支派发中（R5-F1+R4-F1 必闭）",
-      "goal": "C-1 ChatGPT 订阅 OAuth 接入 v0.3.0 全量交付：preset 账号 + 独立凭据文件 + 1455 loopback + codex-responses 协议分支（SSE 聚合）+ Q2 per-protocol 能力接口 + 合规三层 kill-switch + C-9 埋点启动",
+      "status": "Step 1-5 闭环（Step 5: db1ddf7 + R6 APPROVED_WITH_NOTES/0，EV-041/043）。Step 6 派发中（2026-08-23，fork 通道）：账号卡 UI + ToS 确认 + 登出删除（W-5 删账号联动凭据清理 + S-3 锁超时定义）+ Q2 per-protocol 能力接口（§3.5）+ 代理发现（R6/EV-041 双记录必含——chatgpt.com 需代理 7890/auth 直连；首联顺带裁决 R6-F2 \\r\\n 分帧与 R6-F5 403 文案序）+ C-9 埋点（tests/metrics.mjs）+ DEC-022-D 版本指纹（若 roadmap §3 归属 Step 6）。R6 P3 台账随触及文件分批处理",
+      "goal": "[unchanged] C-1 ChatGPT 订阅 OAuth 接入 v0.3.0 全量交付：preset 账号 + 独立凭据文件 + 1455 loopback + codex-responses 协议分支（SSE 聚合，已交付）+ Q2 per-protocol 能力接口 + 合规三层 kill-switch + C-9 埋点启动",
       "product_success_contract": {
         "user": "dsh-agent-router 插件用户（DSH 主 agent 持有者，持有 ChatGPT Plus/Pro 订阅）",
         "job_to_be_done": "在设置页一键登录 ChatGPT 订阅账号（无需自建 OAuth Client/手抄 token），让专业 agent 用订阅额度完成 chat 任务调用",
@@ -192,6 +192,74 @@
         "Commit per unit with EVO-003 prefix"
       ],
       "source": "plan-tracker.md EVO-003 任务行 + docs/architecture/evolution-roadmap-v1.md §4（L321-388：E6-a/E7-a/E8/§4.2 四件套/§4.4 模块分离）+ ADR-006（L515 起）+ ARCH-002 W-4 绑定 + DEC-018 Q3（DSH_HOME + 90d 裁决）"
+    },
+    "DEV-002": {
+      "task_id": "DEV-002",
+      "priority": "P1",
+      "status": "进行中（2026-08-23 派发，QA 执行 + Test Reviewer 后置）——与 EVO-002 Step 6 并行：仅新增测试文件（tests/ 新文件），不改产品代码与既有测试（M7.6 并行安全切分）",
+      "goal": "核心通路自动化测试补强：routing 决策链（route_agent 参数解析/附件统一编址/模态路由）+ takeover 双层开关语义（FIX-002 终态行为：默认 false 零触碰/一次性接管/用户改回尊重/遗留剥离 one-shot）具备独立可重复测试套件——RISK-001 主轨道（触发条件：下一版本发布前未完成）",
+      "product_success_contract": {
+        "user": "dsh-agent-router 维护者（本项目用户=开发者自身）",
+        "job_to_be_done": "核心通路行为变化能被独立测试套件即时捕获，不依赖单进程 smoke 全局状态",
+        "non_goals": [
+          "不修改产品代码（发现缺陷→缺陷报告上报，修复归 Developer）",
+          "不修改既有测试文件（tests/smoke.mjs、client-render.mjs、metrics.mjs 等 EVO-002 Step 6 持锁）",
+          "不做性能/安全全量专项（本轮聚焦 routing/takeover 关键路径功能回归）"
+        ],
+        "success_metrics": [
+          "新增独立测试文件 node 可直跑（exit 0/1 语义，非 vacuous——R6-F1/R7 教训：必须有 CLI runner 与非空输出）",
+          "routing 决策链与 takeover 双层语义各有行为验证断言（非存在性断言）",
+          "每条断言可指认所验证的行为语义与失败形态"
+        ],
+        "done_definition": [
+          "新测试套件 0 FAIL + 断言-行为映射清单",
+          "Test Reviewer 审查 APPROVED（review-DEV-002-R*.md）",
+          "覆盖声明：测什么/不测什么+理由（stage-testing 纪律）"
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "维护者改动 lib/ 核心通路后运行新套件，行为回归被捕获",
+        "command": "node tests/<新文件>.mjs",
+        "expected_output": "非空输出 + PASS/FAIL 计数 + exit 0（全绿）；断言覆盖 routing 参数解析/附件编址/模态路由/接管开关四语义域",
+        "last_run": {"status": "planned", "exit_code": null, "summary": "起步——现有 4 冒烟文件 + smoke 695 基线为参照系"}
+      },
+      "quality_budget": {
+        "dimensions": {
+          "correctness": {"threshold": "断言验证真实行为（旧代码缺陷下必败——判别性自推演逐条留痕）", "validation": "自推演记录 + Test Reviewer 抽查", "status": "planned", "evidence": "测试文件注释 + review 报告", "exception": ""},
+          "coverage": {"threshold": "routing/takeover 关键路径各 ≥3 行为断言；边界 ≥5 类各 ≥1（null/空/超长/并发语义/超时）", "validation": "断言清单计数", "status": "planned", "evidence": "测试报告", "exception": ""},
+          "maintainability": {"threshold": "新文件独立可跑（CLI runner + 非空输出）；不引入对 smoke 内部状态的依赖", "validation": "独立运行验证", "status": "planned", "evidence": "命令输出", "exception": ""}
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "维护者获得可重复的核心通路回归套件",
+        "demo_path": "node tests/<新文件>.mjs 全绿输出",
+        "scope_guard": "仅 tests/ 下新增文件；禁止修改 lib/** 与既有 tests/**（EVO-002 Step 6 持锁）",
+        "rollback_plan": "纯新增——revert 单 commit",
+        "status": "planned",
+        "evidence": "evidence-log DEV-002 条目"
+      },
+      "interruption_policy": {
+        "mode": "critical-only",
+        "critical_triggers": ["发现产品缺陷（测试揭示真实行为 bug）→ 停下写缺陷报告上报，不顺手修"],
+        "auto_execute": ["测试设计与实现（新文件域）"],
+        "assumption_record": {
+          "assumption": "套件聚焦 routing+takeover 两域；其他域（oauth/stats）已有专属套件覆盖",
+          "basis": "tracker DEV-002 行 + 现有测试布局盘点",
+          "reversibility": "纯新增文件",
+          "validation": "Test Reviewer R1",
+          "rollback": "revert"
+        },
+        "interruption_budget": "至多一次用户打断"
+      },
+      "allowed_change_scope": ["tests/ NEW files only (e.g. tests/routing-paths.mjs)", "No edits to lib/** or existing tests/**"],
+      "required_evidence": [
+        "evidence-log entry with 事实依据/目标对齐/用户影响/结构化事实 JSON",
+        "命令输出（exit_code + 计数）",
+        "Test Reviewer 独立审查（review-DEV-002-R*.md）"
+      ],
+      "next_commands": ["node tests/<新文件>.mjs"],
+      "done_definition": ["0 FAIL + 判别性推演留痕 + 覆盖声明（测/不测+理由）+ Test Reviewer APPROVED + commit（DEV-002 前缀）"],
+      "source": "plan-tracker.md DEV-002 行 + RISK-001（主轨道）+ session-snapshot 遗留任务 + FIX-002 R7/R8 审查链（takeover 语义基线 72b2670/0b3c15d）"
     }
   }
 }
