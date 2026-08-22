@@ -1,0 +1,295 @@
+commit b6581c5e7d2e006bf30481c1de829921ec659b10
+Author: peterwangze <1337917121@qq.com>
+Date:   Sat Aug 22 22:01:21 2026 +0800
+
+    FIX-003: 多模态路由失效修复——①runChat 预检 declared 判定改用 listConfigurableProviders（真实宿主 listProviders 条目无 declared 字段——例外从不生效，FIX-003 实证）+ ②懒注册自取证降级（宿主 readImage 裸 id 元数据校验必败 ATTACHMENT_CORRUPT——读对象文件探测尺寸构造完整 ref 再走宿主读取/内容哈希兜底）+ ③测试 B13a/b + D15 判别（98/98）；settings 侧能力声明修复另述（宿主配置面）
+
+diff --git a/lib/attachments.js b/lib/attachments.js
+index f42a33d..053d27d 100644
+--- a/lib/attachments.js
++++ b/lib/attachments.js
+@@ -26,8 +26,13 @@
+  * @module dsh-agent-router/attachments
+  */
+ import { createHash } from 'node:crypto'
+-import { mkdirSync, writeFileSync } from 'node:fs'
++import { mkdirSync, writeFileSync, readFile as _readFile } from 'node:fs'
++import { homedir } from 'node:os'
+ import { basename, join } from 'node:path'
++import { promisify } from 'node:util'
++
++/** FIX-003 自取证读文件（promisified，零额外依赖）。 */
++const readFileBytes = promisify(_readFile)
+ 
+ /** 内容寻址 id 格式（与宿主附件一致）。 */
+ export const ATTACHMENT_ID_RE = /^sha256:[0-9a-f]{64}$/i
+@@ -90,6 +95,67 @@ export function detectImageMediaType(data) {
+   return undefined
+ }
+ 
++/**
++ * 探测图片尺寸（FIX-003 懒注册自取证用）：PNG IHDR / JPEG SOF / GIF 头 /
++ * WebP VP8/VP8L/VP8X。返回 {width, height}；无法解析返回 undefined。
++ * 字节序与魔数依赖均按各格式规范；零第三方依赖。
++ */
++export function probeImageDimensions(data) {
++  const u8 = data
++  if (u8.length < 24) return undefined
++  const u16be = (i) => (u8[i] << 8) | u8[i + 1]
++  const u32be = (i) => u8[i] * 0x1000000 + (u8[i + 1] << 16) + (u8[i + 2] << 8) + u8[i + 3]
++  if (u8[0] === 0x89 && u8[1] === 0x50 && u8[2] === 0x4e && u8[3] === 0x47 && u8[12] === 0x49 && u8[13] === 0x48 && u8[14] === 0x44 && u8[15] === 0x52) {
++    const w = u32be(16); const h = u32be(20)
++    return Number.isInteger(w) && Number.isInteger(h) && w > 0 && h > 0 ? { width: w, height: h } : undefined
++  }
++  if (u8[0] === 0xff && u8[1] === 0xd8) {
++    // JPEG：扫 SOF0/1/2 标记（0xFFC0/0xFFC1/0xFFC2），长度 2+2+1+1+2+2。
++    let i = 2
++    while (i + 9 < u8.length) {
++      if (u8[i] !== 0xff) { i += 1; continue }
++      const marker = u8[i + 1]
++      if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) { i += 2; continue }
++      if (marker === 0xda) break
++      const len = u16be(i + 2)
++      if (len < 2) return undefined
++      if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
++        const h = u16be(i + 5); const w = u16be(i + 7)
++        return Number.isInteger(w) && Number.isInteger(h) && w > 0 && h > 0 ? { width: w, height: h } : undefined
++      }
++      i += 2 + len
++    }
++    return undefined
++  }
++  if (u8[0] === 0x47 && u8[1] === 0x49 && u8[2] === 0x46 && u8[3] === 0x38 && (u8[4] === 0x39 || u8[4] === 0x37) && u8[5] === 0x61) {
++    const w = u8[6] | (u8[7] << 8); const h = u8[8] | (u8[9] << 8)
++    return w > 0 && h > 0 ? { width: w, height: h } : undefined
++  }
++  if (u8[0] === 0x52 && u8[1] === 0x49 && u8[2] === 0x46 && u8[3] === 0x46 && u8[8] === 0x57 && u8[9] === 0x45 && u8[10] === 0x42 && u8[11] === 0x50 && u8[12] === 0x56 && u8[13] === 0x50) {
++    if (u8[14] === 0x38 && u8[15] === 0x58) {
++      // VP8X：24 位宽高 -1（offset 24/27）
++      const w = 1 + (u8[24] | (u8[25] << 8) | (u8[26] << 16))
++      const h = 1 + (u8[27] | (u8[28] << 8) | (u8[29] << 16))
++      return w > 0 && h > 0 ? { width: w, height: h } : undefined
++    }
++    if (u8[14] === 0x38 && u8[15] === 0x4c) {
++      // VP8L：14 位宽高 -1（span 从 byte21 低 4 位起）
++      if (u8.length < 25) return undefined
++      const w = 1 + ((u8[21] & 0x3f) | ((u8[22] & 0x0f) << 6))
++      const h = 1 + (((u8[22] >> 4) & 0x0f) | ((u8[23] & 0x03) << 4) | ((u8[23] >> 6) & 0x30))
++      return w > 0 && h > 0 ? { width: w, height: h } : undefined
++    }
++    // VP8：帧头后 14/15 字节
++    if ((u8[14] === 0x20 && u8[15] === 0x00 && u8[16] === 0x00 && u8[17] === 0x00) || (u8[14] === 0x10 && u8[15] === 0x00 && u8[16] === 0x00 && u8[17] === 0x00)) {
++      const w = u16be(26) & 0x3fff
++      const h = u16be(28) & 0x3fff
++      return w > 0 && h > 0 ? { width: w, height: h } : undefined
++    }
++    return undefined
++  }
++  return undefined
++}
++
+ /** 字节 → 内容寻址 id（sha256:hex，与宿主附件同前缀）。 */
+ export function contentHashId(data) {
+   return `sha256:${createHash('sha256').update(data).digest('hex')}`
+@@ -289,6 +355,14 @@ export class AttachmentRegistry {
+    * `{ entry, data }`——data 供 materialize 复用写盘，避免"懒注册读一次 +
+    * 物化分支再读一次"的双读；读取失败/id 非法 → undefined（调用方映射
+    * ATTACHMENT_UNKNOWN）。
++   *
++   * FIX-003 降级链（宿主 dsh-attachment-local readImageFile 对裸 id ref
++   * 执行元数据校验——byteLength/width/height/mediaType 必须与对象一致，
++   * 裸 id 校验必败 ATTACHMENT_CORRUPT，21:28 宿主演进实证）：裸 id 失败后
++   * 自取证——读宿主对象文件（DSH_HOME/attachments/v1/objects/<sha256 前2>/<hex>），
++   * 探测魔数/尺寸构造完整 ref，再走宿主 readImage（校验应过）；宿主仍不可读
++   * 时直接使用自取证字节（对象文件在宿主库内即有效载体，仅当内容哈希与 id
++   * 一致时接受）。任一环节失败 → undefined（保持既有映射语义）。
+    */
+   async lazyRegisterById(id) {
+     const attachments = this.attachmentsService
+@@ -297,7 +371,7 @@ export class AttachmentRegistry {
+     try {
+       stored = await attachments.readImage({ attachmentId: id })
+     } catch {
+-      return undefined
++      stored = await this.lazyImageFromObjectFile(id, attachments)
+     }
+     if (!stored || !stored.data) return undefined
+     const ref = stored.ref && typeof stored.ref === 'object' ? stored.ref : {}
+@@ -313,6 +387,44 @@ export class AttachmentRegistry {
+     return { entry, data: stored.data }
+   }
+ 
++  /**
++   * FIX-003 懒注册自取证：经宿主 readImage 裸 id 失败后，直接读宿主附件
++   * 对象文件并构造完整 ref 再走宿主 readImage；宿主仍不可读时以自取证字节
++   * 兜底（SHA-256 与 id 一致才接受——内容寻址不变量）。
++   */
++  async lazyImageFromObjectFile(id, attachments) {
++    const sha = String(id).replace(/^sha256:/i, '')
++    if (!/^[0-9a-f]{64}$/i.test(sha)) return undefined
++    const root = this.dshHomeAttachmentsRoot()
++    if (!root) return undefined
++    const file = join(root, 'objects', sha.slice(0, 2), sha)
++    let data
++    try {
++      data = await readFileBytes(file)
++    } catch {
++      return undefined
++    }
++    if (!data || data.length === 0) return undefined
++    const mediaType = detectImageMediaType(data)
++    if (!mediaType) return undefined
++    const dims = probeImageDimensions(data)
++    if (!dims) return undefined
++    const ref = { attachmentId: id, mediaType, width: dims.width, height: dims.height, bytes: data.length }
++    try {
++      const stored = await attachments.readImage(ref)
++      if (stored && stored.data) return stored
++    } catch { /* 宿主仍拒绝：走自取证兜底 */ }
++    // 内容寻址校验：对象字节哈希必须等于 id（拒绝冒充/半写对象）。
++    if (contentHashId(data) !== id) return undefined
++    return { ref, data }
++  }
++
++  /** 宿主附件库根目录（DSH_HOME/attachments/v1；env 缺失回退 ~/.dsh——EV-028 事实）。 */
++  dshHomeAttachmentsRoot() {
++    const home = typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME ? process.env.DSH_HOME : homedir()
++    return join(home, 'attachments', 'v1')
++  }
++
+   /**
+    * 查注册表：已注册 → 直接返回；未命中但 id 合法（内容寻址格式）→
+    * **懒注册降级**（W-2）：经宿主 attachments.readImage 尝试读取 → 成功则
+diff --git a/lib/service.js b/lib/service.js
+index 0b1971f..d5e695f 100644
+--- a/lib/service.js
++++ b/lib/service.js
+@@ -1161,7 +1161,16 @@ export class RouterService extends TypertRemoteService {
+       // 跳过预检，由端点裁决。
+       let skipPrecheck = false
+       try {
+-        if (typeof llm.listProviders === 'function') {
++        // declared 判定：真实宿主 llm.listProviders() 的条目只有 {id,name}
++        // （FIX-003，21:28 宿主演进实证），declared 目录标记在
++        // llm.listConfigurableProviders()（pro-comment：registerConfigurableProviders
++        // 发布进 directory，listProviders 读的是 adapters 注册表）。先查
++        // configurable 目录（权威），缺失时回退 listProviders 兼容旧宿主。
++        if (typeof llm.listConfigurableProviders === 'function') {
++          const directory = await llm.listConfigurableProviders()
++          const entry = (directory ?? []).find((item) => (item.id ?? item.provider) === resolved.provider)
++          skipPrecheck = !!entry && entry.declared === true
++        } else if (typeof llm.listProviders === 'function') {
+           const directory = await llm.listProviders()
+           const entry = (directory ?? []).find((item) => (item.id ?? item.provider) === resolved.provider)
+           skipPrecheck = !!entry && entry.declared === true
+diff --git a/tests/routing-paths.mjs b/tests/routing-paths.mjs
+index 4a906b8..23c0611 100644
+--- a/tests/routing-paths.mjs
++++ b/tests/routing-paths.mjs
+@@ -61,7 +61,8 @@ import { Context } from '@deepseek-ai/cordis'
+ import { RouterService } from '../lib/service.js'
+ import { AttachmentRegistry, isAttachmentId, ATTACHMENT_REGISTRY_MAX_ENTRIES, ATTACHMENT_FETCH_TIMEOUT_MS, ATTACHMENT_ERROR_CODES } from '../lib/attachments.js'
+ import { installAdmissionWrapper, WRAP_SUFFIX, MODALITY_ENTRIES, minimalImageRewrite } from '../lib/wrapper.js'
+-import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
++import { mkdtempSync, rmSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
++import { createHash } from 'node:crypto'
+ import { tmpdir } from 'node:os'
+ import { join, dirname } from 'node:path'
+ import { fileURLToPath } from 'node:url'
+@@ -297,6 +298,52 @@ console.log('B. attachmentIds 统一编址 (M2):')
+   }
+   check('[B12] isAttachmentId 格式判别（64hex 大小写容忍/其余拒绝）', isAttachmentId(IMG_A) && isAttachmentId(`sha256:${'A'.repeat(64)}`) && !isAttachmentId('att-1') && !isAttachmentId(`sha256:${'a'.repeat(63)}`))
+ }
++// B13（FIX-003 判别）：宿主 readImage 对裸 id ref 做元数据校验失败（21:28 宿主演进
++// 实证：readImageFile byteLength!==undefined → ATTACHMENT_CORRUPT）后，懒注册自取证
++// 降级——读 DSH_HOME/attachments/v1/objects/<sha256 前2>/<hex> + 探测尺寸构造完整 ref，
++// 再走宿主 readImage（完整 ref 校验通过）/或内容哈希兜底。判别：旧代码（唯一 catch
++// → undefined）在该场景下 byId 必 undefined → ATTACHMENT_UNKNOWN；新代码必恢复。
++{
++  console.log('B13. 懒注册自取证降级（FIX-003）:')
++  const tmpHome = mkdtempSync(join(tmpdir(), 'dsh-router-attach-'))
++  const prevDshHome = process.env.DSH_HOME
++  try {
++    process.env.DSH_HOME = tmpHome
++    // 构造一个真实 PNG 最小对象（912x510 尺寸；内容哈希作为 id）。
++    const png = Buffer.concat([
++      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
++      Buffer.from([0x00, 0x00, 0x00, 0x0d]),
++      Buffer.from([0x49, 0x48, 0x44, 0x52]),
++      Buffer.from([0x00, 0x00, 0x03, 0x90, 0x00, 0x00, 0x01, 0xfe]), // 912 x 510
++      Buffer.from([0x08, 0x02, 0x00, 0x00, 0x00]),
++      Buffer.from(Array.from({ length: 64 }, (_, i) => i & 0xff)),
++    ])
++    const sha = createHash('sha256').update(png).digest('hex')
++    const id = `sha256:${sha}`
++    const objDir = join(tmpHome, 'attachments', 'v1', 'objects', sha.slice(0, 2))
++    mkdirSync(objDir, { recursive: true })
++    writeFileSync(join(objDir, sha), png)
++    // 独立 root：宿主面裸 id ref 一律拒绝（元数据校验语义）；完整 ref 才放行。
++    const regRoot = new Context()
++    regRoot.provide('attachments', {
++      readImage: async (ref) => {
++        const idOnly = String(ref?.attachmentId ?? '')
++        if (typeof ref?.width !== 'number' || typeof ref?.bytes !== 'number') throw new Error(`Stored attachment metadata does not match its reference (${idOnly.slice(0, 20)}…)`)
++        if (idOnly !== id) throw new Error('no such attachment')
++        return { ref: { attachmentId: id, mediaType: 'image/png', bytes: png.length, width: 912, height: 510 }, data: new Uint8Array(png) }
++      },
++    })
++    const reg = new AttachmentRegistry(regRoot)
++    const entry = await reg.byId(id)
++    check('[B13a] 宿主元数据校验失败时懒注册自取证恢复', !!entry && entry.mediaType === 'image/png' && entry.width === 912 && entry.height === 510 && entry.bytes === png.length)
++    const byIdAgain = await reg.byId(id)
++    check('[B13b] 自取证注册后二次命中零宿主读取', !!byIdAgain && byIdAgain === entry)
++  } finally {
++    if (prevDshHome === undefined) delete process.env.DSH_HOME
++    else process.env.DSH_HOME = prevDshHome
++    rmSync(tmpHome, { recursive: true, force: true })
++  }
++}
+ 
+ // ── [C] route_agent 工具全链路（真实 tool.js + 真实 service）──────────────────
+ console.log('C. route_agent 工具全链路:')
+@@ -454,6 +501,43 @@ console.log('D. 模态路由:')
+     check('[D14] catalog 镜像开关 true', cat2.takeoverDefaultModel === true)
+     delete svcConfig.takeoverDefaultModel
+   }
++  // D15（FIX-003 判别）：真实宿主形态——llm.listProviders() 的 provider 条目只有
++  // {id,name}（prepareRoutes :1174 实证），declared 目录标记在
++  // llm.listConfigurableProviders()（registerConfigurableProviders 发布）。旧代码
++  // 只查 listProviders → 任何 provider 的 declared 恒 undefined → "declared 路由
++  // 跳过预检"例外从不生效（真实宿主下 opencode-go-new/qwen3.7-plus 必被预检拒）。
++  // 判别：若仍走旧判定（或预检未跳过），带图调用必被"不支持图片输入"拒绝 → FAIL。
++  {
++    console.log('D15. declared 预检例外（listConfigurableProviders 权威源）:')
++    const oldLlm = svcRoot.get('llm')
++    const d15Requests = []
++    // 临时替换 llm fixture 的目录面（真实宿主形态：listProviders 无 declared）。
++    // cordis 不允许重复 provide——通过替换对象方法实现（finally 恢复）。
++    const origListProviders = oldLlm.listProviders
++    const origListConfigurableProviders = oldLlm.listConfigurableProviders
++    const origResolveModelInfo = oldLlm.resolveModelInfo
++    const origStream = oldLlm.stream
++    oldLlm.listProviders = async () => [{ id: 'relay', provider: 'relay' }]
++    oldLlm.listConfigurableProviders = async () => [{ id: 'relay', provider: 'relay', displayName: 'Relay', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'relay'], declared: true }]
++    oldLlm.resolveModelInfo = async () => ({ inputModalities: ['text'] })
++    oldLlm.stream = async function* (request) {
++      d15Requests.push(request)
++      yield { type: 'block-start', index: 0, blockType: 'text' }
++      yield { type: 'text-delta', index: 0, text: 'OK' }
++      yield { type: 'block-end', index: 0, block: { type: 'text', text: 'OK' } }
++      yield { type: 'finish', reason: { kind: 'stop' } }
++    }
++    try {
++      const out = await service.run({ agentId: 'relay', task: '看图', images: [{ attachmentId: IMG_A, mediaType: 'image/png', bytes: 4, width: 2, height: 2 }], exec: execOf() })
++      const request = d15Requests[d15Requests.length - 1]
++      check('[D15] 真实宿主 declared 判定（listConfigurableProviders 优先）跳过预检', out.ok !== false && d15Requests.length === 1 && (request?.messages?.[0]?.content ?? []).some((block) => block.type === 'image'))
++    } finally {
++      oldLlm.listProviders = origListProviders
++      oldLlm.listConfigurableProviders = origListConfigurableProviders
++      oldLlm.resolveModelInfo = origResolveModelInfo
++      oldLlm.stream = origStream
++    }
++  }
+ }
+ 
+ // ══════════════════════════════════════════════════════════════════════════
