@@ -1,0 +1,1195 @@
+commit 5f5a38b9f596ad03fd54a3ae28bc6c5a33a5cba1
+Author: peterwangze <1337917121@qq.com>
+Date:   Sat Aug 22 20:32:31 2026 +0800
+
+    EVO-002 Step 6a: 账号卡服务面——§3.6 ToS 门（oauthTosAccepted 服务端复核，手改配置不能绕过弹窗）+ oauthLogout RPC（W-5 凭据删除路径，合规删除不随实验开关失效）+ §3.5 Q2 per-protocol 能力接口（oauthCapabilities/runOauthDispatch 替代全局 chat 一刀切）+ 代理发现（resolveOauthProxy 配置>env 回退；chatgpt.com codex 调用 dispatcher 接线，undici 缺失 fail-loud；auth.openai.com 永不经代理）+ C-9 埋点启动（oauthEvents 登录旅程，P7 零 token）+ catalog preset/presetLoggedIn 镜像（账号卡数据源）
+
+diff --git a/lib/rpc.js b/lib/rpc.js
+index db178ff..423b951 100644
+--- a/lib/rpc.js
++++ b/lib/rpc.js
+@@ -116,6 +116,15 @@ export const ROUTER_DESCRIPTORS = [
+     parameters: [parameter('request', wireCodecs.oauthDiscoverRequest)],
+     result: result('OauthDiscoverResult', wireCodecs.oauthDiscoverResult),
+   },
++  {
++    id: 'dsh-agent-router#router/oauthLogout',
++    service: 'router',
++    namespace: 'router',
++    method: 'oauthLogout',
++    invocation: { kind: 'direct' },
++    parameters: [parameter('request', wireCodecs.oauthLogoutRequest)],
++    result: result('OauthLogoutResult', wireCodecs.oauthLogoutResult),
++  },
+   {
+     id: 'dsh-agent-router#router/cliStatus',
+     service: 'router',
+diff --git a/lib/schemas.js b/lib/schemas.js
+index ee5806f..37ad03b 100644
+--- a/lib/schemas.js
++++ b/lib/schemas.js
+@@ -221,6 +221,15 @@ export const routerSchema = z.object({
+   /** ChatGPT 订阅 OAuth 实验通路总开关（合规 kill-switch 第③层，§3.6）：
+    *  false = preset 入口隐藏 + 调用时明确报"实验通路已关闭"（报错逻辑在后续步骤）。 */
+   oauthExperimental: z.boolean().default(false),
++  /** ChatGPT 实验条款确认（§3.6 显式开启确认，EVO-002 Step 6）：首次开启
++   *  oauthExperimental 时弹出 ToS 风险声明（UAYOR 措辞），用户同意后随开关
++   *  一并置 true；oauthBegin preset 分支服务端复核（手改配置绕过弹窗也不能
++   *  发起登录）。 */
++  oauthTosAccepted: z.boolean().default(false),
++  /** ChatGPT 调用代理地址（EVO-002 Step 6 代理发现）：空 = 直连 + 环境变量
++   *  回退发现（HTTPS_PROXY/https_proxy/ALL_PROXY）；仅作用于 chatgpt.com
++   *  目标（auth.openai.com 直连可达——EV-028 实证，不经代理）。 */
++  oauthProxyUrl: z.string().default(''),
+   /** 以 id 为键的自定义 agent 字典。 */
+   agents: z.dict(agentSchema).default({}),
+   /** 以 id 为键的 OAuth 账号字典（插件独立管理）。 */
+@@ -357,6 +366,12 @@ export const wireCodecs = {
+       scope: v.string(),
+       models: v.array(v.string()),
+       publicClient: v.boolean(true),
++      /** EVO-002 Step 6：preset 类型镜像（'chatgpt-codex'；空 = 通用账号）——
++       *  账号卡 UI 按 preset 分流渲染专属卡片。 */
++      preset: v.string(true),
++      /** EVO-002 Step 6：preset 账号登录态（凭据文件存在 = true）——账号卡
++       *  登录圆点与一键授权轮询的数据源。 */
++      presetLoggedIn: v.boolean(true),
+     })),
+     pools: v.array(v.object({
+       id: v.string(),
+@@ -416,6 +431,14 @@ export const wireCodecs = {
+     message: v.string(),
+     models: v.array(v.string()),
+   }),
++  /** router/oauthLogout 请求（EVO-002 Step 6：preset 账号登出并删除凭据文件，
++   *  §3.6 凭据删除路径 / W-5；合规删除不随实验开关关闭失效）。 */
++  oauthLogoutRequest: v.object({ accountId: v.string() }),
++  /** router/oauthLogout 结果。 */
++  oauthLogoutResult: v.object({
++    ok: v.boolean(),
++    message: v.string(),
++  }),
+   /** router/cliStatus 结果（cli 类型登录状态探测）。 */
+   cliStatusResult: v.object({
+     ok: v.boolean(),
+diff --git a/lib/service.js b/lib/service.js
+index e096655..fa187e3 100644
+--- a/lib/service.js
++++ b/lib/service.js
+@@ -514,6 +514,33 @@ function resolveCodexResponsesUrl(baseURL) {
+   return `${normalized}/codex/responses`
+ }
+ 
++/**
++ * §3.5 Q2 per-protocol 能力接口（EVO-002 Step 6）：返回某 OAuth 协议支持的
++ * agent 类型列表。v0.3.0 全协议（含未知协议）返回 ['chat']——接口形状就位，
++ * 后续版本按协议扩展返回值（如 codex-responses 增补 'image'，V-EVO-3 验证
++ * 后）即解开类型限制，无需再改调用点（P5 泛化：单点修改）。
++ */
++export function oauthCapabilities(protocol) {
++  return ['chat']
++}
++
++/**
++ * EVO-002 Step 6 代理发现（EV-028 实证：chatgpt.com 需经代理 7890 可达、
++ * auth.openai.com 直连可达）：显式配置 `router.oauthProxyUrl` 优先；缺省回退
++ * 环境代理发现（HTTPS_PROXY/https_proxy/ALL_PROXY/all_proxy 大小写双形态）；
++ * 均无 → 空串 = 直连。返回 `{ proxyUrl, source }`——source 供诊断与埋点
++ * 说明代理来源；仅作用于 chatgpt.com 目标（auth 端点永不经代理）。
++ */
++export function resolveOauthProxy(state, env = globalThis.process?.env ?? {}) {
++  const configured = typeof state?.oauthProxyUrl === 'string' && state.oauthProxyUrl.trim() ? state.oauthProxyUrl.trim() : ''
++  if (configured) return { proxyUrl: configured, source: 'router.oauthProxyUrl' }
++  for (const key of ['HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy']) {
++    const value = typeof env?.[key] === 'string' && env[key].trim() ? env[key].trim() : ''
++    if (value) return { proxyUrl: value, source: key }
++  }
++  return { proxyUrl: '', source: '' }
++}
++
+ /**
+  * SSE 事件流解析（pi-ai parseSSE 同构；事件形状 = H3-10 / EV-028 十二事件链）：
+  * 按 `\n\n` 分帧，帧内 `data:` 行拼接（跨行 data 以 `\n` 连接），`[DONE]` 哨兵
+@@ -593,6 +620,13 @@ export class RouterService extends TypertRemoteService {
+     /** preset 账号凭据存储实例缓存（凭据文件路径 → OauthCredentialStore；
+      *  同路径复用同实例使锁所有权 token 稳定，§3.4 条目 2）。 */
+     this.oauthCredentialStores = new Map()
++    /** C-9 埋点（EVO-002 Step 6 启动）：OAuth 登录旅程事件（begin/login/
++     *  logout/refresh 失败形态），内存环形缓冲（上限 100 条，v0.3.2 出
++     *  报告；stats 清空不联动——登录旅程独立于调用统计）。P7 红线：事件
++     *  负载永不携带 access/refresh token 值。 */
++    this.oauthEvents = []
++    /** 代理 dispatcher 加载器（仅测试注入用；缺省动态 import('undici')）。 */
++    this.oauthUndiciLoader = null
+     /** M2 附件统一编址层（v3 §4.3.1/§5.1，Step 5a 模块 + Step 5b 接线）：
+      *  三调用点（prepareChatFiles / materializeCliImages / selectAttachments）
+      *  的寻址注册与解析经此统一索引。 */
+@@ -804,12 +838,11 @@ export class RouterService extends TypertRemoteService {
+       }
+     }
+     let result
+-    if (resolved.mode === 'oauth') {
+-      if (type !== 'chat') throw new Error(`OAuth 账号目前仅支持 chat 类型 agent（当前类型：${type}）`)
+-      result = await this.runOauthChat(resolved, input)
+-    } else if (resolved.mode === 'pool') {
+-      if (type !== 'chat') throw new Error(`账号池目前仅支持 chat 类型 agent（当前类型：${type}）`)
+-      result = await this.runPooledOauthChat(resolved, input)
++    if (resolved.mode === 'oauth' || resolved.mode === 'pool') {
++      // §3.5 Q2（EVO-002 Step 6）：oauth/pool 分支收敛至 runOauthDispatch
++      // 单点——per-protocol 能力判定（oauthCapabilities）替代全局 chat
++      // 一刀切；类型拒绝文案携带协议名（后续版本按协议扩展能力即解开）。
++      result = await this.runOauthDispatch(resolved, input)
+     } else if (type === 'image') {
+       result = await this.runImage(resolved, input)
+     } else if (type === 'agent') {
+@@ -2375,6 +2408,8 @@ export class RouterService extends TypertRemoteService {
+       return await store.ensureFresh(cred)
+     } catch (error) {
+       if (error && error.code === CREDENTIAL_ERROR_CODES.REFRESH_FAILED) {
++        // C-9 埋点：刷新终态失败（需重登）是登录旅程的关键失败形态。
++        this.recordOauthEvent('preset_refresh_fail', {})
+         // 文案对齐既有 401 重登语义；timedOut/status 元数据原样转发
+         //（R4 转发语义：timedOut=瞬时域、status=HTTP 终态域，不吞掉）。
+         const wrapped = new Error(`ChatGPT access token 刷新失败（${errorMessage(error)}）；请在账号卡片中重新登录`)
+@@ -2425,6 +2460,38 @@ export class RouterService extends TypertRemoteService {
+     return out
+   }
+ 
++  /**
++   * §3.5 Q2 runOauth 调度接口（EVO-002 Step 6）：run() 的 oauth/pool 分支
++   * 收敛单点，内部按 `protocol × type` 派发——v0.3.0 实现全部协议 × chat
++   * （现状行为）；image/speech 等类型经 oauthCapabilities 判定后给出
++   * per-protocol 明确错误（"该协议暂不支持此类型"，替代全局一刀切——后续
++   * 版本扩展能力表即解开，调用点零改动）。池模式按候选账号集语义展示
++   * 'account-pool'（池内逐账号派发沿用 runPooledOauthChat 既有循环）。
++   */
++  async runOauthDispatch(resolved, input) {
++    const type = this.normalizeType(resolved.agent.type)
++    const protocol = resolved.mode === 'oauth'
++      ? (['openai-completions', 'anthropic', 'gemini', 'codex-responses'].includes(resolved.account.protocol) ? resolved.account.protocol : 'openai-completions')
++      : 'account-pool'
++    const capabilities = oauthCapabilities(protocol)
++    if (!capabilities.includes(type)) {
++      throw new Error(`OAuth 通路（${protocol}）暂不支持 ${type} 类型调用；当前支持：${capabilities.join('、')}（per-protocol 能力接口，后续版本按协议扩展）`)
++    }
++    return resolved.mode === 'pool' ? this.runPooledOauthChat(resolved, input) : this.runOauthChat(resolved, input)
++  }
++
++  /**
++   * C-9 埋点（EVO-002 Step 6）：记录 OAuth 登录旅程事件。kind ∈
++   * preset_begin_ok/preset_begin_fail/preset_login_ok/preset_login_fail/
++   * preset_logout/preset_logout_fail/preset_refresh_fail；detail 仅携带
++   * accountId/reason 等非敏感字段（P7：永不携带 token 值）。环形缓冲上限
++   * 100 条（弃最旧）。
++   */
++  recordOauthEvent(kind, detail = {}) {
++    this.oauthEvents.unshift({ at: Date.now(), kind, ...detail })
++    if (this.oauthEvents.length > 100) this.oauthEvents.length = 100
++  }
++
+   /**
+    * OAuth 账号的 chat 直连调用（不经 llm 注册表，绝不出现在共享模型列表）。
+    * 协议：openai-completions / anthropic / gemini / codex-responses。第 4 分支
+@@ -2622,13 +2689,23 @@ export class RouterService extends TypertRemoteService {
+     }
+     let response
+     try {
+-      response = await globalThis.fetch(url, {
++      // EVO-002 Step 6 代理发现接线：仅 chatgpt.com 目标经代理（auth.openai.com
++      // 直连可达——EV-028 实证，永不经代理）；无配置且无环境代理 → 直连
++      // 零变化（不设 dispatcher 键）。undici 不可用 → 明确报错（fail-loud，
++      // 含代理来源与指引——不静默降级为直连失败）。
++      const init = {
+         method: 'POST',
+         headers,
+         body: JSON.stringify(body),
+         ...(input.signal ? { signal: input.signal } : {}),
+-      })
++      }
++      const proxy = resolveOauthProxy(this.getState())
++      if (proxy.proxyUrl && String(url).includes('chatgpt.com')) {
++        init.dispatcher = await this.loadOauthProxyDispatcher(proxy)
++      }
++      response = await globalThis.fetch(url, init)
+     } catch (error) {
++      if (error && typeof error.message === 'string' && error.message.includes('undici 代理支持')) throw error
+       throw new Error(`OAuth 账号 "${resolved.accountId}" 端点不可达（${url}）：${errorMessage(error)}`)
+     }
+     if (!response.ok) {
+@@ -2946,20 +3023,27 @@ export class RouterService extends TypertRemoteService {
+       takeoverDefaultModel: this.getState().takeoverDefaultModel === true,
+       defaults: { provider: defaults.provider, model: defaults.model, ...(defaults.reasoningEffort ? { reasoningEffort: defaults.reasoningEffort } : {}) },
+       agents,
+-      oauthAccounts: Object.entries(this.getState().oauthAccounts ?? {}).map(([id, account]) => ({
+-        id,
+-        name: account.name || id,
+-        enabled: account.enabled !== false,
+-        protocol: typeof account.protocol === 'string' ? account.protocol : 'openai-completions',
+-        baseURL: typeof account.baseURL === 'string' ? account.baseURL : '',
+-        tokenRef: typeof account.tokenRef === 'string' ? account.tokenRef : '',
+-        clientId: typeof account.clientId === 'string' ? account.clientId : '',
+-        authUrl: typeof account.authUrl === 'string' ? account.authUrl : '',
+-        tokenUrl: typeof account.tokenUrl === 'string' ? account.tokenUrl : '',
+-        scope: typeof account.scope === 'string' ? account.scope : '',
+-        models: Array.isArray(account.models) ? account.models.filter((item) => typeof item === 'string') : [],
+-        publicClient: account.publicClient === true,
+-      })).sort((a, b) => (a.id < b.id ? -1 : 1)),
++      oauthAccounts: (await Promise.all(Object.entries(this.getState().oauthAccounts ?? {}).map(async ([id, account]) => {
++        const preset = typeof account.preset === 'string' && account.preset.trim() ? account.preset.trim() : ''
++        return {
++          id,
++          name: account.name || id,
++          enabled: account.enabled !== false,
++          protocol: typeof account.protocol === 'string' ? account.protocol : 'openai-completions',
++          baseURL: typeof account.baseURL === 'string' ? account.baseURL : '',
++          tokenRef: typeof account.tokenRef === 'string' ? account.tokenRef : '',
++          clientId: typeof account.clientId === 'string' ? account.clientId : '',
++          authUrl: typeof account.authUrl === 'string' ? account.authUrl : '',
++          tokenUrl: typeof account.tokenUrl === 'string' ? account.tokenUrl : '',
++          scope: typeof account.scope === 'string' ? account.scope : '',
++          models: Array.isArray(account.models) ? account.models.filter((item) => typeof item === 'string') : [],
++          publicClient: account.publicClient === true,
++          // EVO-002 Step 6：preset 镜像 + 登录态（账号卡专属渲染与一键授权
++          // 轮询数据源；文件读取失败按未登录展示——诊断不抛错）。
++          preset,
++          ...(OAUTH_PRESET_VALUES.includes(preset) ? { presetLoggedIn: await this.presetLoggedInOf(account) } : {}),
++        }
++      }))).sort((a, b) => (a.id < b.id ? -1 : 1)),
+       pools: Object.entries(this.getState().pools ?? {}).map(([id, pool]) => ({
+         id,
+         name: pool.name || id,
+@@ -3092,17 +3176,27 @@ export class RouterService extends TypertRemoteService {
+    */
+   async oauthBeginPreset(id, preset) {
+     if (!OAUTH_PRESET_VALUES.includes(preset)) {
++      this.recordOauthEvent('preset_begin_fail', { accountId: id, reason: 'unknown_preset' })
+       return { ok: false, message: `未知预设类型（preset="${preset}"）；支持的预设：${OAUTH_PRESET_VALUES.join('、')}` }
+     }
+     if (this.getState().oauthExperimental !== true) {
++      this.recordOauthEvent('preset_begin_fail', { accountId: id, reason: 'kill_switch' })
+       return { ok: false, message: 'ChatGPT 实验通路已关闭（router.oauthExperimental）；如需使用请在设置中开启实验开关' }
+     }
++    // §3.6 显式开启确认（EVO-002 Step 6 ToS 门）：experimental 检查之后、
++    // loopback 就绪检查之前——手改配置绕过客户端 ToS 弹窗也不能发起登录。
++    if (this.getState().oauthTosAccepted !== true) {
++      this.recordOauthEvent('preset_begin_fail', { accountId: id, reason: 'tos' })
++      return { ok: false, message: 'ChatGPT 实验条款尚未确认；请在设置中开启「ChatGPT 订阅登录（实验）」开关，并在弹出的条款确认中同意（订阅转插件调用可能导致账号受限，风险自担）' }
++    }
+     const starter = this.codexLoopbackStarter
+     if (typeof starter !== 'function') {
++      this.recordOauthEvent('preset_begin_fail', { accountId: id, reason: 'starter_missing' })
+       return { ok: false, message: 'ChatGPT 回调服务启动器不可用（插件装配异常）；请重启 DSH 后重试' }
+     }
+     const loopback = await starter()
+     if (!loopback || loopback.ready !== true) {
++      this.recordOauthEvent('preset_begin_fail', { accountId: id, reason: 'loopback_not_ready' })
+       return { ok: false, message: 'ChatGPT 登录回调端口 1455 未就绪（可能被 Codex CLI / dsh-codex 等占用）；请关闭占用程序后重试；设备码登录将在后续版本提供，当前可改用手动粘贴方式完成授权' }
+     }
+     this.pruneOauthPending()
+@@ -3122,6 +3216,7 @@ export class RouterService extends TypertRemoteService {
+     })
+     params.set('scope', CHATGPT_PRESET.scope)
+     this.oauthPending.set(state, { accountId: id, verifier, redirectUri: CHATGPT_PRESET.redirectUri, expiresAt: Date.now() + 10 * 60 * 1000 })
++    this.recordOauthEvent('preset_begin_ok', { accountId: id })
+     return {
+       ok: true,
+       message: '授权 URL 已生成',
+@@ -3209,16 +3304,18 @@ export class RouterService extends TypertRemoteService {
+       // accountId）到 OauthCredentialStore（对比通用账号只存 access 单值——
+       // 下方 tokenRef 原路径保持不变，P3）。
+       const refresh = typeof payload?.refresh_token === 'string' && payload.refresh_token ? payload.refresh_token : ''
+-      if (!refresh) return finish({ ok: false, message: 'token 响应缺少 refresh_token（ChatGPT 预设需要可长期刷新的凭据）；请重新发起授权' })
++      if (!refresh) { this.recordOauthEvent('preset_login_fail', { accountId: id, reason: 'refresh_token_missing' }); return finish({ ok: false, message: 'token 响应缺少 refresh_token（ChatGPT 预设需要可长期刷新的凭据）；请重新发起授权' }) }
+       const expiresIn = typeof payload?.expires_in === 'number' && Number.isFinite(payload.expires_in) && payload.expires_in > 0 ? payload.expires_in : 0
+-      if (!expiresIn) return finish({ ok: false, message: 'token 响应缺少有效的 expires_in；请重新发起授权' })
++      if (!expiresIn) { this.recordOauthEvent('preset_login_fail', { accountId: id, reason: 'expires_in_missing' }); return finish({ ok: false, message: 'token 响应缺少有效的 expires_in；请重新发起授权' }) }
+       const accountId = accountIdFromJwt(token)
+-      if (!accountId) return finish({ ok: false, message: '无法从 access token 提取 accountId（JWT 缺少 chatgpt_account_id claim）；请重新发起授权' })
++      if (!accountId) { this.recordOauthEvent('preset_login_fail', { accountId: id, reason: 'account_id_missing' }); return finish({ ok: false, message: '无法从 access token 提取 accountId（JWT 缺少 chatgpt_account_id claim）；请重新发起授权' }) }
+       try {
+         await this.credentialStoreFor(account).write({ type: 'oauth', access: token, refresh, expires: Date.now() + expiresIn * 1000, accountId })
+       } catch (error) {
++        this.recordOauthEvent('preset_login_fail', { accountId: id, reason: 'write_failed' })
+         return finish({ ok: false, message: `保存 ChatGPT 凭据失败：${errorMessage(error)}` })
+       }
++      this.recordOauthEvent('preset_login_ok', { accountId: id, expiresIn })
+       return finish({ ok: true, message: 'OAuth 登录成功，ChatGPT 凭据已保存', expiresIn })
+     }
+     const ref = typeof account.tokenRef === 'string' && account.tokenRef.trim() ? account.tokenRef.trim() : ''
+@@ -3297,6 +3394,58 @@ export class RouterService extends TypertRemoteService {
+     return { ok: true, message: `发现 ${models.length} 个模型`, models }
+   }
+ 
++  /**
++   * router/oauthLogout（EVO-002 Step 6，§3.6 凭据删除路径 / W-5）：preset
++   * 账号登出并删除凭据文件（store.delete 幂等——文件不存在也成功）。合规
++   * 删除路径不随实验开关关闭失效：用户始终可以移除已落盘的订阅凭据
++   *（对照 dsh-codex "卸载不删凭据"，本插件做显式一键删除——更保守）。
++   * 账号条目与池引用的清理在客户端删除账号路径联动（W-5）。
++   */
++  async oauthLogout(request) {
++    const id = String(request?.accountId ?? '')
++    const account = this.getOAuthAccount(id)
++    if (!account) return { ok: false, message: `OAuth 账号 "${id}" 不存在` }
++    const preset = typeof account.preset === 'string' && account.preset.trim() ? account.preset.trim() : ''
++    if (!OAUTH_PRESET_VALUES.includes(preset)) {
++      return { ok: false, message: '登出仅适用于 ChatGPT 预设账号（preset 独立凭据文件）；通用账号请在账号卡片删除 token' }
++    }
++    try {
++      await this.credentialStoreFor(account).delete()
++    } catch (error) {
++      this.recordOauthEvent('preset_logout_fail', { accountId: id })
++      return { ok: false, message: `登出失败（删除凭据文件）：${errorMessage(error)}` }
++    }
++    this.recordOauthEvent('preset_logout', { accountId: id })
++    return { ok: true, message: '已登出并删除 ChatGPT 凭据文件' }
++  }
++
++  /** preset 账号登录态（凭据文件可读 = true；缺失/损坏 = false——诊断面不抛错）。 */
++  async presetLoggedInOf(account) {
++    try {
++      const cred = await this.credentialStoreFor(account).read()
++      return !!cred
++    } catch {
++      return false
++    }
++  }
++
++  /**
++   * 加载代理 dispatcher（EVO-002 Step 6）：动态 import('undici') 取
++   * ProxyAgent（零静态依赖——宿主未安装 undici 时明确报错而非静默直连
++   * 失败；oauthUndiciLoader 仅供测试注入）。Node 原生 fetch 即 undici
++   * 实现，init.dispatcher 为其支持的扩展项。
++   */
++  async loadOauthProxyDispatcher(proxy) {
++    try {
++      const load = this.oauthUndiciLoader ?? (async () => import('undici'))
++      const undici = await load()
++      if (!undici || typeof undici.ProxyAgent !== 'function') throw new Error('undici 模块未暴露 ProxyAgent')
++      return new undici.ProxyAgent(proxy.proxyUrl)
++    } catch (error) {
++      throw new Error(`已配置代理（${proxy.source}：${proxy.proxyUrl}）但无法加载 undici 代理支持（${errorMessage(error)}）；chatgpt.com 在当前网络需经代理可达——请为宿主环境安装 undici，或配置可直连的网络环境`)
++    }
++  }
++
+   /** router/test：对 agent 做一次最小连通性调用（不记入统计）。 */
+   async test(request) {
+     const id = String(request?.agentId ?? '')
+diff --git a/tests/smoke.mjs b/tests/smoke.mjs
+index 542fb18..60dee29 100644
+--- a/tests/smoke.mjs
++++ b/tests/smoke.mjs
+@@ -2,7 +2,7 @@
+ import { Context } from '@deepseek-ai/cordis'
+ import { routerSchema, wireCodecs, MODALITY_VALUES, MODALITY_DIRECTIONS, normalizeCapabilities, OAUTH_PRESET_VALUES } from '../lib/schemas.js'
+ import { createHostContribution, ROUTER_REMOTE } from '../lib/rpc.js'
+-import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine, cliWorkspaceHint, detectAudioVideoMediaType } from '../lib/service.js'
++import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine, cliWorkspaceHint, detectAudioVideoMediaType, oauthCapabilities, resolveOauthProxy } from '../lib/service.js'
+ import { runClientRender } from './client-render.mjs'
+ import { runInstallEntryTests } from './install-entry.mjs'
+ import { runAttachmentTests } from './attachments.mjs'
+@@ -82,12 +82,15 @@ console.log('schemas:')
+   // 未知值放行、消费点校验（OAUTH_PRESET_VALUES 常量供后续步骤与 UI 消费）。
+   const c = routerSchema({})
+   check('default oauthExperimental=false (§3.6 默认关闭)', c.oauthExperimental === false)
++  check('default oauthTosAccepted=false + oauthProxyUrl empty (EVO-002 Step 6)', c.oauthTosAccepted === false && c.oauthProxyUrl === '')
+   check('default takeoverDefaultModel=false (FIX-002 默认不接管)', c.takeoverDefaultModel === false)
+   const d = routerSchema({ oauthAccounts: { legacy: { name: 'L' } } })
+   check('oauth entry preset defaults to empty (P3 既有配置零破坏)', d.oauthAccounts.legacy.preset === '')
+   check('oauth entry credentialFile defaults to empty', d.oauthAccounts.legacy.credentialFile === '')
+   const e = routerSchema({ oauthExperimental: true, oauthAccounts: { cgpt: { name: 'ChatGPT', preset: 'chatgpt-codex', credentialFile: 'X:\\path.json' } } })
+   check('preset/credentialFile/oauthExperimental explicit values kept', e.oauthExperimental === true && e.oauthAccounts.cgpt.preset === 'chatgpt-codex' && e.oauthAccounts.cgpt.credentialFile === 'X:\\path.json')
++  const e6 = routerSchema({ oauthTosAccepted: true, oauthProxyUrl: 'http://127.0.0.1:7890' })
++  check('oauthTosAccepted/oauthProxyUrl explicit values kept (Step 6 schema)', e6.oauthTosAccepted === true && e6.oauthProxyUrl === 'http://127.0.0.1:7890')
+   const f = routerSchema({ oauthAccounts: { odd: { preset: 'foo' } } })
+   check('unknown preset tolerated (R-5 放行语义)', f.oauthAccounts.odd.preset === 'foo')
+   check('OAUTH_PRESET_VALUES frozen + chatgpt-codex (P5 泛化)', Object.isFrozen(OAUTH_PRESET_VALUES) && OAUTH_PRESET_VALUES.length === 1 && OAUTH_PRESET_VALUES[0] === 'chatgpt-codex')
+@@ -158,8 +161,8 @@ console.log('rpc contribution:')
+ {
+   const contribution = createHostContribution()
+   check('face host', contribution.face === 'host')
+-  check('15 invocations', contribution.invocations.length === 15)
+-  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 15 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
++  check('16 invocations', contribution.invocations.length === 16)
++  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 16 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
+   check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))
+   check('image RPC descriptors present', contribution.invocations.some((d) => d.method === 'imageData'))
+   check('uploadFile RPC descriptor present', contribution.invocations.some((d) => d.method === 'uploadFile' && d.id === 'dsh-agent-router#router/uploadFile'))
+@@ -473,11 +476,15 @@ console.log('RouterService:')
+     const presetRoot = new Context()
+     presetRoot.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
+     let oauthExperimental = false
++    // Step 6 起 begin 侧新增 ToS 门（§3.6 显式开启确认，experimental 检查之后）；
++    // 本夹具聚焦授权流本体——预置已确认态，ToS 语义由 Step 6 块专测。
++    const oauthTosAccepted = true
+     const presetCredFile = join(presetWork, 'cgpt-auth.json')
+     const presetService = new RouterService(presetRoot)
+     presetService.attach({ get: () => ({
+       enabled: true,
+       oauthExperimental,
++      oauthTosAccepted,
+       oauthAccounts: {
+         // 同名字段故意填干扰值：preset 语义 = 常量预填（零配置），账号内
+         // authUrl/tokenUrl/clientId/scope 必须被忽略（roadmap §3.4 条目 1）。
+@@ -740,6 +747,164 @@ console.log('RouterService:')
+     }
+   }
+ 
++  // ── EVO-002 Step 6：账号卡服务面——§3.6 ToS 门（显式开启确认）+ oauthLogout
++  // （W-5 凭据删除路径，合规删除不随实验开关关闭失效）+ §3.5 Q2 per-protocol
++  // 能力接口（oauthCapabilities/runOauthDispatch，替代全局 chat 一刀切）+
++  // 代理发现（resolveOauthProxy 配置>env 回退；chatgpt.com codex 调用经
++  // dispatcher 接线；无代理直连零变化）+ C-9 埋点启动（oauthEvents 登录旅程，
++  // P7 零 token 值）+ catalog preset 登录态镜像（账号卡 UI 数据源）。独立
++  // service + 临时凭据目录 + fetch/undici 注入——主夹具零污染。
++  console.log('oauth preset account surface (EVO-002 Step 6):')
++  {
++    let step6Crash = null
++    try {
++      const step6Work = mkdtempSync(join(tmpdir(), 'router-step6-'))
++      const fakeJwt6 = (accountId) => {
++        const b64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
++        return `${b64url({ alg: 'RS256', typ: 'JWT' })}.${b64url({ 'https://api.openai.com/auth': { chatgpt_account_id: accountId } })}.sig-step6`
++      }
++      const accessJwt6 = fakeJwt6('acct-cgpt-6')
++      const credFile6 = join(step6Work, 'step6-auth.json')
++      const root6 = new Context()
++      root6.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
++      const state6 = {
++        enabled: true,
++        oauthExperimental: false,
++        oauthTosAccepted: false,
++        oauthProxyUrl: '',
++        oauthAccounts: {
++          cgpt: { name: 'ChatGPT订阅', enabled: true, preset: 'chatgpt-codex', credentialFile: credFile6, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', models: ['gpt-5.4-mini'] },
++          plain: { name: '通用账号', enabled: true, protocol: 'openai-completions', baseURL: 'https://gw.example/v1', tokenRef: 'PLAIN_TOKEN', models: ['gw-1'] },
++        },
++        pools: { main: { name: '主池', enabled: true, strategy: 'healthy', accounts: ['cgpt'] } },
++        agents: {
++          cgptchat: { name: 'CGPT', type: 'chat', enabled: true, account: 'cgpt' },
++          cgptimg: { name: 'CGPT生图', type: 'image', enabled: true, account: 'cgpt', provider: 'openai', model: 'gpt-image-1' },
++          poolchat: { name: '池chat', type: 'chat', enabled: true, account: 'pool:main' },
++          poolimg: { name: '池image', type: 'image', enabled: true, account: 'pool:main', provider: 'openai', model: 'gpt-image-1' },
++        },
++      }
++      const svc6 = new RouterService(root6)
++      svc6.attach({ get: () => state6 })
++      svc6.codexLoopbackStarter = async () => ({ ready: true, port: 1455, dispose: () => {} })
++      const seed6 = async () => {
++        const store6 = new OauthCredentialStore(credFile6)
++        await store6.write({ type: 'oauth', access: accessJwt6, refresh: 'REFRESH-STEP6', expires: Date.now() + 3_600_000, accountId: 'acct-cgpt-6' })
++      }
++      const sse6 = (text) => ({
++        ok: true,
++        status: 200,
++        body: new ReadableStream({
++          start(controller) {
++            const encoder = new TextEncoder()
++            controller.enqueue(encoder.encode(`event: response.created\ndata: {"type":"response.created"}\n\n`))
++            controller.enqueue(encoder.encode(`event: response.output_text.delta\ndata: ${JSON.stringify({ type: 'response.output_text.delta', output_index: 0, delta: text })}\n\n`))
++            controller.enqueue(encoder.encode(`event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: { usage: { input_tokens: 5, output_tokens: 6 } } })}\n\n`))
++            controller.close()
++          },
++        }),
++      })
++      const fetches6 = []
++      const realFetch6 = globalThis.fetch
++      globalThis.fetch = async (url, options) => {
++        fetches6.push({ url: String(url), init: options })
++        if (String(url) === CHATGPT_PRESET.tokenUrl) {
++          return { ok: true, json: async () => ({ access_token: accessJwt6, refresh_token: 'REFRESH-STEP6', expires_in: 3600, token_type: 'bearer' }) }
++        }
++        if (String(url).endsWith('/codex/responses')) return sse6('OK-6')
++        return { ok: false, status: 404, text: async () => 'not found' }
++      }
++      try {
++        // A. §3.5 oauthCapabilities：v0.3.0 全协议（含未知协议）返回 ['chat']
++        //    ——接口形状就位，后续版本按协议扩展返回值即解开限制（P5 单点）。
++        const caps6 = ['openai-completions', 'anthropic', 'gemini', 'codex-responses', 'mystery'].map((protocol) => oauthCapabilities(protocol))
++        check('oauthCapabilities returns [chat] for every protocol (§3.5)', caps6.every((caps) => Array.isArray(caps) && caps.length === 1 && caps[0] === 'chat'))
++        // B. runOauthDispatch per-protocol 类型拒绝（替代全局一刀切）+ chat 放行。
++        state6.oauthExperimental = true
++        await seed6()
++        let imgErr6 = null
++        try { await svc6.run({ agentId: 'cgptimg', task: '画一张图' }) } catch (error) { imgErr6 = error }
++        check('oauth dispatch rejects image type with per-protocol wording (§3.5)', !!imgErr6 && imgErr6.message.includes('暂不支持') && imgErr6.message.includes('codex-responses') && imgErr6.message.includes('image'))
++        check('oauth dispatch retires old global wording', !!imgErr6 && !imgErr6.message.includes('目前仅支持 chat 类型'))
++        let poolImgErr6 = null
++        try { await svc6.run({ agentId: 'poolimg', task: 'x' }) } catch (error) { poolImgErr6 = error }
++        check('pool dispatch rejects non-chat via same per-protocol gate', !!poolImgErr6 && poolImgErr6.message.includes('account-pool') && poolImgErr6.message.includes('暂不支持'))
++        const chat6 = await svc6.run({ agentId: 'cgptchat', task: '你好' })
++        check('oauth dispatch passes chat through to protocol branch', chat6.kind === 'chat' && chat6.text === 'OK-6')
++        const poolChat6 = await svc6.run({ agentId: 'poolchat', task: '池调用' })
++        check('pool dispatch passes chat through', poolChat6.kind === 'chat' && poolChat6.text === 'OK-6')
++        // C. §3.6 ToS 门：experimental 开 + ToS 未确认 → begin 拒绝（先于
++        //    loopback 就绪检查——1455 ready 也不放行；文案含条款指引）。
++        const tosBlocked6 = await svc6.oauthBegin({ accountId: 'cgpt' })
++        check('preset begin requires ToS acceptance before loopback (§3.6)', tosBlocked6.ok === false && tosBlocked6.message.includes('条款') && !tosBlocked6.message.includes('1455'))
++        state6.oauthTosAccepted = true
++        const begin6 = await svc6.oauthBegin({ accountId: 'cgpt' })
++        check('preset begin proceeds once ToS accepted', begin6.ok === true && begin6.authUrl.startsWith(`${CHATGPT_PRESET.authUrl}?`))
++        const ex6 = await svc6.oauthTokenExchange({ code: 'code-6', state: begin6.state })
++        check('preset exchange completes login journey', ex6.ok === true && existsSync(credFile6))
++        // D. oauthLogout（W-5）：删凭据文件 + 幂等 + 非 preset 拒绝 + 未知账号
++        //    拒绝；实验开关关闭不拦截登出（合规删除路径恒可用）。
++        const lo6 = await svc6.oauthLogout({ accountId: 'cgpt' })
++        check('preset logout deletes credential file (W-5)', lo6.ok === true && lo6.message.includes('登出') && !existsSync(credFile6))
++        const lo6again = await svc6.oauthLogout({ accountId: 'cgpt' })
++        check('preset logout idempotent when credential absent', lo6again.ok === true)
++        const loPlain6 = await svc6.oauthLogout({ accountId: 'plain' })
++        check('logout rejects non-preset account', loPlain6.ok === false && loPlain6.message.includes('ChatGPT 预设'))
++        const loUnknown6 = await svc6.oauthLogout({ accountId: 'nope' })
++        check('logout rejects unknown account', loUnknown6.ok === false && loUnknown6.message.includes('不存在'))
++        state6.oauthExperimental = false
++        await seed6()
++        const loOff6 = await svc6.oauthLogout({ accountId: 'cgpt' })
++        check('logout stays usable while experimental off (compliance path)', loOff6.ok === true && !existsSync(credFile6))
++        state6.oauthExperimental = true
++        // E. catalog 镜像：preset 标志 + presetLoggedIn（登录态随凭据文件翻转）。
++        await seed6()
++        const cat6a = await svc6.catalog({})
++        const cgptEntry6a = cat6a.oauthAccounts.find((entry) => entry.id === 'cgpt')
++        check('catalog mirrors preset flag and logged-in state', cgptEntry6a.preset === 'chatgpt-codex' && cgptEntry6a.presetLoggedIn === true)
++        await svc6.oauthLogout({ accountId: 'cgpt' })
++        const cat6b = await svc6.catalog({})
++        const cgptEntry6b = cat6b.oauthAccounts.find((entry) => entry.id === 'cgpt')
++        check('catalog logged-in flips false after logout', cgptEntry6b.presetLoggedIn === false)
++        check('catalog generic account carries no preset', (cat6b.oauthAccounts.find((entry) => entry.id === 'plain').preset ?? '') === '')
++        // F. 代理发现 resolveOauthProxy：显式配置 > env 回退发现 > 无代理。
++        check('resolveOauthProxy prefers router config over env', resolveOauthProxy({ oauthProxyUrl: 'http://127.0.0.1:7890' }, { HTTPS_PROXY: 'http://env-proxy:1' }).proxyUrl === 'http://127.0.0.1:7890')
++        check('resolveOauthProxy discovers env proxy fallback', resolveOauthProxy({}, { https_proxy: 'http://env-p:7890' }).proxyUrl === 'http://env-p:7890' && resolveOauthProxy({}, { HTTPS_PROXY: 'http://env-2:1' }).source === 'HTTPS_PROXY')
++        check('resolveOauthProxy empty when nothing configured', resolveOauthProxy({}, {}).proxyUrl === '' && resolveOauthProxy({}, {}).source === '')
++        // G. codex 调用代理接线（仅 chatgpt.com 目标）：配置代理 → fetch init
++        //    带 dispatcher（undici 注入桩）；无代理 → 无 dispatcher（直连零
++        //    变化）；undici 不可用 → 明确报错（代理来源 + 指引）。
++        await seed6()
++        svc6.oauthUndiciLoader = async () => ({ ProxyAgent: class { constructor(url) { this.url = url } } })
++        state6.oauthProxyUrl = 'http://127.0.0.1:7890'
++        const proxied6 = await svc6.run({ agentId: 'cgptchat', task: '经代理' })
++        check('codex call routes via proxy dispatcher when configured', proxied6.text === 'OK-6' && fetches6[fetches6.length - 1]?.init?.dispatcher?.url === 'http://127.0.0.1:7890')
++        state6.oauthProxyUrl = ''
++        const direct6 = await svc6.run({ agentId: 'cgptchat', task: '直连' })
++        check('codex call stays direct (no dispatcher) when no proxy', direct6.text === 'OK-6' && fetches6[fetches6.length - 1]?.init?.dispatcher === undefined)
++        svc6.oauthUndiciLoader = async () => { throw new Error('undici not installed') }
++        state6.oauthProxyUrl = 'http://127.0.0.1:7890'
++        let proxyLoadErr6 = null
++        try { await svc6.run({ agentId: 'cgptchat', task: 'x' }) } catch (error) { proxyLoadErr6 = error }
++        check('proxy configured but undici unavailable errors clearly', !!proxyLoadErr6 && proxyLoadErr6.message.includes('undici') && proxyLoadErr6.message.includes('代理'))
++        state6.oauthProxyUrl = ''
++        svc6.oauthUndiciLoader = null
++        // H. C-9 埋点：oauthEvents 记录登录旅程（begin fail/ok、login ok、
++        //    logout），事件负载零 token 值（P7 红线）。
++        const kinds6 = new Set(svc6.oauthEvents.map((event) => event.kind))
++        check('oauth telemetry records login journey kinds (C-9)', kinds6.has('preset_begin_fail') && kinds6.has('preset_begin_ok') && kinds6.has('preset_login_ok') && kinds6.has('preset_logout'))
++        check('oauth telemetry never carries token values (P7)', !JSON.stringify(svc6.oauthEvents).includes('sig-step6') && !JSON.stringify(svc6.oauthEvents).includes('REFRESH-STEP6'))
++      } finally {
++        globalThis.fetch = realFetch6
++        try { rmSync(step6Work, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
++      }
++    } catch (error) {
++      step6Crash = error
++    }
++    check('step6 block completes without unexpected throw', step6Crash === null)
++    if (step6Crash) console.error('      step6 crash:', step6Crash && step6Crash.message)
++  }
++
+   const text = service.promptText()
+   check('promptText lists agents', text.includes('vision') && text.includes('draw') && text.includes('route_agent') && !text.includes('off'))
+   check('promptText pool meta', text.includes('OAuth 账号池:G池') && text.includes('2 个账号'))
+@@ -881,7 +1046,7 @@ console.log('RouterService:')
+       try { await service.run({ agentId: 'coder', task: 'x', images: [], exec: { agent: { session: { header: { delegationDepth: 0 } } } } }) } catch (error) { cliNoCwdRejected = String(error.message).includes('会话工作目录') }
+       check('cli without cwd rejected', cliNoCwdRejected)
+       let cliOauthRejected = false
+-      try { await service.run({ agentId: 'coderacct', task: 'x', images: [], exec: { agent: fakeParentCli } }) } catch (error) { cliOauthRejected = String(error.message).includes('仅支持 chat') }
++      try { await service.run({ agentId: 'coderacct', task: 'x', images: [], exec: { agent: fakeParentCli } }) } catch (error) { cliOauthRejected = String(error.message).includes('暂不支持') && String(error.message).includes('cli') }
+       check('cli with oauth account rejected', cliOauthRejected)
+       service.killCliChildren()
+       check('cli children drained after kill', service.cliChildren.size === 0)
+@@ -1536,7 +1701,7 @@ console.log('apply wiring:')
+     const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
+     await app
+     check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
+-    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 15 && registeredContribution.package === 'dsh-agent-router')
++    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 16 && registeredContribution.package === 'dsh-agent-router')
+     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
+     check('oauth callback route registered', webRoute && webRoute.kind === 'exact' && webRoute.path === '/router-oauth/callback' && typeof webRoute.handler === 'function')
+     // R3 F-3：真实 service 上断言惰性注入点——apply 后 starter 可用但 1455
+
+commit 522025ebf7759a2465dacfa8986090787d9b8cec
+Author: peterwangze <1337917121@qq.com>
+Date:   Sat Aug 22 20:41:17 2026 +0800
+
+    EVO-002 Step 6b: ChatGPT 账号卡 UI——实验区（§3.6 默认关闭开关 + ToS 一次性确认弹窗，拒绝不开/接受同落 oauthExperimental+oauthTosAccepted）+ PresetAccountCard（登录态圆点/登录弹窗轮询 presetLoggedIn/登出删除凭据/删除账号 W-5 三步联动：凭据删除+池引用清理+账号 unset）+ 模型列表编辑 + oauthLogout 客户端 wire/描述符 + 双语 i18n；client-render 判别断言 ×10（两级折叠展开/ToS 拒绝与接受/preset 卡/begin+popup/logout/W-5 ops 链）
+
+diff --git a/lib/client.js b/lib/client.js
+index 9b715ea..611f760 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -90,6 +90,9 @@ window.__ModuleLoader__.load({
+         clientId: wv.string(), authUrl: wv.string(), tokenUrl: wv.string(), scope: wv.string(),
+         models: wv.array(wv.string()),
+         publicClient: wv.boolean(true),
++        // EVO-002 Step 6：preset 镜像 + 登录态（可选——旧服务端缺省兼容）。
++        preset: wv.string(true),
++        presetLoggedIn: wv.boolean(true),
+       })),
+       pools: wv.array(wv.object({
+         id: wv.string(), name: wv.string(), enabled: wv.boolean(), strategy: wv.string(),
+@@ -165,6 +168,9 @@ window.__ModuleLoader__.load({
+     const wOauthExchangeResult = wv.object({ ok: wv.boolean(), message: wv.string(), expiresIn: wv.number(true) })
+     const wOauthDiscoverRequest = wv.object({ accountId: wv.string() })
+     const wOauthDiscoverResult = wv.object({ ok: wv.boolean(), message: wv.string(), models: wv.array(wv.string()) })
++    // EVO-002 Step 6：preset 账号登出（§3.6 凭据删除路径 / W-5）。
++    const wOauthLogoutRequest = wv.object({ accountId: wv.string() })
++    const wOauthLogoutResult = wv.object({ ok: wv.boolean(), message: wv.string() })
+     const wCliStatusResult = wv.object({ ok: wv.boolean(), message: wv.string(), loggedIn: wv.boolean(true) })
+     const wCliLoginResult = wv.object({ ok: wv.boolean(), message: wv.string() })
+     const wCliModelsResult = wv.object({ ok: wv.boolean(), message: wv.string(), models: wv.array(wv.string()), source: wv.string(true) })
+@@ -208,6 +214,7 @@ window.__ModuleLoader__.load({
+         { id: 'dsh-agent-router#router/oauthTokenExchange', service: 'router', namespace: 'router', method: 'oauthTokenExchange', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthExchangeRequest)], result: resultOf('OauthTokenExchangeResult', wOauthExchangeResult) },
+         { id: 'dsh-agent-router#router/oauthBegin', service: 'router', namespace: 'router', method: 'oauthBegin', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthBeginRequest)], result: resultOf('OauthBeginResult', wOauthBeginResult) },
+         { id: 'dsh-agent-router#router/oauthDiscover', service: 'router', namespace: 'router', method: 'oauthDiscover', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthDiscoverRequest)], result: resultOf('OauthDiscoverResult', wOauthDiscoverResult) },
++        { id: 'dsh-agent-router#router/oauthLogout', service: 'router', namespace: 'router', method: 'oauthLogout', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthLogoutRequest)], result: resultOf('OauthLogoutResult', wOauthLogoutResult) },
+         { id: 'dsh-agent-router#router/cliStatus', service: 'router', namespace: 'router', method: 'cliStatus', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('CliStatusResult', wCliStatusResult) },
+         { id: 'dsh-agent-router#router/cliLogin', service: 'router', namespace: 'router', method: 'cliLogin', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('CliLoginResult', wCliLoginResult) },
+         { id: 'dsh-agent-router#router/cliModels', service: 'router', namespace: 'router', method: 'cliModels', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('CliModelsResult', wCliModelsResult) },
+@@ -414,6 +421,24 @@ window.__ModuleLoader__.load({
+       oauthDelete: '删除账号',
+       oauthConfirmDelete: '确认删除该 OAuth 账号？',
+       oauthAdd: '添加 OAuth 账号',
++      // ── ChatGPT 订阅登录（实验，EVO-002 Step 6 / §3.6 合规边界）─────────
++      experimentalTitle: 'ChatGPT 订阅登录（实验）',
++      experimentalSwitch: '开启 ChatGPT 订阅登录（实验通路）',
++      experimentalHint: '用 ChatGPT Plus/Pro 订阅经官方 Codex OAuth 通路调用（实验特性，默认关闭；开启即表示知悉并接受下方条款）。',
++      experimentalToS: '开启 ChatGPT 实验通路前请确认：把 ChatGPT 订阅额度用于插件调用，可能违反 OpenAI 服务条款，可能导致账号受限或封禁——风险自担（Use at your own risk）。确定开启吗？',
++      presetIntro: '开启后可在这里添加 ChatGPT 预设账号：一键浏览器授权 → 凭据落盘 → 专业 agent 的「OAuth 账号」指向它即可调用。',
++      presetTagExperimental: '实验',
++      presetAdd: '＋ 添加 ChatGPT 账号',
++      presetLogin: '登录 ChatGPT',
++      presetLoggingIn: '等待授权…',
++      presetLoginWaiting: '已打开授权页：在弹窗中完成 ChatGPT 登录，登录状态将自动刷新。',
++      presetLoginDone: 'ChatGPT 登录完成，凭据已保存。',
++      presetLogout: '登出并删除凭据',
++      presetLogoutConfirm: '确认登出并删除本机 ChatGPT 凭据文件？（不影响账号本身，随时可重新登录）',
++      presetDelete: '删除账号',
++      presetDeleteConfirm: '确认删除该 ChatGPT 预设账号？将同时删除本机凭据文件，并从引用它的账号池中移除。',
++      presetPoolCleaned: (n) => `已从 ${n} 个账号池移除引用`,
++      presetModelsHint: '模型列表由插件独立维护（可编辑；ChatGPT 订阅端点不提供模型发现，常用值 gpt-5.4 / gpt-5.4-mini）。',
+       oauthCustomAdd: '＋ 自定义（自建 OAuth2 服务商）',
+       oauthCustomHint: '已创建空白账号：请在卡片中填写协议、Base URL、授权/Token 端点、Client ID 与 Scope 后保存，再执行登录。',
+       oauthQuickAddHint: '点击服务商即创建账号：Gemini 为自建 Client 形态（需在高级设置填 Client ID/Secret 后一键授权）；ChatGPT/Claude/Grok 仅适配自建网关——添加后把 Base URL 改为你的网关并粘贴 access token。',
+@@ -684,6 +709,24 @@ window.__ModuleLoader__.load({
+       oauthDelete: 'Delete account',
+       oauthConfirmDelete: 'Delete this OAuth account?',
+       oauthAdd: 'Add OAuth Account',
++      // ── ChatGPT subscription sign-in (experimental, EVO-002 Step 6)─────
++      experimentalTitle: 'ChatGPT Subscription Sign-in (Experimental)',
++      experimentalSwitch: 'Enable ChatGPT subscription sign-in (experimental path)',
++      experimentalHint: 'Call via the official Codex OAuth path using a ChatGPT Plus/Pro subscription (experimental, off by default; enabling means you have read and accepted the terms below).',
++      experimentalToS: 'Before enabling the ChatGPT experimental path: using a ChatGPT subscription through plugin calls may violate OpenAI\'s Terms of Service and may lead to account restrictions or bans — use at your own risk. Enable anyway?',
++      presetIntro: 'Once enabled, add a ChatGPT preset account here: one-click browser authorization → credential stored → point an agent\'s "OAuth account" at it to call.',
++      presetTagExperimental: 'Experimental',
++      presetAdd: '+ Add ChatGPT Account',
++      presetLogin: 'Sign in with ChatGPT',
++      presetLoggingIn: 'Waiting for authorization…',
++      presetLoginWaiting: 'Authorization page opened: complete ChatGPT sign-in in the popup; the login state refreshes automatically.',
++      presetLoginDone: 'ChatGPT sign-in complete; credential saved.',
++      presetLogout: 'Sign out & delete credential',
++      presetLogoutConfirm: 'Sign out and delete the local ChatGPT credential file? (The account itself is unaffected; you can sign in again anytime.)',
++      presetDelete: 'Delete account',
++      presetDeleteConfirm: 'Delete this ChatGPT preset account? The local credential file will also be deleted, and references will be removed from account pools.',
++      presetPoolCleaned: (n) => `Removed references from ${n} pool(s)`,
++      presetModelsHint: 'The model list is plugin-managed (editable; the ChatGPT subscription endpoint offers no model discovery — common values gpt-5.4 / gpt-5.4-mini).',
+       oauthCustomAdd: '+ Custom (own OAuth2 provider)',
+       oauthCustomHint: 'Blank account created: fill in protocol, Base URL, auth/token endpoints, Client ID and Scope, then save and sign in.',
+       oauthQuickAddHint: 'Click a provider to create the account: Gemini is created in self-client mode (fill Client ID/Secret in advanced settings, then one-click sign-in); ChatGPT/Claude/Grok suit self-hosted gateways only — point Base URL at your gateway and paste the access token.',
+@@ -1193,6 +1236,33 @@ window.__ModuleLoader__.load({
+       return `javascript:(async()=>{try{const r=await fetch('${sessionUrl}',{credentials:'include'});const j=await r.json();if(!j||!j.accessToken){alert('未获取到 access token：请确认已登录官方站');return}location.href='${origin}/?dshrouter-account=${encodeURIComponent(accountId)}&dshrouter-token='+encodeURIComponent(j.accessToken)}catch(e){alert('提取失败：'+e.message)}})()`
+     }
+ 
++    /** ChatGPT preset 账号卡（实验区专属，EVO-002 Step 6）：登录态圆点 +
++     *  登录/登出/删除 + 模型列表编辑（§3.6 凭据删除路径 / W-5 联动入口）。 */
++    function PresetAccountCard(props) {
++      const { id, entry, busy, notice, t, writable, onLogin, onLogout, onDelete, modelsValue, onModelsChange, onSaveModels } = props
++      const loggedIn = entry.presetLoggedIn === true
++      return el('div', { className: 'dshrouter-card' },
++        el('div', { className: 'dshrouter-head' },
++          loggedIn ? el('span', { className: 'dshrouter-dot ok', title: t('oauthLoggedIn') }) : el('span', { className: 'dshrouter-dot bad', title: t('oauthNotLoggedIn') }),
++          el('span', { className: 'dshrouter-name' }, entry.name || id),
++          el('span', { className: 'dshrouter-id' }, id),
++          el('span', { className: 'dshrouter-tag' }, t('presetTagExperimental')),
++          el('span', { className: 'dshrouter-spacer' }),
++          el('button', { type: 'button', className: 'dshrouter-button', disabled: busy || !writable, onClick: onLogin }, busy ? t('presetLoggingIn') : t('presetLogin')),
++          el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: busy || !writable || !loggedIn, onClick: onLogout }, t('presetLogout')),
++          el('button', { type: 'button', className: 'dshrouter-button danger', disabled: busy || !writable, onClick: onDelete }, t('presetDelete'))),
++        el('div', { className: 'dshrouter-row' },
++          el('div', { className: 'dshrouter-field', style: { flex: '1 1 320px' } },
++            el('span', { className: 'dshrouter-field-label' }, t('oauthModels')),
++            el('input', {
++              className: 'dshrouter-input', value: modelsValue, placeholder: 'gpt-5.4-mini, gpt-5.4',
++              'aria-label': t('oauthModels'), onChange: (event) => onModelsChange(event.target.value),
++            })),
++          el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: busy || !writable, onClick: onSaveModels }, t('save'))),
++        el('p', { className: 'dshrouter-hint' }, t('presetModelsHint')),
++        notice ? el('p', { className: 'dshrouter-hint' }, notice) : null)
++    }
++
+     /** OAuth 账号卡片（官方登录，插件独立管理；折叠摘要 + 展开配置/登录/模型）。 */
+     function OAuthAccountCard(props) {
+       const { id, entry, tokenState, total, buckets, expanded, draft, busy, notice, t, writable, onToggle, onDraftField, onSave, onPasteToken, onOneClick, onAuthorize, onExchange, onDiscover, onDelete } = props
+@@ -1504,6 +1574,8 @@ window.__ModuleLoader__.load({
+       const [oauthTokenStates, setOauthTokenStates] = useState({})
+       const [oauthNotice, setOauthNotice] = useState({})
+       const [oauthBusy, setOauthBusy] = useState({})
++      /** ChatGPT preset 模型列表草稿（id → 逗号分隔串；EVO-002 Step 6）。 */
++      const [presetModels, setPresetModels] = useState({})
+       const [oauthFlow, setOauthFlow] = useState(null)
+       const [expandedPools, setExpandedPools] = useState({})
+       const [addingPool, setAddingPool] = useState(false)
+@@ -2217,6 +2289,123 @@ window.__ModuleLoader__.load({
+         }
+       }
+ 
++      // ── ChatGPT 订阅登录（实验，EVO-002 Step 6 / §3.6 合规边界）─────────
++      const oauthExperimentalOn = state.value?.oauthExperimental === true
++      const presetOauthEntries = oauthEntries.filter((entry) => entry.preset === 'chatgpt-codex')
++
++      /** 实验开关切换：开启前弹一次性 ToS 确认（§3.6 显式开启确认——拒绝则
++       *  不开）；接受则同时落 oauthTosAccepted（服务端 begin 侧复核，手改
++       *  配置绕过弹窗也发起不了登录）。关闭无需确认。 */
++      const toggleOauthExperimental = async () => {
++        const next = !oauthExperimentalOn
++        if (next && !window.confirm(t('experimentalToS'))) return
++        const ops = [{ op: 'set', path: ['oauthExperimental'], value: next }]
++        if (next) ops.push({ op: 'set', path: ['oauthTosAccepted'], value: true })
++        await mutate(ops)
++      }
++
++      /** 添加 ChatGPT preset 账号（零配置：端点常量由服务端 preset 分支预填）
++       *  并立即发起一键登录；模型预置 EV-028 实证可用的 gpt-5.4 系。 */
++      const addPresetAccount = async () => {
++        let accountId = 'chatgpt'
++        let n = 2
++        while (oauthById.has(accountId)) { accountId = `chatgpt-${n++}` }
++        const value = {
++          name: 'ChatGPT（实验）', enabled: true, preset: 'chatgpt-codex', protocol: 'codex-responses',
++          baseURL: 'https://chatgpt.com/backend-api', credentialFile: '', clientId: '', clientSecret: '',
++          publicClient: false, authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.4-mini', 'gpt-5.4'], tokenRef: '',
++        }
++        const outcome = await mutate([{ op: 'set', path: ['oauthAccounts', accountId], value }])
++        if (!outcome.ok) { setOauthNotice((current) => ({ ...current, [accountId]: outcome.message })); return }
++        await runPresetLogin(accountId)
++      }
++
++      /** preset 一键登录：oauthBegin（preset 分支）→ 弹窗授权 → 轮询 catalog
++       *  的 presetLoggedIn（1455 回调在宿主侧自动完成 code 交换与凭据落盘，
++       *  客户端只观察登录态翻转）。 */
++      const runPresetLogin = async (id) => {
++        const routerRemote = remote()
++        if (!routerRemote || typeof routerRemote.oauthBegin !== 'function') {
++          setOauthNotice((current) => ({ ...current, [id]: t('oauthNeedRestart') }))
++          return
++        }
++        setOauthBusy((current) => ({ ...current, [id]: true }))
++        const response = await routerRemote.oauthBegin({ accountId: id, redirectUri: window.location.origin + '/router-oauth/callback' })
++        if (!response.ok) {
++          setOauthBusy((current) => ({ ...current, [id]: false }))
++          setOauthNotice((current) => ({ ...current, [id]: response.error.message }))
++          return
++        }
++        let popup
++        try { popup = window.open(response.value.authUrl, 'dsh-agent-router-oauth', 'popup,width=520,height=680') } catch { popup = null }
++        if (!popup) {
++          setOauthBusy((current) => ({ ...current, [id]: false }))
++          setOauthNotice((current) => ({ ...current, [id]: t('oauthPopupBlocked') }))
++          return
++        }
++        setOauthNotice((current) => ({ ...current, [id]: t('presetLoginWaiting') }))
++        const deadline = Date.now() + 3 * 60 * 1000
++        const poll = async () => {
++          if (popup.closed || Date.now() > deadline) {
++            if (Date.now() > deadline) setOauthNotice((current) => ({ ...current, [id]: t('oauthExpired') }))
++            setOauthBusy((current) => ({ ...current, [id]: false }))
++            return
++          }
++          let loggedIn = false
++          try {
++            const catalog = await routerRemote.catalog({})
++            const entry = ((catalog.value?.oauthAccounts) ?? []).find((candidate) => candidate.id === id)
++            loggedIn = entry?.presetLoggedIn === true
++          } catch { /* 网络瞬时失败：继续轮询 */ }
++          if (loggedIn) {
++            setOauthNotice((current) => ({ ...current, [id]: t('presetLoginDone') }))
++            try { popup.close() } catch { /* 已由用户关闭 */ }
++            setOauthBusy((current) => ({ ...current, [id]: false }))
++            await load()
++            return
++          }
++          window.setTimeout(poll, 1200)
++        }
++        window.setTimeout(poll, 1000)
++      }
++
++      /** 登出并删除凭据（§3.6 凭据删除路径；服务端 store.delete 幂等，
++       *  不随实验开关关闭失效）。 */
++      const logoutPresetAccount = async (id) => {
++        if (!window.confirm(t('presetLogoutConfirm'))) return
++        setOauthBusy((current) => ({ ...current, [id]: true }))
++        const response = await remote().oauthLogout({ accountId: id })
++        setOauthBusy((current) => ({ ...current, [id]: false }))
++        setOauthNotice((current) => ({ ...current, [id]: response.ok ? response.value.message : response.error.message }))
++        if (response.ok) await load()
++      }
++
++      /** 删除 preset 账号（W-5 联动）：先删本机凭据文件 → 清引用它的账号池
++       *  （联动提示）→ 删账号条目——三步一次完成（§3.6 合规删除路径）。 */
++      const deletePresetAccount = async (id) => {
++        if (!window.confirm(t('presetDeleteConfirm'))) return
++        setOauthBusy((current) => ({ ...current, [id]: true }))
++        await remote().oauthLogout({ accountId: id }).catch(() => undefined)
++        const poolsContaining = poolEntries.filter((pool) => (pool.accounts ?? []).includes(id))
++        const ops = []
++        for (const pool of poolsContaining) {
++          ops.push({ op: 'set', path: ['pools', pool.id, 'accounts'], value: (pool.accounts ?? []).filter((item) => item !== id) })
++        }
++        ops.push({ op: 'unset', path: ['oauthAccounts', id] })
++        const outcome = await mutate(ops)
++        setOauthBusy((current) => ({ ...current, [id]: false }))
++        const cleaned = poolsContaining.length
++        setOauthNotice((current) => ({ ...current, [id]: outcome.ok ? `${t('oauthTokenBack')}${cleaned > 0 ? ` ${t('presetPoolCleaned')(cleaned)}` : ''}` : outcome.message }))
++      }
++
++      /** preset 模型列表保存（逗号分隔编辑 → 数组落盘）。 */
++      const savePresetModels = async (id) => {
++        const raw = presetModels[id] ?? ''
++        const models = raw.split(/[,，]/).map((item) => item.trim()).filter(Boolean)
++        const outcome = await mutate([{ op: 'set', path: ['oauthAccounts', id, 'models'], value: models }])
++        setOauthNotice((current) => ({ ...current, [id]: outcome.ok ? t('saved') : outcome.message }))
++      }
++
+       // ── 子代理（无头 CLI 条目：账号区维护，专业 agent 经 cliAgent 引用）──
+       const cliEntries = state.catalog?.cliAgents ?? []
+       const cliEntriesById = new Map(cliEntries.map((entry) => [entry.id, entry]))
+@@ -2571,6 +2760,29 @@ window.__ModuleLoader__.load({
+           t,
+           onToggle: () => setExpandedAdvanced((current) => !current),
+           children: [
++            // ── ChatGPT 订阅登录（实验，§3.6 默认关闭 + ToS 确认）────────
++            el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-subtitle' }, t('experimentalTitle'))),
++            el('div', { className: 'dshrouter-card' },
++              el('label', { className: 'dshrouter-switch' },
++                el('input', { type: 'checkbox', checked: oauthExperimentalOn, disabled: !state.writable, onChange: toggleOauthExperimental }),
++                t('experimentalSwitch')),
++              el('p', { className: 'dshrouter-hint' }, t('experimentalHint')),
++              oauthExperimentalOn ? el('div', null,
++                presetOauthEntries.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('presetIntro')) : null,
++                ...presetOauthEntries.map((entry) => el(PresetAccountCard, {
++                  key: entry.id, id: entry.id, entry,
++                  busy: !!oauthBusy[entry.id], notice: oauthNotice[entry.id],
++                  t, writable: state.writable,
++                  modelsValue: presetModels[entry.id] ?? (entry.models ?? []).join(', '),
++                  onModelsChange: (value) => setPresetModels((current) => ({ ...current, [entry.id]: value })),
++                  onSaveModels: () => savePresetModels(entry.id),
++                  onLogin: () => runPresetLogin(entry.id),
++                  onLogout: () => logoutPresetAccount(entry.id),
++                  onDelete: () => deletePresetAccount(entry.id),
++                })),
++                el('div', { className: 'dshrouter-row' },
++                  el('button', { type: 'button', className: 'dshrouter-button', disabled: !state.writable, onClick: addPresetAccount }, t('presetAdd'))),
++              ) : null),
+             // OAuth 账号子区（官方登录，插件独立管理）
+             el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-subtitle' }, t('oauthTitle'))),
+             el('p', { className: 'dshrouter-hint' }, t('oauthIntro')),
+diff --git a/tests/client-render.mjs b/tests/client-render.mjs
+index f5e7543..3c50b99 100644
+--- a/tests/client-render.mjs
++++ b/tests/client-render.mjs
+@@ -171,7 +171,7 @@ export async function runClientRender(check) {
+   }
+ 
+   // ── 装配：评估浏览器包 → mock ctx → apply → 渲染 ─────────────────────
+-  const captured = { registrations: [], listeners: [], uploadFileCalls: [], readWorkspaceFileCalls: [] }
++  const captured = { registrations: [], listeners: [], uploadFileCalls: [], readWorkspaceFileCalls: [], saveOps: [], oauthLogoutCalls: [], beginCalls: [], openCalls: [] }
+   const fakeWindow = {
+     __ModuleLoader__: { load: (payload) => { captured.bundle = payload } },
+     location: { search: '', pathname: '/' },
+@@ -182,8 +182,8 @@ export async function runClientRender(check) {
+     // 登录轮询依赖 setTimeout 真正回调（忽略延迟立即排队），否则轮询挂死。
+     setTimeout: (fn) => { setImmediate(fn); return 0 },
+     clearTimeout: () => {},
+-    confirm: () => true,
+-    open: () => {},
++    confirm: () => confirmMode,
++    open: (url) => { captured.openCalls.push(String(url)); return { closed: true } },
+     // F11 附件上传（Step 8）：AttachButton 经 FileReader 读字节 → base64 →
+     // router/uploadFile RPC。测试用假 FileReader（与真实浏览器同构：readAsDataURL
+     // 产出 data: URL，onload 异步回调）；文件字节由夹具的 _base64 字段提供。
+@@ -214,6 +214,12 @@ export async function runClientRender(check) {
+   // FIX-002-R7 F3：接管开关可切换（catalog.takeoverDefaultModel 镜像值）——
+   // 默认 true 维持既有接管断言语义；false 供"开关关闭"判别双断言组。
+   let takeoverSwitch = true
++  // EVO-002 Step 6：ChatGPT 实验区——experimentalOn 控制开关态（config value
++  // 镜像），presetMode 控制目录 preset 账号形态（'none'|'logged-out'|
++  // 'logged-in'），confirmMode 控制 ToS/登出/删除确认对话（decline 判别）。
++  let experimentalOn = false
++  let presetMode = 'none'
++  let confirmMode = true
+   // F11 上传失败模式：true 时 remoteMock.uploadFile 返回 ok:false（错误码形状）。
+   let uploadFailMode = false
+   // L3 打开文件失败模式（Step 9）：true 时 remoteMock.readWorkspaceFile 返回
+@@ -236,13 +242,20 @@ export async function runClientRender(check) {
+               { id: 'codex', name: 'Codex 助手', type: 'cli', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', cliAgent: 'codexentry', effectiveProvider: 'cli:codexentry', effectiveModel: '', source: 'agent' },
+               { id: 'vision', name: '视觉', type: 'chat', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', effectiveProvider: 'deepseek-official', effectiveModel: 'deepseek-v4-pro', source: 'main' },
+             ],
+-        oauthAccounts: [], pools: [], cliAgents: [
++        oauthAccounts: presetMode === 'none' ? [] : [
++          { id: 'chatgpt', name: 'ChatGPT（实验）', enabled: true, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', tokenRef: '', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.4-mini'], publicClient: false, preset: 'chatgpt-codex', presetLoggedIn: presetMode === 'logged-in' },
++        ],
++        pools: presetMode === 'none' ? [] : [
++          { id: 'main', name: '主池', enabled: true, strategy: 'healthy', accounts: ['chatgpt'], accountHealth: [] },
++        ], cliAgents: [
+           { id: 'codexentry', name: 'Codex 子代理', enabled: true, command: 'codex', args: '', timeoutMs: 0, maxConcurrent: 1 },
+         ],
+       },
+     }),
+     config: async () => ({ ok: true, value: { ok: true, enabled: true, revision: 1, writable: true, value: {
+       enabled: true,
++      oauthExperimental: experimentalOn,
++      oauthTosAccepted: experimentalOn,
+       agents: {
+         codex: { name: 'Codex 助手', type: 'cli', enabled: true, description: 'd', capabilities: ['image'], command: '', args: '', timeoutMs: 0, maxConcurrent: 1, cliAgent: 'codexentry' },
+         vision: { name: '视觉', type: 'chat', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', maxRounds: 1 },
+@@ -254,7 +267,9 @@ export async function runClientRender(check) {
+       },
+     }, user: null } }),
+     stats: async () => ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [] } }),
+-    save: async () => ({ ok: true, value: { ok: true, revision: 1 } }),
++    save: async (request) => { captured.saveOps.push(...((request && request.ops) ?? [])); return { ok: true, value: { ok: true, revision: 1 } } },
++    oauthBegin: async (request) => { captured.beginCalls.push(request); return { ok: true, value: { ok: true, message: '授权 URL 已生成', authUrl: 'https://auth.openai.com/oauth/authorize?x=1', state: 'st-6' } } },
++    oauthLogout: async (request) => { captured.oauthLogoutCalls.push(request); return { ok: true, value: { ok: true, message: '已登出并删除 ChatGPT 凭据文件' } } },
+     reset: async () => ({ ok: true, value: { ok: true } }),
+     test: async () => ({ ok: true, value: { ok: true, message: 'ok' } }),
+     cliStatus: async () => cliStatusMode === 'logged-out'
+@@ -822,6 +837,105 @@ export async function runClientRender(check) {
+     }
+   }
+ 
++  // EVO-002 Step 6：ChatGPT 实验区（§3.6 默认关闭 + ToS 显式确认 + preset
++  // 账号卡 + W-5 删除联动）。判别性推演：断言 ②③④⑤⑥ 在"无实验区/无 ToS
++  // 门/无登出联动"的旧客户端代码下必败——旧代码不渲染 experimentalSwitch/
++  // presetAdd/presetLogin/presetLogout/presetDelete 元素（findAll 查空 →
++  // undefined 分支跳过点击 → 捕获数组为空 → 断言失败），saveOps 亦无
++  // oauthExperimental/oauthTosAccepted/pools 清理 op。
++  {
++    const settingsReg6 = captured.registrations.find((reg) => reg && reg.name === 'settings.section')
++    const listener6 = captured.listeners.find((entry) => entry.event === 'settings/document-updated')
++    const renderSettings6 = async (prefix) => {
++      const tree6 = await renderInto(settingsReg6.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: tOf, $on: () => () => {} }), prefix)
++      // 两级折叠（分类卡头为 dshrouter-category-head）：多模态账号区 → 高级扩展。
++      const heads6 = findAll(tree6, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head'))
++      const accountsHead6 = heads6.find((node) => textOf(node).includes(tOf('accountTitle')))
++      if (accountsHead6) accountsHead6.props.onClick()
++      const tree6b = await settle()
++      const heads6b = findAll(tree6b, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head'))
++      const advHead6 = heads6b.find((node) => textOf(node).includes(tOf('advancedSection')))
++      if (advHead6) advHead6.props.onClick()
++      return settle()
++    }
++    const experimentalSwitchOf = (tree) => {
++      // checkbox 自身无子文本（label 文本在其兄弟位置）——先按 label 文本定位
++      // dshrouter-switch，再取其 input 子节点。
++      const label6 = findAll(tree, (node) => hasClass(node, 'dshrouter-switch') && textOf(node).includes(tOf('experimentalSwitch')))[0]
++      return label6 ? (label6.children ?? []).find((child) => child && child.type === 'input') : undefined
++    }
++    // ① 默认关闭：开关未勾选 + preset 入口隐藏（§3.6 默认关闭）。
++    {
++      const tree6 = await renderSettings6('step6-off')
++      const switch6 = experimentalSwitchOf(tree6)
++      check('step6: experimental switch off by default (§3.6)', !!switch6 && switch6.props.checked === false)
++      check('step6: preset entry hidden while off (§3.6)', !textOf(tree6).includes(tOf('presetAdd')) && !textOf(tree6).includes(tOf('presetLogin')))
++    }
++    // ② ToS 拒绝 → 不写开关；③ 接受 → oauthExperimental + oauthTosAccepted
++    //    两 op 同时落（服务端 begin 复核的数据面）。
++    {
++      const tree6 = await renderSettings6('step6-tos')
++      confirmMode = false
++      captured.saveOps.length = 0
++      const switch6 = experimentalSwitchOf(tree6)
++      if (switch6) switch6.props.onChange({ target: { checked: true } })
++      await settle()
++      check('step6: ToS declined leaves switch untouched', captured.saveOps.filter((op) => (op.path ?? []).includes('oauthExperimental')).length === 0)
++      confirmMode = true
++      const switch6b = experimentalSwitchOf(currentTree)
++      captured.saveOps.length = 0
++      if (switch6b) switch6b.props.onChange({ target: { checked: true } })
++      await settle()
++      const ops6 = captured.saveOps.filter((op) => op.path[0] === 'oauthExperimental' || op.path[0] === 'oauthTosAccepted')
++      check('step6: ToS accepted persists switch + acceptance together', ops6.length === 2 && ops6.every((op) => op.value === true))
++      experimentalOn = true
++      presetMode = 'logged-out'
++      if (listener6) listener6.listener()
++      await new Promise((resolve) => setImmediate(resolve))
++    }
++    // ④ 开启后：preset 账号卡（登录按钮）+ 添加入口可见。
++    {
++      const tree6 = await renderSettings6('step6-on')
++      check('step6: preset card renders with login button', textOf(tree6).includes(tOf('presetLogin')) && textOf(tree6).includes('chatgpt'))
++      check('step6: preset add entry visible when on', textOf(tree6).includes(tOf('presetAdd')))
++      // ⑤ 登录点击 → oauthBegin（preset 分支）→ 授权页弹窗（open 捕获）。
++      captured.beginCalls.length = 0
++      captured.openCalls.length = 0
++      const loginBtn6 = buttonsOf(tree6).find((node) => textOf(node) === tOf('presetLogin'))
++      if (loginBtn6) loginBtn6.props.onClick()
++      await settle()
++      check('step6: login click fires oauthBegin for preset account', captured.beginCalls.length === 1 && captured.beginCalls[0]?.accountId === 'chatgpt')
++      check('step6: login opens authorization popup url', captured.openCalls.length === 1 && captured.openCalls[0].includes('auth.openai.com'))
++    }
++    // ⑥ 登出（§3.6 凭据删除路径）+ 删除账号（W-5：凭据删除 + 池引用清理
++    //    + 账号 unset 三步一次完成）。
++    {
++      presetMode = 'logged-in'
++      if (listener6) listener6.listener()
++      await new Promise((resolve) => setImmediate(resolve))
++      const tree6 = await renderSettings6('step6-logout')
++      captured.oauthLogoutCalls.length = 0
++      const logoutBtn6 = buttonsOf(tree6).find((node) => textOf(node) === tOf('presetLogout'))
++      if (logoutBtn6) logoutBtn6.props.onClick()
++      await settle()
++      check('step6: logout click fires oauthLogout (credential deletion)', captured.oauthLogoutCalls.length === 1 && captured.oauthLogoutCalls[0]?.accountId === 'chatgpt')
++      captured.saveOps.length = 0
++      captured.oauthLogoutCalls.length = 0
++      const delBtn6 = buttonsOf(tree6).find((node) => textOf(node) === tOf('presetDelete'))
++      if (delBtn6) delBtn6.props.onClick()
++      await settle()
++      const poolOps6 = captured.saveOps.filter((op) => op.path.join('/') === 'pools/main/accounts')
++      const unsetOps6 = captured.saveOps.filter((op) => op.op === 'unset' && op.path.join('/') === 'oauthAccounts/chatgpt')
++      check('step6: delete cleans credential + pool refs + entry (W-5)', captured.oauthLogoutCalls.length === 1 && poolOps6.length === 1 && Array.isArray(poolOps6[0].value) && poolOps6[0].value.length === 0 && unsetOps6.length === 1)
++    }
++    // 复位（不污染后续块）。
++    experimentalOn = false
++    presetMode = 'none'
++    confirmMode = true
++    if (listener6) listener6.listener()
++    await new Promise((resolve) => setImmediate(resolve))
++  }
++
+   // route_agent 工具卡片：解析标记渲染缩略图；兼容旧会话真实图片块；运行态显示处理中。
+   {
+     const settledBlock = {
+
+commit f9d8bf0e1050e736de0b91c7c0b0c3ad503eca81
+Author: peterwangze <1337917121@qq.com>
+Date:   Sat Aug 22 20:41:48 2026 +0800
+
+    EVO-002 Step 6c: C-9 埋点观测——observeOauthTelemetry（C-9-1：登录旅程事件链 kill_switch/begin_ok/login_ok/调用采样/logout + P7 零 token 断言）
+
+diff --git a/tests/metrics.mjs b/tests/metrics.mjs
+index db257e5..b4b012a 100644
+--- a/tests/metrics.mjs
++++ b/tests/metrics.mjs
+@@ -24,6 +24,10 @@ import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/
+ import { RouterService } from '../lib/service.js'
+ import { AttachmentRegistry, isAttachmentId, contentHashId, ATTACHMENT_ERROR_CODES } from '../lib/attachments.js'
+ import { rememberImage, recallImage, clearImageMemory } from '../lib/memory.js'
++import { CHATGPT_PRESET } from '../lib/oauth-credentials.js'
++import { existsSync, mkdtempSync, rmSync } from 'node:fs'
++import { tmpdir } from 'node:os'
++import { join } from 'node:path'
+ 
+ // ── 观测结果收集 ──────────────────────────────────────────────────────────────
+ const results = []
+@@ -630,6 +634,85 @@ async function observeDiscrimination() {
+   })
+ }
+ 
++// ── 观测 ⑥（C-9-1）：OAuth 登录旅程埋点（EVO-002 Step 6 启动；v0.3.2 出报告）──
++// 可完全自动化：直构 RouterService 走完整旅程——begin（kill-switch 拒绝留事件）
++// → 开关开 → begin/exchange（登录事件 + 凭据落盘）→ codex 调用（SSE 桩采样）
++// → logout（删除事件 + 文件消失）。判别性：oauthEvents 缺失（旧代码无埋点）
++// 或事件负载含 token 值（P7 违规）→ 观测失败。
++async function observeOauthTelemetry() {
++  const detail = []
++  const checks = []
++  let crash = null
++  try {
++    const work = mkdtempSync(join(tmpdir(), 'router-c9-'))
++    const fakeJwt = (accountId) => {
++      const b64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
++      return `${b64url({ alg: 'RS256', typ: 'JWT' })}.${b64url({ 'https://api.openai.com/auth': { chatgpt_account_id: accountId } })}.sig-c9`
++    }
++    const access = fakeJwt('acct-c9')
++    const credFile = join(work, 'c9-auth.json')
++    const root = new Context()
++    root.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
++    let experimental = false
++    const service = new RouterService(root)
++    service.attach({ get: () => ({
++      enabled: true,
++      oauthExperimental: experimental,
++      oauthTosAccepted: true,
++      oauthProxyUrl: '',
++      oauthAccounts: { cgpt: { name: 'ChatGPT订阅', enabled: true, preset: 'chatgpt-codex', credentialFile: credFile, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', models: ['gpt-5.4-mini'] } },
++      agents: { cgptchat: { name: 'CGPT', type: 'chat', enabled: true, account: 'cgpt' } },
++    }) })
++    service.codexLoopbackStarter = async () => ({ ready: true, port: 1455, dispose: () => {} })
++    const realFetch = globalThis.fetch
++    globalThis.fetch = async (url) => {
++      if (String(url) === CHATGPT_PRESET.tokenUrl) {
++        return { ok: true, json: async () => ({ access_token: access, refresh_token: 'REFRESH-C9', expires_in: 3600, token_type: 'bearer' }) }
++      }
++      if (String(url).endsWith('/codex/responses')) {
++        return { ok: true, status: 200, body: new ReadableStream({ start(controller) {
++          const encoder = new TextEncoder()
++          controller.enqueue(encoder.encode(`event: response.output_text.delta\ndata: ${JSON.stringify({ type: 'response.output_text.delta', output_index: 0, delta: 'C9-OK' })}\n\n`))
++          controller.enqueue(encoder.encode(`event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: { usage: { input_tokens: 1, output_tokens: 2 } } })}\n\n`))
++          controller.close()
++        } }) }
++      }
++      return { ok: false, status: 404, text: async () => 'not found' }
++    }
++    try {
++      const blocked = await service.oauthBegin({ accountId: 'cgpt' })
++      checks.push(['kill-switch begin 拒绝且留事件', blocked.ok === false && service.oauthEvents.some((event) => event.kind === 'preset_begin_fail' && event.reason === 'kill_switch')])
++      experimental = true
++      const begin = await service.oauthBegin({ accountId: 'cgpt' })
++      const exchange = await service.oauthTokenExchange({ code: 'c9', state: begin.state })
++      checks.push(['登录旅程事件链（begin_ok + login_ok）', begin.ok === true && exchange.ok === true && service.oauthEvents.some((event) => event.kind === 'preset_begin_ok') && service.oauthEvents.some((event) => event.kind === 'preset_login_ok')])
++      const run = await service.run({ agentId: 'cgptchat', task: 'C-9 采样调用' })
++      checks.push(['codex 调用通路采样成功', run.kind === 'chat' && run.text === 'C9-OK'])
++      const logout = await service.oauthLogout({ accountId: 'cgpt' })
++      checks.push(['登出删除凭据 + logout 事件', logout.ok === true && !existsSync(credFile) && service.oauthEvents.some((event) => event.kind === 'preset_logout')])
++      const eventsText = JSON.stringify(service.oauthEvents)
++      checks.push(['事件负载零 token 值（P7）', !eventsText.includes('sig-c9') && !eventsText.includes('REFRESH-C9')])
++      detail.push(`事件种类: ${[...new Set(service.oauthEvents.map((event) => event.kind))].join(', ')}`)
++    } finally {
++      globalThis.fetch = realFetch
++      try { rmSync(work, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
++    }
++  } catch (error) { crash = error }
++  if (crash) {
++    checks.push(['观测无异常崩溃', false])
++    detail.push(String(crash && crash.message))
++  }
++  const failed = checks.filter(([, ok]) => !ok)
++  for (const [name, ok] of checks) detail.push(`${ok ? '✓' : '✗'} ${name}`)
++  record({
++    id: 'C-9-1',
++    name: 'OAuth 登录旅程埋点（C-9 v0.3.0 启动：登录/调用/登出事件 + P7 零 token）',
++    status: failed.length === 0 ? 'pass' : 'fail',
++    detail,
++    evidence: ['RouterService.oauthEvents（内存环形缓冲 100 条）', 'oauthBegin/oauthTokenExchange/run/oauthLogout 直构链'],
++  })
++}
++
+ // ── 主流程：逐项观测 + 汇总 ─────────────────────────────────────────────────
+ console.log('=== dsh-agent-router D-1 METRICS OBSERVATION (MIG-001 Step 10) ===')
+ console.log('定义来源: DEC-012 定稿 + docs/architecture-v3.md §11（成功标准候选指标评审定稿）')
+@@ -649,6 +732,8 @@ observeEscapeTradeoffs()
+ console.log('')
+ await observeDiscrimination()
+ console.log('')
++await observeOauthTelemetry()
++console.log('')
+ 
+ // ── D-1 门判定汇总 ───────────────────────────────────────────────────────────
+ const automated = results.filter((r) => r.status === 'pass')

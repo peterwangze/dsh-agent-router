@@ -16,7 +16,7 @@
     "EVO-002": {
       "task_id": "EVO-002",
       "priority": "P0",
-      "status": "Step 1-5 闭环（Step 5: db1ddf7 + R6 APPROVED_WITH_NOTES/0，EV-041/043）。Step 6 派发中（2026-08-23，fork 通道）：账号卡 UI + ToS 确认 + 登出删除（W-5 删账号联动凭据清理 + S-3 锁超时定义）+ Q2 per-protocol 能力接口（§3.5）+ 代理发现（R6/EV-041 双记录必含——chatgpt.com 需代理 7890/auth 直连；首联顺带裁决 R6-F2 \\r\\n 分帧与 R6-F5 403 文案序）+ C-9 埋点（tests/metrics.mjs）+ DEC-022-D 版本指纹（若 roadmap §3 归属 Step 6）。R6 P3 台账随触及文件分批处理",
+      "status": "Step 1-6 实现闭环待审（Step 6: 5f5a38b/522025e/f9d8bf0，733/0，EV-048——R7 审查中）。开放决策项：出口①真机首联（用户在场）+ 出口③设备码流排期 + DEC-022-D 转 Step 7",
       "goal": "[unchanged] C-1 ChatGPT 订阅 OAuth 接入 v0.3.0 全量交付：preset 账号 + 独立凭据文件 + 1455 loopback + codex-responses 协议分支（SSE 聚合，已交付）+ Q2 per-protocol 能力接口 + 合规三层 kill-switch + C-9 埋点启动",
       "product_success_contract": {
         "user": "dsh-agent-router 插件用户（DSH 主 agent 持有者，持有 ChatGPT Plus/Pro 订阅）",
@@ -112,7 +112,7 @@
     "EVO-003": {
       "task_id": "EVO-003",
       "priority": "P1",
-      "status": "Phase 1 闭环（1199c0b + R1 APPROVED_WITH_NOTES/unresolved_blockers=0，EV-039/042；8 裁量点全 adopt）。Phase 2 待派（串行等 FIX-002-F4 释放 tests/smoke.mjs 锁）：service.js 委托迁移（snapshot 形状已逐字段核验等价）+ schemas.js W-4 persist 开关 + smoke 接线 + statsExport RPC。Phase 2 前置项（R1 移交，MUST 随任务书下发）：F1 persist=false 时 load()/heal/quarantine/prune 门控+用例；F2 record() #fold/getAgentName 纳入 try（注入抛错不击穿永不-throw 不变量）；F4 tests/stats.mjs 测5 补子集身份断言；裁量① 治理义务：quality_budget 字面修订（'仅 node:fs/node:path'→'Node 内建零包依赖'——随 Phase 2 更新本包）",
+      "status": "Phase 2 派发中（2026-08-23，EVO-002 Step 6 已提交释放锁）：service.js 委托迁移（record/statsSnapshot/resetStats→stats 模块，五实例字段迁移）+ schemas.js W-4 persist 开关（router.stats.persist 往返语义）+ smoke 统计断言接线 + RPC statsExport + **前置项必做**：F1 persist=false 时 load()/heal/quarantine/prune 门控+用例；F2 record() #fold/getAgentName 纳入 try；F4 tests/stats.mjs 测5 补子集身份断言；裁量① quality_budget 文面修订（Node 内建零包依赖）随本包更新",
       "goal": "C-3 统计持久化（ADR-006）：lib/stats.js 分离（service.js 2965 基线净减 ~220）+ DSH_HOME 按天 JSONL + 异步批量 flush + 数据安全四件套 + 成本单价表 + CSV 导出 + W-4 persist 开关往返语义——重启保留 + 按天聚合/p50/p95/成本",
       "product_success_contract": {
         "user": "dsh-agent-router 插件用户",
