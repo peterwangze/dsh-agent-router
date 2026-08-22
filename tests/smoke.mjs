@@ -8,13 +8,14 @@ import { runInstallEntryTests } from './install-entry.mjs'
 import { runAttachmentTests } from './attachments.mjs'
 import { runOauthCredentialTests } from './oauth-credentials.mjs'
 import { runLoopbackTests } from './oauth-loopback.mjs'
+import { runStatsTests } from './stats.mjs'
 import { OauthCredentialStore, CHATGPT_PRESET } from '../lib/oauth-credentials.js'
 import { isAttachmentId } from '../lib/attachments.js'
 import { BlockAssembler, LlmRuntime, contentHasImage } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -27,6 +28,12 @@ function check(label, condition) {
   if (condition) console.log(`  ok  ${label}`)
   else { failures++; console.error(`FAIL  ${label}`) }
 }
+
+// C-3 统计持久化隔离（EVO-003 Phase 2）：index apply 接线会按 settings 默认
+// 启用 persist（真实产品行为，DSH_HOME 是部署契约——E6-a）。测试进程把
+// DSH_HOME 指到临时目录，防止 smoke 运行读写真实 ~/.dsh 统计（P7：测试
+// 绝不触碰用户数据）。进程退出即弃；无需恢复（子进程环境不影响调用方）。
+process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'router-smoke-home-'))
 
 // 0. 语法守卫：client.js 是浏览器 bundle，但宿主启动时预打包客户端
 //    入口——语法错误会直接击穿 DSH 启动（括号失衡事故教训）。用 node
@@ -94,6 +101,11 @@ console.log('schemas:')
   const f = routerSchema({ oauthAccounts: { odd: { preset: 'foo' } } })
   check('unknown preset tolerated (R-5 放行语义)', f.oauthAccounts.odd.preset === 'foo')
   check('OAUTH_PRESET_VALUES frozen + chatgpt-codex (P5 泛化)', Object.isFrozen(OAUTH_PRESET_VALUES) && OAUTH_PRESET_VALUES.length === 1 && OAUTH_PRESET_VALUES[0] === 'chatgpt-codex')
+  // EVO-003 Phase 2（C-3 / W-4，ARCH-002 IBC-1）：router.stats.persist 设置——
+  // 默认 true（持久化开）；显式 false = 纯内存（现状行为）；空对象补默认。
+  check('default stats.persist=true (W-4 persistence on by default)', c.stats.persist === true)
+  check('explicit stats.persist=false kept (W-4 fallback switch)', routerSchema({ stats: { persist: false } }).stats.persist === false)
+  check('empty stats object resolves defaults', routerSchema({ stats: {} }).stats.persist === true)
 }
 
 // 2. wire codec
@@ -106,6 +118,25 @@ console.log('wire codecs:')
   check('catalogResult rejects missing fields', threw)
   const s = wireCodecs.statsResult.parse({ ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [] })
   check('statsResult parses empty', s.ok === true)
+  // EVO-003 Phase 2：statsResult C-3 增量字段（days 按天聚合 / selfReport 自诊断
+  // / recent costEstimate+errorClass）与 statsExport 请求/结果 codec（§4.3）。
+  const sFull = wireCodecs.statsResult.parse({
+    ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [],
+    days: { '2026-01-15': { calls: 3, errors: 1, inputTokens: 110, outputTokens: 52, tokens: 162, ms: 2180, cost: 0.1 } },
+    selfReport: { dropped: 0, skippedLines: 0, skippedVersionLines: 0, corruptFiles: 0, migratedLines: 0, writeErrors: 0, indexRebuilt: 0, detailDropped: 0 },
+  })
+  check('statsResult parses days + selfReport increment fields (C-3)', sFull.days['2026-01-15'].calls === 3 && sFull.selfReport.dropped === 0)
+  const sRecent = wireCodecs.statsResult.parse({ ok: true, enabled: true, totals: [], recent: [{ at: 1, agentId: 'a', provider: 'p', model: 'm', ok: true, ms: 2, costEstimate: 0.5, errorClass: 'network' }], series: [], accountTotals: [], accountSeries: [] })
+  check('statsResult recent parses costEstimate + errorClass (C-3 increment)', sRecent.recent[0].costEstimate === 0.5 && sRecent.recent[0].errorClass === 'network')
+  const seReq = wireCodecs.statsExportRequest.parse({ range: '7d', level: 'agent' })
+  check('statsExportRequest parses', seReq.range === '7d' && seReq.level === 'agent')
+  let seThrew = false
+  try { wireCodecs.statsExportRequest.parse({ range: '7d' }) } catch { seThrew = true }
+  check('statsExportRequest rejects missing level', seThrew)
+  const seRes = wireCodecs.statsExportResult.parse({ ok: true, message: '已导出 1 行', csv: 'date,agent\n2026-01-15,vision' })
+  check('statsExportResult parses csv payload', seRes.csv.startsWith('date,'))
+  const seErr = wireCodecs.statsExportResult.parse({ ok: false, message: '无效的统计导出 range' })
+  check('statsExportResult error shape parses (no csv)', seErr.ok === false && seErr.csv === undefined)
   const dataReq = wireCodecs.imageDataRequest.parse({ ref: { attachmentId: 'sha256:x', mediaType: 'image/png', bytes: 4, width: 2, height: 2 } })
   check('imageDataRequest parses', dataReq.ref.attachmentId === 'sha256:x' && dataReq.ref.name === undefined)
   const dataRes = wireCodecs.imageDataResult.parse({ ok: true, message: 'ok', mediaType: 'image/png', data: 'aGk=', width: 2, height: 2 })
@@ -161,12 +192,15 @@ console.log('rpc contribution:')
 {
   const contribution = createHostContribution()
   check('face host', contribution.face === 'host')
-  check('16 invocations', contribution.invocations.length === 16)
-  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 16 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
+  check('17 invocations', contribution.invocations.length === 17)
+  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 17 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
   check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))
   check('image RPC descriptors present', contribution.invocations.some((d) => d.method === 'imageData'))
   check('uploadFile RPC descriptor present', contribution.invocations.some((d) => d.method === 'uploadFile' && d.id === 'dsh-agent-router#router/uploadFile'))
   check('readWorkspaceFile RPC descriptor present', contribution.invocations.some((d) => d.method === 'readWorkspaceFile' && d.id === 'dsh-agent-router#router/readWorkspaceFile'))
+  // EVO-003 Phase 2（§4.3）：statsExport 描述符——与 stats 相邻注册，
+  // strict request/result codec 挂接（CSV 导出 RPC 面）。
+  check('statsExport RPC descriptor present (C-3 CSV export)', contribution.invocations.some((d) => d.method === 'statsExport' && d.id === 'dsh-agent-router#router/statsExport' && d.parameters[0].codec.schema === wireCodecs.statsExportRequest && d.result.schema === wireCodecs.statsExportResult))
   const cliStatusCodec = wireCodecs.cliStatusResult.parse({ ok: true, message: '已登录', loggedIn: true })
   check('cliStatusResult parses', cliStatusCodec.ok === true && cliStatusCodec.loggedIn === true)
   const cliModelsCodec = wireCodecs.cliModelsResult.parse({ ok: true, message: 'm', models: ['a'] })
@@ -1192,6 +1226,45 @@ console.log('RouterService:')
   service.reset()
   check('reset clears', service.statsSnapshot().totals.length === 0)
 
+  // EVO-003 Phase 2（§4.3）：statsExport——CSV 列齐全（11 列 §4.3 清单）+
+  // 非法 range/level 服务层校验（ok:false + 明确文案；与 cliModels 先例同构）。
+  service.record({ agentId: 'vision', provider: 'deepseek-official', model: 'deepseek-v4-pro', ok: true, ms: 30, inputTokens: 100, outputTokens: 20 })
+  const exportOk = service.statsExport({ range: '7d', level: 'agent' })
+  check('statsExport returns CSV with all 11 columns (§4.3)', exportOk.ok === true && exportOk.csv.split('\n')[0] === 'date,agent,account,model,calls,errors,inputTokens,outputTokens,p50ms,p95ms,costEstimate' && exportOk.csv.split('\n')[1].startsWith(`${new Date().toISOString().slice(0, 10)},vision,deepseek-official,deepseek-v4-pro,`))
+  const exportBadRange = service.statsExport({ range: '1y', level: 'agent' })
+  check('statsExport rejects invalid range (ok:false + message)', exportBadRange.ok === false && exportBadRange.message.includes('range') && exportBadRange.csv === undefined)
+  const exportBadLevel = service.statsExport({ range: '7d', level: 'model' })
+  check('statsExport rejects invalid level (ok:false + message)', exportBadLevel.ok === false && exportBadLevel.message.includes('level'))
+
+  // EVO-003 Phase 2（W-4 / ARCH-002 IBC-1）：service 层开关往返——
+  // applyStatsSettings 读 settings.stats.persist 热同步 store.setPersist；
+  // 开→关先 flush（不丢已记录事件）、false 期纯内存、关→开不双计。
+  {
+    const w4Work = mkdtempSync(join(tmpdir(), 'router-w4-'))
+    const w4Root = new Context()
+    const w4 = new RouterService(w4Root, null, { dir: join(w4Work, 'stats'), flushThreshold: 50 })
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+    w4.attach({ get: () => ({ enabled: true, stats: { persist: true } }) })
+    w4.applyStatsSettings()
+    await sleep(80)
+    w4.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 10, inputTokens: 1 })
+    w4.attach({ get: () => ({ enabled: true, stats: { persist: false } }) })
+    w4.applyStatsSettings()
+    await sleep(80)
+    const dailyFile = readdirSync(join(w4Work, 'stats')).find((n) => /^daily-.*\.jsonl$/.test(n))
+    check('W-4 service toggle-off flushes pending events first (nothing lost)', !!dailyFile && readFileSync(join(w4Work, 'stats', dailyFile), 'utf8').split('\n').filter((l) => l !== '').length === 1)
+    w4.record({ agentId: 'draw', provider: 'openai', model: 'dall-e-3', ok: true, ms: 5 })
+    await w4.stats.flush()
+    check('W-4 false period stays memory-only (explicit flush writes nothing)', readFileSync(join(w4Work, 'stats', dailyFile), 'utf8').split('\n').filter((l) => l !== '').length === 1)
+    check('W-4 timeline continuous across toggle (both agents visible)', w4.statsSnapshot().totals.length === 2)
+    w4.attach({ get: () => ({ enabled: true, stats: { persist: true } }) })
+    w4.applyStatsSettings()
+    await sleep(80)
+    check('W-4 toggle-on with live memory: no double-count of disk data', w4.statsSnapshot().totals.find((t) => t.agentId === 'vision')?.calls === 1)
+    await w4.stats.close()
+    rmSync(w4Work, { recursive: true, force: true })
+  }
+
   check('recentAttachmentBlocks empty', service.recentAttachmentBlocks(null).length === 0)
 
   // 附件按需显式派发：序号映射 / 越界报错 / includeImages 快捷方式 / 默认不携带。
@@ -1701,7 +1774,7 @@ console.log('apply wiring:')
     const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
     await app
     check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
-    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 16 && registeredContribution.package === 'dsh-agent-router')
+    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 17 && registeredContribution.package === 'dsh-agent-router')
     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
     check('oauth callback route registered', webRoute && webRoute.kind === 'exact' && webRoute.path === '/router-oauth/callback' && typeof webRoute.handler === 'function')
     // R3 F-3：真实 service 上断言惰性注入点——apply 后 starter 可用但 1455
@@ -1722,6 +1795,11 @@ console.log('apply wiring:')
   // EVO-002 Step 2/3：ChatGPT preset 凭据模块 + 1455 惰性 loopback 回调服务。
   await runOauthCredentialTests(check)
   await runLoopbackTests(check)
+
+  // EVO-003 Phase 2（C-3）：统计持久化模块测试接入 smoke（runStatsTests 与
+  // oauth-credentials 同构导出；独立入口 node tests/stats.mjs 互补——执行包
+  // next_commands 两列均绿）。四件套/版本迁移/往返/W-4 内核语义全量回归。
+  await runStatsTests(check)
 }
 
 // 7.5 准入包装机制验证：真实 LlmRuntime 上的 twin 路由

@@ -18,6 +18,12 @@
  * - CSV 导出：列齐全（date/agent/account/model/calls/errors/inputTokens/outputTokens/p50ms/p95ms/costEstimate）
  *   + p50/p95 明细分位 + range 过滤 + 引号转义 + agent/account 两 level
  * - persist=false 纯内存（W-4 回退开关的内核语义）
+ * - F1（R1 前置项）：persist=false 时 load/prune/quarantine/heal/reset 全部
+ *   磁盘路径门控（不读不写——"纯内存=现状行为"语义补全）
+ * - F2（R1 前置项）：record() 永不 throw（注入 getAgentName 抛错不击穿调用路径）
+ * - F4（R1 前置项）：队列满丢弃的子集身份断言（保留最新，非最旧）
+ * - W-4（ARCH-002 IBC-1）：persist 开关往返语义（开→关先 flush 不丢事件；
+ *   关→开内存非空跳过 reload 防双计 / 重启后空内存全量恢复 + 重建 index）
  * - flushSync（进程优雅退出路径）
  * - 依赖面结构断言：仅 node: 内建导入（不反向依赖 service.js —— 无环）
  *
@@ -155,6 +161,9 @@ export async function runStatsTests(check) {
     await store.flush()
     const lines = readFileSync(join(work, 'stats', `daily-${D0}.jsonl`), 'utf8').split('\n').filter((l) => l !== '')
     check('only bounded subset persisted (3 newest of 5)', lines.length === 3)
+    // F4（R1 前置项）：子集身份断言——保留的必须是最新 3 条（ms 2,3,4），
+    // 而非最旧 3 条（ms 0,1,2）。旧内核若错丢最新（shift 改 pop）本断言必败。
+    check('dropped subset is the oldest two (F4: persisted rows are ms 2,3,4 by identity)', lines.map((l) => JSON.parse(l).ms).join(',') === '2,3,4')
     await store.close()
     rmSync(work, { recursive: true, force: true })
   }
@@ -381,7 +390,95 @@ export async function runStatsTests(check) {
     rmSync(work, { recursive: true, force: true })
   }
 
-  // ── 15. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
+  // ── 15. F1（R1 前置项）：persist=false 时全部磁盘路径门控（不读不写）──
+  console.log('persist=false disk-path gating (F1):')
+  {
+    const work = mkdtempSync(join(tmpdir(), 'stats-f1-'))
+    const dir = join(work, 'stats')
+    mkdirSync(dir, { recursive: true })
+    // 三类会被写路径触碰的现场：超期文件（load 首步 prune 会删）、窗口内
+    // 坏行文件（heal 会重写清除）、目录占位 daily 名（quarantine 会 rename
+    // 保留现场 + 重建空文件）+ 超期 index 项（prune 会裁剪镜像）。
+    writeFileSync(join(dir, 'daily-2020-01-01.jsonl'), `${lineOf({ at: Date.UTC(2020, 0, 1) })}\n`)
+    writeFileSync(join(dir, `daily-${D0}.jsonl`), `${lineOf()}\nnot-json garbage\n`)
+    mkdirSync(join(dir, 'daily-2026-01-14.jsonl'))
+    writeFileSync(join(dir, 'index.json'), JSON.stringify({ schemaVersion: 1, generatedAt: 0, days: { '2020-01-01': { calls: 1, errors: 0, tokens: 3, ms: 10, cost: 0, inputTokens: 1, outputTokens: 2 } } }))
+    const before = readdirSync(dir).sort().join(',')
+    const badContent = readFileSync(join(dir, `daily-${D0}.jsonl`), 'utf8')
+    const store = new StatsStore({ dir, persist: false, now: NOW_AT })
+    const report = await store.load()
+    check('persist=false load(): expired file NOT pruned (F1 gate)', existsSync(join(dir, 'daily-2020-01-01.jsonl')))
+    check('persist=false load(): bad-line file NOT healed (byte-identical)', readFileSync(join(dir, `daily-${D0}.jsonl`), 'utf8') === badContent)
+    check('persist=false load(): directory-occupying daily name NOT quarantined', existsSync(join(dir, 'daily-2026-01-14.jsonl')) && !readdirSync(dir).some((n) => n.includes('.corrupt-')))
+    check('persist=false load(): index.json NOT rewritten/trimmed (byte-identical dir listing)', readdirSync(dir).sort().join(',') === before)
+    check('persist=false load(): nothing folded into memory (no disk read)', store.snapshot().totals.length === 0)
+    check('persist=false load(): no heal/quarantine counters (nothing parsed)', report.skippedLines === 0 && report.corruptFiles === 0)
+    const pruneResult = store.prune()
+    check('persist=false prune(): no-op zeros + files intact', pruneResult.removedFiles === 0 && pruneResult.removedDays === 0 && readdirSync(dir).sort().join(',') === before)
+    // false 期清空（W-4 IBC-1 ②）：纯内存清零 = 现状 resetStats 行为；盘上
+    // 数据不动（无 backup、无删除——磁盘快照留给重新启用后恢复）。
+    store.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 1, at: T0 })
+    const resetOut = await store.reset()
+    check('persist=false reset(): memory cleared, no backup dir, disk untouched', store.snapshot().totals.length === 0 && resetOut.backupDir === '' && readdirSync(dir).sort().join(',') === before)
+    await store.close()
+    rmSync(work, { recursive: true, force: true })
+  }
+
+  // ── 16. F2（R1 前置项）：record() 永不 throw——注入函数抛错不击穿调用路径
+  console.log('record() never throws on injected-function failure (F2):')
+  {
+    const work = mkdtempSync(join(tmpdir(), 'stats-f2-'))
+    const dir = join(work, 'stats')
+    // getAgentName 是 service.getAgent 迁移缝（Phase 2 注入）——注入函数抛错
+    // 不得击穿 #fold/record（service.js 池 catch 语境依赖"record 永不 throw"）。
+    const store = new StatsStore({ dir, persist: false, getAgentName: () => { throw new Error('injected getAgentName boom') } })
+    let threw = false
+    try {
+      store.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 10, inputTokens: 1, at: T0 })
+    } catch {
+      threw = true
+    }
+    check('record() swallows injected getAgentName throw (never-throw invariant)', threw === false)
+    // 抛错后 store 保持可用（后续正常注入下继续聚合）。
+    store.getAgentName = (id) => `name:${id}`
+    store.record({ agentId: 'draw', provider: 'openai', model: 'dall-e-3', ok: true, ms: 5, at: T0 })
+    check('store remains usable after swallowed record failure', store.snapshot().totals.some((t) => t.agentId === 'draw' && t.calls === 1))
+    await store.close()
+    rmSync(work, { recursive: true, force: true })
+  }
+
+  // ── 17. W-4（ARCH-002 IBC-1）：persist 开关往返语义（开→关→开，统计不损）
+  console.log('W-4 persist toggle round-trip:')
+  {
+    const work = mkdtempSync(join(tmpdir(), 'stats-w4-'))
+    const dir = join(work, 'stats')
+    const a = new StatsStore({ dir, flushThreshold: 50, now: NOW_AT })
+    a.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 10, inputTokens: 1, at: T0 })
+    await a.setPersist(false)
+    check('setPersist(false) flushes pending queue first (recorded event never lost)', readFileSync(join(dir, `daily-${D0}.jsonl`), 'utf8').split('\n').filter((l) => l !== '').length === 1)
+    a.record({ agentId: 'draw', provider: 'openai', model: 'dall-e-3', ok: true, ms: 20, at: T0 })
+    await a.flush()
+    check('events during persist=false stay memory-only (explicit flush writes nothing)', readFileSync(join(dir, `daily-${D0}.jsonl`), 'utf8').split('\n').filter((l) => l !== '').length === 1)
+    check('timeline continuous in memory across toggle-off (both agents visible)', a.snapshot().totals.length === 2)
+    await a.setPersist(true)
+    check('setPersist(true) with live memory skips reload (no double-count of disk data)', a.snapshot().totals.find((t) => t.agentId === 'vision')?.calls === 1)
+    check('setPersist(true) rebuilds index mirror on re-enable', existsSync(join(dir, 'index.json')))
+    a.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 5, at: T0 })
+    await a.close()
+    const rows = readFileSync(join(dir, `daily-${D0}.jsonl`), 'utf8').split('\n').filter((l) => l !== '').map((l) => JSON.parse(l))
+    check('round-trip loses no data: pre-switch + post-re-enable events persisted', rows.filter((r) => r.agentId === 'vision').length === 2)
+    check('memory-only semantics held for false-period events (P7: droppable by design)', !rows.some((r) => r.agentId === 'draw'))
+    // false 期重启后重新启用：内存为空 → load 全量恢复磁盘聚合（IBC-1 ①）。
+    // 构造 persist=false 模拟"启动时设置即为关"的接线形态，随后开启开关。
+    const b = new StatsStore({ dir, now: NOW_AT, persist: false })
+    await b.setPersist(true)
+    const restored = b.snapshot()
+    check('re-enable after restart (empty memory) reloads disk aggregates in full', restored.totals.find((t) => t.agentId === 'vision')?.calls === 2 && restored.totals[0]?.name === restored.totals[0]?.agentId)
+    await b.close()
+    rmSync(work, { recursive: true, force: true })
+  }
+
+  // ── 18. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
   console.log('dependency surface (acyclic):')
   {
     const source = readFileSync(new URL('../lib/stats.js', import.meta.url), 'utf8')
