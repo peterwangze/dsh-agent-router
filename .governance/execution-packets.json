@@ -16,7 +16,7 @@
     "EVO-002": {
       "task_id": "EVO-002",
       "priority": "P0",
-      "status": "Step 1-6 实现闭环待审（Step 6: 5f5a38b/522025e/f9d8bf0，733/0，EV-048——R7 审查中）。开放决策项：出口①真机首联（用户在场）+ 出口③设备码流排期 + DEC-022-D 转 Step 7",
+      "status": "Step 1-6 实现闭环（Step 6: 5f5a38b/522025e/f9d8bf0，733/0，EV-048；R7 APPROVED_WITH_NOTES/0，EV-050/054 链）。**Step 7 收尾批次派发中（2026-08-23）**：R7-F1 W-5 旁路（通用 OAuth 区渲染 preset 账号双卡 + 通用删除仅 unset→活 token 残留+池悬挂引用——deleteOauthAccount 对 preset 分流至 W-5 联动或通用区过滤）+ R7-F2 删除成功文案（复用 oauthTokenBack 语义错误——新增 presetDeleted 键）+ R7-F4 deletePresetAccount 忽略 oauthLogout ok:false（失败提示/重试入口）+ R7-F5 测试隔离代理 env（HTTPS_PROXY 机器 smoke 直连断言+C-9-1 必败）+ R7-F3 ProxyAgent 按 proxyUrl 缓存 + R6-F1 kill-switch 冷凭据断言（Step 3 遗留）+ DEC-022-D 版本指纹 + R7-F9 执行包文件枚举刷新（rpc.js+client-render 列——Coordinator 治理记录，不属 Developer）。开放决策项：出口①真机首联（用户在场）+ 出口③设备码流排期",
       "goal": "[unchanged] C-1 ChatGPT 订阅 OAuth 接入 v0.3.0 全量交付：preset 账号 + 独立凭据文件 + 1455 loopback + codex-responses 协议分支（SSE 聚合，已交付）+ Q2 per-protocol 能力接口 + 合规三层 kill-switch + C-9 埋点启动",
       "product_success_contract": {
         "user": "dsh-agent-router 插件用户（DSH 主 agent 持有者，持有 ChatGPT Plus/Pro 订阅）",
@@ -260,6 +260,17 @@
       "next_commands": ["node tests/<新文件>.mjs"],
       "done_definition": ["0 FAIL + 判别性推演留痕 + 覆盖声明（测/不测+理由）+ Test Reviewer APPROVED + commit（DEV-002 前缀）"],
       "source": "plan-tracker.md DEV-002 行 + RISK-001（主轨道）+ session-snapshot 遗留任务 + FIX-002 R7/R8 审查链（takeover 语义基线 72b2670/0b3c15d）"
+    },
+    "FIX-003C": {
+      "task_id": "FIX-003C",
+      "priority": "P1",
+      "status": "派发中（2026-08-23，Developer 承接 c0ee8dc2 会话）——FIX-003 R1 遗留收尾批次",
+      "goal": "FIX-003 R1 审查 8 发现中的代码面三条最小修：F-1（P1）dshHomeAttachmentsRoot env 缺省回退 homedir() 缺 .dsh（L424，与自身注释及宿主默认 homedir()/.dsh 矛盾——1 行修复 join(homedir(), '.dsh')）；F-3（P1）哈希兜底分支与环境 fallback 无测试（补 B13c/B13d/B13e 三条判别：宿主仍拒→哈希兜底接受 / 哈希不符→undefined / env fallback 路径）；F-2（P2）probeImageDimensions WebP VP8X 长度门 off-by-N（入口 24 vs 需 30→截断头返回 {1,1} 仅元数据错）",
+      "allowed_change_scope": ["lib/attachments.js", "tests/routing-paths.mjs（新增 B13c/d/e 断言）"],
+      "required_evidence": ["evidence-log entry（EV 行）", "node tests/routing-paths.mjs 全绿输出", "node tests/smoke.mjs 0 FAIL（849 基线——回归信号）"],
+      "next_commands": ["node tests/routing-paths.mjs", "node tests/smoke.mjs"],
+      "done_definition": ["F-1/F-2/F-3 三修落点明确 + routing-paths 101/101（98+3）+ smoke 850/0（849 基线）零回退 + commit（FIX-003C 前缀）", "Code Reviewer 审查 APPROVED"],
+      "source": "review-FIX-003-R1.md（F-1/F-2/F-3）+ EV-054 台账 + 用户 2026-08-23 候选确认"
     }
   }
 }
