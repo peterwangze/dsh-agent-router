@@ -108,6 +108,90 @@
         "Commit per step with EVO-002 prefix and push completed for this task"
       ],
       "source": "plan-tracker.md EVO-002 任务行 + docs/architecture/evolution-roadmap-v1.md §3（ADR-005）+ EV-028（PoC 发现：SSE 聚合路径/代理发现 chatgpt.com 需代理 7890 而 auth.openai.com 直连/软轮换宽限窗/V-EVO-2c 自标识可行/gpt-5.3 不在白名单）"
+    },
+    "EVO-003": {
+      "task_id": "EVO-003",
+      "priority": "P1",
+      "status": "进行中（2026-08-23 派发 Phase 1）——Phase 1：lib/stats.js 持久化内核 + tests/stats.mjs（E6-a/E7-a/E8/§4.2 四件套，不触碰 service.js/schemas.js/smoke.mjs）；Phase 2（service.js 委托迁移 + schemas.js W-4 persist 开关 + smoke 断言 + RPC statsExport）串行等待 EVO-002 Step 5 释放 lib/service.js 文件锁（M7.6 无 worktree 参数 → 重叠面串行化）",
+      "goal": "C-3 统计持久化（ADR-006）：lib/stats.js 分离（service.js 2965 基线净减 ~220）+ DSH_HOME 按天 JSONL + 异步批量 flush + 数据安全四件套 + 成本单价表 + CSV 导出 + W-4 persist 开关往返语义——重启保留 + 按天聚合/p50/p95/成本",
+      "product_success_contract": {
+        "user": "dsh-agent-router 插件用户",
+        "job_to_be_done": "统计面板数据重启不丢；可看按天聚合/p50/p95/成本估算；可导出 CSV",
+        "non_goals": [
+          "不做 C-4 失败分类落地（v0.3.2；errorClass 仅 v1 行格式预留字段——§4.3 向前兼容）",
+          "不引入 SQLite/原生依赖（E6 已裁 JSONL）",
+          "统计写绝不反压调用路径（E7-a 性能红线）",
+          "Phase 1 不触碰 lib/service.js、lib/schemas.js、tests/smoke.mjs（EVO-002 文件锁）",
+          "backup 目录不自动清理（用户自治）"
+        ],
+        "success_metrics": [
+          "重启后统计保留（v0.3.1 出口条件①）",
+          "node tests/stats.mjs 四件套用例全绿（原子写/自愈计数/版本迁移/prune+软删除）",
+          "kill -9 模拟：无半行残留或不完整行被自愈跳过（§4.2 验证列）"
+        ],
+        "competitive_baseline": "LiteLLM 本地单价表（litellm-custom-pricing.md §2/§5 对标）+ OpenRouter usage.cost 直读双口径（E8）",
+        "done_definition": [
+          "v0.3.1 出口条件八项（roadmap §2.1）逐项满足并记录证据",
+          "每工作单元独立 commit（EVO-003 前缀）+ Code Reviewer 审查链 APPROVED（review-EVO-003-R*.md）",
+          "产品成功证据（重启保留实测）入 evidence-log 且含结构化事实 JSON"
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "record 事件入有界内存队列（微秒级 push，零阻塞）→ 异步批量 append $DSH_HOME/dsh-agent-router/stats/daily-YYYY-MM-DD.jsonl（每行 at/agentId/provider/model/ok/ms/tokens/errorClass/costEstimate/v）→ 重启加载恢复聚合 + index.json（非权威，可从明细重建）",
+        "command": "node tests/stats.mjs",
+        "expected_output": "全部断言 0 fail：存储往返/kill-9 无半行/坏行自愈 skippedLines+corrupt rename 现场/v1→v2 migrateLine/retentionDays prune/软删除 stats-backup-<ts>/CSV 列齐全（date/agent/account/model/calls/errors/inputTokens/outputTokens/p50ms/p95ms/costEstimate）/队列满丢弃计数 statsSelfReport.dropped",
+        "last_run": {"status": "planned", "exit_code": null, "summary": "Phase 1 起步——tests/stats.mjs 新增"},
+        "demo_evidence": "tests/stats.mjs 输出 + .governance/review-EVO-003-R1.md"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {"threshold": "record() = 一次数组 push（E7-a）；flush 异步批量；绝不反压", "validation": "tests/stats.mjs 队列/flush 用例", "status": "planned", "evidence": "tests/stats.mjs 输出", "exception": ""},
+          "reliability": {"threshold": "JSONL 单行原子 append；index temp+rename；崩溃丢失窗口 ≤5s（P7：可丢统计不可损用户数据）", "validation": "kill -9 模拟用例", "status": "planned", "evidence": "tests/stats.mjs 输出", "exception": ""},
+          "security": {"threshold": "统计行不含凭据/token 值；corrupt 文件 rename 保留现场不静默丢弃", "validation": "行内容断言", "status": "planned", "evidence": "tests/stats.mjs 输出", "exception": ""},
+          "maintainability": {"threshold": "stats.js 职责 ≤3 句（聚合/持久化/生命周期 API）；仅依赖 node:fs/node:path 与 schemas 常量，被 service.js 消费不反向依赖（无环）", "validation": "Code Reviewer 设计一致性检查", "status": "planned", "evidence": "review-EVO-003-R*.md", "exception": ""}
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "Phase 2 完成后：统计面板重启数据保留 + 按天/agent/账号视图 + CSV 导出（Phase 1 为其持久化内核）",
+        "demo_path": "重启 DSH → 统计面板数据保留；node tests/stats.mjs 全绿",
+        "scope_guard": "Phase 1 仅新增 lib/stats.js 与 tests/stats.mjs；禁止修改 lib/service.js、lib/schemas.js、lib/client.js、tests/smoke.mjs（EVO-002 文件锁/串行集成）；Phase 2 集成点待 Coordinator 解锁后另行派发",
+        "rollback_plan": "Phase 1 纯新增文件——revert 单 commit 即回滚（ADR-006 低风险）",
+        "status": "planned",
+        "evidence": "evidence-log EVO-003 条目 + review-EVO-003-R*.md"
+      },
+      "interruption_policy": {
+        "mode": "critical-only",
+        "critical_triggers": [
+          "实现与 ADR-006/§4 设计（E6-a/E7-a/四件套）冲突时停下上报",
+          "需要触碰锁内文件（service.js/schemas.js/smoke.mjs）才能继续时上报——不得越锁",
+          "发现 §4 设计本身缺陷（如 JSONL 方案不可行证据）上报 Coordinator"
+        ],
+        "auto_execute": ["Phase 1 范围内实现/测试（不 commit——Coordinator 统一提交避免与 EVO-002 git index 竞争）"],
+        "assumption_record": {
+          "assumption": "Phase 切分：持久化内核先行，service.js 委托迁移与 schemas persist 开关随 Phase 2",
+          "basis": "M7.6 文件锁串行约束 + DEC-011 attachments.js 分离先例（§4.4）",
+          "reversibility": "纯新增文件，单 commit 回滚",
+          "validation": "Phase 1 测试全绿 + Code Reviewer R1",
+          "rollback": "revert Phase 1 commit"
+        },
+        "interruption_budget": "Phase 1 至多一次用户打断"
+      },
+      "allowed_change_scope": [
+        "Phase 1 only: lib/stats.js (new), tests/stats.mjs (new)",
+        "Keep service.js/schemas.js/client.js/smoke.mjs untouched (EVO-002 locks); no fixture sync, no version bumps"
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output (node tests/stats.mjs)",
+        "independent review evidence (Code Reviewer APPROVED, review-EVO-003-R*.md) or explicit degraded evidence"
+      ],
+      "next_commands": ["node tests/stats.mjs"],
+      "done_definition": [
+        "v0.3.1 出口条件八项（roadmap §2.1）逐项：①重启保留 ②按天聚合视图 ③p50/p95 ④成本双口径 ⑤CSV 导出 ⑥retention 90d ⑦四件套单测 ⑧W-4 persist 开关往返语义",
+        "Code Reviewer per-unit review chain APPROVED（.governance/review-EVO-003-R*.md）",
+        "Commit per unit with EVO-003 prefix"
+      ],
+      "source": "plan-tracker.md EVO-003 任务行 + docs/architecture/evolution-roadmap-v1.md §4（L321-388：E6-a/E7-a/E8/§4.2 四件套/§4.4 模块分离）+ ADR-006（L515 起）+ ARCH-002 W-4 绑定 + DEC-018 Q3（DSH_HOME + 90d 裁决）"
     }
   }
 }
