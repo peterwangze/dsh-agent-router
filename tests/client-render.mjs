@@ -171,7 +171,7 @@ export async function runClientRender(check) {
   }
 
   // ── 装配：评估浏览器包 → mock ctx → apply → 渲染 ─────────────────────
-  const captured = { registrations: [], listeners: [], uploadFileCalls: [], readWorkspaceFileCalls: [] }
+  const captured = { registrations: [], listeners: [], uploadFileCalls: [], readWorkspaceFileCalls: [], saveOps: [], oauthLogoutCalls: [], beginCalls: [], openCalls: [] }
   const fakeWindow = {
     __ModuleLoader__: { load: (payload) => { captured.bundle = payload } },
     location: { search: '', pathname: '/' },
@@ -182,8 +182,8 @@ export async function runClientRender(check) {
     // 登录轮询依赖 setTimeout 真正回调（忽略延迟立即排队），否则轮询挂死。
     setTimeout: (fn) => { setImmediate(fn); return 0 },
     clearTimeout: () => {},
-    confirm: () => true,
-    open: () => {},
+    confirm: () => confirmMode,
+    open: (url) => { captured.openCalls.push(String(url)); return { closed: true } },
     // F11 附件上传（Step 8）：AttachButton 经 FileReader 读字节 → base64 →
     // router/uploadFile RPC。测试用假 FileReader（与真实浏览器同构：readAsDataURL
     // 产出 data: URL，onload 异步回调）；文件字节由夹具的 _base64 字段提供。
@@ -214,6 +214,12 @@ export async function runClientRender(check) {
   // FIX-002-R7 F3：接管开关可切换（catalog.takeoverDefaultModel 镜像值）——
   // 默认 true 维持既有接管断言语义；false 供"开关关闭"判别双断言组。
   let takeoverSwitch = true
+  // EVO-002 Step 6：ChatGPT 实验区——experimentalOn 控制开关态（config value
+  // 镜像），presetMode 控制目录 preset 账号形态（'none'|'logged-out'|
+  // 'logged-in'），confirmMode 控制 ToS/登出/删除确认对话（decline 判别）。
+  let experimentalOn = false
+  let presetMode = 'none'
+  let confirmMode = true
   // F11 上传失败模式：true 时 remoteMock.uploadFile 返回 ok:false（错误码形状）。
   let uploadFailMode = false
   // L3 打开文件失败模式（Step 9）：true 时 remoteMock.readWorkspaceFile 返回
@@ -236,13 +242,20 @@ export async function runClientRender(check) {
               { id: 'codex', name: 'Codex 助手', type: 'cli', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', cliAgent: 'codexentry', effectiveProvider: 'cli:codexentry', effectiveModel: '', source: 'agent' },
               { id: 'vision', name: '视觉', type: 'chat', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', effectiveProvider: 'deepseek-official', effectiveModel: 'deepseek-v4-pro', source: 'main' },
             ],
-        oauthAccounts: [], pools: [], cliAgents: [
+        oauthAccounts: presetMode === 'none' ? [] : [
+          { id: 'chatgpt', name: 'ChatGPT（实验）', enabled: true, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', tokenRef: '', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.4-mini'], publicClient: false, preset: 'chatgpt-codex', presetLoggedIn: presetMode === 'logged-in' },
+        ],
+        pools: presetMode === 'none' ? [] : [
+          { id: 'main', name: '主池', enabled: true, strategy: 'healthy', accounts: ['chatgpt'], accountHealth: [] },
+        ], cliAgents: [
           { id: 'codexentry', name: 'Codex 子代理', enabled: true, command: 'codex', args: '', timeoutMs: 0, maxConcurrent: 1 },
         ],
       },
     }),
     config: async () => ({ ok: true, value: { ok: true, enabled: true, revision: 1, writable: true, value: {
       enabled: true,
+      oauthExperimental: experimentalOn,
+      oauthTosAccepted: experimentalOn,
       agents: {
         codex: { name: 'Codex 助手', type: 'cli', enabled: true, description: 'd', capabilities: ['image'], command: '', args: '', timeoutMs: 0, maxConcurrent: 1, cliAgent: 'codexentry' },
         vision: { name: '视觉', type: 'chat', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', maxRounds: 1 },
@@ -254,7 +267,9 @@ export async function runClientRender(check) {
       },
     }, user: null } }),
     stats: async () => ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [] } }),
-    save: async () => ({ ok: true, value: { ok: true, revision: 1 } }),
+    save: async (request) => { captured.saveOps.push(...((request && request.ops) ?? [])); return { ok: true, value: { ok: true, revision: 1 } } },
+    oauthBegin: async (request) => { captured.beginCalls.push(request); return { ok: true, value: { ok: true, message: '授权 URL 已生成', authUrl: 'https://auth.openai.com/oauth/authorize?x=1', state: 'st-6' } } },
+    oauthLogout: async (request) => { captured.oauthLogoutCalls.push(request); return { ok: true, value: { ok: true, message: '已登出并删除 ChatGPT 凭据文件' } } },
     reset: async () => ({ ok: true, value: { ok: true } }),
     test: async () => ({ ok: true, value: { ok: true, message: 'ok' } }),
     cliStatus: async () => cliStatusMode === 'logged-out'
@@ -820,6 +835,105 @@ export async function runClientRender(check) {
       if (listener) listener.listener()
       await new Promise((resolve) => setImmediate(resolve))
     }
+  }
+
+  // EVO-002 Step 6：ChatGPT 实验区（§3.6 默认关闭 + ToS 显式确认 + preset
+  // 账号卡 + W-5 删除联动）。判别性推演：断言 ②③④⑤⑥ 在"无实验区/无 ToS
+  // 门/无登出联动"的旧客户端代码下必败——旧代码不渲染 experimentalSwitch/
+  // presetAdd/presetLogin/presetLogout/presetDelete 元素（findAll 查空 →
+  // undefined 分支跳过点击 → 捕获数组为空 → 断言失败），saveOps 亦无
+  // oauthExperimental/oauthTosAccepted/pools 清理 op。
+  {
+    const settingsReg6 = captured.registrations.find((reg) => reg && reg.name === 'settings.section')
+    const listener6 = captured.listeners.find((entry) => entry.event === 'settings/document-updated')
+    const renderSettings6 = async (prefix) => {
+      const tree6 = await renderInto(settingsReg6.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: tOf, $on: () => () => {} }), prefix)
+      // 两级折叠（分类卡头为 dshrouter-category-head）：多模态账号区 → 高级扩展。
+      const heads6 = findAll(tree6, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head'))
+      const accountsHead6 = heads6.find((node) => textOf(node).includes(tOf('accountTitle')))
+      if (accountsHead6) accountsHead6.props.onClick()
+      const tree6b = await settle()
+      const heads6b = findAll(tree6b, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head'))
+      const advHead6 = heads6b.find((node) => textOf(node).includes(tOf('advancedSection')))
+      if (advHead6) advHead6.props.onClick()
+      return settle()
+    }
+    const experimentalSwitchOf = (tree) => {
+      // checkbox 自身无子文本（label 文本在其兄弟位置）——先按 label 文本定位
+      // dshrouter-switch，再取其 input 子节点。
+      const label6 = findAll(tree, (node) => hasClass(node, 'dshrouter-switch') && textOf(node).includes(tOf('experimentalSwitch')))[0]
+      return label6 ? (label6.children ?? []).find((child) => child && child.type === 'input') : undefined
+    }
+    // ① 默认关闭：开关未勾选 + preset 入口隐藏（§3.6 默认关闭）。
+    {
+      const tree6 = await renderSettings6('step6-off')
+      const switch6 = experimentalSwitchOf(tree6)
+      check('step6: experimental switch off by default (§3.6)', !!switch6 && switch6.props.checked === false)
+      check('step6: preset entry hidden while off (§3.6)', !textOf(tree6).includes(tOf('presetAdd')) && !textOf(tree6).includes(tOf('presetLogin')))
+    }
+    // ② ToS 拒绝 → 不写开关；③ 接受 → oauthExperimental + oauthTosAccepted
+    //    两 op 同时落（服务端 begin 复核的数据面）。
+    {
+      const tree6 = await renderSettings6('step6-tos')
+      confirmMode = false
+      captured.saveOps.length = 0
+      const switch6 = experimentalSwitchOf(tree6)
+      if (switch6) switch6.props.onChange({ target: { checked: true } })
+      await settle()
+      check('step6: ToS declined leaves switch untouched', captured.saveOps.filter((op) => (op.path ?? []).includes('oauthExperimental')).length === 0)
+      confirmMode = true
+      const switch6b = experimentalSwitchOf(currentTree)
+      captured.saveOps.length = 0
+      if (switch6b) switch6b.props.onChange({ target: { checked: true } })
+      await settle()
+      const ops6 = captured.saveOps.filter((op) => op.path[0] === 'oauthExperimental' || op.path[0] === 'oauthTosAccepted')
+      check('step6: ToS accepted persists switch + acceptance together', ops6.length === 2 && ops6.every((op) => op.value === true))
+      experimentalOn = true
+      presetMode = 'logged-out'
+      if (listener6) listener6.listener()
+      await new Promise((resolve) => setImmediate(resolve))
+    }
+    // ④ 开启后：preset 账号卡（登录按钮）+ 添加入口可见。
+    {
+      const tree6 = await renderSettings6('step6-on')
+      check('step6: preset card renders with login button', textOf(tree6).includes(tOf('presetLogin')) && textOf(tree6).includes('chatgpt'))
+      check('step6: preset add entry visible when on', textOf(tree6).includes(tOf('presetAdd')))
+      // ⑤ 登录点击 → oauthBegin（preset 分支）→ 授权页弹窗（open 捕获）。
+      captured.beginCalls.length = 0
+      captured.openCalls.length = 0
+      const loginBtn6 = buttonsOf(tree6).find((node) => textOf(node) === tOf('presetLogin'))
+      if (loginBtn6) loginBtn6.props.onClick()
+      await settle()
+      check('step6: login click fires oauthBegin for preset account', captured.beginCalls.length === 1 && captured.beginCalls[0]?.accountId === 'chatgpt')
+      check('step6: login opens authorization popup url', captured.openCalls.length === 1 && captured.openCalls[0].includes('auth.openai.com'))
+    }
+    // ⑥ 登出（§3.6 凭据删除路径）+ 删除账号（W-5：凭据删除 + 池引用清理
+    //    + 账号 unset 三步一次完成）。
+    {
+      presetMode = 'logged-in'
+      if (listener6) listener6.listener()
+      await new Promise((resolve) => setImmediate(resolve))
+      const tree6 = await renderSettings6('step6-logout')
+      captured.oauthLogoutCalls.length = 0
+      const logoutBtn6 = buttonsOf(tree6).find((node) => textOf(node) === tOf('presetLogout'))
+      if (logoutBtn6) logoutBtn6.props.onClick()
+      await settle()
+      check('step6: logout click fires oauthLogout (credential deletion)', captured.oauthLogoutCalls.length === 1 && captured.oauthLogoutCalls[0]?.accountId === 'chatgpt')
+      captured.saveOps.length = 0
+      captured.oauthLogoutCalls.length = 0
+      const delBtn6 = buttonsOf(tree6).find((node) => textOf(node) === tOf('presetDelete'))
+      if (delBtn6) delBtn6.props.onClick()
+      await settle()
+      const poolOps6 = captured.saveOps.filter((op) => op.path.join('/') === 'pools/main/accounts')
+      const unsetOps6 = captured.saveOps.filter((op) => op.op === 'unset' && op.path.join('/') === 'oauthAccounts/chatgpt')
+      check('step6: delete cleans credential + pool refs + entry (W-5)', captured.oauthLogoutCalls.length === 1 && poolOps6.length === 1 && Array.isArray(poolOps6[0].value) && poolOps6[0].value.length === 0 && unsetOps6.length === 1)
+    }
+    // 复位（不污染后续块）。
+    experimentalOn = false
+    presetMode = 'none'
+    confirmMode = true
+    if (listener6) listener6.listener()
+    await new Promise((resolve) => setImmediate(resolve))
   }
 
   // route_agent 工具卡片：解析标记渲染缩略图；兼容旧会话真实图片块；运行态显示处理中。
