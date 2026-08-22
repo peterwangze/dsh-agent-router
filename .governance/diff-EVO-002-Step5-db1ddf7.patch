@@ -1,0 +1,735 @@
+commit db1ddf7512956a5c7a5749dfe1412a562b1a2879
+Author: peterwangze <1337917121@qq.com>
+Date:   Sat Aug 22 18:40:17 2026 +0800
+
+    EVO-002 Step 5: codex-responses protocol branch (SSE aggregation + R5-F1 call-time kill-switch + R4-F1/R4-F2 hardening)
+    
+    runOauthChat 4th protocol branch -> runCodexResponsesChat: stream:true forced (EV-028 P5 stream:false rejected), SSE 12-event chain aggregation (delta concat fallback / output_item.done slot text / terminal usage / failed+error events), H3-9 headers (originator=dsh-agent-router honest self-id, chatgpt-account-id, OpenAI-Beta responses=experimental), H3-14 error semantics (401/403 re-login, 429 resets_at minutes).
+    
+    R5-F1 (P2, must-close): resolvePresetCredential entry kill-switch -- oauthExperimental=false reports 实验通路已关闭 before any credential read or refresh network call; single point covers runOauthChat + oauthDiscover consumers (resolveOauthToken preset arm now delegates).
+    
+    R4-F1 (P3, promoted must-close): refresh timeout timer now covers headers + payload (json) phase -- body-phase stall abort closes stale-lock-takeover overlap window (also dissolves R5-F3 same-instance lockToken degradation); R4-F2: AbortController typeof guard removed (fail-loud Node>=18 baseline). R5-F4: originator value pinned in smoke.
+    
+    Tests: smoke 659->683 (19 branch assertions + 5 body-phase timeout assertions), oauth-credentials 75->80; metrics 31 / parity 14 / loopback 20 all green, 0 regression.
+
+diff --git a/lib/oauth-credentials.js b/lib/oauth-credentials.js
+index d761d1c..26cb59c 100644
+--- a/lib/oauth-credentials.js
++++ b/lib/oauth-credentials.js
+@@ -207,9 +207,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+  * 失败（网络错误 / 非 2xx / 响应畸形 / 超时）→ REFRESH_FAILED（HTTP 响应存在
+  * 时附带 error.status 数值属性，供上层区分 401 终态与瞬时故障；超时附
+  * error.timedOut === true 且 message 含 "timeout"——封闭码集不变）。
+- * 超时为协作式：signal 传入 fetch init（生产 undici 尊重 signal；注入实现
+- * 需监听 init.signal 才能被超时中止）。消息只含状态码与原因，不含任何
+- * token 值（P7；超时消息为固定格式，不内联底层中止错误文本）。
++ * 超时为协作式：signal 传入 fetch init 且覆盖 headers 与 payload（json）两
++ * 相位（R4-F1：headers 落定后 body 停滞也会被 abort 终止；生产 undici 尊重
++ * signal，注入实现需监听 init.signal 才能被超时中止）。消息只含状态码与
++ * 原因，不含任何 token 值（P7；超时消息为固定格式，不内联底层中止错误文本）。
+  * @param timeoutMs - 超时毫秒数（缺省/非法 → REFRESH_TIMEOUT_MS）。
+  */
+ async function refreshCredential(cred, fetchImpl, timeoutMs) {
+@@ -220,65 +221,78 @@ async function refreshCredential(cred, fetchImpl, timeoutMs) {
+   })
+   const ms = typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : REFRESH_TIMEOUT_MS
+   // F-01a：自建 AbortController + reffed setTimeout（而非 AbortSignal.timeout——
+-  // 其计时器 unref，空事件循环下永不触发，超时保证将依赖 fetch 侧保活 I/O）；
+-  // fetch 落定后即清理计时器，不留唤醒源。
+-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined
+-  const timer = controller ? setTimeout(() => controller.abort(), ms) : undefined
+-  let response
++  // 其计时器 unref，空事件循环下永不触发，超时保证将依赖 fetch 侧保活 I/O）。
++  // R4-F2（Step 5）：宿主基线 Node ≥18（globalThis.fetch 所在面，:429 fail-loud
++  // 同基线）AbortController 必在——删除 typeof 守卫直用，消除"静默失去全部
++  // 超时保证"的不可达降级分支。
++  // R4-F1（Step 5 升格必闭）：timer 覆盖 headers + payload 两相位——fetch 落定
++  // 后不清理，json() 落定（成功/失败/超时）后才在 finally 清除。headers-后
++  // body 停滞（坏代理/病态服务器）时 undici abort 会 reject 进行中的 body
++  // 读取，持锁时长全程有界（< CREDENTIAL_LOCK_STALE_MS），消除陈旧接管重叠
++  // 窗（连带消解 R5-F3 同实例 lockToken 退化角）。
++  const controller = new AbortController()
++  const timer = setTimeout(() => controller.abort(), ms)
++  const timeoutError = () => {
++    const error = credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, `刷新请求超时（timeout after ${ms}ms，未在时限内得到响应）`)
++    error.timedOut = true
++    return error
++  }
+   try {
+-    response = await fetchImpl(CHATGPT_PRESET.tokenUrl, {
+-      method: 'POST',
+-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
+-      body: String(body),
+-      ...(controller ? { signal: controller.signal } : {}),
+-    })
+-  } catch (error) {
+-    // 以 signal.aborted 判定超时（对注入 fetch 的错误形状鲁棒）。
+-    if (controller && controller.signal.aborted) {
+-      const timeoutError = credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, `刷新请求超时（timeout after ${ms}ms，未在时限内得到响应）`)
+-      timeoutError.timedOut = true
+-      throw timeoutError
++    let response
++    try {
++      response = await fetchImpl(CHATGPT_PRESET.tokenUrl, {
++        method: 'POST',
++        headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
++        body: String(body),
++        signal: controller.signal,
++      })
++    } catch (error) {
++      // 以 signal.aborted 判定超时（对注入 fetch 的错误形状鲁棒）。
++      if (controller.signal.aborted) throw timeoutError()
++      throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, `刷新请求失败（网络错误）：${errorMessage(error)}`)
++    }
++    if (!response || typeof response.ok !== 'boolean') {
++      throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, '刷新响应格式无效（缺少 ok 字段）')
++    }
++    if (!response.ok) {
++      const status = typeof response.status === 'number' ? response.status : 0
++      const error = credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, `刷新失败：HTTP ${status}（refresh token 可能已失效，请重新登录）`)
++      if (status) error.status = status
++      throw error
++    }
++    let payload
++    try {
++      payload = await response.json()
++    } catch (error) {
++      // body 相位中止（headers-后停滞）与真实解析错误分流：前者归一为超时
++      // 终态（timedOut 元数据），后者保持畸形响应语义。
++      if (controller.signal.aborted) throw timeoutError()
++      throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, '刷新响应不是合法 JSON')
++    }
++    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
++      throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, '刷新响应必须是 JSON 对象')
++    }
++    const access = payload.access_token
++    const refresh = payload.refresh_token
++    const expiresIn = payload.expires_in
++    if (typeof access !== 'string' || !access) {
++      throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, '刷新响应缺少 access_token')
++    }
++    if (typeof refresh !== 'string' || !refresh) {
++      throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, '刷新响应缺少 refresh_token（rotating 语义要求以新值覆写）')
++    }
++    if (typeof expiresIn !== 'number' || !Number.isFinite(expiresIn) || expiresIn <= 0) {
++      throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, '刷新响应缺少有效的 expires_in')
++    }
++    return {
++      type: 'oauth',
++      access,
++      refresh,
++      expires: Date.now() + expiresIn * 1000,
++      accountId: accountIdFromJwt(access) ?? (typeof cred.accountId === 'string' ? cred.accountId : ''),
+     }
+-    throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, `刷新请求失败（网络错误）：${errorMessage(error)}`)
+   } finally {
+-    if (timer) clearTimeout(timer)
+-  }
+-  if (!response || typeof response.ok !== 'boolean') {
+-    throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, '刷新响应格式无效（缺少 ok 字段）')
+-  }
+-  if (!response.ok) {
+-    const status = typeof response.status === 'number' ? response.status : 0
+-    const error = credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, `刷新失败：HTTP ${status}（refresh token 可能已失效，请重新登录）`)
+-    if (status) error.status = status
+-    throw error
+-  }
+-  let payload
+-  try {
+-    payload = await response.json()
+-  } catch {
+-    throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, '刷新响应不是合法 JSON')
+-  }
+-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+-    throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, '刷新响应必须是 JSON 对象')
+-  }
+-  const access = payload.access_token
+-  const refresh = payload.refresh_token
+-  const expiresIn = payload.expires_in
+-  if (typeof access !== 'string' || !access) {
+-    throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, '刷新响应缺少 access_token')
+-  }
+-  if (typeof refresh !== 'string' || !refresh) {
+-    throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, '刷新响应缺少 refresh_token（rotating 语义要求以新值覆写）')
+-  }
+-  if (typeof expiresIn !== 'number' || !Number.isFinite(expiresIn) || expiresIn <= 0) {
+-    throw credentialError(CREDENTIAL_ERROR_CODES.REFRESH_FAILED, '刷新响应缺少有效的 expires_in')
+-  }
+-  return {
+-    type: 'oauth',
+-    access,
+-    refresh,
+-    expires: Date.now() + expiresIn * 1000,
+-    accountId: accountIdFromJwt(access) ?? (typeof cred.accountId === 'string' ? cred.accountId : ''),
++    clearTimeout(timer)
+   }
+ }
+ 
+diff --git a/lib/service.js b/lib/service.js
+index b6703c9..e096655 100644
+--- a/lib/service.js
++++ b/lib/service.js
+@@ -498,6 +498,73 @@ function minuteKey(at) {
+   return new Date(at).toISOString().slice(0, 16)
+ }
+ 
++/**
++ * codex-responses 端点归一（pi-ai resolveCodexUrl 同款，H3-8）：空 baseURL →
++ * 官方默认 `https://chatgpt.com/backend-api`（preset 零配置语义）；已含
++ * `/codex/responses` 原样；止于 `/codex` 补 `/responses`；其余补
++ * `/codex/responses`（自定义网关/代理形态放行）。
++ */
++const CODEX_RESPONSES_DEFAULT_BASE_URL = 'https://chatgpt.com/backend-api'
++
++function resolveCodexResponsesUrl(baseURL) {
++  const raw = typeof baseURL === 'string' && baseURL.trim() ? baseURL.trim() : ''
++  const normalized = (raw || CODEX_RESPONSES_DEFAULT_BASE_URL).replace(/\/+$/, '')
++  if (normalized.endsWith('/codex/responses')) return normalized
++  if (normalized.endsWith('/codex')) return `${normalized}/responses`
++  return `${normalized}/codex/responses`
++}
++
++/**
++ * SSE 事件流解析（pi-ai parseSSE 同构；事件形状 = H3-10 / EV-028 十二事件链）：
++ * 按 `\n\n` 分帧，帧内 `data:` 行拼接（跨行 data 以 `\n` 连接），`[DONE]` 哨兵
++ * 跳过，其余 JSON.parse 后逐事件 yield；`event:` 行忽略（类型以 data JSON 的
++ * type 字段为准）。signal 中止时 cancel reader 并抛错（协作式取消）。
++ * @param {ReadableStream} body - fetch response.body（须可 getReader）。
++ * @param {AbortSignal} [signal] - 调用方取消信号（input.signal 透传）。
++ */
++async function* parseSseEvents(body, signal) {
++  if (!body || typeof body.getReader !== 'function') {
++    throw new Error('ChatGPT 端点未返回 SSE 流（response.body 不可读）')
++  }
++  const reader = body.getReader()
++  const decoder = new TextDecoder()
++  let buffer = ''
++  const onAbort = () => { void reader.cancel().catch(() => {}) }
++  signal?.addEventListener?.('abort', onAbort, { once: true })
++  try {
++    for (;;) {
++      if (signal?.aborted) throw new Error('ChatGPT 调用已被取消（signal 中止）')
++      const { done, value } = await reader.read()
++      if (signal?.aborted) throw new Error('ChatGPT 调用已被取消（signal 中止）')
++      if (done) break
++      buffer += decoder.decode(value, { stream: true })
++      let idx = buffer.indexOf('\n\n')
++      while (idx !== -1) {
++        const chunk = buffer.slice(0, idx)
++        buffer = buffer.slice(idx + 2)
++        const data = chunk
++          .split('\n')
++          .filter((line) => line.startsWith('data:'))
++          .map((line) => line.slice(5).trim())
++          .join('\n')
++          .trim()
++        if (data && data !== '[DONE]') {
++          try {
++            yield JSON.parse(data)
++          } catch {
++            throw new Error(`ChatGPT SSE 数据不是合法 JSON：${data.slice(0, 200)}`)
++          }
++        }
++        idx = buffer.indexOf('\n\n')
++      }
++    }
++  } finally {
++    signal?.removeEventListener?.('abort', onAbort)
++    try { await reader.cancel() } catch { /* 已关闭 */ }
++    try { reader.releaseLock() } catch { /* 已释放 */ }
++  }
++}
++
+ /**
+  * 宿主多模型路由服务。
+  */
+@@ -2281,6 +2348,45 @@ export class RouterService extends TypertRemoteService {
+     return store
+   }
+ 
++  /**
++   * preset 账号 → 刷新后的完整凭据对象（含 accountId，H3-7）。Step 5 从
++   * resolveOauthToken 的 preset 分支抽出：codex-responses 协议分支需要
++   * accountId 构造 chatgpt-account-id 请求头，单次 read+ensureFresh 同时
++   * 供给 access 与 accountId（E3-a：两种凭据形态在此分流，§3.4 条目 5）。
++   *
++   * 入口即 §3.6 第③层 kill-switch 调用期检查（R5-F1，Step 5 必闭）：
++   * oauthExperimental=false 时明确报"实验通路已关闭"——不读凭据文件、
++   * 不发刷新请求（网络调用不得越过开关）；单点覆盖 runOauthChat 与
++   * oauthDiscover 两个消费方。校验序与 oauthBeginPreset 同构（未知
++   * preset → kill-switch → 资源触碰）。
++   */
++  async resolvePresetCredential(account) {
++    const preset = typeof account?.preset === 'string' && account.preset.trim() ? account.preset.trim() : ''
++    if (!OAUTH_PRESET_VALUES.includes(preset)) {
++      throw new Error(`未知预设类型（preset="${preset}"）；支持的预设：${OAUTH_PRESET_VALUES.join('、')}`)
++    }
++    if (this.getState().oauthExperimental !== true) {
++      throw new Error('ChatGPT 实验通路已关闭（router.oauthExperimental）；如需使用请在设置中开启实验开关')
++    }
++    const store = this.credentialStoreFor(account)
++    const cred = await store.read()
++    if (!cred) throw new Error('该 ChatGPT 预设账号尚未登录（无凭据文件）；请先在账号卡片完成授权')
++    try {
++      return await store.ensureFresh(cred)
++    } catch (error) {
++      if (error && error.code === CREDENTIAL_ERROR_CODES.REFRESH_FAILED) {
++        // 文案对齐既有 401 重登语义；timedOut/status 元数据原样转发
++        //（R4 转发语义：timedOut=瞬时域、status=HTTP 终态域，不吞掉）。
++        const wrapped = new Error(`ChatGPT access token 刷新失败（${errorMessage(error)}）；请在账号卡片中重新登录`)
++        wrapped.code = error.code
++        if (typeof error.status === 'number') wrapped.status = error.status
++        if (error.timedOut === true) wrapped.timedOut = true
++        throw wrapped
++      }
++      throw error
++    }
++  }
++
+   /**
+    * 解析 OAuth 账号的 access token。preset 账号（如 chatgpt-codex）走凭据
+    * 模块（独立文件四元组 + ensureFresh 临期自动刷新，§3.4 条目 5）；通用
+@@ -2288,30 +2394,7 @@ export class RouterService extends TypertRemoteService {
+    */
+   async resolveOauthToken(account) {
+     const preset = typeof account?.preset === 'string' && account.preset.trim() ? account.preset.trim() : ''
+-    if (preset) {
+-      if (!OAUTH_PRESET_VALUES.includes(preset)) {
+-        throw new Error(`未知预设类型（preset="${preset}"）；支持的预设：${OAUTH_PRESET_VALUES.join('、')}`)
+-      }
+-      const store = this.credentialStoreFor(account)
+-      const cred = await store.read()
+-      if (!cred) throw new Error('该 ChatGPT 预设账号尚未登录（无凭据文件）；请先在账号卡片完成授权')
+-      let fresh
+-      try {
+-        fresh = await store.ensureFresh(cred)
+-      } catch (error) {
+-        if (error && error.code === CREDENTIAL_ERROR_CODES.REFRESH_FAILED) {
+-          // 文案对齐既有 401 重登语义；timedOut/status 元数据原样转发
+-          //（R4 转发语义：timedOut=瞬时域、status=HTTP 终态域，Step 5 消费，不吞掉）。
+-          const wrapped = new Error(`ChatGPT access token 刷新失败（${errorMessage(error)}）；请在账号卡片中重新登录`)
+-          wrapped.code = error.code
+-          if (typeof error.status === 'number') wrapped.status = error.status
+-          if (error.timedOut === true) wrapped.timedOut = true
+-          throw wrapped
+-        }
+-        throw error
+-      }
+-      return fresh.access
+-    }
++    if (preset) return (await this.resolvePresetCredential(account)).access
+     const ref = typeof account.tokenRef === 'string' && account.tokenRef.trim() ? account.tokenRef.trim() : ''
+     if (!ref) throw new Error('该 OAuth 账号未配置凭据引用（tokenRef）；请重新登录')
+     const credentials = this.ctx.get('credentials')
+@@ -2344,12 +2427,17 @@ export class RouterService extends TypertRemoteService {
+ 
+   /**
+    * OAuth 账号的 chat 直连调用（不经 llm 注册表，绝不出现在共享模型列表）。
+-   * 协议：openai-completions / anthropic / gemini。
++   * 协议：openai-completions / anthropic / gemini / codex-responses。第 4 分支
++   * codex-responses（E5）派发至 runCodexResponsesChat——ChatGPT 订阅 preset
++   * 账号经 chatgpt.com/backend-api/codex/responses 的 SSE 事件链聚合（EV-028
++   * P3 实证 stream:false 被拒，SSE 为唯一路径）；其余协议走既有 JSON 端点
++   * 分支（现状不变，P3）。
+    */
+   async runOauthChat(resolved, input) {
+     const account = resolved.account
++    const protocol = ['openai-completions', 'anthropic', 'gemini', 'codex-responses'].includes(account.protocol) ? account.protocol : 'openai-completions'
++    if (protocol === 'codex-responses') return this.runCodexResponsesChat(resolved, input)
+     const token = await this.resolveOauthToken(account)
+-    const protocol = ['openai-completions', 'anthropic', 'gemini'].includes(account.protocol) ? account.protocol : 'openai-completions'
+     const baseURL = (typeof account.baseURL === 'string' && account.baseURL.trim()) ? account.baseURL.trim().replace(/\/+$/, '') : ''
+     if (!baseURL) throw new Error(`OAuth 账号 "${resolved.accountId}" 未配置 Base URL`)
+     const agent = resolved.agent
+@@ -2463,6 +2551,155 @@ export class RouterService extends TypertRemoteService {
+     return { kind: 'chat', text: output, ...(imageRefs.length > 0 ? { images: imageRefs } : {}), usage: usageFrom(payload) }
+   }
+ 
++  /**
++   * codex-responses 协议分支（E5 / EV-028，Step 5）：ChatGPT 订阅 preset 账号
++   * 的 chat 直连——POST codex/responses（stream:true 强制：EV-028 P5 实证
++   * stream:false 被拒"Stream must be set to true"，SSE 聚合为唯一路径）。
++   * 请求构造对齐 H3-8/H3-9（Bearer + chatgpt-account-id + originator 诚实
++   * 自标识 + SSE beta 头）；错误处理对齐 H3-14（401/403 重登、
++   * 429/usage_limit_* 解析 resets_at 分钟数）；事件聚合对齐 H3-10/EV-028
++   * 十二事件链（output_text.delta 拼接兜底、output_item.done 槽位文本为准、
++   * completed/incomplete 终态取 usage、failed/error 事件抛错、未见终态视为
++   * 截断）。与既有三协议分支同构：同样的任务文本组装与返回形状
++   * { kind, text, images?, usage }；仅 preset 账号可用（accountId 随四元组
++   * 凭据供给，H3-7）。
++   */
++  async runCodexResponsesChat(resolved, input) {
++    const account = resolved.account
++    const preset = typeof account.preset === 'string' && account.preset.trim() ? account.preset.trim() : ''
++    if (!preset) {
++      throw new Error('codex-responses 协议仅支持 ChatGPT 预设账号（preset 凭据四元组含 accountId，H3-7）；请在账号卡片使用 ChatGPT 预设登录')
++    }
++    const cred = await this.resolvePresetCredential(account)
++    const agent = resolved.agent
++    const chatFiles = input.chatFiles
++    const imageRefs = [
++      ...(Array.isArray(input.images) ? input.images : []),
++      ...(Array.isArray(chatFiles?.images) ? chatFiles.images : []),
++    ]
++    const contextText = imageRefs.length > 0 ? this.recentConversationContext(input.exec?.agent) : ''
++    const text = this.composeTask(input.task, input.extra)
++      + this.composeChatFileText(chatFiles)
++      + (contextText ? `\n\n[会话上下文（主会话最近对话）]\n${contextText}\n\n请结合以上上下文理解用户需求：分析围绕用户的实际问题，引用上下文中的具体信息。` : '')
++    const system = typeof agent.systemPrompt === 'string' && agent.systemPrompt.trim()
++      ? agent.systemPrompt.trim()
++      : `你是 "${agent.name || resolved.id}" 专业 agent，通过多模型路由被调用。请直接完成任务，只输出最终结果，不要寒暄。`
++    const maxTokens = Number(agent.maxTokens) > 0 ? Number(agent.maxTokens) : undefined
++    const temperature = Number(agent.temperature) > 0 ? Number(agent.temperature) : undefined
++    const images = await this.readImagesAsDataUrls(imageRefs)
++    const url = resolveCodexResponsesUrl(account.baseURL)
++    const platform = globalThis.process?.platform ?? 'unknown'
++    const arch = globalThis.process?.arch ?? 'unknown'
++    // H3-9：Bearer + chatgpt-account-id（H3-7，凭据四元组）+ originator 诚实
++    // 自标识（E5 / V-EVO-2c：'dsh-agent-router' 实证被接受，不伪装 codex_cli）
++    // + SSE 双头（OpenAI-Beta / accept）+ 诚实 User-Agent。
++    const headers = {
++      'Content-Type': 'application/json',
++      Authorization: `Bearer ${cred.access}`,
++      'chatgpt-account-id': cred.accountId,
++      originator: 'dsh-agent-router',
++      accept: 'text/event-stream',
++      'OpenAI-Beta': 'responses=experimental',
++      'User-Agent': `dsh-agent-router (${platform} ${arch})`,
++    }
++    // H3-8 请求体（E5）：stream:true 强制；input 为 Responses 内容块形态
++    //（input_text + 带图时 input_image 追加）；include 携带加密推理内容。
++    const body = {
++      model: resolved.model,
++      store: false,
++      stream: true,
++      ...(system ? { instructions: system } : {}),
++      input: [{
++        role: 'user',
++        content: [
++          { type: 'input_text', text },
++          ...images.map((image) => ({ type: 'input_image', image_url: image.dataUrl })),
++        ],
++      }],
++      include: ['reasoning.encrypted_content'],
++      ...(maxTokens !== undefined ? { max_output_tokens: maxTokens } : {}),
++      ...(temperature !== undefined ? { temperature } : {}),
++    }
++    let response
++    try {
++      response = await globalThis.fetch(url, {
++        method: 'POST',
++        headers,
++        body: JSON.stringify(body),
++        ...(input.signal ? { signal: input.signal } : {}),
++      })
++    } catch (error) {
++      throw new Error(`OAuth 账号 "${resolved.accountId}" 端点不可达（${url}）：${errorMessage(error)}`)
++    }
++    if (!response.ok) {
++      // H3-14：401/403 → 重登；429/usage_limit_* → 解析 resets_at（unix 秒）
++      // 给出剩余分钟数；其余透传 status 与 error.message（detail 截断 400 字符）。
++      const raw = await response.text().catch(() => '')
++      let err = null
++      try { err = JSON.parse(raw)?.error ?? null } catch { /* 非 JSON 错误体按原文 */ }
++      const code = typeof err?.code === 'string' ? err.code : ''
++      let detail = raw
++      if (err && (typeof err.message === 'string' || code)) detail = err.message || code
++      detail = String(detail).slice(0, 400)
++      if (response.status === 401 || response.status === 403) {
++        throw new Error(`OAuth access token 无效或已过期（HTTP ${response.status}）${detail ? `：${detail}` : ''}；请在账号卡片中重新登录`)
++      }
++      if (response.status === 429 || /usage_limit_reached|usage_not_included|rate_limit_exceeded/i.test(code)) {
++        let when = ''
++        if (typeof err?.resets_at === 'number' && Number.isFinite(err.resets_at)) {
++          const minutes = Math.max(0, Math.round((err.resets_at * 1000 - Date.now()) / 60000))
++          when = `；约 ${minutes} 分钟后重置`
++        }
++        const plan = typeof err?.plan_type === 'string' && err.plan_type ? `，${err.plan_type} plan` : ''
++        throw new Error(`ChatGPT 用量限制（HTTP 429${plan}）${detail ? `：${detail}` : ''}${when}`)
++      }
++      throw new Error(`OAuth 调用失败 HTTP ${response.status}${detail ? `：${detail}` : ''}`)
++    }
++    // SSE 聚合（H3-10 / EV-028 十二事件链）：delta 拼接兜底 + output_item.done
++    // 槽位文本为准（pi-ai 同款替换语义）；终态事件取 usage 后停止消费；未见
++    // 终态视为流截断（单轮任务调用必须拿到完整响应）。
++    let deltaText = ''
++    const itemTexts = []
++    let usage
++    let sawTerminal = false
++    for await (const event of parseSseEvents(response.body, input.signal)) {
++      const type = typeof event?.type === 'string' ? event.type : ''
++      if (type === 'response.output_text.delta') {
++        if (typeof event.delta === 'string') deltaText += event.delta
++      } else if (type === 'response.output_item.done') {
++        const item = event.item
++        if (item && item.type === 'message' && Array.isArray(item.content)) {
++          const itemText = item.content
++            .map((part) => (part?.type === 'output_text' && typeof part.text === 'string' ? part.text : (typeof part?.refusal === 'string' ? part.refusal : '')))
++            .join('')
++          const index = Number.isInteger(event.output_index) && event.output_index >= 0 ? event.output_index : itemTexts.length
++          itemTexts[index] = itemText
++        }
++      } else if (type === 'response.completed' || type === 'response.incomplete' || type === 'response.done') {
++        sawTerminal = true
++        const terminal = event.response
++        if (terminal && typeof terminal.usage === 'object' && terminal.usage) {
++          usage = { inputTokens: terminal.usage.input_tokens ?? 0, outputTokens: terminal.usage.output_tokens ?? 0 }
++        }
++        break
++      } else if (type === 'response.failed') {
++        const failure = event.response?.error
++        const failCode = typeof failure?.code === 'string' ? failure.code : ''
++        const failMessage = typeof failure?.message === 'string' ? failure.message : ''
++        throw new Error(`ChatGPT 调用失败（response.failed${failCode ? `：${failCode}` : ''}）${failMessage ? `：${failMessage}` : ''}`)
++      } else if (type === 'error') {
++        const nested = event.error && typeof event.error === 'object' ? event.error : {}
++        const errorCode = typeof event.code === 'string' ? event.code : (typeof nested.code === 'string' ? nested.code : '')
++        const eventMessage = typeof event.message === 'string' ? event.message : (typeof nested.message === 'string' ? nested.message : '')
++        throw new Error(`ChatGPT SSE 错误事件${errorCode ? `（${errorCode}）` : ''}${eventMessage ? `：${eventMessage}` : ''}`)
++      }
++    }
++    if (!sawTerminal) throw new Error('ChatGPT SSE 流未返回终态事件（response.completed）——响应可能被截断')
++    const output = (itemTexts.filter((part) => typeof part === 'string' && part).join('\n') || deltaText).trim()
++    if (!output) throw new Error('OAuth 调用返回中没有文本内容')
++    return { kind: 'chat', text: output, ...(imageRefs.length > 0 ? { images: imageRefs } : {}), usage }
++  }
++
+   // ── 统计 ──────────────────────────────────────────────────────────────────
+ 
+   resetStats() {
+diff --git a/tests/oauth-credentials.mjs b/tests/oauth-credentials.mjs
+index 302dd6e..9c78787 100644
+--- a/tests/oauth-credentials.mjs
++++ b/tests/oauth-credentials.mjs
+@@ -218,6 +218,44 @@ export async function runOauthCredentialTests(check) {
+     const tmoRetry = await tmoStore.ensureFresh(staleCred, { fetchImpl: async () => refreshOk('A11-new', 'R11-new', 864000) })
+     check('follow-up ensureFresh proceeds immediately (no lock poisoning)', tmoRetry.access === 'A11-new')
+ 
++    // ── R4-F1（Step 5 升格必闭）：headers 落定后 body 相位停滞（response.json()
++    // 挂起）——超时 timer 覆盖须扩展至 payload 解析之后（abort 会 reject 进行中
++    // 的 body 读取），否则 headers-后-stall 可持锁越窗触发陈旧接管重叠（并连带
++    // 消解 R5-F3 同实例 lockToken 退化角）。注入 json 尊重 init.signal（协作式
++    // 前提，同 hangFetch 模式）。
++    console.log('refresh body-phase stall timeout (R4-F1):')
++    const bjPath = join(work, 'bodyhang.json')
++    const bjStore = new OauthCredentialStore(bjPath)
++    await bjStore.write(staleCred)
++    let bjSawSignal = null
++    const stallJsonFetch = async (url, init) => ({
++      ok: true,
++      status: 200,
++      json: () => new Promise((_, reject) => {
++        // 模拟 undici：body 读取尊重 signal——停滞服务器形态下只有 abort 能终止。
++        bjSawSignal = init.signal
++        init.signal.addEventListener('abort', () => reject(new Error('body read aborted')))
++      }),
++    })
++    let bjError = null
++    let bjSettled = false
++    // race 护栏：若超时未覆盖 body 相位（R4-F1 修复前形态），json() 永不落定——
++    // 2s 后按未决判 FAIL，测试不得挂死。
++    await Promise.race([
++      bjStore.ensureFresh(staleCred, { fetchImpl: stallJsonFetch, timeoutMs: 60 }).then(
++        () => { bjSettled = true },
++        (error) => { bjSettled = true; bjError = error },
++      ),
++      new Promise((resolve) => setTimeout(resolve, 2_000)),
++    ])
++    check('body-phase stall fails as REFRESH_FAILED with timedOut marker (R4-F1)', bjSettled && !!bjError && bjError.code === CREDENTIAL_ERROR_CODES.REFRESH_FAILED && bjError.timedOut === true)
++    check('body-phase timeout message stays fixed-format and redacted (P7)', bjSettled && !!bjError && /timeout/i.test(bjError.message) && !bjError.message.includes('SECRET-ACCESS-XYZ') && !bjError.message.includes('SECRET-REFRESH-ABC'))
++    check('body-phase stall still wires signal into fetch init', bjSawSignal instanceof AbortSignal)
++    check('lock released after body-phase timeout', bjSettled && !readdirSync(work).some((name) => name === 'bodyhang.json.lock'))
++    let bjRetry = null
++    try { bjRetry = await bjStore.ensureFresh(staleCred, { fetchImpl: async () => refreshOk('A12-new', 'R12-new', 864000) }) } catch { bjRetry = null }
++    check('follow-up ensureFresh proceeds after body-phase timeout', bjRetry?.access === 'A12-new')
++
+     // ── 9. 并发：锁串行化 + 锁内重读 → fetch 恰一次（BC-E6 ③）──────────────
+     console.log('concurrency & locking:')
+     const concPath = join(work, 'conc.json')
+diff --git a/tests/smoke.mjs b/tests/smoke.mjs
+index 60457ff..6192c64 100644
+--- a/tests/smoke.mjs
++++ b/tests/smoke.mjs
+@@ -524,7 +524,7 @@ console.log('RouterService:')
+         && pbegin.authUrl.includes(scopeParam)
+         && pbegin.authUrl.includes(redirectParam)
+         && pbegin.authUrl.includes(`state=${pbegin.state}`))
+-      check('preset begin carries PKCE + H3-4 params + originator', pbegin.authUrl.includes('response_type=code') && pbegin.authUrl.includes('code_challenge=') && pbegin.authUrl.includes('code_challenge_method=S256') && pbegin.authUrl.includes('id_token_add_organizations=true') && pbegin.authUrl.includes('codex_cli_simplified_flow=true') && pbegin.authUrl.includes('originator='))
++      check('preset begin carries PKCE + H3-4 params + originator', pbegin.authUrl.includes('response_type=code') && pbegin.authUrl.includes('code_challenge=') && pbegin.authUrl.includes('code_challenge_method=S256') && pbegin.authUrl.includes('id_token_add_organizations=true') && pbegin.authUrl.includes('codex_cli_simplified_flow=true') && pbegin.authUrl.includes('originator=dsh-agent-router'))
+       check('preset begin ignores same-named account fields (zero-config)', !pbegin.authUrl.includes('evil.example') && !pbegin.authUrl.includes('WRONG'))
+       check('preset begin registers pending session', presetService.oauthPending.get(pbegin.state)?.accountId === 'cgpt' && typeof presetService.oauthPending.get(pbegin.state)?.verifier === 'string' && presetService.oauthPending.get(pbegin.state)?.redirectUri === CHATGPT_PRESET.redirectUri)
+       // 4. 未知 preset → 消费点校验明确报错（schemas Step 1 放行语义的闭合）。
+@@ -573,6 +573,173 @@ console.log('RouterService:')
+     }
+   }
+ 
++  // ── EVO-002 Step 5：codex-responses 协议分支（runOauthChat 派发 + SSE 事件链
++  // 聚合——EV-028 P3 实证 stream:false 被拒，SSE 为唯一路径）+ R5-F1 调用期
++  // kill-switch（§3.6 ③：resolveOauthToken preset 入口单点覆盖 runOauthChat 与
++  // oauthDiscover 两消费方）。独立 service + 临时凭据目录 + fetch 覆盖——主夹具
++  // 零污染；SSE 十二事件链按 EV-028 形态复刻（delta 拼接与 output_item.done
++  // 双路径同文返回 POC-OK）。
++  console.log('oauth codex-responses branch (EVO-002 Step 5):')
++  {
++    const codexWork = mkdtempSync(join(tmpdir(), 'router-codex-'))
++    const fakeJwt5 = (accountId, sig) => {
++      const b64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
++      return `${b64url({ alg: 'RS256', typ: 'JWT' })}.${b64url({ 'https://api.openai.com/auth': { chatgpt_account_id: accountId } })}.${sig}`
++    }
++    const accessJwt5 = fakeJwt5('acct-cgpt-5', 'sig-step5')
++    const refreshedJwt5 = fakeJwt5('acct-cgpt-5', 'sig-step5-refreshed')
++    const codexCredFile = join(codexWork, 'codex-auth.json')
++    const bareCredFile = join(codexWork, 'bare-auth.json')
++    const codexRoot = new Context()
++    codexRoot.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
++    codexRoot.provide('attachments', { readImage: async () => ({ data: Uint8Array.from([1, 2, 3]), ref: { mediaType: 'image/png' } }) })
++    let oauthExperimental5 = false
++    const codexService = new RouterService(codexRoot)
++    codexService.attach({ get: () => ({
++      enabled: true,
++      oauthExperimental: oauthExperimental5,
++      oauthAccounts: {
++        cgpt: { name: 'ChatGPT订阅', enabled: true, preset: 'chatgpt-codex', credentialFile: codexCredFile, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', models: ['gpt-5.4-mini'] },
++        bare: { name: '零配置', enabled: true, preset: 'chatgpt-codex', credentialFile: bareCredFile, protocol: 'codex-responses', models: ['gpt-5.4'] },
++        gcodex: { name: '通用codex', enabled: true, protocol: 'codex-responses', baseURL: 'https://example.invalid/api', tokenRef: 'NOPE', models: ['m'] },
++      },
++      agents: {
++        cgptchat: { name: 'CGPT', type: 'chat', enabled: true, account: 'cgpt', systemPrompt: '你是测试助手', maxTokens: 1024, temperature: 0.2 },
++        cgptbare: { name: 'CGPT裸', type: 'chat', enabled: true, account: 'bare' },
++        gcodexchat: { name: '通用codex', type: 'chat', enabled: true, account: 'gcodex' },
++      },
++    })})
++    const seedStore5 = new OauthCredentialStore(codexCredFile)
++    await seedStore5.write({ type: 'oauth', access: accessJwt5, refresh: 'REFRESH-5-SEED', expires: Date.now() + 3_600_000, accountId: 'acct-cgpt-5' })
++    // SSE 流响应（ReadableStream 分帧：event: + data: 行、\n\n 分隔——pi-ai
++    // parseSSE 同款帧法；解析只取 data: 行）。
++    const sseResponse5 = (events) => ({
++      ok: true,
++      status: 200,
++      body: new ReadableStream({
++        start(controller) {
++          const encoder = new TextEncoder()
++          for (const event of events) {
++            controller.enqueue(encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`))
++          }
++          controller.close()
++        },
++      }),
++    })
++    // EV-028 P3 十二事件链复刻：4×delta 与 output_item.done 双路径同文。
++    const chain5 = (deltas, doneText, usage = { input_tokens: 29, output_tokens: 8 }) => [
++      { type: 'response.created', response: { id: 'resp_5' } },
++      { type: 'response.in_progress', response: { id: 'resp_5' } },
++      { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'msg_5' } },
++      { type: 'response.content_part.added', output_index: 0, content_index: 0 },
++      ...deltas.map((delta) => ({ type: 'response.output_text.delta', output_index: 0, delta })),
++      { type: 'response.output_text.done', output_index: 0, text: deltas.join('') },
++      { type: 'response.content_part.done', output_index: 0, content_index: 0 },
++      { type: 'response.output_item.done', output_index: 0, item: { type: 'message', id: 'msg_5', content: [{ type: 'output_text', text: doneText }] } },
++      { type: 'response.completed', response: { id: 'resp_5', usage } },
++    ]
++    let codexMode5 = {}
++    const codexFetches5 = []
++    const realFetch5 = globalThis.fetch
++    globalThis.fetch = async (url, options) => {
++      codexFetches5.push({ url: String(url), init: options })
++      if (String(url) === CHATGPT_PRESET.tokenUrl && new URLSearchParams(String(options?.body ?? '')).get('grant_type') === 'refresh_token') {
++        return { ok: true, json: async () => ({ access_token: refreshedJwt5, refresh_token: 'REFRESH-5-NEW', expires_in: 864000 }) }
++      }
++      if (String(url).endsWith('/codex/responses')) {
++        if (codexMode5.sse) return sseResponse5(typeof codexMode5.sse === 'function' ? codexMode5.sse() : codexMode5.sse)
++        if (codexMode5.http) return codexMode5.http
++      }
++      return { ok: false, status: 404, text: async () => 'not found' }
++    }
++    const run5 = async (agentId, task, extra = {}) => {
++      try { return { result: await codexService.run({ agentId, task, images: [], ...extra }) } } catch (error) { return { error } }
++    }
++    try {
++      // 1. R5-F1 调用期 kill-switch：凭据在盘且新鲜，但 oauthExperimental=false →
++      //    调用明确报"实验通路已关闭"，且零网络（读凭据后的刷新/调用请求都
++      //    不得越过开关——R5-F1 义务原文）。
++      const killed = await run5('cgptchat', 'x')
++      check('codex call blocked while oauthExperimental=false (R5-F1)', !!killed.error && killed.error.message.includes('实验通路已关闭') && codexFetches5.length === 0)
++      let killResolveError = null
++      try { await codexService.resolveOauthToken(codexService.getOAuthAccount('cgpt')) } catch (error) { killResolveError = error }
++      check('codex kill-switch guards resolveOauthToken (oauthDiscover path)', !!killResolveError && killResolveError.message.includes('实验通路已关闭') && codexFetches5.length === 0)
++      oauthExperimental5 = true
++      // 2. 未知 preset 在 resolve 侧同样拒绝（与 begin 侧同一闭合语义）。
++      let unknownPresetError = null
++      try { await codexService.resolveOauthToken({ preset: 'mystery-preset' }) } catch (error) { unknownPresetError = error }
++      check('codex resolve unknown preset rejected', !!unknownPresetError && unknownPresetError.message.includes('未知预设类型'))
++      // 3. codex-responses 协议挂在非 preset 账号 → 明确报错（无四元组凭据则
++      //    无法构造 chatgpt-account-id 头；引导使用 ChatGPT 预设账号）。
++      const genericRun = await run5('gcodexchat', 'x')
++      check('codex-responses on non-preset account rejected with preset guidance', !!genericRun.error && genericRun.error.message.includes('预设'))
++      // 4. 主路径：SSE 聚合 → 文本 + usage；端点 / 头 / 请求体形状逐项（E5/H3-8/9）。
++      codexMode5 = { sse: chain5(['POC', '-', 'OK'], 'POC-OK') }
++      const codexRun = await run5('cgptchat', 'SSE-测试')
++      check('codex run aggregates SSE deltas into final text with usage', codexRun.result?.kind === 'chat' && codexRun.result?.text === 'POC-OK' && codexRun.result?.usage?.inputTokens === 29 && codexRun.result?.usage?.outputTokens === 8)
++      const codexCall = codexFetches5[codexFetches5.length - 1]
++      check('codex request posts to chatgpt.com/backend-api/codex/responses', codexCall?.url === 'https://chatgpt.com/backend-api/codex/responses')
++      const codexHeaders = codexCall?.init?.headers ?? {}
++      check('codex headers carry bearer/account-id/originator/SSE beta (H3-9/E5)', codexHeaders.Authorization === `Bearer ${accessJwt5}` && codexHeaders['chatgpt-account-id'] === 'acct-cgpt-5' && codexHeaders.originator === 'dsh-agent-router' && codexHeaders.accept === 'text/event-stream' && codexHeaders['OpenAI-Beta'] === 'responses=experimental' && codexHeaders['Content-Type'] === 'application/json')
++      const codexBody = JSON.parse(codexCall?.init?.body ?? '{}')
++      check('codex body is Responses shape with stream:true (EV-028 P5)', codexBody.model === 'gpt-5.4-mini' && codexBody.store === false && codexBody.stream === true && codexBody.instructions === '你是测试助手' && Array.isArray(codexBody.include) && codexBody.include.includes('reasoning.encrypted_content') && codexBody.max_output_tokens === 1024 && codexBody.temperature === 0.2)
++      check('codex input carries user input_text part', Array.isArray(codexBody.input) && codexBody.input[0]?.role === 'user' && codexBody.input[0]?.content?.[0]?.type === 'input_text' && codexBody.input[0]?.content?.[0]?.text?.includes('SSE-测试'))
++      // 5. 图片输入 → input_image 内容块（E5 请求体形状，input_text 之后追加）。
++      codexMode5 = { sse: chain5(['图'], '图') }
++      const codexImageRun = await run5('cgptchat', '看图', { images: [{ attachmentId: 'att-5', mediaType: 'image/png' }] })
++      const codexImageBody = JSON.parse(codexFetches5[codexFetches5.length - 1]?.init?.body ?? '{}')
++      const imagePart = codexImageBody.input?.[0]?.content?.[1]
++      check('codex body carries input_image part for image attachments', codexImageRun.result?.text === '图' && codexImageBody.input?.[0]?.content?.length === 2 && imagePart?.type === 'input_image' && typeof imagePart?.image_url === 'string' && imagePart.image_url.startsWith('data:image/png;base64,'))
++      // 6. output_item.done 缺席 → delta 拼接兜底；到场则以其为准（pi-ai 槽位语义）。
++      codexMode5 = { sse: [
++        { type: 'response.created', response: {} },
++        { type: 'response.output_text.delta', output_index: 0, delta: 'POC' },
++        { type: 'response.output_text.delta', output_index: 0, delta: '-OK' },
++        { type: 'response.completed', response: { usage: { input_tokens: 3, output_tokens: 4 } } },
++      ] }
++      const deltaOnly = await run5('cgptchat', 'x')
++      check('codex falls back to delta text when output_item.done absent', deltaOnly.result?.text === 'POC-OK' && deltaOnly.result?.usage?.inputTokens === 3)
++      codexMode5 = { sse: chain5(['WR', 'ONG'], 'POC-OK') }
++      const itemPreferred = await run5('cgptchat', 'x')
++      check('codex prefers output_item.done text over raw deltas (slot semantics)', itemPreferred.result?.text === 'POC-OK')
++      // 7. 错误面：response.failed / error 事件 / HTTP 401 / 429 resets_at / 截断。
++      codexMode5 = { sse: [{ type: 'response.failed', response: { error: { code: 'server_error', message: 'boom' } } }] }
++      const failedRun = await run5('cgptchat', 'x')
++      check('codex response.failed event surfaces code and message', !!failedRun.error && failedRun.error.message.includes('server_error') && failedRun.error.message.includes('boom'))
++      codexMode5 = { sse: [{ type: 'error', error: { code: 'rate_limited', message: 'slow down' } }] }
++      const errorEventRun = await run5('cgptchat', 'x')
++      check('codex error event surfaces message', !!errorEventRun.error && errorEventRun.error.message.includes('slow down'))
++      codexMode5 = { http: { ok: false, status: 401, text: async () => JSON.stringify({ error: { message: 'could-not-parse-token' } }) } }
++      const authRun = await run5('cgptchat', 'x')
++      check('codex HTTP 401 aligns re-login wording', !!authRun.error && authRun.error.message.includes('重新登录'))
++      codexMode5 = { http: { ok: false, status: 429, text: async () => JSON.stringify({ error: { code: 'usage_limit_reached', plan_type: 'plus', resets_at: Math.floor(Date.now() / 1000) + 120 } }) } }
++      const limitRun = await run5('cgptchat', 'x')
++      check('codex HTTP 429 parses resets_at minutes (H3-14)', !!limitRun.error && limitRun.error.message.includes('分钟后重置') && limitRun.error.message.includes('plus'))
++      codexMode5 = { sse: [{ type: 'response.created', response: {} }, { type: 'response.output_text.delta', output_index: 0, delta: 'half' }] }
++      const truncatedRun = await run5('cgptchat', 'x')
++      check('codex stream without terminal event rejected', !!truncatedRun.error && truncatedRun.error.message.includes('终态'))
++      // 8. 调用期临期自动刷新：stale 凭据 → ensureFresh 先刷（rotating 盘上覆写）
++      //    再以新 access 发起调用（Authorization 头 = 刷新后 token）。
++      await seedStore5.write({ type: 'oauth', access: 'ACCESS-STALE-5', refresh: 'REFRESH-STALE-5', expires: Date.now() + 30_000, accountId: 'acct-cgpt-5' })
++      codexMode5 = { sse: chain5(['刷'], '刷') }
++      const afterRefresh = await run5('cgptchat', '刷新')
++      const refreshedCall = codexFetches5[codexFetches5.length - 1]
++      const refreshedDoc5 = JSON.parse(readFileSync(codexCredFile, 'utf8'))
++      check('codex call refreshes expiring credential and uses fresh access', afterRefresh.result?.text === '刷' && refreshedCall?.init?.headers?.Authorization === `Bearer ${refreshedJwt5}` && refreshedDoc5.credential?.refresh === 'REFRESH-5-NEW')
++      // 9. 零配置：无 baseURL 的 preset 账号 → 默认端点（pi-ai resolveCodexUrl
++      //    同款三级归一：空 → chatgpt.com/backend-api/codex/responses）。
++      await seedStore5.write({ type: 'oauth', access: accessJwt5, refresh: 'REFRESH-5-SEED', expires: Date.now() + 3_600_000, accountId: 'acct-cgpt-5' })
++      const bareSeed = new OauthCredentialStore(bareCredFile)
++      await bareSeed.write({ type: 'oauth', access: accessJwt5, refresh: 'REFRESH-BARE', expires: Date.now() + 3_600_000, accountId: 'acct-cgpt-5' })
++      codexMode5 = { sse: chain5(['零'], '零') }
++      const bareRun = await run5('cgptbare', 'x')
++      check('codex baseURL defaults to chatgpt backend-api (zero-config)', bareRun.result?.text === '零' && codexFetches5[codexFetches5.length - 1]?.url === 'https://chatgpt.com/backend-api/codex/responses')
++    } finally {
++      globalThis.fetch = realFetch5
++      try { rmSync(codexWork, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
++    }
++  }
++
+   const text = service.promptText()
+   check('promptText lists agents', text.includes('vision') && text.includes('draw') && text.includes('route_agent') && !text.includes('off'))
+   check('promptText pool meta', text.includes('OAuth 账号池:G池') && text.includes('2 个账号'))
