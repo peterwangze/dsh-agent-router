@@ -59,11 +59,11 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import { RouterService } from '../lib/service.js'
-import { AttachmentRegistry, isAttachmentId, ATTACHMENT_REGISTRY_MAX_ENTRIES, ATTACHMENT_FETCH_TIMEOUT_MS, ATTACHMENT_ERROR_CODES } from '../lib/attachments.js'
+import { AttachmentRegistry, isAttachmentId, ATTACHMENT_REGISTRY_MAX_ENTRIES, ATTACHMENT_FETCH_TIMEOUT_MS, ATTACHMENT_ERROR_CODES, probeImageDimensions } from '../lib/attachments.js'
 import { installAdmissionWrapper, WRAP_SUFFIX, MODALITY_ENTRIES, minimalImageRewrite } from '../lib/wrapper.js'
 import { mkdtempSync, rmSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { tmpdir } from 'node:os'
+import { tmpdir, homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -338,6 +338,56 @@ console.log('B. attachmentIds 统一编址 (M2):')
     check('[B13a] 宿主元数据校验失败时懒注册自取证恢复', !!entry && entry.mediaType === 'image/png' && entry.width === 912 && entry.height === 510 && entry.bytes === png.length)
     const byIdAgain = await reg.byId(id)
     check('[B13b] 自取证注册后二次命中零宿主读取', !!byIdAgain && byIdAgain === entry)
+    // B13c（FIX-003C F-3 判别）：宿主恒拒（裸 id 与完整 ref 均 throw）+ 对象内容哈希
+    // 与 id 一致 → 内容哈希兜底接受。判别：兜底分支缺失（唯一 catch → undefined）→
+    // !!entryC 必败。
+    {
+      const regRootStrict = new Context()
+      regRootStrict.provide('attachments', {
+        readImage: async () => { throw new Error('host always refuses') },
+      })
+      const regC = new AttachmentRegistry(regRootStrict)
+      const entryC = await regC.byId(id)
+      check('[B13c] 宿主恒拒时内容哈希兜底接受', !!entryC && entryC.mediaType === 'image/png' && entryC.bytes === png.length && entryC.width === 912 && entryC.height === 510)
+    }
+    // B13d（FIX-003C F-3 判别）：对象字节与 id 内容寻址不符（冒充/半写）→ 兜底拒绝
+    // undefined。判别：哈希门缺失（接受任何合法 PNG 对象字节）→ byId 返回条目必败。
+    {
+      const badPng = Buffer.concat([png.subarray(0, png.length - 1), Buffer.from([(png[png.length - 1] + 1) & 0xff])])
+      const badSha = createHash('sha256').update(badPng).digest('hex')
+      const badId = `sha256:${badSha}`
+      const badDir = join(tmpHome, 'attachments', 'v1', 'objects', badSha.slice(0, 2))
+      mkdirSync(badDir, { recursive: true })
+      writeFileSync(join(badDir, badSha), png) // 目录名=badId 哈希，内容=原 png（哈希不符）
+      const regRootBad = new Context()
+      regRootBad.provide('attachments', {
+        readImage: async () => { throw new Error('host always refuses') },
+      })
+      const regD = new AttachmentRegistry(regRootBad)
+      const entryD = await regD.byId(badId)
+      check('[B13d] 内容寻址哈希不符时兜底拒绝', entryD === undefined)
+    }
+    // B13e（FIX-003C F-1 判别）：DSH_HOME env 缺省 → 回退 homedir()/.dsh/attachments/v1
+    //（与宿主 resolveDshHome 默认一致）。判别：旧代码（homedir() 无 .dsh）→ 路径
+    // 不含 ".dsh" 段必败——纯拼接断言，不触真实用户目录。
+    {
+      const prevEnv = process.env.DSH_HOME
+      try {
+        delete process.env.DSH_HOME
+        const regE = new AttachmentRegistry(new Context())
+        check('[B13e] env 缺省回退 homedir()/.dsh/attachments/v1', regE.dshHomeAttachmentsRoot() === join(homedir(), '.dsh', 'attachments', 'v1'))
+      } finally {
+        if (prevEnv !== undefined) process.env.DSH_HOME = prevEnv
+      }
+    }
+    // B13f（FIX-003C F-2 判别）：VP8X 截断头（24-29 字节，按规范 VP8X payload 需 ≥30）
+    // → undefined 而非 {1,1}。判别：长度门缺失（读越界位运算归 0 → {1,1}）→ 必败。
+    {
+      const vp8xTrunc = new Uint8Array(27)
+      vp8xTrunc.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x58], 0)
+      vp8xTrunc[16] = 0x0a // chunk size 10
+      check('[B13f] VP8X 截断头（<30 字节）返回 undefined', probeImageDimensions(vp8xTrunc) === undefined)
+    }
   } finally {
     if (prevDshHome === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = prevDshHome
