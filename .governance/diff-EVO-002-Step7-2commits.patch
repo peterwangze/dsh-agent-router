@@ -1,0 +1,285 @@
+commit cbfafcf9a028d1cc68ec988c07b5fc4392a54264
+Author: peterwangze <1337917121@qq.com>
+Date:   Sat Aug 22 22:27:52 2026 +0800
+
+    EVO-002: Step 7a R7 收尾——R7-F1 W-5 旁路（deleteOauthAccount preset 分流至 W-5 联动 + 通用区过滤 preset 条目：消双卡渲染/消活 token 残留与池悬挂引用）+ R7-F2 删除成功文案（presetDeleted 键替代 oauthTokenBack）+ R7-F4 oauthLogout 失败中止后续 ops（账号保留可重试）+ client-render 判别断言×3（旧代码必败）
+
+diff --git a/lib/client.js b/lib/client.js
+index 611f760..f242b5f 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -437,6 +437,8 @@ window.__ModuleLoader__.load({
+       presetLogoutConfirm: '确认登出并删除本机 ChatGPT 凭据文件？（不影响账号本身，随时可重新登录）',
+       presetDelete: '删除账号',
+       presetDeleteConfirm: '确认删除该 ChatGPT 预设账号？将同时删除本机凭据文件，并从引用它的账号池中移除。',
++      presetDeleted: 'ChatGPT 账号已删除（凭据文件与池引用已清理）。',
++      presetLogoutFailed: '登出失败（删除凭据文件）：请重试',
+       presetPoolCleaned: (n) => `已从 ${n} 个账号池移除引用`,
+       presetModelsHint: '模型列表由插件独立维护（可编辑；ChatGPT 订阅端点不提供模型发现，常用值 gpt-5.4 / gpt-5.4-mini）。',
+       oauthCustomAdd: '＋ 自定义（自建 OAuth2 服务商）',
+@@ -725,6 +727,8 @@ window.__ModuleLoader__.load({
+       presetLogoutConfirm: 'Sign out and delete the local ChatGPT credential file? (The account itself is unaffected; you can sign in again anytime.)',
+       presetDelete: 'Delete account',
+       presetDeleteConfirm: 'Delete this ChatGPT preset account? The local credential file will also be deleted, and references will be removed from account pools.',
++      presetDeleted: 'ChatGPT account deleted (credential file and pool references cleaned up).',
++      presetLogoutFailed: 'Sign-out failed (credential file deletion): please retry',
+       presetPoolCleaned: (n) => `Removed references from ${n} pool(s)`,
+       presetModelsHint: 'The model list is plugin-managed (editable; the ChatGPT subscription endpoint offers no model discovery — common values gpt-5.4 / gpt-5.4-mini).',
+       oauthCustomAdd: '+ Custom (own OAuth2 provider)',
+@@ -2187,7 +2191,11 @@ window.__ModuleLoader__.load({
+ 
+       // ── OAuth 账号（插件独立管理）派生与操作 ──────────────────────────
+       const oauthById = new Map(oauthEntries.map((entry) => [entry.id, entry]))
+-      const oauthIds = oauthEntries.map((entry) => entry.id).sort()
++      // R7-F1：通用 OAuth 区排除 preset 账号（preset 条目由专职账号卡管理，
++      // §3.6 实验区）——消除"双卡渲染 + 展示服务端忽略的可编辑字段"误导。
++      // 实验开关关闭时 preset 账号不可见但数据无恙（开开关即见卡片，§3.6
++      // 默认隐藏语义）；删除入口恒为 W-5 联动（deleteOauthAccount 分流兜底）。
++      const oauthIds = oauthEntries.filter((entry) => typeof entry.preset !== 'string' || !entry.preset.trim()).map((entry) => entry.id).sort()
+       const defaultOauthDraft = () => ({
+         name: '', enabled: true, protocol: 'openai-completions', baseURL: '',
+         clientId: '', clientSecret: '', publicClient: false, authUrl: '', tokenUrl: '', scope: '', models: [],
+@@ -2222,8 +2230,14 @@ window.__ModuleLoader__.load({
+       }
+ 
+       const deleteOauthAccount = async (id) => {
+-        if (!window.confirm(t('oauthConfirmDelete'))) return
++        // R7-F1：preset 账号（如 chatgpt-codex）分流至 W-5 联动删除——
++        // 通用删除路径仅 unset 条目（无凭据删除无池清理 → 活 refresh token
++        // 残留 + 池悬挂引用）；preset 账号的合规删除只有一条路径（删凭据 +
++        // 清池引用 + unset 三步联动，§3.6）。确认文案用 presetDeleteConfirm
++        // （明确告知凭据删除），与预设卡删除语义一致。
+         const entry = oauthById.get(id)
++        if (entry && typeof entry.preset === 'string' && entry.preset.trim()) return deletePresetAccount(id)
++        if (!window.confirm(t('oauthConfirmDelete'))) return
+         if (entry && entry.tokenRef) await api.credentials.unset({ ref: entry.tokenRef }).catch(() => undefined)
+         await mutate([{ op: 'unset', path: ['oauthAccounts', id] }])
+       }
+@@ -2381,11 +2395,19 @@ window.__ModuleLoader__.load({
+       }
+ 
+       /** 删除 preset 账号（W-5 联动）：先删本机凭据文件 → 清引用它的账号池
+-       *  （联动提示）→ 删账号条目——三步一次完成（§3.6 合规删除路径）。 */
++       *  （联动提示）→ 删账号条目——三步一次完成（§3.6 合规删除路径）。
++       *  R7-F4：oauthLogout 响应语义为 value.ok（RPC 外层 ok 恒真）——删除
++       *  凭据失败（fs 级错误）时中止后续 ops（账号保留可重试）并展示失败
++       *  文案，避免"凭据残留 + 条目已删 + 成功提示"的失联状态。 */
+       const deletePresetAccount = async (id) => {
+         if (!window.confirm(t('presetDeleteConfirm'))) return
+         setOauthBusy((current) => ({ ...current, [id]: true }))
+-        await remote().oauthLogout({ accountId: id }).catch(() => undefined)
++        const logoutResponse = await remote().oauthLogout({ accountId: id }).catch(() => ({ ok: true, value: { ok: false, message: t('presetLogoutFailed') } }))
++        if (!logoutResponse?.value || logoutResponse.value.ok !== true) {
++          setOauthBusy((current) => ({ ...current, [id]: false }))
++          setOauthNotice((current) => ({ ...current, [id]: logoutResponse?.value?.message ?? t('presetLogoutFailed') }))
++          return
++        }
+         const poolsContaining = poolEntries.filter((pool) => (pool.accounts ?? []).includes(id))
+         const ops = []
+         for (const pool of poolsContaining) {
+@@ -2395,7 +2417,7 @@ window.__ModuleLoader__.load({
+         const outcome = await mutate(ops)
+         setOauthBusy((current) => ({ ...current, [id]: false }))
+         const cleaned = poolsContaining.length
+-        setOauthNotice((current) => ({ ...current, [id]: outcome.ok ? `${t('oauthTokenBack')}${cleaned > 0 ? ` ${t('presetPoolCleaned')(cleaned)}` : ''}` : outcome.message }))
++        setOauthNotice((current) => ({ ...current, [id]: outcome.ok ? `${t('presetDeleted')}${cleaned > 0 ? ` ${t('presetPoolCleaned')(cleaned)}` : ''}` : outcome.message }))
+       }
+ 
+       /** preset 模型列表保存（逗号分隔编辑 → 数组落盘）。 */
+diff --git a/tests/client-render.mjs b/tests/client-render.mjs
+index 3c50b99..26fb14a 100644
+--- a/tests/client-render.mjs
++++ b/tests/client-render.mjs
+@@ -220,6 +220,9 @@ export async function runClientRender(check) {
+   let experimentalOn = false
+   let presetMode = 'none'
+   let confirmMode = true
++  // EVO-002 Step 7（R7-F4 判别）：true 时 remoteMock.oauthLogout 返回
++  // ok:false（store.delete 失败形态——凭据文件残留 + 无重试入口的旧行为判别）。
++  let logoutFailMode = false
+   // F11 上传失败模式：true 时 remoteMock.uploadFile 返回 ok:false（错误码形状）。
+   let uploadFailMode = false
+   // L3 打开文件失败模式（Step 9）：true 时 remoteMock.readWorkspaceFile 返回
+@@ -269,7 +272,12 @@ export async function runClientRender(check) {
+     stats: async () => ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [] } }),
+     save: async (request) => { captured.saveOps.push(...((request && request.ops) ?? [])); return { ok: true, value: { ok: true, revision: 1 } } },
+     oauthBegin: async (request) => { captured.beginCalls.push(request); return { ok: true, value: { ok: true, message: '授权 URL 已生成', authUrl: 'https://auth.openai.com/oauth/authorize?x=1', state: 'st-6' } } },
+-    oauthLogout: async (request) => { captured.oauthLogoutCalls.push(request); return { ok: true, value: { ok: true, message: '已登出并删除 ChatGPT 凭据文件' } } },
++    oauthLogout: async (request) => {
++      captured.oauthLogoutCalls.push(request)
++      return logoutFailMode
++        ? { ok: true, value: { ok: false, message: '登出失败（删除凭据文件）：模拟磁盘错误' } }
++        : { ok: true, value: { ok: true, message: '已登出并删除 ChatGPT 凭据文件' } }
++    },
+     reset: async () => ({ ok: true, value: { ok: true } }),
+     test: async () => ({ ok: true, value: { ok: true, message: 'ok' } }),
+     cliStatus: async () => cliStatusMode === 'logged-out'
+@@ -928,6 +936,32 @@ export async function runClientRender(check) {
+       const unsetOps6 = captured.saveOps.filter((op) => op.op === 'unset' && op.path.join('/') === 'oauthAccounts/chatgpt')
+       check('step6: delete cleans credential + pool refs + entry (W-5)', captured.oauthLogoutCalls.length === 1 && poolOps6.length === 1 && Array.isArray(poolOps6[0].value) && poolOps6[0].value.length === 0 && unsetOps6.length === 1)
+     }
++    // ── EVO-002 Step 7：R7 收尾（F1 渲染过滤 / F4 吞错 / F2 成功文案）──
++    // 判别性：F1 旧代码通用区 summary 含 preset 账号（计数 1）→ 断言 (0) 必败；
++    // F4 旧代码忽略 ok:false 继续 unset + 弹成功提示 → 断言 unset 缺席 + 失败
++    // 文案必败；F2 旧代码复用 oauthTokenBack → 断言 presetDeleted 必败。
++    {
++      const tree7 = await renderSettings6('step7-f1')
++      check('step7: generic oauth area excludes preset accounts (R7-F1)', textOf(tree7).includes(tOf('oauthSummary')(0)))
++      // F4：oauthLogout 返回 ok:false → 账号条目保留（可重试）+ 展示失败消息。
++      logoutFailMode = true
++      captured.oauthLogoutCalls.length = 0
++      captured.saveOps.length = 0
++      const delFail7 = buttonsOf(tree7).find((node) => textOf(node) === tOf('presetDelete'))
++      if (delFail7) delFail7.props.onClick()
++      await settle()
++      const unsetFail7 = captured.saveOps.filter((op) => op.op === 'unset' && op.path.join('/') === 'oauthAccounts/chatgpt')
++      check('step7: logout failure keeps account entry (retry path, R7-F4)', captured.oauthLogoutCalls.length === 1 && unsetFail7.length === 0)
++      check('step7: logout failure surfaces error message (R7-F4)', textOf(currentTree).includes('登出失败'))
++      // F2：成功删除后提示用 presetDeleted 文案（非 oauthTokenBack）。
++      logoutFailMode = false
++      captured.saveOps.length = 0
++      const delOk7 = buttonsOf(currentTree).find((node) => textOf(node) === tOf('presetDelete'))
++      if (delOk7) delOk7.props.onClick()
++      await settle()
++      check('step7: delete success notice uses presetDeleted copy (R7-F2)', textOf(currentTree).includes(tOf('presetDeleted')) && !textOf(currentTree).includes(tOf('oauthTokenBack')))
++      logoutFailMode = false
++    }
+     // 复位（不污染后续块）。
+     experimentalOn = false
+     presetMode = 'none'
+
+commit 3e950341397517dc232ad3c98bf052d2689b3b0a
+Author: peterwangze <1337917121@qq.com>
+Date:   Sat Aug 22 22:28:29 2026 +0800
+
+    EVO-002: Step 7b R7 收尾——R7-F3 ProxyAgent 按 proxyUrl 缓存（连接池复用）+ R7-F5 测试隔离代理 env（smoke Step6 块 + metrics C-9-1）+ R6-F1 调用期 kill-switch 冷凭据断言（拒绝+凭据文件字节不变）；smoke 849→856 全绿
+
+diff --git a/lib/service.js b/lib/service.js
+index d5e695f..9290ffe 100644
+--- a/lib/service.js
++++ b/lib/service.js
+@@ -625,6 +625,11 @@ export class RouterService extends TypertRemoteService {
+     this.oauthEvents = []
+     /** 代理 dispatcher 加载器（仅测试注入用；缺省动态 import('undici')）。 */
+     this.oauthUndiciLoader = null
++    /** R7-F3：代理 dispatcher 实例缓存（proxyUrl → ProxyAgent）。每次调用
++     *  新建连接池会重复 TLS 握手且不显式关闭（GC 依赖）——高频调用下
++     *  socket/FD 压力；同 oauthCredentialStores 按路径缓存的先例模式。
++     *  键 = proxyUrl：配置变更时自然失效（旧键实例随 GC 回收）。 */
++    this.oauthProxyDispatchers = new Map()
+     /** M2 附件统一编址层（v3 §4.3.1/§5.1，Step 5a 模块 + Step 5b 接线）：
+      *  三调用点（prepareChatFiles / materializeCliImages / selectAttachments）
+      *  的寻址注册与解析经此统一索引。 */
+@@ -3354,10 +3359,16 @@ export class RouterService extends TypertRemoteService {
+    */
+   async loadOauthProxyDispatcher(proxy) {
+     try {
++      // R7-F3：按 proxyUrl 缓存实例（连接池复用——重复 TLS 握手与未关闭实例
++      // 依赖 GC 是高频代理调用的资源压力；配置热变更经旧键自然失效）。
++      const cached = this.oauthProxyDispatchers?.get(proxy.proxyUrl)
++      if (cached) return cached
+       const load = this.oauthUndiciLoader ?? (async () => import('undici'))
+       const undici = await load()
+       if (!undici || typeof undici.ProxyAgent !== 'function') throw new Error('undici 模块未暴露 ProxyAgent')
+-      return new undici.ProxyAgent(proxy.proxyUrl)
++      const dispatcher = new undici.ProxyAgent(proxy.proxyUrl)
++      if (this.oauthProxyDispatchers) this.oauthProxyDispatchers.set(proxy.proxyUrl, dispatcher)
++      return dispatcher
+     } catch (error) {
+       throw new Error(`已配置代理（${proxy.source}：${proxy.proxyUrl}）但无法加载 undici 代理支持（${errorMessage(error)}）；chatgpt.com 在当前网络需经代理可达——请为宿主环境安装 undici，或配置可直连的网络环境`)
+     }
+diff --git a/tests/metrics.mjs b/tests/metrics.mjs
+index b4b012a..c312b84 100644
+--- a/tests/metrics.mjs
++++ b/tests/metrics.mjs
+@@ -664,6 +664,11 @@ async function observeOauthTelemetry() {
+       agents: { cgptchat: { name: 'CGPT', type: 'chat', enabled: true, account: 'cgpt' } },
+     }) })
+     service.codexLoopbackStarter = async () => ({ ready: true, port: 1455, dispose: () => {} })
++    // R7-F5：隔离进程代理 env——C-9-1 采样调用经真实 resolveOauthProxy
++    //  读 process.env，HTTPS_PROXY 机器上会触发环境代理 + fail-loud import。
++    const proxyEnvKeysC9 = ['HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy']
++    const savedProxyEnvC9 = {}
++    for (const key of proxyEnvKeysC9) { savedProxyEnvC9[key] = globalThis.process?.env?.[key]; delete globalThis.process.env[key] }
+     const realFetch = globalThis.fetch
+     globalThis.fetch = async (url) => {
+       if (String(url) === CHATGPT_PRESET.tokenUrl) {
+@@ -695,6 +700,10 @@ async function observeOauthTelemetry() {
+       detail.push(`事件种类: ${[...new Set(service.oauthEvents.map((event) => event.kind))].join(', ')}`)
+     } finally {
+       globalThis.fetch = realFetch
++      for (const key of proxyEnvKeysC9) {
++        if (savedProxyEnvC9[key] === undefined) delete globalThis.process.env[key]
++        else globalThis.process.env[key] = savedProxyEnvC9[key]
++      }
+       try { rmSync(work, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
+     }
+   } catch (error) { crash = error }
+diff --git a/tests/smoke.mjs b/tests/smoke.mjs
+index 84e440e..8962d11 100644
+--- a/tests/smoke.mjs
++++ b/tests/smoke.mjs
+@@ -840,6 +840,11 @@ console.log('RouterService:')
+       })
+       const fetches6 = []
+       const realFetch6 = globalThis.fetch
++      // R7-F5：隔离进程代理 env（resolveOauthProxy 运行时读真实 process.env——
++      // 设 HTTPS_PROXY 的机器上直连断言/fail-loud 断言必被 env 代理污染破坏）。
++      const proxyEnvKeys6 = ['HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy']
++      const savedProxyEnv6 = {}
++      for (const key of proxyEnvKeys6) { savedProxyEnv6[key] = globalThis.process?.env?.[key]; delete globalThis.process.env[key] }
+       globalThis.fetch = async (url, options) => {
+         fetches6.push({ url: String(url), init: options })
+         if (String(url) === CHATGPT_PRESET.tokenUrl) {
+@@ -876,6 +881,17 @@ console.log('RouterService:')
+         check('preset begin proceeds once ToS accepted', begin6.ok === true && begin6.authUrl.startsWith(`${CHATGPT_PRESET.authUrl}?`))
+         const ex6 = await svc6.oauthTokenExchange({ code: 'code-6', state: begin6.state })
+         check('preset exchange completes login journey', ex6.ok === true && existsSync(credFile6))
++        // R6-F1（kill-switch 冷凭据半边断言）：开关关闭时调用期拒绝——
++        // 不读凭据文件（字节不变 = 无读改写）、不发刷新（网络零访问由
++        // resolvePresetCredential 早退保证），文案明确"实验通路已关闭"。
++        // 判别：旧实现（无调用期检查）会读文件并成功调用 → 必败。
++        const coldBytes6 = readFileSync(credFile6)
++        state6.oauthExperimental = false
++        let coldErr6 = null
++        try { await svc6.run({ agentId: 'cgptchat', task: '冷凭据' }) } catch (error) { coldErr6 = error }
++        check('kill-switch call-side rejects cold preset credential (R6-F1)', !!coldErr6 && coldErr6.message.includes('实验通路已关闭'))
++        check('kill-switch call-side touches no credential file (R6-F1)', coldBytes6.equals(readFileSync(credFile6)))
++        state6.oauthExperimental = true
+         // D. oauthLogout（W-5）：删凭据文件 + 幂等 + 非 preset 拒绝 + 未知账号
+         //    拒绝；实验开关关闭不拦截登出（合规删除路径恒可用）。
+         const lo6 = await svc6.oauthLogout({ accountId: 'cgpt' })
+@@ -909,15 +925,20 @@ console.log('RouterService:')
+         //    带 dispatcher（undici 注入桩）；无代理 → 无 dispatcher（直连零
+         //    变化）；undici 不可用 → 明确报错（代理来源 + 指引）。
+         await seed6()
+-        svc6.oauthUndiciLoader = async () => ({ ProxyAgent: class { constructor(url) { this.url = url } } })
++        let proxyAgentCount6 = 0
++        svc6.oauthUndiciLoader = async () => ({ ProxyAgent: class { constructor(url) { proxyAgentCount6 += 1; this.url = url } } })
+         state6.oauthProxyUrl = 'http://127.0.0.1:7890'
+         const proxied6 = await svc6.run({ agentId: 'cgptchat', task: '经代理' })
+         check('codex call routes via proxy dispatcher when configured', proxied6.text === 'OK-6' && fetches6[fetches6.length - 1]?.init?.dispatcher?.url === 'http://127.0.0.1:7890')
++        const proxied6b = await svc6.run({ agentId: 'cgptchat', task: '经代理 2' })
++        check('proxy dispatcher cached per proxyUrl (R7-F3)', proxied6b.text === 'OK-6' && proxyAgentCount6 === 1 && fetches6[fetches6.length - 1]?.init?.dispatcher === fetches6[fetches6.length - 2]?.init?.dispatcher)
+         state6.oauthProxyUrl = ''
+         const direct6 = await svc6.run({ agentId: 'cgptchat', task: '直连' })
+         check('codex call stays direct (no dispatcher) when no proxy', direct6.text === 'OK-6' && fetches6[fetches6.length - 1]?.init?.dispatcher === undefined)
+         svc6.oauthUndiciLoader = async () => { throw new Error('undici not installed') }
+-        state6.oauthProxyUrl = 'http://127.0.0.1:7890'
++        // R7-F3 缓存交互：fail-loud 场景用未缓存键（7891）——同 URL 已成功
++        // 实例化（7890）即证明 undici 可用，缓存命中不报错是正确行为。
++        state6.oauthProxyUrl = 'http://127.0.0.1:7891'
+         let proxyLoadErr6 = null
+         try { await svc6.run({ agentId: 'cgptchat', task: 'x' }) } catch (error) { proxyLoadErr6 = error }
+         check('proxy configured but undici unavailable errors clearly', !!proxyLoadErr6 && proxyLoadErr6.message.includes('undici') && proxyLoadErr6.message.includes('代理'))
+@@ -930,6 +951,10 @@ console.log('RouterService:')
+         check('oauth telemetry never carries token values (P7)', !JSON.stringify(svc6.oauthEvents).includes('sig-step6') && !JSON.stringify(svc6.oauthEvents).includes('REFRESH-STEP6'))
+       } finally {
+         globalThis.fetch = realFetch6
++        for (const key of proxyEnvKeys6) {
++          if (savedProxyEnv6[key] === undefined) delete globalThis.process.env[key]
++          else globalThis.process.env[key] = savedProxyEnv6[key]
++        }
+         try { rmSync(step6Work, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
+       }
+     } catch (error) {
