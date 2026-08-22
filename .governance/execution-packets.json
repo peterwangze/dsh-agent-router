@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-08-20T19:55:00",
+  "generated_at": "2026-08-21T19:01:32",
   "packets": {
     "MIG-001": {
       "task_id": "MIG-001",
@@ -12,6 +12,102 @@
         "node tests/metrics.mjs"
       ],
       "source": "MIG-001 完结记录（EV-023）"
+    },
+    "EVO-002": {
+      "task_id": "EVO-002",
+      "priority": "P0",
+      "status": "进行中——Step 1 ✅；Step 2 ✅；Step 3 ✅（DEC-021）；Step 4a ✅ 加固（R2 P2 清零）；Step 4b ✅ 授权流（564e18c，R5，EV-033，R3 P2 清零）；Step 5 协议分支派发中（R5-F1+R4-F1 必闭）",
+      "goal": "C-1 ChatGPT 订阅 OAuth 接入 v0.3.0 全量交付：preset 账号 + 独立凭据文件 + 1455 loopback + codex-responses 协议分支（SSE 聚合）+ Q2 per-protocol 能力接口 + 合规三层 kill-switch + C-9 埋点启动",
+      "product_success_contract": {
+        "user": "dsh-agent-router 插件用户（DSH 主 agent 持有者，持有 ChatGPT Plus/Pro 订阅）",
+        "job_to_be_done": "在设置页一键登录 ChatGPT 订阅账号（无需自建 OAuth Client/手抄 token），让专业 agent 用订阅额度完成 chat 任务调用",
+        "non_goals": [
+          "不做 C-2 Claude OAuth（DEC-019 Q1 观察项，ChatGPT 落地后按风控反馈再议）",
+          "不注册 llm 路由、不进共享模型列表（schemas.js OAuth 不变量）",
+          "不伪装官方 CLI 的 UA/originator（诚实自标识，V-EVO-2c 已证可行）",
+          "不改变既有通用 OAuth 账号（粘贴 token/自建 Client）行为——P3 零回归",
+          "不做 image/speech 模态实施（Q2 仅 per-protocol 能力接口层预留，V-EVO-3 待验证）"
+        ],
+        "success_metrics": [
+          "用户可见场景：设置页 preset 入口一键登录→凭据 owner-only 落盘→route_agent chat 调用返回文本（v0.3.0 出口条件①）",
+          "可运行验证：node tests/smoke.mjs 既有 534+ 断言零回退 + 新增 oauth 单测全绿（出口条件⑤）",
+          "token 过期自动刷新，重启后调用成功（出口条件②，PoC P4 rotating+软轮换机制已证）"
+        ],
+        "competitive_baseline": "dsh-codex / yoke233 dsh-openai-codex-auth 已验证的 ChatGPT 订阅登录体验（H3-16 三插件 DSH 生态先例）",
+        "done_definition": [
+          "v0.3.0 出口条件①-⑥（roadmap §2.1）逐项满足并记录证据",
+          "每步独立 commit + Code Reviewer 审查链 APPROVED（review-EVO-002-R*.md 留档）",
+          "产品成功证据（端到端一键登录实测）入 evidence-log 且含结构化事实 JSON"
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "用户开启 oauthExperimental → 设置页出现 ChatGPT 预设入口 → 浏览器授权 → 1455 回调 → 凭据文件 owner-only 落盘 → 绑定该账号的 agent chat 调用返回文本",
+        "command": "node tests/smoke.mjs；node tests/oauth-credentials.mjs（新增）；node tests/metrics.mjs",
+        "expected_output": "全部测试断言通过（0 fail），既有 534+ 断言计数不减；凭据读/写/刷新/删除/自愈单测覆盖",
+        "last_run": {
+          "status": "planned",
+          "exit_code": null,
+          "summary": "Step 1 起步——基线 534 断言在 v0.2.0 main 全绿（EV-023）"
+        },
+        "demo_evidence": "端到端登录实测留痕（pwsh 输出/凭据文件元数据）+ 审查报告 .governance/review-EVO-002-R*.md"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {"threshold": "授权流与调用路径无同步磁盘 IO 阻塞（刷新在文件锁内异步进行）", "validation": "node tests/smoke.mjs 含时延相关断言", "status": "planned", "evidence": "tests/smoke.mjs 输出", "exception": ""},
+          "reliability": {"threshold": "凭据原子写（temp+rename）崩溃不产生半写文档；刷新失败明确终态错误码", "validation": "node tests/oauth-credentials.mjs 原子写/自愈用例", "status": "planned", "evidence": "tests/oauth-credentials.mjs 输出", "exception": ""},
+          "security": {"threshold": "凭据文件 owner-only；诊断信息永不回传 token 值；凭据文档未知字段拒绝", "validation": "node tests/oauth-credentials.mjs 权限与脱敏断言", "status": "planned", "evidence": "tests/oauth-credentials.mjs 输出", "exception": ""},
+          "accessibility": {"threshold": "预设入口/ToS 确认弹窗/错误文案中文可读、人话可理解", "validation": "UI 文案逐项检查（Code Reviewer checklist 项）", "status": "planned", "evidence": "review-EVO-002-R*.md", "exception": "CLI 插件无 WCAG 面"},
+          "ux": {"threshold": "一键登录用户操作 ≤3 次（对比自建 Client 路径 10+ 步）", "validation": "端到端登录路径测试与操作计数", "status": "planned", "evidence": "evidence-log EVO-002 条目", "exception": ""},
+          "maintainability": {"threshold": "新模块单职责（≤3 句）；协议分支与既有三协议分支同构；service.js 无关膨胀", "validation": "Code Reviewer 设计一致性检查项", "status": "planned", "evidence": "review-EVO-002-R*.md", "exception": ""}
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "Step 6 账号卡：oauthExperimental 开启后设置页出现「ChatGPT（实验）」预设入口与登录/登出按钮（Step 1-5 为其地基，逐步交付）",
+        "demo_path": "设置页 UI 实测 + node tests/smoke.mjs 全绿",
+        "scope_guard": "仅 lib/schemas.js、lib/oauth-credentials.js（新增）、lib/index.js、lib/service.js、lib/client.js、tests/smoke.mjs、tests/oauth-credentials.mjs（新增）、tests/metrics.mjs（C-9 埋点）内 EVO-002 声明的改动；不改 M1-M5 模块与既有通用账号行为",
+        "rollback_plan": "用户层 oauthExperimental 关闭（入口隐藏+通路报错）；代码层每步独立 commit 可逐个 revert（ADR-005 可逆·中风险）",
+        "status": "planned",
+        "evidence": "evidence-log EVO-002 条目 + review-EVO-002-R*.md 链"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "实现与 ADR-005/roadmap §3 设计或 H3/H2 PoC 事实冲突时停下上报（如协议形状不符）",
+          "需要引入新依赖或改变既有 OAuth 通用账号行为时上报",
+          "发布决策/风险接受/外部依赖变更由 Coordinator 转用户裁决"
+        ],
+        "auto_execute": [
+          "分步实现/测试/commit（每步一个独立 commit，含 EVO-002 前缀）",
+          "既有断言回归验证与治理记录更新（Coordinator 侧）"
+        ],
+        "assumption_record": {
+          "assumption": "Step 边界按 roadmap §3.3/§3.4 顺序切分：schemas → oauth-credentials → 1455 loopback → service 授权流 → 协议分支 → client UI → C-9 埋点",
+          "basis": "plan-tracker EVO-002 任务行 + session-snapshot 下次会话优先级 1",
+          "reversibility": "步骤边界可重排，不影响单步 commit 粒度与回滚",
+          "validation": "每步 Code Reviewer 审查通过后进入下一步",
+          "rollback": "revert 单步 commit"
+        },
+        "interruption_budget": "每工作单元（Step）至多一次用户打断，无新 critical trigger 不追加"
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task: lib/schemas.js, lib/oauth-credentials.js (new), lib/index.js, lib/service.js, lib/client.js, tests/smoke.mjs, tests/oauth-credentials.mjs (new), tests/metrics.mjs (C-9 metric hooks)",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary (node tests/smoke.mjs 等)",
+        "independent review evidence per step (Code Reviewer APPROVED, review-EVO-002-R*.md) or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "node tests/smoke.mjs",
+        "node tests/metrics.mjs"
+      ],
+      "done_definition": [
+        "v0.3.0 出口条件①-⑥（roadmap §2.1）逐项满足：①一键登录端到端 ②token 过期自动刷新 ③设备码后备可用 ④默认关闭+显式确认+登出删除路径全可用 ⑤534+ 断言零回退+新增用例全绿 ⑥H2 PoC 报告归档（EV-028 已完成）",
+        "Code Reviewer per-step review chain APPROVED（.governance/review-EVO-002-R*.md）",
+        "Commit per step with EVO-002 prefix and push completed for this task"
+      ],
+      "source": "plan-tracker.md EVO-002 任务行 + docs/architecture/evolution-roadmap-v1.md §3（ADR-005）+ EV-028（PoC 发现：SSE 聚合路径/代理发现 chatgpt.com 需代理 7890 而 auth.openai.com 直连/软轮换宽限窗/V-EVO-2c 自标识可行/gpt-5.3 不在白名单）"
     }
   }
 }
