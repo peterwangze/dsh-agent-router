@@ -112,7 +112,7 @@
     "EVO-003": {
       "task_id": "EVO-003",
       "priority": "P1",
-      "status": "Phase 2 派发中（2026-08-23，EVO-002 Step 6 已提交释放锁）：service.js 委托迁移（record/statsSnapshot/resetStats→stats 模块，五实例字段迁移）+ schemas.js W-4 persist 开关（router.stats.persist 往返语义）+ smoke 统计断言接线 + RPC statsExport + **前置项必做**：F1 persist=false 时 load()/heal/quarantine/prune 门控+用例；F2 record() #fold/getAgentName 纳入 try；F4 tests/stats.mjs 测5 补子集身份断言；裁量① quality_budget 文面修订（Node 内建零包依赖）随本包更新",
+      "status": "已完成（终态，2026-08-23）——Phase 1（1199c0b）+ Phase 2（c2d01ea）全闭环；R1 APPROVED_WITH_NOTES/0（EV-039/042）+ R2 APPROVED_WITH_NOTES/0（EV-051/052）；前置项 F1/F2/F4 闭合；4 裁量点全 adopt；W-4 往返语义落地。遗留台账（转 UI 批次）：R2-F1/F2/F3 P2×3 + carried R1-F3 CSV 注入 + 出口②按天视图/⑤导出按钮 UI 面 + P3×4。本包为终态记录，UI 批次另立",
       "goal": "C-3 统计持久化（ADR-006）：lib/stats.js 分离（service.js 2965 基线净减 ~220）+ DSH_HOME 按天 JSONL + 异步批量 flush + 数据安全四件套 + 成本单价表 + CSV 导出 + W-4 persist 开关往返语义——重启保留 + 按天聚合/p50/p95/成本",
       "product_success_contract": {
         "user": "dsh-agent-router 插件用户",
@@ -148,7 +148,7 @@
           "performance": {"threshold": "record() = 一次数组 push（E7-a）；flush 异步批量；绝不反压", "validation": "tests/stats.mjs 队列/flush 用例", "status": "planned", "evidence": "tests/stats.mjs 输出", "exception": ""},
           "reliability": {"threshold": "JSONL 单行原子 append；index temp+rename；崩溃丢失窗口 ≤5s（P7：可丢统计不可损用户数据）", "validation": "kill -9 模拟用例", "status": "planned", "evidence": "tests/stats.mjs 输出", "exception": ""},
           "security": {"threshold": "统计行不含凭据/token 值；corrupt 文件 rename 保留现场不静默丢弃", "validation": "行内容断言", "status": "planned", "evidence": "tests/stats.mjs 输出", "exception": ""},
-          "maintainability": {"threshold": "stats.js 职责 ≤3 句（聚合/持久化/生命周期 API）；仅依赖 node:fs/node:path 与 schemas 常量，被 service.js 消费不反向依赖（无环）", "validation": "Code Reviewer 设计一致性检查", "status": "planned", "evidence": "review-EVO-003-R*.md", "exception": ""}
+          "maintainability": {"threshold": "stats.js 职责 ≤3 句（聚合/持久化/生命周期 API）；Node 内建零包依赖（R2 裁量①文面——原'仅依赖 node:fs/node:path'广义化），被 service.js 消费不反向依赖（无环）", "validation": "Code Reviewer 设计一致性检查", "status": "planned", "evidence": "review-EVO-003-R*.md", "exception": ""}
         }
       },
       "vertical_slice": {
