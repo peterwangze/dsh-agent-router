@@ -2,7 +2,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { routerSchema, wireCodecs, MODALITY_VALUES, MODALITY_DIRECTIONS, normalizeCapabilities, OAUTH_PRESET_VALUES } from '../lib/schemas.js'
 import { createHostContribution, ROUTER_REMOTE } from '../lib/rpc.js'
-import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine, cliWorkspaceHint, detectAudioVideoMediaType } from '../lib/service.js'
+import { RouterService, AGENT_TYPES, errorMessage, GEMINI_OAUTH_SCOPES, GEMINI_SELF_CLIENT_SCOPES, migrateGeminiScope, extractCodexJsonl, extractCliJsonObject, parseClaudeStatus, wrapCmdLine, cliWorkspaceHint, detectAudioVideoMediaType, oauthCapabilities, resolveOauthProxy } from '../lib/service.js'
 import { runClientRender } from './client-render.mjs'
 import { runInstallEntryTests } from './install-entry.mjs'
 import { runAttachmentTests } from './attachments.mjs'
@@ -82,12 +82,15 @@ console.log('schemas:')
   // 未知值放行、消费点校验（OAUTH_PRESET_VALUES 常量供后续步骤与 UI 消费）。
   const c = routerSchema({})
   check('default oauthExperimental=false (§3.6 默认关闭)', c.oauthExperimental === false)
+  check('default oauthTosAccepted=false + oauthProxyUrl empty (EVO-002 Step 6)', c.oauthTosAccepted === false && c.oauthProxyUrl === '')
   check('default takeoverDefaultModel=false (FIX-002 默认不接管)', c.takeoverDefaultModel === false)
   const d = routerSchema({ oauthAccounts: { legacy: { name: 'L' } } })
   check('oauth entry preset defaults to empty (P3 既有配置零破坏)', d.oauthAccounts.legacy.preset === '')
   check('oauth entry credentialFile defaults to empty', d.oauthAccounts.legacy.credentialFile === '')
   const e = routerSchema({ oauthExperimental: true, oauthAccounts: { cgpt: { name: 'ChatGPT', preset: 'chatgpt-codex', credentialFile: 'X:\\path.json' } } })
   check('preset/credentialFile/oauthExperimental explicit values kept', e.oauthExperimental === true && e.oauthAccounts.cgpt.preset === 'chatgpt-codex' && e.oauthAccounts.cgpt.credentialFile === 'X:\\path.json')
+  const e6 = routerSchema({ oauthTosAccepted: true, oauthProxyUrl: 'http://127.0.0.1:7890' })
+  check('oauthTosAccepted/oauthProxyUrl explicit values kept (Step 6 schema)', e6.oauthTosAccepted === true && e6.oauthProxyUrl === 'http://127.0.0.1:7890')
   const f = routerSchema({ oauthAccounts: { odd: { preset: 'foo' } } })
   check('unknown preset tolerated (R-5 放行语义)', f.oauthAccounts.odd.preset === 'foo')
   check('OAUTH_PRESET_VALUES frozen + chatgpt-codex (P5 泛化)', Object.isFrozen(OAUTH_PRESET_VALUES) && OAUTH_PRESET_VALUES.length === 1 && OAUTH_PRESET_VALUES[0] === 'chatgpt-codex')
@@ -158,8 +161,8 @@ console.log('rpc contribution:')
 {
   const contribution = createHostContribution()
   check('face host', contribution.face === 'host')
-  check('15 invocations', contribution.invocations.length === 15)
-  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 15 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
+  check('16 invocations', contribution.invocations.length === 16)
+  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 16 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
   check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))
   check('image RPC descriptors present', contribution.invocations.some((d) => d.method === 'imageData'))
   check('uploadFile RPC descriptor present', contribution.invocations.some((d) => d.method === 'uploadFile' && d.id === 'dsh-agent-router#router/uploadFile'))
@@ -473,11 +476,15 @@ console.log('RouterService:')
     const presetRoot = new Context()
     presetRoot.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
     let oauthExperimental = false
+    // Step 6 起 begin 侧新增 ToS 门（§3.6 显式开启确认，experimental 检查之后）；
+    // 本夹具聚焦授权流本体——预置已确认态，ToS 语义由 Step 6 块专测。
+    const oauthTosAccepted = true
     const presetCredFile = join(presetWork, 'cgpt-auth.json')
     const presetService = new RouterService(presetRoot)
     presetService.attach({ get: () => ({
       enabled: true,
       oauthExperimental,
+      oauthTosAccepted,
       oauthAccounts: {
         // 同名字段故意填干扰值：preset 语义 = 常量预填（零配置），账号内
         // authUrl/tokenUrl/clientId/scope 必须被忽略（roadmap §3.4 条目 1）。
@@ -740,6 +747,164 @@ console.log('RouterService:')
     }
   }
 
+  // ── EVO-002 Step 6：账号卡服务面——§3.6 ToS 门（显式开启确认）+ oauthLogout
+  // （W-5 凭据删除路径，合规删除不随实验开关关闭失效）+ §3.5 Q2 per-protocol
+  // 能力接口（oauthCapabilities/runOauthDispatch，替代全局 chat 一刀切）+
+  // 代理发现（resolveOauthProxy 配置>env 回退；chatgpt.com codex 调用经
+  // dispatcher 接线；无代理直连零变化）+ C-9 埋点启动（oauthEvents 登录旅程，
+  // P7 零 token 值）+ catalog preset 登录态镜像（账号卡 UI 数据源）。独立
+  // service + 临时凭据目录 + fetch/undici 注入——主夹具零污染。
+  console.log('oauth preset account surface (EVO-002 Step 6):')
+  {
+    let step6Crash = null
+    try {
+      const step6Work = mkdtempSync(join(tmpdir(), 'router-step6-'))
+      const fakeJwt6 = (accountId) => {
+        const b64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
+        return `${b64url({ alg: 'RS256', typ: 'JWT' })}.${b64url({ 'https://api.openai.com/auth': { chatgpt_account_id: accountId } })}.sig-step6`
+      }
+      const accessJwt6 = fakeJwt6('acct-cgpt-6')
+      const credFile6 = join(step6Work, 'step6-auth.json')
+      const root6 = new Context()
+      root6.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
+      const state6 = {
+        enabled: true,
+        oauthExperimental: false,
+        oauthTosAccepted: false,
+        oauthProxyUrl: '',
+        oauthAccounts: {
+          cgpt: { name: 'ChatGPT订阅', enabled: true, preset: 'chatgpt-codex', credentialFile: credFile6, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', models: ['gpt-5.4-mini'] },
+          plain: { name: '通用账号', enabled: true, protocol: 'openai-completions', baseURL: 'https://gw.example/v1', tokenRef: 'PLAIN_TOKEN', models: ['gw-1'] },
+        },
+        pools: { main: { name: '主池', enabled: true, strategy: 'healthy', accounts: ['cgpt'] } },
+        agents: {
+          cgptchat: { name: 'CGPT', type: 'chat', enabled: true, account: 'cgpt' },
+          cgptimg: { name: 'CGPT生图', type: 'image', enabled: true, account: 'cgpt', provider: 'openai', model: 'gpt-image-1' },
+          poolchat: { name: '池chat', type: 'chat', enabled: true, account: 'pool:main' },
+          poolimg: { name: '池image', type: 'image', enabled: true, account: 'pool:main', provider: 'openai', model: 'gpt-image-1' },
+        },
+      }
+      const svc6 = new RouterService(root6)
+      svc6.attach({ get: () => state6 })
+      svc6.codexLoopbackStarter = async () => ({ ready: true, port: 1455, dispose: () => {} })
+      const seed6 = async () => {
+        const store6 = new OauthCredentialStore(credFile6)
+        await store6.write({ type: 'oauth', access: accessJwt6, refresh: 'REFRESH-STEP6', expires: Date.now() + 3_600_000, accountId: 'acct-cgpt-6' })
+      }
+      const sse6 = (text) => ({
+        ok: true,
+        status: 200,
+        body: new ReadableStream({
+          start(controller) {
+            const encoder = new TextEncoder()
+            controller.enqueue(encoder.encode(`event: response.created\ndata: {"type":"response.created"}\n\n`))
+            controller.enqueue(encoder.encode(`event: response.output_text.delta\ndata: ${JSON.stringify({ type: 'response.output_text.delta', output_index: 0, delta: text })}\n\n`))
+            controller.enqueue(encoder.encode(`event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: { usage: { input_tokens: 5, output_tokens: 6 } } })}\n\n`))
+            controller.close()
+          },
+        }),
+      })
+      const fetches6 = []
+      const realFetch6 = globalThis.fetch
+      globalThis.fetch = async (url, options) => {
+        fetches6.push({ url: String(url), init: options })
+        if (String(url) === CHATGPT_PRESET.tokenUrl) {
+          return { ok: true, json: async () => ({ access_token: accessJwt6, refresh_token: 'REFRESH-STEP6', expires_in: 3600, token_type: 'bearer' }) }
+        }
+        if (String(url).endsWith('/codex/responses')) return sse6('OK-6')
+        return { ok: false, status: 404, text: async () => 'not found' }
+      }
+      try {
+        // A. §3.5 oauthCapabilities：v0.3.0 全协议（含未知协议）返回 ['chat']
+        //    ——接口形状就位，后续版本按协议扩展返回值即解开限制（P5 单点）。
+        const caps6 = ['openai-completions', 'anthropic', 'gemini', 'codex-responses', 'mystery'].map((protocol) => oauthCapabilities(protocol))
+        check('oauthCapabilities returns [chat] for every protocol (§3.5)', caps6.every((caps) => Array.isArray(caps) && caps.length === 1 && caps[0] === 'chat'))
+        // B. runOauthDispatch per-protocol 类型拒绝（替代全局一刀切）+ chat 放行。
+        state6.oauthExperimental = true
+        await seed6()
+        let imgErr6 = null
+        try { await svc6.run({ agentId: 'cgptimg', task: '画一张图' }) } catch (error) { imgErr6 = error }
+        check('oauth dispatch rejects image type with per-protocol wording (§3.5)', !!imgErr6 && imgErr6.message.includes('暂不支持') && imgErr6.message.includes('codex-responses') && imgErr6.message.includes('image'))
+        check('oauth dispatch retires old global wording', !!imgErr6 && !imgErr6.message.includes('目前仅支持 chat 类型'))
+        let poolImgErr6 = null
+        try { await svc6.run({ agentId: 'poolimg', task: 'x' }) } catch (error) { poolImgErr6 = error }
+        check('pool dispatch rejects non-chat via same per-protocol gate', !!poolImgErr6 && poolImgErr6.message.includes('account-pool') && poolImgErr6.message.includes('暂不支持'))
+        const chat6 = await svc6.run({ agentId: 'cgptchat', task: '你好' })
+        check('oauth dispatch passes chat through to protocol branch', chat6.kind === 'chat' && chat6.text === 'OK-6')
+        const poolChat6 = await svc6.run({ agentId: 'poolchat', task: '池调用' })
+        check('pool dispatch passes chat through', poolChat6.kind === 'chat' && poolChat6.text === 'OK-6')
+        // C. §3.6 ToS 门：experimental 开 + ToS 未确认 → begin 拒绝（先于
+        //    loopback 就绪检查——1455 ready 也不放行；文案含条款指引）。
+        const tosBlocked6 = await svc6.oauthBegin({ accountId: 'cgpt' })
+        check('preset begin requires ToS acceptance before loopback (§3.6)', tosBlocked6.ok === false && tosBlocked6.message.includes('条款') && !tosBlocked6.message.includes('1455'))
+        state6.oauthTosAccepted = true
+        const begin6 = await svc6.oauthBegin({ accountId: 'cgpt' })
+        check('preset begin proceeds once ToS accepted', begin6.ok === true && begin6.authUrl.startsWith(`${CHATGPT_PRESET.authUrl}?`))
+        const ex6 = await svc6.oauthTokenExchange({ code: 'code-6', state: begin6.state })
+        check('preset exchange completes login journey', ex6.ok === true && existsSync(credFile6))
+        // D. oauthLogout（W-5）：删凭据文件 + 幂等 + 非 preset 拒绝 + 未知账号
+        //    拒绝；实验开关关闭不拦截登出（合规删除路径恒可用）。
+        const lo6 = await svc6.oauthLogout({ accountId: 'cgpt' })
+        check('preset logout deletes credential file (W-5)', lo6.ok === true && lo6.message.includes('登出') && !existsSync(credFile6))
+        const lo6again = await svc6.oauthLogout({ accountId: 'cgpt' })
+        check('preset logout idempotent when credential absent', lo6again.ok === true)
+        const loPlain6 = await svc6.oauthLogout({ accountId: 'plain' })
+        check('logout rejects non-preset account', loPlain6.ok === false && loPlain6.message.includes('ChatGPT 预设'))
+        const loUnknown6 = await svc6.oauthLogout({ accountId: 'nope' })
+        check('logout rejects unknown account', loUnknown6.ok === false && loUnknown6.message.includes('不存在'))
+        state6.oauthExperimental = false
+        await seed6()
+        const loOff6 = await svc6.oauthLogout({ accountId: 'cgpt' })
+        check('logout stays usable while experimental off (compliance path)', loOff6.ok === true && !existsSync(credFile6))
+        state6.oauthExperimental = true
+        // E. catalog 镜像：preset 标志 + presetLoggedIn（登录态随凭据文件翻转）。
+        await seed6()
+        const cat6a = await svc6.catalog({})
+        const cgptEntry6a = cat6a.oauthAccounts.find((entry) => entry.id === 'cgpt')
+        check('catalog mirrors preset flag and logged-in state', cgptEntry6a.preset === 'chatgpt-codex' && cgptEntry6a.presetLoggedIn === true)
+        await svc6.oauthLogout({ accountId: 'cgpt' })
+        const cat6b = await svc6.catalog({})
+        const cgptEntry6b = cat6b.oauthAccounts.find((entry) => entry.id === 'cgpt')
+        check('catalog logged-in flips false after logout', cgptEntry6b.presetLoggedIn === false)
+        check('catalog generic account carries no preset', (cat6b.oauthAccounts.find((entry) => entry.id === 'plain').preset ?? '') === '')
+        // F. 代理发现 resolveOauthProxy：显式配置 > env 回退发现 > 无代理。
+        check('resolveOauthProxy prefers router config over env', resolveOauthProxy({ oauthProxyUrl: 'http://127.0.0.1:7890' }, { HTTPS_PROXY: 'http://env-proxy:1' }).proxyUrl === 'http://127.0.0.1:7890')
+        check('resolveOauthProxy discovers env proxy fallback', resolveOauthProxy({}, { https_proxy: 'http://env-p:7890' }).proxyUrl === 'http://env-p:7890' && resolveOauthProxy({}, { HTTPS_PROXY: 'http://env-2:1' }).source === 'HTTPS_PROXY')
+        check('resolveOauthProxy empty when nothing configured', resolveOauthProxy({}, {}).proxyUrl === '' && resolveOauthProxy({}, {}).source === '')
+        // G. codex 调用代理接线（仅 chatgpt.com 目标）：配置代理 → fetch init
+        //    带 dispatcher（undici 注入桩）；无代理 → 无 dispatcher（直连零
+        //    变化）；undici 不可用 → 明确报错（代理来源 + 指引）。
+        await seed6()
+        svc6.oauthUndiciLoader = async () => ({ ProxyAgent: class { constructor(url) { this.url = url } } })
+        state6.oauthProxyUrl = 'http://127.0.0.1:7890'
+        const proxied6 = await svc6.run({ agentId: 'cgptchat', task: '经代理' })
+        check('codex call routes via proxy dispatcher when configured', proxied6.text === 'OK-6' && fetches6[fetches6.length - 1]?.init?.dispatcher?.url === 'http://127.0.0.1:7890')
+        state6.oauthProxyUrl = ''
+        const direct6 = await svc6.run({ agentId: 'cgptchat', task: '直连' })
+        check('codex call stays direct (no dispatcher) when no proxy', direct6.text === 'OK-6' && fetches6[fetches6.length - 1]?.init?.dispatcher === undefined)
+        svc6.oauthUndiciLoader = async () => { throw new Error('undici not installed') }
+        state6.oauthProxyUrl = 'http://127.0.0.1:7890'
+        let proxyLoadErr6 = null
+        try { await svc6.run({ agentId: 'cgptchat', task: 'x' }) } catch (error) { proxyLoadErr6 = error }
+        check('proxy configured but undici unavailable errors clearly', !!proxyLoadErr6 && proxyLoadErr6.message.includes('undici') && proxyLoadErr6.message.includes('代理'))
+        state6.oauthProxyUrl = ''
+        svc6.oauthUndiciLoader = null
+        // H. C-9 埋点：oauthEvents 记录登录旅程（begin fail/ok、login ok、
+        //    logout），事件负载零 token 值（P7 红线）。
+        const kinds6 = new Set(svc6.oauthEvents.map((event) => event.kind))
+        check('oauth telemetry records login journey kinds (C-9)', kinds6.has('preset_begin_fail') && kinds6.has('preset_begin_ok') && kinds6.has('preset_login_ok') && kinds6.has('preset_logout'))
+        check('oauth telemetry never carries token values (P7)', !JSON.stringify(svc6.oauthEvents).includes('sig-step6') && !JSON.stringify(svc6.oauthEvents).includes('REFRESH-STEP6'))
+      } finally {
+        globalThis.fetch = realFetch6
+        try { rmSync(step6Work, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
+      }
+    } catch (error) {
+      step6Crash = error
+    }
+    check('step6 block completes without unexpected throw', step6Crash === null)
+    if (step6Crash) console.error('      step6 crash:', step6Crash && step6Crash.message)
+  }
+
   const text = service.promptText()
   check('promptText lists agents', text.includes('vision') && text.includes('draw') && text.includes('route_agent') && !text.includes('off'))
   check('promptText pool meta', text.includes('OAuth 账号池:G池') && text.includes('2 个账号'))
@@ -881,7 +1046,7 @@ console.log('RouterService:')
       try { await service.run({ agentId: 'coder', task: 'x', images: [], exec: { agent: { session: { header: { delegationDepth: 0 } } } } }) } catch (error) { cliNoCwdRejected = String(error.message).includes('会话工作目录') }
       check('cli without cwd rejected', cliNoCwdRejected)
       let cliOauthRejected = false
-      try { await service.run({ agentId: 'coderacct', task: 'x', images: [], exec: { agent: fakeParentCli } }) } catch (error) { cliOauthRejected = String(error.message).includes('仅支持 chat') }
+      try { await service.run({ agentId: 'coderacct', task: 'x', images: [], exec: { agent: fakeParentCli } }) } catch (error) { cliOauthRejected = String(error.message).includes('暂不支持') && String(error.message).includes('cli') }
       check('cli with oauth account rejected', cliOauthRejected)
       service.killCliChildren()
       check('cli children drained after kill', service.cliChildren.size === 0)
@@ -1536,7 +1701,7 @@ console.log('apply wiring:')
     const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
     await app
     check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
-    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 15 && registeredContribution.package === 'dsh-agent-router')
+    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 16 && registeredContribution.package === 'dsh-agent-router')
     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
     check('oauth callback route registered', webRoute && webRoute.kind === 'exact' && webRoute.path === '/router-oauth/callback' && typeof webRoute.handler === 'function')
     // R3 F-3：真实 service 上断言惰性注入点——apply 后 starter 可用但 1455
