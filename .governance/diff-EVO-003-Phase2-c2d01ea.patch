@@ -1,0 +1,910 @@
+commit c2d01ea512cb93400f27ca8ce3ed3ae1d69f172d
+Author: peterwangze <1337917121@qq.com>
+Date:   Sat Aug 22 21:05:23 2026 +0800
+
+    EVO-003: Phase 2 统计集成——service 委托迁移（+73/-165 零残留）+ W-4 persist 往返开关 + statsExport RPC（17 号描述符）+ 前置项 F1/F2/F4 + smoke 接线（849/0，DSH_HOME 隔离）；EV-051
+
+diff --git a/.governance/evidence-log.md b/.governance/evidence-log.md
+index 2838997..1568477 100644
+--- a/.governance/evidence-log.md
++++ b/.governance/evidence-log.md
+@@ -64,3 +64,4 @@
+ 
+ | REVIEW-EVO-002-R7 | EVO-002 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 7） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-EVO-002-R7.md; review-EVO-002-R7.md | Code Reviewer | 2026-08-22 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+ | EV-050 | EVO-002 | development | REVIEW 证据（Step 6 终态） | **R7 审查 = APPROVED_WITH_NOTES（unresolved_blockers=0，P0=0/P1×2/P2×3/P3×6）——Step 6 有条件通过（机器落账 REVIEW-EVO-002-R7；完整报告备份防覆盖恢复）**。正面核验全过：ToS 三级门门序逐行核实（experimental→tos→loopback，手改配置绕不过）/oauthLogout 幂等/Q2 §3.5 逐字一致/代理三态序+auth 永不经代理/C-9 P7 零 token/38 断言算术闭合（8/10 旧代码必败）。**P1×2 绑定 Step 7 收尾批次（真机首联前 MUST 闭合）**：R7-F1 W-5 旁路——通用 OAuth 区渲染 preset 账号（双卡）+ 通用删除仅 unset（**无凭据删除无池清理 → 活 refresh token 残留 + 池悬挂引用**，任务书疑区(b)点名模式）；R7-F2 删除成功文案复用"access token 已自动保存"（语义错误）。P2×3：F3 ProxyAgent 每调用新建/F4 deletePresetAccount 忽略 oauthLogout ok:false/F5 测试未隔离代理 env（HTTPS_PROXY 机器上 smoke+C-9-1 必败——与 F1/F2 同批修复）。P3×6 台账。R6-F2/F5 维持待真机首联；R6-F1 建议 Step 7。**Reviewer 过程披露：一次 pwsh 只读计数流程违规（§0 自披露）**。目标对齐: C-1 Step 6 质量门通过（带收尾条件）。用户影响: 实验入口全链可用；W-5 旁路修复前删 preset 账号请用账号卡删除按钮（勿用通用区）。结构化事实: {"verdict":"APPROVED_WITH_NOTES","unresolved_blockers":0,"p":{"P0":0,"P1":2,"P2":3,"P3":6},"step7_must_close":["R7-F1-w5-bypass","R7-F2-copy","R7-F4-logout-fail-silent","R7-F5-env-isolation"],"live_first_call_inputs":["dispatcher-vs-native-fetch","R6-F2-crlf","R6-F5-403-copy","R7-F5-env"],"packet_refresh":"rpc.js+client-render 枚举"} | .governance/review-EVO-002-R7.md + review-record 输出 | Code Reviewer（subagent 89796f76） | 2026-08-23 | — | Step 6 终态（带收尾条件）；Step 7 输入入账 |
++| EV-051 | EVO-003 | development | DEV 证据（Phase 2 集成） | **Phase 2 完成（7 子项全闭环，7 锁内文件，未提交——Coordinator 接管）**：前置项 **F1** load()/prune()/#quarantine/heal/#loadDailyFile/reset 磁盘段全门控（测15 8 断言红→绿）；**F2** record() #fold/recent/入队纳入第二层 try（测16 2 断言）；**F4** 测5 子集身份断言 `'2,3,4'`（错丢最新必败）。**委托迁移**：五实例字段整体迁移 StatsStore（service.js +73/-165），record/statsSnapshot/resetStats 委托，ok/enabled 包装留接线层（R1 F12），accountHealth getter 兼容，minuteKey/RECENT_CAP/SERIES_WINDOW 归 stats.js 单一事实源——统计逻辑零残留 inline。**W-4 persist 开关**：schemas stats.persist 默认 true 三态 + setPersist 往返语义（关前先 flush 队列→false 期纯内存→重开非空内存跳过 reload 防双计+空内存全量恢复 IBC-1 ①②③）+ applyStatsSettings + index.js 热同步（服务面 5 断言三次翻转）。**smoke 接线**：DSH_HOME 临时目录隔离（P7 关键——本机 DSH_HOME 实测为真实用户目录）+ runStatsTests 接入（裁量：接入且独立并存，oauth-credentials 同构）+ 描述符 16→17。**statsExport RPC**：{range,level}→CSV 11 列 + 非法值 ok:false（cliModels 先例）。**测试全 exit=0：smoke 849/0（基线 733+116）/ stats 99/0（80+19）/ metrics ALL / routing-paths 95/95（DEV-002 套件回归绿）/ parity 14**；TDD 红灯先行。**4 项裁量申报待 R2**：①runStatsTests 接入方式 ②RouterService 构造默认 persist=false（组合根按设置启用——防直构测试污染真实 DSH_HOME，生产行为不变）③setPersist 同进程往返跳过 reload（IBC-1 细化防双计）④净减 -92 vs 预估 ~220（现行统计段 165 行已全量迁移，完整性以零残留为准）。目标对齐: v0.3.1 出口条件①②③⑤⑥⑦⑧机制面（④成本双口径展示待 UI 面）+ W-4 闭环。用户影响: 统计持久化生效路径就位（重启保留/CSV 导出 RPC 可用；实际生效待版本发布）。结构化事实: {"files":{"lib/stats.js":"+92/-26","lib/service.js":"+73/-165","lib/schemas.js":"+43","lib/rpc.js":"+9","lib/index.js":"+19/-1","tests/stats.mjs":"+98/-1","tests/smoke.mjs":"+82/-4"},"tests":{"smoke":"849/0","stats":"99/0","routing_paths":"95/95"},"preconditions":"F1/F2/F4 全闭环","w4":"roundtrip-8+5-assertions","discretions":4,"dsh_home_isolation":"real-dir-risk-mitigated"} | 工作区 7 文件 diff + Developer（subagent d4a8975f）报告 | Developer（subagent）via Coordinator | 2026-08-23 | — | R2 审查派发中 |
+diff --git a/lib/index.js b/lib/index.js
+index e979679..532347d 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -161,9 +161,27 @@ export function apply(ctx) {
+     service.killCliChildren()
+   }, 'dsh-agent-router: detach settings scope')
+ 
+-  // 多模态平台 L1：准入包装（twin 路由，随视觉 agent 开关热同步）。
++  // Multi-modal platform L1: admission wrapping (twin routing, hot-synced with the vision agent switch).
+   ctx.effect(() => installAdmissionWrapper(ctx, service), 'dsh-agent-router: admission wrapper')
+ 
++  // C-3 statistics persistence lifecycle (EVO-003 Phase 2 / roadmap §4.4 / W-4):
++  // enable according to settings router.stats.persist (default true) —— setPersist on toggle
++  // handles round-trip semantics (on→off: flush first so no recorded events are lost; off→on: empty memory fully restores disk
++  // aggregation + rebuilds index); on unload, final flush + timer cleanup. service defaults to
++  // pure in-memory (current behavior), persistence is only enabled here at the composition root (lifetime single point).
++  ctx.effect(() => {
++    service.applyStatsSettings()
++    const offSettings = ctx.on('settings/updated', (ns) => {
++      // Listen on settings/updated (issued after resolved commit——same reasoning as wrapper L512,
++      // reading must get the new value); only respond to changes in this namespace.
++      if (ns === ROUTER_NS || ns === void 0) service.applyStatsSettings()
++    })
++    return () => {
++      offSettings()
++      void service.stats.close()
++    }
++  }, 'dsh-agent-router: stats persistence lifecycle')
++
+   // pre-step（v3 Step 6 / N-3）：图片轮 reminder 注入（通道①，带 id 的插件合成
+   // user 消息）+ 逃生组分级改写兜底（非包装路由，复用 Step 3 能力判定与改写
+   // 语义）。随宿主行 fiber 卸载（Step 6 回滚 = 卸载本注册，wrapper-only 仍可用）。
+diff --git a/lib/rpc.js b/lib/rpc.js
+index 423b951..27c9a13 100644
+--- a/lib/rpc.js
++++ b/lib/rpc.js
+@@ -53,6 +53,15 @@ export const ROUTER_DESCRIPTORS = [
+     parameters: [parameter('request', wireCodecs.emptyRequest)],
+     result: result('StatsResult', wireCodecs.statsResult),
+   },
++  {
++    id: 'dsh-agent-router#router/statsExport',
++    service: 'router',
++    namespace: 'router',
++    method: 'statsExport',
++    invocation: { kind: 'direct' },
++    parameters: [parameter('request', wireCodecs.statsExportRequest)],
++    result: result('StatsExportResult', wireCodecs.statsExportResult),
++  },
+   {
+     id: 'dsh-agent-router#router/test',
+     service: 'router',
+diff --git a/lib/schemas.js b/lib/schemas.js
+index 37ad03b..114d872 100644
+--- a/lib/schemas.js
++++ b/lib/schemas.js
+@@ -230,6 +230,13 @@ export const routerSchema = z.object({
+    *  回退发现（HTTPS_PROXY/https_proxy/ALL_PROXY）；仅作用于 chatgpt.com
+    *  目标（auth.openai.com 直连可达——EV-028 实证，不经代理）。 */
+   oauthProxyUrl: z.string().default(''),
++  /** 统计持久化设置（C-3 / EVO-003 Phase 2 / W-4，ARCH-002 IBC-1）：
++   *  persist（默认 true）= DSH_HOME 按天 JSONL 持久化；false = 纯内存 =
++   *  现状行为——false 期间不读不写磁盘，开关往返不损已落盘数据（开→关
++   *  先 flush；关→开空内存全量恢复磁盘聚合 + 重建索引）。 */
++  stats: z.object({
++    persist: z.boolean().default(true),
++  }).default({}),
+   /** 以 id 为键的自定义 agent 字典。 */
+   agents: z.dict(agentSchema).default({}),
+   /** 以 id 为键的 OAuth 账号字典（插件独立管理）。 */
+@@ -483,6 +490,10 @@ export const wireCodecs = {
+       inputTokens: v.number(true),
+       outputTokens: v.number(true),
+       error: v.string(true),
++      /** C-3 增量（EVO-003 Phase 2）：成本估算（E8）与错误分类预留字段
++       *  （§4.3 errorClass——v0.3.2 填充，向前兼容）。 */
++      costEstimate: v.number(true),
++      errorClass: v.string(true),
+     })),
+     series: v.array(v.object({
+       agentId: v.string(),
+@@ -522,6 +533,38 @@ export const wireCodecs = {
+         outputTokens: v.number(),
+       })),
+     })),
++    /** C-3 增量（EVO-003 Phase 2 / §4.3 按天聚合视图）：date → {calls,
++     *  errors, inputTokens, outputTokens, tokens, ms, cost}——动态日期键
++     *  结构走 json 透传（wire 面不逐键声明）。 */
++    days: v.json(true),
++    /** C-3 增量（§4.2 / E7-a 可观测面）：存储自诊断计数（dropped/
++     *  skippedLines/skippedVersionLines/corruptFiles/migratedLines/
++     *  writeErrors/indexRebuilt/detailDropped）。 */
++    selfReport: v.object({
++      dropped: v.number(),
++      skippedLines: v.number(),
++      skippedVersionLines: v.number(),
++      corruptFiles: v.number(),
++      migratedLines: v.number(),
++      writeErrors: v.number(),
++      indexRebuilt: v.number(),
++      detailDropped: v.number(),
++    }, true),
++  }),
++  /** router/statsExport 请求（§4.3）：range '7d'|'30d'|'90d' × level
++   *  'agent'|'account'。wire 面只做形状检查（自由字符串先例——protocol/
++   *  strategy 同构）；非法取值由 service 层校验返回 ok:false + 明确文案。 */
++  statsExportRequest: v.object({
++    range: v.string(),
++    level: v.string(),
++  }),
++  /** router/statsExport 结果（§4.3）：CSV 文本（11 列：date/agent/account/
++   *  model/calls/errors/inputTokens/outputTokens/p50ms/p95ms/costEstimate；
++   *  不落工作区文件——浏览器下载）。 */
++  statsExportResult: v.object({
++    ok: v.boolean(),
++    message: v.string(),
++    csv: v.string(true),
+   }),
+   /** router/test 结果。 */
+   testResult: v.object({
+diff --git a/lib/service.js b/lib/service.js
+index fa187e3..0b1971f 100644
+--- a/lib/service.js
++++ b/lib/service.js
+@@ -10,9 +10,10 @@
+  *   cli（无头 CLI 子代理：codex / claude / gemini 等外部 agent 工具，
+  *   宿主直接 spawn，任务经 stdin 文件 FD 注入、stdout/stderr 走文件 FD
+  *   重定向（不经管道，兼容受限环境），JSON 输出按 CLI 预设解析）；
+- * - 维护进程内实时用量统计（totals / recent / 分钟级 series）；
+- * - 提供 gateway 可直达的 RPC 方法：catalog / stats / test / reset /
+- *   config / save（配置读写走本插件自己的 Remote 端点，因为
++ * - 维护进程内实时用量统计（C-3 / §4.4：聚合与持久化委托 lib/stats.js——
++ *   totals / recent / 分钟级 series 两级聚合 + DSH_HOME 按天 JSONL 持久化）；
++ * - 提供 gateway 可直达的 RPC 方法：catalog / stats / statsExport / test /
++ *   reset / config / save（配置读写走本插件自己的 Remote 端点，因为
+  *   api-proxy 的 settings.describe 只放行其内置白名单 namespace）；
+  * - 生成面向主模型的系统提示段文本（由 tool 行注册）。
+  *
+@@ -34,6 +35,7 @@ import { ROUTER_NS, MODALITY_VALUES, normalizeCapabilities, OAUTH_PRESET_VALUES
+ import { rememberImage } from './memory.js'
+ import { AttachmentRegistry, isAttachmentId, ATTACHMENT_ERROR_CODES } from './attachments.js'
+ import { CHATGPT_PRESET, OauthCredentialStore, resolveCredentialPath, accountIdFromJwt, CREDENTIAL_ERROR_CODES } from './oauth-credentials.js'
++import { StatsStore } from './stats.js'
+ 
+ /** 支持的 agent 类型。 */
+ export const AGENT_TYPES = ['chat', 'agent', 'image', 'speech', 'cli']
+@@ -305,9 +307,8 @@ const CHAT_FILE_READ_MAX_BYTES = 25 * 1024 * 1024
+ /** chat 类型 files 注入：文本内联的字符上限（单文件与总量一致）。 */
+ const CHAT_FILES_TEXT_MAX_CHARS = 200_000
+ 
+-/** 统计保留：最近记录条数 / 分钟桶保留窗口（分钟）。 */
+-const RECENT_CAP = 100
+-const SERIES_WINDOW_MINUTES = 90
++// 统计保留窗口常量（RECENT_CAP=100 / SERIES_WINDOW_MINUTES=90）已随 C-3
++// 委托迁移至 lib/stats.js（RECENT_CAP / SERIES_WINDOW_MINUTES 导出面）。
+ 
+ /**
+  * 内置公开 OAuth Client（零配置一键授权）：Google Cloud SDK（gcloud）的
+@@ -493,10 +494,7 @@ function decodeBase64(text) {
+   return data
+ }
+ 
+-/** 分钟键：ISO 时间截断到分钟。 */
+-function minuteKey(at) {
+-  return new Date(at).toISOString().slice(0, 16)
+-}
++// 分钟键（minuteKey）已随 C-3 委托迁移至 lib/stats.js（minuteKeyOf 私有实现）。
+ 
+ /**
+  * codex-responses 端点归一（pi-ai resolveCodexUrl 同款，H3-8）：空 baseURL →
+@@ -596,7 +594,7 @@ async function* parseSseEvents(body, signal) {
+  * 宿主多模型路由服务。
+  */
+ export class RouterService extends TypertRemoteService {
+-  constructor(ctx, base = {}) {
++  constructor(ctx, base = {}, statsOptions = {}) {
+     super(ctx, 'router')
+     /** 组合层 base（settings 未挂载时的后备配置）。 */
+     this.base = base ?? {}
+@@ -637,7 +635,17 @@ export class RouterService extends TypertRemoteService {
+      *  会话的工作区——浏览器上传发生在用户正在操作的会话，该会话必然已至少
+      *  运行过一次；多会话切换时以最近执行为准（声明推导，§4.4.2 ②）。 */
+     this.lastWorkspace = null
+-    this.resetStats()
++    /** C-3 统计（EVO-003 Phase 2 / §4.4 委托迁移，DEC-011 attachments.js
++     *  先例）：totals/recent/series/accountTotals/accountSeries 五实例字段
++     *  整体迁移至 StatsStore。未接线前 persist=false（纯内存 = 现状行为）；
++     *  index.js 组合根按 settings `router.stats.persist`（默认 true）经
++     *  applyStatsSettings/setPersist 启用持久化生命周期（W-4 往返语义）。
++     *  statsOptions 仅测试注入用（dir/persist 等透传）。 */
++    this.stats = new StatsStore({
++      persist: false,
++      ...statsOptions,
++      getAgentName: (id) => this.getAgent(id)?.name || id,
++    })
+   }
+ 
+   /** 挂接 settings scope；传入 null 回退到组合层 base。 */
+@@ -2777,168 +2785,68 @@ export class RouterService extends TypertRemoteService {
+     return { kind: 'chat', text: output, ...(imageRefs.length > 0 ? { images: imageRefs } : {}), usage }
+   }
+ 
+-  // ── 统计 ──────────────────────────────────────────────────────────────────
++  // ── 统计（C-3 / §4.4 委托迁移：聚合与持久化归 lib/stats.js）───────────────
+ 
+-  resetStats() {
+-    this.totals = new Map()
+-    this.recent = []
+-    this.series = new Map()
+-    this.accountTotals = new Map()
+-    this.accountSeries = new Map()
++  /** 账号（服务商）级聚合读视图：Map 归属 StatsStore（白盒读取兼容面）。 */
++  get accountTotals() {
++    return this.stats.accountTotals
+   }
+ 
+   /**
+-   * 记录一次调用结果。record：
+-   * { agentId, provider, model, ok, ms, inputTokens?, outputTokens?, error? }
+-   * 同时按 agent 与按账号（服务商，含模型细分）两级聚合。
++   * 记录一次调用结果（service.js record 迁移语义，§4.4 委托）：同步、微秒级、
++   * 永不反压调用路径（E7-a）、永不 throw（F2——store 内聚吞错）。record：
++   * { agentId, provider, model, ok, ms, inputTokens?, outputTokens?, error?,
++   * errorClass?, usageCost?, at? }；agent 显示名经构造期注入的 getAgentName
++   * 迁移缝解析（this.getAgent 语义保持）。
+    */
+   record(record) {
+-    const at = Date.now()
+-    const inputTokens = Number(record.inputTokens) || 0
+-    const outputTokens = Number(record.outputTokens) || 0
+-    const ms = Number(record.ms) || 0
+-    const provider = record.provider ?? '?'
+-    const model = record.model ?? '?'
+-
+-    const total = this.totals.get(record.agentId) ?? {
+-      agentId: record.agentId,
+-      name: '',
+-      provider,
+-      model,
+-      calls: 0,
+-      errors: 0,
+-      inputTokens: 0,
+-      outputTokens: 0,
+-      totalMs: 0,
+-      lastAt: 0,
+-    }
+-    total.name = this.getAgent(record.agentId)?.name || record.agentId
+-    total.provider = provider
+-    total.model = model
+-    total.calls += 1
+-    if (!record.ok) total.errors += 1
+-    total.inputTokens += inputTokens
+-    total.outputTokens += outputTokens
+-    total.totalMs += ms
+-    total.lastAt = at
+-    this.totals.set(record.agentId, total)
+-
+-    // 账号（服务商）级聚合，含模型细分。
+-    const account = this.accountTotals.get(provider) ?? {
+-      provider,
+-      calls: 0,
+-      errors: 0,
+-      inputTokens: 0,
+-      outputTokens: 0,
+-      totalMs: 0,
+-      lastAt: 0,
+-      models: new Map(),
+-    }
+-    account.calls += 1
+-    if (!record.ok) account.errors += 1
+-    account.inputTokens += inputTokens
+-    account.outputTokens += outputTokens
+-    account.totalMs += ms
+-    account.lastAt = at
+-    const modelTotal = account.models.get(model) ?? { model, calls: 0, errors: 0, inputTokens: 0, outputTokens: 0, totalMs: 0, lastAt: 0 }
+-    modelTotal.calls += 1
+-    if (!record.ok) modelTotal.errors += 1
+-    modelTotal.inputTokens += inputTokens
+-    modelTotal.outputTokens += outputTokens
+-    modelTotal.totalMs += ms
+-    modelTotal.lastAt = at
+-    account.models.set(model, modelTotal)
+-    this.accountTotals.set(provider, account)
+-
+-    const bucketMap = this.series.get(record.agentId) ?? new Map()
+-    const key = minuteKey(at)
+-    const bucket = bucketMap.get(key) ?? { minute: key, calls: 0, errors: 0, inputTokens: 0, outputTokens: 0 }
+-    bucket.calls += 1
+-    if (!record.ok) bucket.errors += 1
+-    bucket.inputTokens += inputTokens
+-    bucket.outputTokens += outputTokens
+-    bucketMap.set(key, bucket)
+-    this.series.set(record.agentId, bucketMap)
+-
+-    const accountBucketMap = this.accountSeries.get(provider) ?? new Map()
+-    const accountBucket = accountBucketMap.get(key) ?? { minute: key, calls: 0, errors: 0, inputTokens: 0, outputTokens: 0 }
+-    accountBucket.calls += 1
+-    if (!record.ok) accountBucket.errors += 1
+-    accountBucket.inputTokens += inputTokens
+-    accountBucket.outputTokens += outputTokens
+-    accountBucketMap.set(key, accountBucket)
+-    this.accountSeries.set(provider, accountBucketMap)
+-
+-    this.recent.unshift({
+-      at,
+-      agentId: record.agentId,
+-      provider,
+-      model,
+-      ok: record.ok !== false,
+-      ms,
+-      ...(inputTokens > 0 ? { inputTokens } : {}),
+-      ...(outputTokens > 0 ? { outputTokens } : {}),
+-      ...(record.error ? { error: String(record.error).slice(0, 300) } : {}),
+-    })
+-    if (this.recent.length > RECENT_CAP) this.recent.length = RECENT_CAP
++    this.stats.record(record)
+   }
+ 
+-  /** 统计快照（RPC stats 使用）。 */
++  /**
++   * 统计快照（RPC stats 使用）：ok/enabled 包装留在接线层（R1 F12 备忘——
++   * RPC 语义归 service），聚合形状（totals/recent/series/accountTotals/
++   * accountSeries）+ 增量字段（days 按天聚合 / selfReport 自诊断）由
++   * stats.snapshot() 提供（R1 核验逐字段等价）。
++   */
+   statsSnapshot() {
+-    const cutoff = new Date(Date.now() - SERIES_WINDOW_MINUTES * 60 * 1000).toISOString().slice(0, 16)
+-    const totals = [...this.totals.values()].map((total) => ({
+-      agentId: total.agentId,
+-      name: total.name,
+-      provider: total.provider,
+-      model: total.model,
+-      calls: total.calls,
+-      errors: total.errors,
+-      inputTokens: total.inputTokens,
+-      outputTokens: total.outputTokens,
+-      totalMs: total.totalMs,
+-      lastAt: total.lastAt || undefined,
+-    }))
+-    const series = []
+-    for (const [agentId, buckets] of this.series) {
+-      const kept = [...buckets.values()].filter((bucket) => bucket.minute >= cutoff).sort((a, b) => (a.minute < b.minute ? -1 : 1))
+-      for (const bucket of [...buckets.values()]) if (bucket.minute < cutoff) buckets.delete(bucket.minute)
+-      if (kept.length > 0) series.push({ agentId, buckets: kept })
+-    }
+-    const accountTotals = [...this.accountTotals.values()].map((account) => ({
+-      provider: account.provider,
+-      calls: account.calls,
+-      errors: account.errors,
+-      inputTokens: account.inputTokens,
+-      outputTokens: account.outputTokens,
+-      totalMs: account.totalMs,
+-      lastAt: account.lastAt || undefined,
+-      models: [...account.models.values()].map((modelTotal) => ({
+-        model: modelTotal.model,
+-        calls: modelTotal.calls,
+-        errors: modelTotal.errors,
+-        inputTokens: modelTotal.inputTokens,
+-        outputTokens: modelTotal.outputTokens,
+-        totalMs: modelTotal.totalMs,
+-        lastAt: modelTotal.lastAt || undefined,
+-      })),
+-    })).sort((a, b) => (a.provider < b.provider ? -1 : 1))
+-    const accountSeries = []
+-    for (const [provider, buckets] of this.accountSeries) {
+-      const kept = [...buckets.values()].filter((bucket) => bucket.minute >= cutoff).sort((a, b) => (a.minute < b.minute ? -1 : 1))
+-      for (const bucket of [...buckets.values()]) if (bucket.minute < cutoff) buckets.delete(bucket.minute)
+-      if (kept.length > 0) accountSeries.push({ provider, buckets: kept })
+-    }
+-    return {
+-      ok: true,
+-      enabled: this.isEnabled(),
+-      totals,
+-      recent: [...this.recent],
+-      series,
+-      accountTotals,
+-      accountSeries,
++    return { ok: true, enabled: this.isEnabled(), ...this.stats.snapshot() }
++  }
++
++  /**
++   * 清空统计（§4.2 软删除默认：stats/ → stats-backup-\<ts\>/，可手工恢复；
++   * hardDelete 语义与 persist=false 纯内存清零由 store 承载——W-4 IBC-1 ②）。
++   * 内存清零在首个 await 前同步完成（未 flush 时全程同步——RPC 即时可见）。
++   */
++  async resetStats() {
++    await this.stats.reset()
++  }
++
++  /** router/statsExport：CSV 导出（§4.3 {range:'7d'|'30d'|'90d',
++   *  level:'agent'|'account'} → CSV 文本，11 列；不落工作区文件）。非法
++   *  range/level 返回 ok:false + 明确文案（与 cliModels 先例同构）。 */
++  statsExport(request = {}) {
++    try {
++      const csv = this.stats.export({ range: request.range, level: request.level })
++      return { ok: true, message: `已导出 ${csv.split('\n').length - 1} 行`, csv }
++    } catch (error) {
++      return { ok: false, message: errorMessage(error) }
+     }
+   }
+ 
++  /**
++   * C-3 统计持久化设置同步（W-4，index.js 组合根在启动与 settings/updated
++   * 时调用）：读 settings `router.stats.persist`（缺省 true）并应用到
++   * stats store。翻转的往返语义由 store.setPersist 承载（开→关先 flush
++   * 不丢已记录事件；关→开空内存全量恢复磁盘聚合 + 重建索引）。幂等、
++   * fire-and-forget（开关热生效，不阻塞调用方）。
++   */
++  applyStatsSettings() {
++    const statsConfig = this.getState().stats
++    const persist = !(statsConfig && statsConfig.persist === false)
++    void this.stats.setPersist(persist).catch(() => { /* 开关应用失败不击穿宿主事件流 */ })
++  }
++
+   /** 面向主模型的目录文本（tool 行的提示段使用）。 */
+   promptText() {
+     const state = this.getState()
+@@ -3479,9 +3387,9 @@ export class RouterService extends TypertRemoteService {
+     }
+   }
+ 
+-  /** router/reset：清空统计。 */
+-  reset() {
+-    this.resetStats()
++  /** router/reset：清空统计（软删除默认 §4.2；内存清零同步即时可见）。 */
++  async reset() {
++    await this.resetStats()
+     return { ok: true }
+   }
+ }
+diff --git a/lib/stats.js b/lib/stats.js
+index 86d641f..f86075f 100644
+--- a/lib/stats.js
++++ b/lib/stats.js
+@@ -33,6 +33,10 @@
+  *   + 每日定时 prune 超期 daily 文件（含 .corrupt 现场）与索引项；reset() 软删除
+  *   默认（stats/ → 同级 `<name>-backup-<ts>/`，默认即 stats-backup-<ts>，不自动
+  *   清理）；hardDelete:true 真删。
++ * - 持久化开关（W-4，ARCH-002 IBC-1）：persist=false = 纯内存 = 现状行为
++ *   ——不读不写磁盘（load/heal/quarantine/prune/reset 磁盘段全门控，F1）；
++ *   开关往返经 setPersist（开→关先 flush 不丢已记录事件；关→开空内存全量
++ *   恢复 + 重建索引，非空内存跳过 reload 防双计）。
+  * - p50/p95（§4.3）：明细排序 nearest-rank 分位，惰性计算（export 时聚合）；
+  *   分组样本超过 PERCENTILE_SAMPLE_MAX 时降级为确定性步长采样（reservoir 预留
+  *   接口的 Phase 1 落地形态）。
+@@ -272,30 +276,37 @@ export class StatsStore {
+     } catch {
+       return
+     }
+-    this.#fold(rec)
+-    this.recent.unshift({
+-      at: rec.at,
+-      agentId: rec.agentId,
+-      provider: rec.provider,
+-      model: rec.model,
+-      ok: rec.ok,
+-      ms: rec.ms,
+-      ...(rec.inputTokens > 0 ? { inputTokens: rec.inputTokens } : {}),
+-      ...(rec.outputTokens > 0 ? { outputTokens: rec.outputTokens } : {}),
+-      ...(rec.errorClass ? { errorClass: rec.errorClass } : {}),
+-      ...(typeof event.error === 'string' && event.error ? { error: event.error.slice(0, 300) } : {}),
+-      ...(typeof event.error !== 'string' && event.error ? { error: String(event.error).slice(0, 300) } : {}),
+-      costEstimate: rec.costEstimate,
+-    })
+-    if (this.recent.length > RECENT_CAP) this.recent.length = RECENT_CAP
+-    if (!this.persist || this.#closed) return
+-    this.queue.push(this.#lineForWrite(rec))
+-    while (this.queue.length > this.queueMax) {
+-      this.queue.shift()
+-      this.selfReport.dropped += 1
++    // F2（R1 前置项）：#fold/recent 构造全部纳入 try——注入函数（getAgentName
++    // 迁移缝等）抛错只损失本条统计，绝不击穿"record() 永不 throw"不变量
++    //（service.js 池 catch 语境在 record 后继续执行，E7-a/P7）。
++    try {
++      this.#fold(rec)
++      this.recent.unshift({
++        at: rec.at,
++        agentId: rec.agentId,
++        provider: rec.provider,
++        model: rec.model,
++        ok: rec.ok,
++        ms: rec.ms,
++        ...(rec.inputTokens > 0 ? { inputTokens: rec.inputTokens } : {}),
++        ...(rec.outputTokens > 0 ? { outputTokens: rec.outputTokens } : {}),
++        ...(rec.errorClass ? { errorClass: rec.errorClass } : {}),
++        ...(typeof event.error === 'string' && event.error ? { error: event.error.slice(0, 300) } : {}),
++        ...(typeof event.error !== 'string' && event.error ? { error: String(event.error).slice(0, 300) } : {}),
++        costEstimate: rec.costEstimate,
++      })
++      if (this.recent.length > RECENT_CAP) this.recent.length = RECENT_CAP
++      if (!this.persist || this.#closed) return
++      this.queue.push(this.#lineForWrite(rec))
++      while (this.queue.length > this.queueMax) {
++        this.queue.shift()
++        this.selfReport.dropped += 1
++      }
++      if (this.queue.length >= this.flushThreshold) this.flush()
++      else this.#armTimer()
++    } catch {
++      // 吞掉：统计失败绝不影响调用路径（P7）。
+     }
+-    if (this.queue.length >= this.flushThreshold) this.flush()
+-    else this.#armTimer()
+   }
+ 
+   /** 构造落盘行：v1 基线字段 + 迁移链升到当前 lineVersion（单一字段来源）。 */
+@@ -500,9 +511,13 @@ export class StatsStore {
+    * 启动加载：prune 超期 → 读窗口内 daily 文件（坏行跳过计数 + 修复、迁移回写、
+    * 文件级损坏隔离现场）→ index 种子补全更早日期聚合 → 重建 recent/分钟桶 →
+    * 刷新 index 镜像 → 每日 prune 定时器。任何单点失败不阻断启动（§4.2 继续服务）。
++   *
++   * F1（R1 前置项）：persist=false 时整个加载路径门控——不读不写磁盘
++   *（"纯内存=现状行为"语义：无现场修复、无 prune、无聚合恢复）。
+    */
+   async load() {
+     this.#closed = false
++    if (!this.persist) return this.statsSelfReport()
+     try { this.prune() } catch { /* 启动 prune 失败不阻断加载 */ }
+     const cutoffDate = dateKeyOf(this.now() - this.detailDays * DAY_MS)
+     const entries = await readdir(this.dir, { withFileTypes: true }).catch(() => [])
+@@ -542,8 +557,50 @@ export class StatsStore {
+     return this.statsSelfReport()
+   }
+ 
+-  /** 文件级损坏隔离：rename `daily-*.corrupt-<ts>` 保留现场 + 重建空文件。 */
++  /**
++   * W-4 persist 开关往返语义（ARCH-002 IBC-1 / roadmap §4.2，幂等）：
++   * - 开→关：先排空待写队列（已记录事件落盘——不因关开关丢数据），再停用
++   *   持久化（定时器/退出钩子清理；此后不读不写，F1）。
++   * - 关→开：启用 + 退出钩子重挂；内存聚合非空（进程内往返——磁盘数据已在
++   *   记录时折叠，再 load 会双计）→ 跳过 load 仅重建 index 镜像；内存为空
++   *   （false 期重启/清空后开启）→ load() 全量恢复磁盘聚合 + 重建索引
++   *  （IBC-1 ①③：数据不损、空窗后索引重建时机 = 重新启用时）。
++   */
++  async setPersist(next) {
++    const want = next !== false
++    if (want === this.persist) return
++    if (!want) {
++      if (this.#flushing) {
++        try {
++          await this.#flushing
++        } catch { /* in-flight flush 收尾失败不阻断关停 */ }
++      }
++      await this.flush()
++      this.persist = false
++      this.#clearTimers()
++      return
++    }
++    this.persist = true
++    if (!this.#exitHandler) {
++      this.#exitHandler = () => this.flushSync()
++      process.on('exit', this.#exitHandler)
++    }
++    const memoryEmpty = this.totals.size === 0 && this.accountTotals.size === 0 && this.days.size === 0 && this.detail.length === 0
++    if (memoryEmpty) {
++      await this.load()
++      return
++    }
++    try {
++      await this.#writeIndex()
++    } catch {
++      this.selfReport.writeErrors += 1
++    }
++  }
++
++  /** 文件级损坏隔离：rename `daily-*.corrupt-<ts>` 保留现场 + 重建空文件。
++   *  F1：persist=false 不做现场处置（不读不写）。 */
+   #quarantine(path, date) {
++    if (!this.persist) return
+     try {
+       renameSync(path, join(this.dir, `daily-${date}.corrupt-${this.now()}`))
+       this.selfReport.corruptFiles += 1
+@@ -601,7 +658,8 @@ export class StatsStore {
+       this.#fold(shaped)
+     }
+     const rewritten = kept.length > 0 ? `${kept.join('\n')}\n` : ''
+-    if (rewritten !== content) {
++    // F1：persist=false 不回写修复（heal 是写盘路径——纯内存模式不触碰现场）。
++    if (rewritten !== content && this.persist) {
+       const tmp = join(this.dir, `.daily-${date}.heal-${++TEMP_SEQ}`)
+       try {
+         await writeFile(tmp, rewritten, 'utf8')
+@@ -681,8 +739,10 @@ export class StatsStore {
+ 
+   // ── 保留期 prune（§4.2：启动 + 每日）────────────────────────────────────
+ 
+-  /** 删除超期 daily 文件（含 .corrupt 现场）与索引项；返回删除计数。 */
++  /** 删除超期 daily 文件（含 .corrupt 现场）与索引项；返回删除计数。
++   *  F1：persist=false 时 no-op（写盘路径门控——纯内存模式不动磁盘现场）。 */
+   prune() {
++    if (!this.persist) return { removedFiles: 0, removedDays: 0 }
+     const cutoffDate = dateKeyOf(this.now() - this.retentionDays * DAY_MS)
+     let removedFiles = 0
+     let removedDays = 0
+@@ -847,6 +907,8 @@ export class StatsStore {
+    * 清空统计。默认软删除：`stats/` rename 为同级 `stats-backup-<ts>/`（保留
+    * 现场，可手工恢复；不自动清理）；`hardDelete: true` 真删。两者均重建空
+    * 目录 + 空索引，内存态清零（自诊断计数保留——观测存储健康）。
++   * persist=false 时磁盘段整体门控（F1/W-4 IBC-1 ②）：纯内存清零 = 现状
++   * resetStats 行为，盘上数据原样保留（无 backup、无删除）。
+    */
+   async reset({ hardDelete = false } = {}) {
+     if (this.#flushing) {
+@@ -864,6 +926,10 @@ export class StatsStore {
+     this.days.clear()
+     this.detail = []
+     let backupDir = ''
++    // F1/W-4（IBC-1 ②）：persist=false 时磁盘段整体门控——纯内存清零 =
++    // 现状 resetStats 行为；盘上数据原样保留（无 backup、无删除），留给
++    // 重新启用持久化后 load 恢复。
++    if (!this.persist) return { backupDir }
+     if (hardDelete) {
+       await rm(this.dir, { recursive: true, force: true })
+     } else {
+diff --git a/tests/smoke.mjs b/tests/smoke.mjs
+index 60dee29..84e440e 100644
+--- a/tests/smoke.mjs
++++ b/tests/smoke.mjs
+@@ -8,13 +8,14 @@ import { runInstallEntryTests } from './install-entry.mjs'
+ import { runAttachmentTests } from './attachments.mjs'
+ import { runOauthCredentialTests } from './oauth-credentials.mjs'
+ import { runLoopbackTests } from './oauth-loopback.mjs'
++import { runStatsTests } from './stats.mjs'
+ import { OauthCredentialStore, CHATGPT_PRESET } from '../lib/oauth-credentials.js'
+ import { isAttachmentId } from '../lib/attachments.js'
+ import { BlockAssembler, LlmRuntime, contentHasImage } from '@deepseek-ai/dsh-llm'
+ import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
+ import { defineTool } from '@deepseek-ai/dsh-tools'
+ import { spawnSync } from 'node:child_process'
+-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
++import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+ import { tmpdir } from 'node:os'
+ import { join, dirname } from 'node:path'
+ import { fileURLToPath } from 'node:url'
+@@ -28,6 +29,12 @@ function check(label, condition) {
+   else { failures++; console.error(`FAIL  ${label}`) }
+ }
+ 
++// C-3 统计持久化隔离（EVO-003 Phase 2）：index apply 接线会按 settings 默认
++// 启用 persist（真实产品行为，DSH_HOME 是部署契约——E6-a）。测试进程把
++// DSH_HOME 指到临时目录，防止 smoke 运行读写真实 ~/.dsh 统计（P7：测试
++// 绝不触碰用户数据）。进程退出即弃；无需恢复（子进程环境不影响调用方）。
++process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'router-smoke-home-'))
++
+ // 0. 语法守卫：client.js 是浏览器 bundle，但宿主启动时预打包客户端
+ //    入口——语法错误会直接击穿 DSH 启动（括号失衡事故教训）。用 node
+ //    --check 全量把关；install.ps1 由 Windows 用户直接执行，用 PowerShell
+@@ -94,6 +101,11 @@ console.log('schemas:')
+   const f = routerSchema({ oauthAccounts: { odd: { preset: 'foo' } } })
+   check('unknown preset tolerated (R-5 放行语义)', f.oauthAccounts.odd.preset === 'foo')
+   check('OAUTH_PRESET_VALUES frozen + chatgpt-codex (P5 泛化)', Object.isFrozen(OAUTH_PRESET_VALUES) && OAUTH_PRESET_VALUES.length === 1 && OAUTH_PRESET_VALUES[0] === 'chatgpt-codex')
++  // EVO-003 Phase 2（C-3 / W-4，ARCH-002 IBC-1）：router.stats.persist 设置——
++  // 默认 true（持久化开）；显式 false = 纯内存（现状行为）；空对象补默认。
++  check('default stats.persist=true (W-4 persistence on by default)', c.stats.persist === true)
++  check('explicit stats.persist=false kept (W-4 fallback switch)', routerSchema({ stats: { persist: false } }).stats.persist === false)
++  check('empty stats object resolves defaults', routerSchema({ stats: {} }).stats.persist === true)
+ }
+ 
+ // 2. wire codec
+@@ -106,6 +118,25 @@ console.log('wire codecs:')
+   check('catalogResult rejects missing fields', threw)
+   const s = wireCodecs.statsResult.parse({ ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [] })
+   check('statsResult parses empty', s.ok === true)
++  // EVO-003 Phase 2：statsResult C-3 增量字段（days 按天聚合 / selfReport 自诊断
++  // / recent costEstimate+errorClass）与 statsExport 请求/结果 codec（§4.3）。
++  const sFull = wireCodecs.statsResult.parse({
++    ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [],
++    days: { '2026-01-15': { calls: 3, errors: 1, inputTokens: 110, outputTokens: 52, tokens: 162, ms: 2180, cost: 0.1 } },
++    selfReport: { dropped: 0, skippedLines: 0, skippedVersionLines: 0, corruptFiles: 0, migratedLines: 0, writeErrors: 0, indexRebuilt: 0, detailDropped: 0 },
++  })
++  check('statsResult parses days + selfReport increment fields (C-3)', sFull.days['2026-01-15'].calls === 3 && sFull.selfReport.dropped === 0)
++  const sRecent = wireCodecs.statsResult.parse({ ok: true, enabled: true, totals: [], recent: [{ at: 1, agentId: 'a', provider: 'p', model: 'm', ok: true, ms: 2, costEstimate: 0.5, errorClass: 'network' }], series: [], accountTotals: [], accountSeries: [] })
++  check('statsResult recent parses costEstimate + errorClass (C-3 increment)', sRecent.recent[0].costEstimate === 0.5 && sRecent.recent[0].errorClass === 'network')
++  const seReq = wireCodecs.statsExportRequest.parse({ range: '7d', level: 'agent' })
++  check('statsExportRequest parses', seReq.range === '7d' && seReq.level === 'agent')
++  let seThrew = false
++  try { wireCodecs.statsExportRequest.parse({ range: '7d' }) } catch { seThrew = true }
++  check('statsExportRequest rejects missing level', seThrew)
++  const seRes = wireCodecs.statsExportResult.parse({ ok: true, message: '已导出 1 行', csv: 'date,agent\n2026-01-15,vision' })
++  check('statsExportResult parses csv payload', seRes.csv.startsWith('date,'))
++  const seErr = wireCodecs.statsExportResult.parse({ ok: false, message: '无效的统计导出 range' })
++  check('statsExportResult error shape parses (no csv)', seErr.ok === false && seErr.csv === undefined)
+   const dataReq = wireCodecs.imageDataRequest.parse({ ref: { attachmentId: 'sha256:x', mediaType: 'image/png', bytes: 4, width: 2, height: 2 } })
+   check('imageDataRequest parses', dataReq.ref.attachmentId === 'sha256:x' && dataReq.ref.name === undefined)
+   const dataRes = wireCodecs.imageDataResult.parse({ ok: true, message: 'ok', mediaType: 'image/png', data: 'aGk=', width: 2, height: 2 })
+@@ -161,12 +192,15 @@ console.log('rpc contribution:')
+ {
+   const contribution = createHostContribution()
+   check('face host', contribution.face === 'host')
+-  check('16 invocations', contribution.invocations.length === 16)
+-  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 16 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
++  check('17 invocations', contribution.invocations.length === 17)
++  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 17 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
+   check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))
+   check('image RPC descriptors present', contribution.invocations.some((d) => d.method === 'imageData'))
+   check('uploadFile RPC descriptor present', contribution.invocations.some((d) => d.method === 'uploadFile' && d.id === 'dsh-agent-router#router/uploadFile'))
+   check('readWorkspaceFile RPC descriptor present', contribution.invocations.some((d) => d.method === 'readWorkspaceFile' && d.id === 'dsh-agent-router#router/readWorkspaceFile'))
++  // EVO-003 Phase 2（§4.3）：statsExport 描述符——与 stats 相邻注册，
++  // strict request/result codec 挂接（CSV 导出 RPC 面）。
++  check('statsExport RPC descriptor present (C-3 CSV export)', contribution.invocations.some((d) => d.method === 'statsExport' && d.id === 'dsh-agent-router#router/statsExport' && d.parameters[0].codec.schema === wireCodecs.statsExportRequest && d.result.schema === wireCodecs.statsExportResult))
+   const cliStatusCodec = wireCodecs.cliStatusResult.parse({ ok: true, message: '已登录', loggedIn: true })
+   check('cliStatusResult parses', cliStatusCodec.ok === true && cliStatusCodec.loggedIn === true)
+   const cliModelsCodec = wireCodecs.cliModelsResult.parse({ ok: true, message: 'm', models: ['a'] })
+@@ -1192,6 +1226,45 @@ console.log('RouterService:')
+   service.reset()
+   check('reset clears', service.statsSnapshot().totals.length === 0)
+ 
++  // EVO-003 Phase 2（§4.3）：statsExport——CSV 列齐全（11 列 §4.3 清单）+
++  // 非法 range/level 服务层校验（ok:false + 明确文案；与 cliModels 先例同构）。
++  service.record({ agentId: 'vision', provider: 'deepseek-official', model: 'deepseek-v4-pro', ok: true, ms: 30, inputTokens: 100, outputTokens: 20 })
++  const exportOk = service.statsExport({ range: '7d', level: 'agent' })
++  check('statsExport returns CSV with all 11 columns (§4.3)', exportOk.ok === true && exportOk.csv.split('\n')[0] === 'date,agent,account,model,calls,errors,inputTokens,outputTokens,p50ms,p95ms,costEstimate' && exportOk.csv.split('\n')[1].startsWith(`${new Date().toISOString().slice(0, 10)},vision,deepseek-official,deepseek-v4-pro,`))
++  const exportBadRange = service.statsExport({ range: '1y', level: 'agent' })
++  check('statsExport rejects invalid range (ok:false + message)', exportBadRange.ok === false && exportBadRange.message.includes('range') && exportBadRange.csv === undefined)
++  const exportBadLevel = service.statsExport({ range: '7d', level: 'model' })
++  check('statsExport rejects invalid level (ok:false + message)', exportBadLevel.ok === false && exportBadLevel.message.includes('level'))
++
++  // EVO-003 Phase 2（W-4 / ARCH-002 IBC-1）：service 层开关往返——
++  // applyStatsSettings 读 settings.stats.persist 热同步 store.setPersist；
++  // 开→关先 flush（不丢已记录事件）、false 期纯内存、关→开不双计。
++  {
++    const w4Work = mkdtempSync(join(tmpdir(), 'router-w4-'))
++    const w4Root = new Context()
++    const w4 = new RouterService(w4Root, null, { dir: join(w4Work, 'stats'), flushThreshold: 50 })
++    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
++    w4.attach({ get: () => ({ enabled: true, stats: { persist: true } }) })
++    w4.applyStatsSettings()
++    await sleep(80)
++    w4.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 10, inputTokens: 1 })
++    w4.attach({ get: () => ({ enabled: true, stats: { persist: false } }) })
++    w4.applyStatsSettings()
++    await sleep(80)
++    const dailyFile = readdirSync(join(w4Work, 'stats')).find((n) => /^daily-.*\.jsonl$/.test(n))
++    check('W-4 service toggle-off flushes pending events first (nothing lost)', !!dailyFile && readFileSync(join(w4Work, 'stats', dailyFile), 'utf8').split('\n').filter((l) => l !== '').length === 1)
++    w4.record({ agentId: 'draw', provider: 'openai', model: 'dall-e-3', ok: true, ms: 5 })
++    await w4.stats.flush()
++    check('W-4 false period stays memory-only (explicit flush writes nothing)', readFileSync(join(w4Work, 'stats', dailyFile), 'utf8').split('\n').filter((l) => l !== '').length === 1)
++    check('W-4 timeline continuous across toggle (both agents visible)', w4.statsSnapshot().totals.length === 2)
++    w4.attach({ get: () => ({ enabled: true, stats: { persist: true } }) })
++    w4.applyStatsSettings()
++    await sleep(80)
++    check('W-4 toggle-on with live memory: no double-count of disk data', w4.statsSnapshot().totals.find((t) => t.agentId === 'vision')?.calls === 1)
++    await w4.stats.close()
++    rmSync(w4Work, { recursive: true, force: true })
++  }
++
+   check('recentAttachmentBlocks empty', service.recentAttachmentBlocks(null).length === 0)
+ 
+   // 附件按需显式派发：序号映射 / 越界报错 / includeImages 快捷方式 / 默认不携带。
+@@ -1701,7 +1774,7 @@ console.log('apply wiring:')
+     const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
+     await app
+     check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
+-    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 16 && registeredContribution.package === 'dsh-agent-router')
++    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 17 && registeredContribution.package === 'dsh-agent-router')
+     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
+     check('oauth callback route registered', webRoute && webRoute.kind === 'exact' && webRoute.path === '/router-oauth/callback' && typeof webRoute.handler === 'function')
+     // R3 F-3：真实 service 上断言惰性注入点——apply 后 starter 可用但 1455
+@@ -1722,6 +1795,11 @@ console.log('apply wiring:')
+   // EVO-002 Step 2/3：ChatGPT preset 凭据模块 + 1455 惰性 loopback 回调服务。
+   await runOauthCredentialTests(check)
+   await runLoopbackTests(check)
++
++  // EVO-003 Phase 2（C-3）：统计持久化模块测试接入 smoke（runStatsTests 与
++  // oauth-credentials 同构导出；独立入口 node tests/stats.mjs 互补——执行包
++  // next_commands 两列均绿）。四件套/版本迁移/往返/W-4 内核语义全量回归。
++  await runStatsTests(check)
+ }
+ 
+ // 7.5 准入包装机制验证：真实 LlmRuntime 上的 twin 路由
+diff --git a/tests/stats.mjs b/tests/stats.mjs
+index 290f32b..94eaf48 100644
+--- a/tests/stats.mjs
++++ b/tests/stats.mjs
+@@ -18,6 +18,12 @@
+  * - CSV 导出：列齐全（date/agent/account/model/calls/errors/inputTokens/outputTokens/p50ms/p95ms/costEstimate）
+  *   + p50/p95 明细分位 + range 过滤 + 引号转义 + agent/account 两 level
+  * - persist=false 纯内存（W-4 回退开关的内核语义）
++ * - F1（R1 前置项）：persist=false 时 load/prune/quarantine/heal/reset 全部
++ *   磁盘路径门控（不读不写——"纯内存=现状行为"语义补全）
++ * - F2（R1 前置项）：record() 永不 throw（注入 getAgentName 抛错不击穿调用路径）
++ * - F4（R1 前置项）：队列满丢弃的子集身份断言（保留最新，非最旧）
++ * - W-4（ARCH-002 IBC-1）：persist 开关往返语义（开→关先 flush 不丢事件；
++ *   关→开内存非空跳过 reload 防双计 / 重启后空内存全量恢复 + 重建 index）
+  * - flushSync（进程优雅退出路径）
+  * - 依赖面结构断言：仅 node: 内建导入（不反向依赖 service.js —— 无环）
+  *
+@@ -155,6 +161,9 @@ export async function runStatsTests(check) {
+     await store.flush()
+     const lines = readFileSync(join(work, 'stats', `daily-${D0}.jsonl`), 'utf8').split('\n').filter((l) => l !== '')
+     check('only bounded subset persisted (3 newest of 5)', lines.length === 3)
++    // F4（R1 前置项）：子集身份断言——保留的必须是最新 3 条（ms 2,3,4），
++    // 而非最旧 3 条（ms 0,1,2）。旧内核若错丢最新（shift 改 pop）本断言必败。
++    check('dropped subset is the oldest two (F4: persisted rows are ms 2,3,4 by identity)', lines.map((l) => JSON.parse(l).ms).join(',') === '2,3,4')
+     await store.close()
+     rmSync(work, { recursive: true, force: true })
+   }
+@@ -381,7 +390,95 @@ export async function runStatsTests(check) {
+     rmSync(work, { recursive: true, force: true })
+   }
+ 
+-  // ── 15. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
++  // ── 15. F1（R1 前置项）：persist=false 时全部磁盘路径门控（不读不写）──
++  console.log('persist=false disk-path gating (F1):')
++  {
++    const work = mkdtempSync(join(tmpdir(), 'stats-f1-'))
++    const dir = join(work, 'stats')
++    mkdirSync(dir, { recursive: true })
++    // 三类会被写路径触碰的现场：超期文件（load 首步 prune 会删）、窗口内
++    // 坏行文件（heal 会重写清除）、目录占位 daily 名（quarantine 会 rename
++    // 保留现场 + 重建空文件）+ 超期 index 项（prune 会裁剪镜像）。
++    writeFileSync(join(dir, 'daily-2020-01-01.jsonl'), `${lineOf({ at: Date.UTC(2020, 0, 1) })}\n`)
++    writeFileSync(join(dir, `daily-${D0}.jsonl`), `${lineOf()}\nnot-json garbage\n`)
++    mkdirSync(join(dir, 'daily-2026-01-14.jsonl'))
++    writeFileSync(join(dir, 'index.json'), JSON.stringify({ schemaVersion: 1, generatedAt: 0, days: { '2020-01-01': { calls: 1, errors: 0, tokens: 3, ms: 10, cost: 0, inputTokens: 1, outputTokens: 2 } } }))
++    const before = readdirSync(dir).sort().join(',')
++    const badContent = readFileSync(join(dir, `daily-${D0}.jsonl`), 'utf8')
++    const store = new StatsStore({ dir, persist: false, now: NOW_AT })
++    const report = await store.load()
++    check('persist=false load(): expired file NOT pruned (F1 gate)', existsSync(join(dir, 'daily-2020-01-01.jsonl')))
++    check('persist=false load(): bad-line file NOT healed (byte-identical)', readFileSync(join(dir, `daily-${D0}.jsonl`), 'utf8') === badContent)
++    check('persist=false load(): directory-occupying daily name NOT quarantined', existsSync(join(dir, 'daily-2026-01-14.jsonl')) && !readdirSync(dir).some((n) => n.includes('.corrupt-')))
++    check('persist=false load(): index.json NOT rewritten/trimmed (byte-identical dir listing)', readdirSync(dir).sort().join(',') === before)
++    check('persist=false load(): nothing folded into memory (no disk read)', store.snapshot().totals.length === 0)
++    check('persist=false load(): no heal/quarantine counters (nothing parsed)', report.skippedLines === 0 && report.corruptFiles === 0)
++    const pruneResult = store.prune()
++    check('persist=false prune(): no-op zeros + files intact', pruneResult.removedFiles === 0 && pruneResult.removedDays === 0 && readdirSync(dir).sort().join(',') === before)
++    // false 期清空（W-4 IBC-1 ②）：纯内存清零 = 现状 resetStats 行为；盘上
++    // 数据不动（无 backup、无删除——磁盘快照留给重新启用后恢复）。
++    store.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 1, at: T0 })
++    const resetOut = await store.reset()
++    check('persist=false reset(): memory cleared, no backup dir, disk untouched', store.snapshot().totals.length === 0 && resetOut.backupDir === '' && readdirSync(dir).sort().join(',') === before)
++    await store.close()
++    rmSync(work, { recursive: true, force: true })
++  }
++
++  // ── 16. F2（R1 前置项）：record() 永不 throw——注入函数抛错不击穿调用路径
++  console.log('record() never throws on injected-function failure (F2):')
++  {
++    const work = mkdtempSync(join(tmpdir(), 'stats-f2-'))
++    const dir = join(work, 'stats')
++    // getAgentName 是 service.getAgent 迁移缝（Phase 2 注入）——注入函数抛错
++    // 不得击穿 #fold/record（service.js 池 catch 语境依赖"record 永不 throw"）。
++    const store = new StatsStore({ dir, persist: false, getAgentName: () => { throw new Error('injected getAgentName boom') } })
++    let threw = false
++    try {
++      store.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 10, inputTokens: 1, at: T0 })
++    } catch {
++      threw = true
++    }
++    check('record() swallows injected getAgentName throw (never-throw invariant)', threw === false)
++    // 抛错后 store 保持可用（后续正常注入下继续聚合）。
++    store.getAgentName = (id) => `name:${id}`
++    store.record({ agentId: 'draw', provider: 'openai', model: 'dall-e-3', ok: true, ms: 5, at: T0 })
++    check('store remains usable after swallowed record failure', store.snapshot().totals.some((t) => t.agentId === 'draw' && t.calls === 1))
++    await store.close()
++    rmSync(work, { recursive: true, force: true })
++  }
++
++  // ── 17. W-4（ARCH-002 IBC-1）：persist 开关往返语义（开→关→开，统计不损）
++  console.log('W-4 persist toggle round-trip:')
++  {
++    const work = mkdtempSync(join(tmpdir(), 'stats-w4-'))
++    const dir = join(work, 'stats')
++    const a = new StatsStore({ dir, flushThreshold: 50, now: NOW_AT })
++    a.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 10, inputTokens: 1, at: T0 })
++    await a.setPersist(false)
++    check('setPersist(false) flushes pending queue first (recorded event never lost)', readFileSync(join(dir, `daily-${D0}.jsonl`), 'utf8').split('\n').filter((l) => l !== '').length === 1)
++    a.record({ agentId: 'draw', provider: 'openai', model: 'dall-e-3', ok: true, ms: 20, at: T0 })
++    await a.flush()
++    check('events during persist=false stay memory-only (explicit flush writes nothing)', readFileSync(join(dir, `daily-${D0}.jsonl`), 'utf8').split('\n').filter((l) => l !== '').length === 1)
++    check('timeline continuous in memory across toggle-off (both agents visible)', a.snapshot().totals.length === 2)
++    await a.setPersist(true)
++    check('setPersist(true) with live memory skips reload (no double-count of disk data)', a.snapshot().totals.find((t) => t.agentId === 'vision')?.calls === 1)
++    check('setPersist(true) rebuilds index mirror on re-enable', existsSync(join(dir, 'index.json')))
++    a.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 5, at: T0 })
++    await a.close()
++    const rows = readFileSync(join(dir, `daily-${D0}.jsonl`), 'utf8').split('\n').filter((l) => l !== '').map((l) => JSON.parse(l))
++    check('round-trip loses no data: pre-switch + post-re-enable events persisted', rows.filter((r) => r.agentId === 'vision').length === 2)
++    check('memory-only semantics held for false-period events (P7: droppable by design)', !rows.some((r) => r.agentId === 'draw'))
++    // false 期重启后重新启用：内存为空 → load 全量恢复磁盘聚合（IBC-1 ①）。
++    // 构造 persist=false 模拟"启动时设置即为关"的接线形态，随后开启开关。
++    const b = new StatsStore({ dir, now: NOW_AT, persist: false })
++    await b.setPersist(true)
++    const restored = b.snapshot()
++    check('re-enable after restart (empty memory) reloads disk aggregates in full', restored.totals.find((t) => t.agentId === 'vision')?.calls === 2 && restored.totals[0]?.name === restored.totals[0]?.agentId)
++    await b.close()
++    rmSync(work, { recursive: true, force: true })
++  }
++
++  // ── 18. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
+   console.log('dependency surface (acyclic):')
+   {
+     const source = readFileSync(new URL('../lib/stats.js', import.meta.url), 'utf8')
