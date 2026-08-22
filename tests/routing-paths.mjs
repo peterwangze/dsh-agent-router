@@ -61,6 +61,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { RouterService } from '../lib/service.js'
 import { AttachmentRegistry, isAttachmentId, ATTACHMENT_REGISTRY_MAX_ENTRIES, ATTACHMENT_FETCH_TIMEOUT_MS, ATTACHMENT_ERROR_CODES, probeImageDimensions } from '../lib/attachments.js'
 import { installAdmissionWrapper, WRAP_SUFFIX, MODALITY_ENTRIES, minimalImageRewrite } from '../lib/wrapper.js'
+import { installPreStep } from '../lib/prestep.js'
 import { mkdtempSync, rmSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { tmpdir, homedir } from 'node:os'
@@ -931,6 +932,78 @@ console.log('F. takeover 客户端会话级:')
     && selectCalls.some((call) => call.sessionId === 'sess-b' && call.provider === 'gateway')
     && sessionCurrent.get('sess-a').provider === 'openai'
     && sessionCurrent.get('sess-b').provider === 'gateway')
+}
+
+// ── [G] prestep 分级：原生多模态不注入 reminder / 纯文本保持 / wrapper 分支同判（FIX-005）
+// 判别性：修复前 installPreStep 对含图轮无条件注入 reminder（prestep.js L225）——
+// 原生多模态主模型也收到"请调用 route_agent 工具"引导 → 主 agent 被误导调（用户
+// 429 配额误调实案）；修复后 accepts=true 不注入（G1/G3 旧代码必败），accepts=false
+// 保持现状注入 + 逃生组改写（G2/G4 旧代码即绿——现状保持判别）。
+{
+  const REMINDER_SUBSTR = '请调用 route_agent 工具'
+  const NEUTRAL_SUBSTR = '已由主模型原生查看'
+  const mkStubLlm = () => ({
+    registration: (provider) => ({
+      adapter: {
+        resolveModel: async () => ({ inputModalities: provider === 'deepseek-official' ? ['text', 'image'] : ['text'] }),
+      },
+    }),
+    stream: async function* () { yield { type: 'finish', reason: { kind: 'stop' } } },
+  })
+  const runPreStep = async (cfg) => {
+    let handler
+    const ctx = {
+      get: (key) => (key === 'llm' ? cfg.llm : undefined),
+      on: (_event, fn) => { handler = fn; return () => undefined },
+      logger: { warn: () => undefined },
+    }
+    installPreStep(ctx, service)
+    const messages = cfg.messages
+    const decision = await handler(
+      { agent: { options: { provider: cfg.provider, model: cfg.model } }, messages, turn: 0, step: 0, signal: undefined },
+      async () => ({ kind: 'enter', messages }),
+    )
+    return decision.messages
+  }
+  const imgMessages = () => [{ role: 'user', content: [{ type: 'image', attachment: { attachmentId: IMG_C, name: 't.png', mediaType: 'image/png', bytes: 4, width: 2, height: 2 } }] }]
+  const hasReminder = (msgs) => msgs.some((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'text' && typeof b.text === 'string' && b.text.includes(REMINDER_SUBSTR)))
+  const hasImageBlock = (msgs) => msgs.some((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'image'))
+
+  // G1 原生多模态（非 wrapper）：accepts=true → 不注入 reminder + 图片块保留（未改写）——
+  // 旧代码：无条件注入 → hasReminder 必败。
+  {
+    const out = await runPreStep({ llm: mkStubLlm(), provider: 'deepseek-official', model: 'vision-exp', messages: imgMessages() })
+    check('[G1] 原生多模态：不注入 route_agent reminder（图片保留）', !hasReminder(out) && hasImageBlock(out))
+  }
+  // G2 纯文本：accepts=false → 注入保持 + 逃生组改写（图片块 → 标记文本，无 image 块）——
+  // 现状行为保持判别（误删保护：C-3 纯文本主模型不见裸图块）。
+  {
+    const out = await runPreStep({ llm: mkStubLlm(), provider: 'text-only-prov', model: 't1', messages: imgMessages() })
+    check('[G2] 纯文本主模型：reminder 注入保持 + 改写无裸图块', hasReminder(out) && !hasImageBlock(out))
+  }
+  // G3 wrapper 分支原生多模态：provider 剥 -router 探测原能力 → 不注入——
+  // 旧代码 wrapper 分支不探测（onWrapperRoute 跳过）→ 无条件注入 → 必败。
+  {
+    const out = await runPreStep({ llm: mkStubLlm(), provider: 'deepseek-official-router', model: 'vision-exp', messages: imgMessages() })
+    check('[G3] wrapper 分支原生多模态：不注入 reminder（provider 剥离判定）', !hasReminder(out))
+  }
+  // G4 wrapper 分支纯文本：注入保持（不改写——wrapper stream 在模型输入层改写，防双改写）。
+  {
+    const out = await runPreStep({ llm: mkStubLlm(), provider: 'text-only-prov-router', model: 't1', messages: imgMessages() })
+    check('[G4] wrapper 分支纯文本：reminder 保持注入', hasReminder(out))
+  }
+  // G5 tool.js route_agent 描述含中性句（静态断言：读源码文本——判别性：句中词"已由
+  // 主模型原生查看"仅在描述追加后出现）+ 既有指导保留（不得删改）。
+  {
+    const toolSrc = readFileSync(join(LIB_DIR, 'tool.js'), 'utf8')
+    check('[G5] route_agent 描述含中性句且既有指导保留', toolSrc.includes(NEUTRAL_SUBSTR) && toolSrc.includes('只有当任务明确匹配某个专业 agent 的能力时'))
+  }
+  // G6 service.promptText 目录段含中性句（运行断言：真实 service 实例）——
+  // 判别性：中性词仅在 promptText 使用规则追加后出现。
+  {
+    const prompt = service.promptText()
+    check('[G6] promptText 目录段含中性句', typeof prompt === 'string' && prompt.includes(NEUTRAL_SUBSTR))
+  }
 }
 
 // ── 终态摘要（CLI runner：非空输出 + PASS/FAIL 计数 + exit 语义）──────────────

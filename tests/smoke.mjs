@@ -2373,9 +2373,12 @@ console.log('admission wrapper (L1):')
   check('escape-group turn also injects reminder', escapeDecision.messages.length === 2 && escapeDecision.messages[1].source.kind === 'plugin')
 
   // ③ 逃生组 + 原生多模态主模型：能力判定保真直传（preserveImageInput 语义）。
+  // FIX-005（2026-08-23）：原生多模态（accepts=true）不注入 reminder——主模型已
+  // 原生看图，行为引导是误导（用户 429 误调实案）；零注入 = 单消息保真直传。
   const mmAgent = { options: { provider: 'mm-escape-provider', model: 'brain-1' } }
   const mmDecision = await dispatch(mmAgent, [imageMessage])
-  check('native multimodal escape keeps raw image (passthrough)', mmDecision.messages[0].content.some((b) => b.type === 'image') && mmDecision.messages.length === 2)
+  check('native multimodal escape keeps raw image (passthrough)', mmDecision.messages[0].content.some((b) => b.type === 'image') && mmDecision.messages.length === 1)
+  check('native multimodal escape injects no reminder (FIX-005)', mmDecision.messages.every((m) => !(m.source && m.source.kind === 'plugin')))
 
   // ④ 纯文本轮负向：零注入、零改写（同一对象引用返回）。
   const textMessage = createUserMessage({ content: [{ type: 'text', text: '纯文本轮' }], source: { kind: 'user' } })
