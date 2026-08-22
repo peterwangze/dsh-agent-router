@@ -1950,16 +1950,86 @@ console.log('admission wrapper (L1):')
   await tick()
   check('takeover off never touches default model (FIX-002)', defaultSelection.provider === 'text-provider')
   check('wrappableProviders excludes twins', wrappableProviders(llm).every((provider) => !provider.endsWith(WRAP_SUFFIX)) && wrappableProviders(llm).includes('text-provider'))
-  // 7) 卸载器释放全部注册并恢复默认模型。
+  // 6d) FIX-002-R7 F4 不变量③（开关关回还原——服务端 restore 写路径）：6c 的
+  // 前置是"用户已手动改回原生后关开关"——restore 分支虽进入但写被跳过
+  //（provider 已非 twin），对还原写路径是 vacuous pass。此处前置改为"接管
+  // 在位（默认模型停在 twin）"再关开关：restore 写必须真实执行——断言端态 +
+  // 恰一次 saveSelection 写 + 写入内容为原生 provider（FIX-002 之前代码无
+  // 开关，事件后默认模型仍停在 twin 且零写，必败）。
+  config.takeoverDefaultModel = true
+  fireSettingsCommit('router')
+  await tick()
+  check('wrapper re-arms takeover after switch back on', defaultSelection.provider === `text-provider${WRAP_SUFFIX}`)
+  const switchOffWrites = defaultWrites.length
+  config.takeoverDefaultModel = false
+  fireSettingsCommit('router')
+  await tick()
+  check('switch-off restores default model while takeover in place (invariant ③)', defaultSelection.provider === 'text-provider' && defaultWrites.length === switchOffWrites + 1 && defaultWrites[switchOffWrites].provider === 'text-provider')
+  // 7) 卸载器释放全部注册并恢复默认模型。（FIX-002-R7 F4：6b/6c/6d 之后
+  // tookOverFrom 已清空、默认模型已在原生 provider 上——直接 dispose 的
+  // "还原"断言成空转（R6-F1 同类掏空教训）。先重新启用开关 + 事件重新
+  // 接管，dispose 时默认模型真实停在 twin 上，还原分支才真实执行：补断言
+  // 恰一次还原写 + 写入内容为原生 provider——还原写路径被删改即败。）
+  config.takeoverDefaultModel = true
+  fireSettingsCommit('router')
+  await tick()
+  check('wrapper re-takes over before uninstall (restore branch armed)', defaultSelection.provider === `text-provider${WRAP_SUFFIX}`)
+  const disposeWrites = defaultWrites.length
   dispose()
   await tick()
   check('wrapper uninstaller removes all twins', !llm.listProviders().some((entry) => String(entry.id).endsWith(WRAP_SUFFIX)))
   check('wrapper uninstaller restores default model', defaultSelection.provider === 'text-provider')
+  check('uninstall restore executes exactly one write (invariant ③ dispose path)', defaultWrites.length === disposeWrites + 1 && defaultWrites[disposeWrites].provider === 'text-provider')
   // 8) createWrapAdapter 对已消失原适配器明确报错。
   const orphan = createWrapAdapter(llm, 'missing-provider', [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: () => null }])
   let orphanRejected = false
   try { await orphan.resolveModel('x', 'y') } catch (error) { orphanRejected = String(error.message).includes('no adapter registered') }
   check('twin without original adapter fails loud', orphanRejected)
+  // 9) FIX-002-R7 F4 不变量④（遗留剥离——smoke 级正式断言，F2 形式化）：
+  // 模拟 FIX-002 之前版本的遗留状态——旧版无条件接管已把默认选择锁在 twin
+  // 上，而新安装的 wrapper 无 tookOverFrom 记忆（全新闭包、开关默认 false）。
+  // 首次 sync 剥离一次还原原生（FIX-002 之前代码无剥离分支，默认模型停在
+  // twin 零写——必败）；此后用户手动再选 twin，后续 sync 一律尊重（零再剥
+  // 零写入——pre-F2 代码（无 legacyStripped 标记）首个事件即再剥，端态 +
+  // 写计数双败）；dispose 不再剥（标记已消费）；重装（丢失安装级记忆的自愈
+  // 通道）遇遗留状态再剥一次——若标记退化为模块级（重装不重置），重装后
+  // 不剥，此断言守护闭包级设计。
+  {
+    config.takeoverDefaultModel = false
+    config.enabled = true
+    config.visionAgents = [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]]
+    defaultSelection = { provider: `text-provider${WRAP_SUFFIX}`, model: 'brain-1' }
+    const legacyWrites = defaultWrites.length
+    const legacyDispose = installAdmissionWrapper(root, fakeService)
+    await tick()
+    check('legacy takeover stripped once on fresh install (invariant ④)', defaultSelection.provider === 'text-provider' && defaultWrites.length === legacyWrites + 1 && defaultWrites[legacyWrites].provider === 'text-provider' && llm.listProviders().some((entry) => entry.id === `text-provider${WRAP_SUFFIX}`))
+    // one-shot：用户重新手动选择 twin → 后续 sync 事件（settings/adapters/
+    // settings 三连）零再剥、零写入。
+    defaultSelection = { provider: `text-provider${WRAP_SUFFIX}`, model: 'brain-1' }
+    const oneshotWrites = defaultWrites.length
+    fireSettingsCommit('router')
+    await tick()
+    for (const callback of root.events.dispatch('emit', ['llm/adapters-updated'])) callback()
+    await tick()
+    fireSettingsCommit('router')
+    await tick()
+    check('no re-strip after user re-selects twin (legacyStripped one-shot)', defaultSelection.provider === `text-provider${WRAP_SUFFIX}` && defaultWrites.length === oneshotWrites)
+    // dispose：标记已消费 → 卸载零写、默认模型不动（pre-F2 代码 dispose 会
+    // 再剥一次——写计数或端态必败其一）。
+    const legacyDisposeWrites = defaultWrites.length
+    legacyDispose()
+    await tick()
+    check('dispose writes nothing after marker consumed', defaultWrites.length === legacyDisposeWrites && defaultSelection.provider === `text-provider${WRAP_SUFFIX}`)
+    // 重装自愈：全新闭包重置标记——遗留状态再剥恰一次（守护闭包级标记，
+    // 排斥模块级退化）。
+    defaultSelection = { provider: `text-provider${WRAP_SUFFIX}`, model: 'brain-1' }
+    const reinstallWrites = defaultWrites.length
+    const legacyDispose2 = installAdmissionWrapper(root, fakeService)
+    await tick()
+    check('reinstall strips legacy takeover once more (self-heal channel)', defaultSelection.provider === 'text-provider' && defaultWrites.length === reinstallWrites + 1 && defaultWrites[reinstallWrites].provider === 'text-provider')
+    legacyDispose2()
+    await tick()
+  }
 }
 
 // 7.7 pre-step（v3 Step 6 / N-3）：图片轮 reminder 注入（带 id）+ 逃生组分级改写兜底
