@@ -22,7 +22,7 @@
 | 项目名称 | dsh-agent-router |
 | 当前阶段 | development (6/11) |
 | 总任务数 | 17（去重后，含 GOV-002；原统计 13 滞后于后续入账） |
-| 已完成 | 13 |
+| 已完成 | 14 |
 | 阻塞中 | 0 |
 | 已关闭 | 1（DEV-001——DEC-017 重定义关闭，观测义务并入 DEV-002） |
 | 关键风险数 | 1（RISK-001 活跃——主轨道 = DEV-002 + 演进路线） |
@@ -50,7 +50,7 @@
 | ARCH-001 | architecture（并行活跃） | 通用附件路由框架架构 v3 设计稿（DEC-007） | 基于 v2 架构 + 两份调研产出 v3 设计：不变量重写、preserveImageInput、三通道感知、imageMemory、三级展示、附件统一编址、F11 输入入口、移除清单、模态矩阵、迁移路径、成功标准候选（D-1 定稿用） | 已完成——R1 NEEDS_CHANGE（B-1+W-1~4）→ 返工 → R2 APPROVED_WITH_NOTES（unresolved_blockers=0；review-ARCH-001-R2.md） | P0 |
 | MIG-001 | development | v3 迁移实施 Step 0-10（DEC-012） | 按架构 v3 §8 迁移路径逐步实施：Step 0 基线测试 → Step 1 移除整轮路由 → … → Step 10；每步独立提交+测试全绿；验收门 = D-1 五条指标（DEC-012） | **已完成**——Step 0-10 全 13 单元闭环（7cb2024/b7261d5/a23b338/374edfa/f89b8bd/f294c3c/98f04a3/2c4b194/1f17ea8/12a8c71/e88dfb2/0554c5d + Step 10 本提交）；R1-R14 审查链全通过（含两次 NEEDS_CHANGE→返工→复审闭环）；EV-011~023；V-DSH-1/2/3/7 闭环（1/2/7 验证成立/可用，3 证伪走原生兜底）；**D-1 门判定：满足×2（恒主模型/编址往返 100% 自动化）+ 部分满足×2（图片到达/跨轮指代——机制面 100% 端到端待实测）+ 待实测×1（触发率——U-3 真实统计）**；观测脚本 tests/metrics.mjs（31 项）；遗留转后续域：R14-F-01 测试卫生（DEV-002）+ P3 记录项 + D-1 待实测项（真实使用后评估）+ R4 F-1/F-2 | P0 |
 | DEV-001 | development | v0.1.8 行为基线回归验证 | 跑通 tests/smoke.mjs + client-render.mjs，记录 whole-turn 图片路由默认化（c2648d2/963b4f5）后的基线输出 | **已关闭（DEC-017，2026-08-20）**——基线对象（整轮路由行为）已随 v3 Step 1 移除；534 smoke 断言 + 31 项 D-1 观测构成现行基线；"基线观测常态化"并入 DEV-002 范围 | P2 |
-| DEV-002 | development | 核心通路自动化测试补强 | routing/takeover 关键路径具备可重复测试（当前仅 4 个冒烟测试文件） | **进行中（2026-08-23 QA 派发 + Test Reviewer 后置）**——routing 决策链 + takeover 双层语义独立套件（新文件域，与 EVO-002 Step 6 并行）；执行包已入 execution-packets.json | P1 |
+| DEV-002 | development | 核心通路自动化测试补强 | routing/takeover 关键路径具备可重复测试（当前仅 4 个冒烟测试文件） | **已完成（终态）**——tests/routing-paths.mjs 95 断言（3e0e2b5，EV-047）+ Test Reviewer R1 APPROVED_WITH_NOTES/0（EV-049；16 条抽查/突变矩阵 4 项精确吻合/边界 5 类）；P3 台账 T1-T6；RISK-001 主轨道关闭条件①达成 | P1 |
 | DEV-003 | release | v0.2.0 发布收尾（DEC-015 升级） | 版本 bump 0.2.0 + CHANGELOG（v3 迁移全量记录）+ README 徽章/安装命令同步 + tarball 离线安装验证 + tag v0.2.0 + 归档触发检测 | **已完成（本提交=v0.2.0 发布提交）**——Release agent 三件套 + Developer bump/README + Release Reviewer APPROVED（W-1 有条件发布裁决入 risk-log，48h 观察期义务 DEV-001/002 关闭决策；W-3 回滚范围表述已修正）；tarball/tag 随本提交执行 | P1 |
 | GOV-001 | development（治理快速通道） | 项目质量原则固化与持续改进机制建立 | 7 条原则 + 4 条编程要求立版（project-principles.md P-v1，含执行锚点映射）+ AGENTS.md 会话投影 + 持续演进协议（decision-log 入账制 + P-vN 版本化，质量基线只升不降） | **已完成**——DEC-016 决策入账 + EV-025 证据入账；check-governance 28 issues 经事实核查均为 pre-existing（插件仓自审计误期望 + 历史复审命名约定），无 GOV-001 引入项；原则文本与用户 2026-08-20 会话指令逐字一致 | P1 |
 | GOV-002 | development（治理快速通道） | 治理工作流升级 0.74.0→0.75.0（/governance Scenario C） | bootstrap 段版本行更新 + plan-tracker 版本行 + 归档触发检测 + 过时锁释放 + tracker 去重卫生（FIX-001 重复行/FIX-002 陈旧行） | **已完成**——AGENTS.md @bootstrap-version 0.75.0（轻量模板 diff 仅版本行）；归档检测：跳过（已发布版本 0<2）；EV-038 | P1 |
