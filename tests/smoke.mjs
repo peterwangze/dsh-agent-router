@@ -840,6 +840,11 @@ console.log('RouterService:')
       })
       const fetches6 = []
       const realFetch6 = globalThis.fetch
+      // R7-F5：隔离进程代理 env（resolveOauthProxy 运行时读真实 process.env——
+      // 设 HTTPS_PROXY 的机器上直连断言/fail-loud 断言必被 env 代理污染破坏）。
+      const proxyEnvKeys6 = ['HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy']
+      const savedProxyEnv6 = {}
+      for (const key of proxyEnvKeys6) { savedProxyEnv6[key] = globalThis.process?.env?.[key]; delete globalThis.process.env[key] }
       globalThis.fetch = async (url, options) => {
         fetches6.push({ url: String(url), init: options })
         if (String(url) === CHATGPT_PRESET.tokenUrl) {
@@ -876,6 +881,17 @@ console.log('RouterService:')
         check('preset begin proceeds once ToS accepted', begin6.ok === true && begin6.authUrl.startsWith(`${CHATGPT_PRESET.authUrl}?`))
         const ex6 = await svc6.oauthTokenExchange({ code: 'code-6', state: begin6.state })
         check('preset exchange completes login journey', ex6.ok === true && existsSync(credFile6))
+        // R6-F1（kill-switch 冷凭据半边断言）：开关关闭时调用期拒绝——
+        // 不读凭据文件（字节不变 = 无读改写）、不发刷新（网络零访问由
+        // resolvePresetCredential 早退保证），文案明确"实验通路已关闭"。
+        // 判别：旧实现（无调用期检查）会读文件并成功调用 → 必败。
+        const coldBytes6 = readFileSync(credFile6)
+        state6.oauthExperimental = false
+        let coldErr6 = null
+        try { await svc6.run({ agentId: 'cgptchat', task: '冷凭据' }) } catch (error) { coldErr6 = error }
+        check('kill-switch call-side rejects cold preset credential (R6-F1)', !!coldErr6 && coldErr6.message.includes('实验通路已关闭'))
+        check('kill-switch call-side touches no credential file (R6-F1)', coldBytes6.equals(readFileSync(credFile6)))
+        state6.oauthExperimental = true
         // D. oauthLogout（W-5）：删凭据文件 + 幂等 + 非 preset 拒绝 + 未知账号
         //    拒绝；实验开关关闭不拦截登出（合规删除路径恒可用）。
         const lo6 = await svc6.oauthLogout({ accountId: 'cgpt' })
@@ -909,15 +925,20 @@ console.log('RouterService:')
         //    带 dispatcher（undici 注入桩）；无代理 → 无 dispatcher（直连零
         //    变化）；undici 不可用 → 明确报错（代理来源 + 指引）。
         await seed6()
-        svc6.oauthUndiciLoader = async () => ({ ProxyAgent: class { constructor(url) { this.url = url } } })
+        let proxyAgentCount6 = 0
+        svc6.oauthUndiciLoader = async () => ({ ProxyAgent: class { constructor(url) { proxyAgentCount6 += 1; this.url = url } } })
         state6.oauthProxyUrl = 'http://127.0.0.1:7890'
         const proxied6 = await svc6.run({ agentId: 'cgptchat', task: '经代理' })
         check('codex call routes via proxy dispatcher when configured', proxied6.text === 'OK-6' && fetches6[fetches6.length - 1]?.init?.dispatcher?.url === 'http://127.0.0.1:7890')
+        const proxied6b = await svc6.run({ agentId: 'cgptchat', task: '经代理 2' })
+        check('proxy dispatcher cached per proxyUrl (R7-F3)', proxied6b.text === 'OK-6' && proxyAgentCount6 === 1 && fetches6[fetches6.length - 1]?.init?.dispatcher === fetches6[fetches6.length - 2]?.init?.dispatcher)
         state6.oauthProxyUrl = ''
         const direct6 = await svc6.run({ agentId: 'cgptchat', task: '直连' })
         check('codex call stays direct (no dispatcher) when no proxy', direct6.text === 'OK-6' && fetches6[fetches6.length - 1]?.init?.dispatcher === undefined)
         svc6.oauthUndiciLoader = async () => { throw new Error('undici not installed') }
-        state6.oauthProxyUrl = 'http://127.0.0.1:7890'
+        // R7-F3 缓存交互：fail-loud 场景用未缓存键（7891）——同 URL 已成功
+        // 实例化（7890）即证明 undici 可用，缓存命中不报错是正确行为。
+        state6.oauthProxyUrl = 'http://127.0.0.1:7891'
         let proxyLoadErr6 = null
         try { await svc6.run({ agentId: 'cgptchat', task: 'x' }) } catch (error) { proxyLoadErr6 = error }
         check('proxy configured but undici unavailable errors clearly', !!proxyLoadErr6 && proxyLoadErr6.message.includes('undici') && proxyLoadErr6.message.includes('代理'))
@@ -930,6 +951,10 @@ console.log('RouterService:')
         check('oauth telemetry never carries token values (P7)', !JSON.stringify(svc6.oauthEvents).includes('sig-step6') && !JSON.stringify(svc6.oauthEvents).includes('REFRESH-STEP6'))
       } finally {
         globalThis.fetch = realFetch6
+        for (const key of proxyEnvKeys6) {
+          if (savedProxyEnv6[key] === undefined) delete globalThis.process.env[key]
+          else globalThis.process.env[key] = savedProxyEnv6[key]
+        }
         try { rmSync(step6Work, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
       }
     } catch (error) {

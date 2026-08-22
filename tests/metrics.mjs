@@ -664,6 +664,11 @@ async function observeOauthTelemetry() {
       agents: { cgptchat: { name: 'CGPT', type: 'chat', enabled: true, account: 'cgpt' } },
     }) })
     service.codexLoopbackStarter = async () => ({ ready: true, port: 1455, dispose: () => {} })
+    // R7-F5：隔离进程代理 env——C-9-1 采样调用经真实 resolveOauthProxy
+    //  读 process.env，HTTPS_PROXY 机器上会触发环境代理 + fail-loud import。
+    const proxyEnvKeysC9 = ['HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy']
+    const savedProxyEnvC9 = {}
+    for (const key of proxyEnvKeysC9) { savedProxyEnvC9[key] = globalThis.process?.env?.[key]; delete globalThis.process.env[key] }
     const realFetch = globalThis.fetch
     globalThis.fetch = async (url) => {
       if (String(url) === CHATGPT_PRESET.tokenUrl) {
@@ -695,6 +700,10 @@ async function observeOauthTelemetry() {
       detail.push(`事件种类: ${[...new Set(service.oauthEvents.map((event) => event.kind))].join(', ')}`)
     } finally {
       globalThis.fetch = realFetch
+      for (const key of proxyEnvKeysC9) {
+        if (savedProxyEnvC9[key] === undefined) delete globalThis.process.env[key]
+        else globalThis.process.env[key] = savedProxyEnvC9[key]
+      }
       try { rmSync(work, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
     }
   } catch (error) { crash = error }
