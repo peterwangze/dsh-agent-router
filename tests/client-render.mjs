@@ -171,7 +171,7 @@ export async function runClientRender(check) {
   }
 
   // ── 装配：评估浏览器包 → mock ctx → apply → 渲染 ─────────────────────
-  const captured = { registrations: [], listeners: [], uploadFileCalls: [], readWorkspaceFileCalls: [], saveOps: [], oauthLogoutCalls: [], beginCalls: [], openCalls: [] }
+  const captured = { registrations: [], listeners: [], uploadFileCalls: [], readWorkspaceFileCalls: [], saveOps: [], oauthLogoutCalls: [], beginCalls: [], openCalls: [], statsExportCalls: [] }
   const fakeWindow = {
     __ModuleLoader__: { load: (payload) => { captured.bundle = payload } },
     location: { search: '', pathname: '/' },
@@ -274,7 +274,11 @@ export async function runClientRender(check) {
         codexentry: { name: 'Codex 子代理', enabled: true, command: 'codex', args: '', timeoutMs: 0, maxConcurrent: 1, loginArgs: '', statusArgs: '', modelsArgs: '' },
       },
     }, user: null } }),
-    stats: async () => ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [] } }),
+    stats: async () => ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [], days: {
+      '2026-01-15': { calls: 3, errors: 1, inputTokens: 110, outputTokens: 50, tokens: 160, ms: 180, cost: 0.5 },
+      '2026-01-16': { calls: 2, errors: 0, inputTokens: 20, outputTokens: 0, tokens: 20, ms: 60, cost: 0 },
+    } } }),
+    statsExport: async (request) => { captured.statsExportCalls.push(request); return { ok: true, value: { ok: true, message: '已导出 2 行', csv: 'date,agent,account,model,calls,errors,inputTokens,outputTokens,p50ms,p95ms,costEstimate\n2026-01-15,vision,openai,gpt-4o,3,1,110,50,60,180,0.5' } } },
     save: async (request) => { captured.saveOps.push(...((request && request.ops) ?? [])); return { ok: true, value: { ok: true, revision: 1 } } },
     oauthBegin: async (request) => { captured.beginCalls.push(request); return { ok: true, value: { ok: true, message: '授权 URL 已生成', authUrl: 'https://auth.openai.com/oauth/authorize?x=1', state: 'st-6' } } },
     oauthLogout: async (request) => {
@@ -1116,5 +1120,47 @@ export async function runClientRender(check) {
     unknownPresetMode = false
     presetMode = 'none'
     experimentalOn = false
+  }
+
+  // ── 断言：①（EVO-004 出口②）按天视图 UI 面——stats.days 按天聚合表 ────
+  // 旧代码 statsBody 只渲染 totals/series/recent，无 stats.days 消费面（UI 面
+  // 零改动）→ 本组断言必败。构造：remoteMock.stats 返回 days（两日期聚合）。
+  {
+    experimentalOn = false
+    presetMode = 'none'
+    unknownPresetMode = false
+    await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'settings-daily', 60)
+    const statsHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.statsTitle))
+    check('daily-view stats category head present', !!statsHead)
+    if (statsHead) {
+      statsHead.props.onClick()
+      currentTree = await settle()
+      check('daily view renders by-day aggregate table (①)', textOf(currentTree).includes(zh.statsDayLevel) && textOf(currentTree).includes('2026-01-15') && textOf(currentTree).includes('2026-01-16'))
+      check('daily view rows carry day call counts', textOf(currentTree).includes('3') && textOf(currentTree).includes('2'))
+    }
+  }
+
+  // ── 断言：②（EVO-004 出口⑤）导出按钮 UI 面——statsExport RPC + CSV 下载
+  // 旧代码 statsBody 无导出按钮（UI 面零改动）→ 本组断言必败。
+  {
+    experimentalOn = false
+    presetMode = 'none'
+    unknownPresetMode = false
+    captured.statsExportCalls = []
+    captured.openCalls = []
+    await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'settings-export', 60)
+    const statsHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.statsTitle))
+    if (statsHead) {
+      statsHead.props.onClick()
+      currentTree = await settle()
+      const exportButton = buttonsOf(currentTree).find((node) => textOf(node) === zh.statsExport)
+      check('export button renders in stats panel (②)', !!exportButton)
+      if (exportButton) {
+        exportButton.props.onClick()
+        currentTree = await settle()
+        check('export triggers statsExport RPC with range/level', captured.statsExportCalls.length === 1 && captured.statsExportCalls[0].range === '7d' && captured.statsExportCalls[0].level === 'agent')
+        check('export downloads CSV via data: URL (②)', captured.openCalls.some((url) => url.startsWith('data:text/csv;charset=utf-8,') && decodeURIComponent(url.split(',')[1]).includes('date,agent,account,model')))
+      }
+    }
   }
 }
