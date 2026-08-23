@@ -527,7 +527,27 @@ export async function runStatsTests(check) {
     rmSync(work, { recursive: true, force: true })
   }
 
-  // ── 20. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
+  // ── 20. R2-F2（P2）：false 期显式 flush 契约洞——#drain 无 persist 门控 ──
+  // 旧 #drain 起点无 `if (!this.persist) return`：toggle-off 时 await flush
+  // 写失败批次 unshift 回队 → persist=false 生效后残留队列，false 期显式
+  // flush() 会继续写盘——违反 F1 "不读不写"文档契约。本组直接向 persist=false
+  // store 注入残留队列再显式 flush → 旧代码写盘必败。
+  console.log('persist=false explicit flush with residual queue (R2-F2):')
+  {
+    const work = mkdtempSync(join(tmpdir(), 'stats-r2f2-'))
+    const dir = join(work, 'stats')
+    const store = new StatsStore({ dir, persist: false, now: NOW_AT })
+    // 模拟 toggle-off 写失败回队后 false 生效的残留待写行（字段形状同 #lineForWrite）。
+    store.queue.push({ v: 1, at: T0, agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 1, inputTokens: 0, outputTokens: 0, costEstimate: 0 })
+    await store.flush()
+    const dailyPath = join(dir, `daily-${D0}.jsonl`)
+    check('R2-F2: false-period explicit flush writes nothing even with residual queue', !existsSync(dailyPath))
+    check('R2-F2: false-period flush leaves no stats dir artifacts', !existsSync(dir) || readdirSync(dir).filter((n) => n.endsWith('.jsonl')).length === 0)
+    await store.close()
+    rmSync(work, { recursive: true, force: true })
+  }
+
+  // ── 21. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
   console.log('dependency surface (acyclic):')
   {
     const source = readFileSync(new URL('../lib/stats.js', import.meta.url), 'utf8')
