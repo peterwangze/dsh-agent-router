@@ -478,7 +478,35 @@ export async function runStatsTests(check) {
     rmSync(work, { recursive: true, force: true })
   }
 
-  // ── 18. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
+  // ── 18. R1-F3（carried P2）：CSV 公式注入防护 ─────────────────────────
+  // 字段首字符为 = + - @ 时须加 ' 前缀（OWASP/RFC 建议——excel 会把这些
+  // 当公式求值）。agentId/provider/model 为外部可注入字段。旧 csvEscape
+  // 只处理引号/逗号/换行，=+-@ 开头字段原样输出 → 本组断言必败。
+  console.log('CSV formula-injection escape (R1-F3):')
+  {
+    const work = mkdtempSync(join(tmpdir(), 'stats-f3-'))
+    const dir = join(work, 'stats')
+    const store = new StatsStore({ dir, persist: false, now: NOW_AT })
+    store.record({ agentId: '=1+1', provider: 'openai', model: 'gpt-4o', ok: true, ms: 1, at: T0 })
+    store.record({ agentId: '+=cmd', provider: '+SUM(A1)', model: 'gpt-4o', ok: true, ms: 2, at: T0 })
+    store.record({ agentId: '-2', provider: '@import', model: 'gpt-4o', ok: true, ms: 3, at: T0 })
+    const csv = store.export({ range: '7d', level: 'agent' })
+    const rows = csv.split('\n').slice(1)
+    const cell = (row, index) => {
+      const cols = row.split(',')
+      return cols[index]
+    }
+    check('R1-F3: agent field leading = prefixed with single quote', rows.some((r) => cell(r, 1) === "'=1+1"))
+    check('R1-F3: provider field leading + prefixed', rows.some((r) => cell(r, 2) === "'+SUM(A1)"))
+    check('R1-F3: agent field leading - prefixed', rows.some((r) => cell(r, 1) === "'-2"))
+    check('R1-F3: provider field leading @ prefixed', rows.some((r) => cell(r, 2) === "'@import"))
+    // 模型/账号等正常字段不受影响（无 =+-@ 开头前缀不加引号）。
+    check('R1-F3: safe fields unchanged', rows.every((r) => cell(r, 3) === 'gpt-4o' && !cell(r, 3).startsWith("'")))
+    await store.close()
+    rmSync(work, { recursive: true, force: true })
+  }
+
+  // ── 19. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
   console.log('dependency surface (acyclic):')
   {
     const source = readFileSync(new URL('../lib/stats.js', import.meta.url), 'utf8')
