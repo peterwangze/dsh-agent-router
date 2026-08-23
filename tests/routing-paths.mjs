@@ -591,6 +591,96 @@ console.log('D. 模态路由:')
   }
 }
 
+// ── [X] FIX-004 能力自证 + 预检可观测（判定单点复用 sourceAcceptsModality）──
+// 问题定性：宿主 pi-ai 自定义 provider 的 inputModalities 缺省 DEFAULT_INPUT=
+// ["text"]——纯靠宿主声明不可信（qwen3.7-plus 实测可看图却会被误拒，README L125）。
+// 判别覆盖三路径：探测成功（宿主 text-only 但适配器自证 image → 放行）/探测失败
+// （宿主 text-only 且自证不可用 → 安全回落拒绝 + 诊断事件 P8 可观测）/声明可信
+// （宿主明确 image → 信任放行）。探测失败回落判别（F-2 先例）：绝不放行裸图块击穿
+// 不确定端点，而是回落拒绝并事件化（R2-F3 吞错零观测同型的根治）。
+console.log('X. FIX-004 能力自证判别:')
+{
+  const oldLlm = svcRoot.get('llm')
+  const origResolveModelInfo = oldLlm.resolveModelInfo
+  const origRegistration = oldLlm.registration
+  const origStream = oldLlm.stream
+  const probeImages = [{ attachmentId: IMG_A, mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'a.png' }]
+  // 临时 agent（非 declared、chat 含 image 标签——必走预检）；finally 清理。
+  const addProbeAgent = (provider, model) => {
+    svcConfig.agents.probe = { name: '探测', type: 'chat', enabled: true, capabilities: ['image'], provider, model, maxRounds: 1 }
+  }
+  const delProbeAgent = () => { delete svcConfig.agents.probe }
+  const okStream = (reqs) => async function* (request) {
+    reqs.push(request)
+    yield { type: 'block-start', index: 0, blockType: 'text' }
+    yield { type: 'text-delta', index: 0, text: 'OK' }
+    yield { type: 'block-end', index: 0, block: { type: 'text', text: 'OK' } }
+    yield { type: 'finish', reason: { kind: 'stop' } }
+  }
+
+  // X1 探测成功：宿主声明 text-only（pi-ai 默认）、适配器 resolveModel 返回 image →
+  //   自证放行（qwen3.7-plus 同型）。判别：若仍纯信宿主声明 → 该调用必被"不支持图片输入"拒 → FAIL。
+  {
+    oldLlm.resolveModelInfo = async () => ({ inputModalities: ['text'] })
+    oldLlm.registration = () => ({ adapter: { async resolveModel() { return { provider: 'opencode-go-new', id: 'qwen3.7-plus', inputModalities: ['text', 'image'] } } } })
+    const reqs = []
+    oldLlm.stream = okStream(reqs)
+    addProbeAgent('opencode-go-new', 'qwen3.7-plus')
+    try {
+      const out = await service.run({ agentId: 'probe', task: '看图', images: probeImages, exec: execOf() })
+      const request = reqs[reqs.length - 1]
+      const imageBlocks = (request?.messages?.[0]?.content ?? []).filter((block) => block.type === 'image')
+      check('[X1] 宿主 text-only 时走能力自证放行（探测成功）', out.kind === 'chat' && reqs.length === 1 && imageBlocks.length === 1 && imageBlocks[0].attachment.attachmentId === IMG_A)
+      check('[X1b] 自证放行记录 self-certified 诊断事件', service.capabilityEvents.some((e) => e.kind === 'image_precheck_self_certified' && e.provider === 'opencode-go-new' && e.model === 'qwen3.7-plus'))
+    } finally {
+      delProbeAgent()
+    }
+  }
+
+  // X2 探测失败回落判别：宿主 text-only 且自证不可用（无 registration 适配器）→
+  //   安全回落拒绝 + 诊断事件（P8 可观测，非静默吞错——R2-F3 同型）。
+  //   判别①：若回落放行（未知放行），文本模型裸图块击穿端点 → 该调用必成功 → rejects 必败。
+  //   判别②：若拒绝但无诊断事件 → 静默拒绝零观测 → X2b 必败。
+  {
+    oldLlm.resolveModelInfo = async () => ({ inputModalities: ['text'] })
+    oldLlm.registration = undefined // 适配器不可用（真实宿主 registration 未就绪同型）
+    oldLlm.stream = origStream
+    addProbeAgent('text-only', 't1')
+    const capBefore = service.capabilityEvents.length
+    try {
+      const rejected = await rejects(() => service.run({ agentId: 'probe', task: '看图', images: probeImages, exec: execOf() }), '不支持图片输入')
+      check('[X2] 探测失败安全回落拒绝（不放行不确定端点）', rejected)
+      check('[X2b] 探测失败产生诊断事件（P8 可观测非静默）', service.capabilityEvents.length > capBefore && service.capabilityEvents[0]?.kind === 'image_precheck_reject' && service.capabilityEvents[0]?.provider === 'text-only' && service.capabilityEvents[0]?.model === 't1')
+    } finally {
+      delProbeAgent()
+    }
+  }
+
+  // X3 声明可信：宿主明确声明 image → 信任放行（无需适配器探测——registration 缺省）。
+  //   判别：若宿主声明不被信任（仍走自证且适配器不可用）→ 必被拒 → FAIL。
+  {
+    oldLlm.resolveModelInfo = async () => ({ inputModalities: ['text', 'image'] })
+    oldLlm.registration = undefined // 声明可信不需要适配器探测
+    const reqs = []
+    oldLlm.stream = okStream(reqs)
+    addProbeAgent('openai', 'gpt-4o')
+    try {
+      const out = await service.run({ agentId: 'probe', task: '看图', images: probeImages, exec: execOf() })
+      const request = reqs[reqs.length - 1]
+      const imageBlocks = (request?.messages?.[0]?.content ?? []).filter((block) => block.type === 'image')
+      check('[X3] 宿主声明 image 信任放行（声明可信）', out.kind === 'chat' && reqs.length === 1 && imageBlocks.length === 1 && imageBlocks[0].attachment.attachmentId === IMG_A)
+      check('[X3b] 声明可信路径无 self-certified 事件（信任宿主，未自证）', !service.capabilityEvents.some((e) => e.kind === 'image_precheck_self_certified' && e.provider === 'openai' && e.model === 'gpt-4o'))
+    } finally {
+      delProbeAgent()
+    }
+  }
+
+  // 恢复桩。注：X1 曾把 registration 设为函数——必须复位，避免污染后续 E 小节。
+  oldLlm.resolveModelInfo = origResolveModelInfo
+  oldLlm.registration = origRegistration
+  oldLlm.stream = origStream
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // [E] takeover 服务端双层语义（installAdmissionWrapper + 真实 LlmRuntime）。
 // 语义权威：review-FIX-002-R7/R8（DEC-022 ①-⑥）；断言风格对齐 smoke §7.6 的
