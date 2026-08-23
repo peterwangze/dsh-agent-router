@@ -926,12 +926,19 @@ console.log('RouterService:')
         //    变化）；undici 不可用 → 明确报错（代理来源 + 指引）。
         await seed6()
         let proxyAgentCount6 = 0
-        svc6.oauthUndiciLoader = async () => ({ ProxyAgent: class { constructor(url) { proxyAgentCount6 += 1; this.url = url } } })
+        let proxyCloseCount6 = 0
+        svc6.oauthUndiciLoader = async () => ({ ProxyAgent: class { constructor(url) { proxyAgentCount6 += 1; this.url = url } close() { proxyCloseCount6 += 1 } } })
         state6.oauthProxyUrl = 'http://127.0.0.1:7890'
         const proxied6 = await svc6.run({ agentId: 'cgptchat', task: '经代理' })
         check('codex call routes via proxy dispatcher when configured', proxied6.text === 'OK-6' && fetches6[fetches6.length - 1]?.init?.dispatcher?.url === 'http://127.0.0.1:7890')
         const proxied6b = await svc6.run({ agentId: 'cgptchat', task: '经代理 2' })
         check('proxy dispatcher cached per proxyUrl (R7-F3)', proxied6b.text === 'OK-6' && proxyAgentCount6 === 1 && fetches6[fetches6.length - 1]?.init?.dispatcher === fetches6[fetches6.length - 2]?.init?.dispatcher)
+        // R8-F2（P2）：缓存生命周期有界 + 注释机制修正——Map 强引用下旧键实例
+        // 不随 GC 回收（注释"随 GC 回收"为机制错误）；切换到新 proxyUrl 时旧
+        // 实例显式 close + 淘汰，缓存仅保留最近一次（有界）。
+        state6.oauthProxyUrl = 'http://127.0.0.1:7895'
+        const proxied6c = await svc6.run({ agentId: 'cgptchat', task: '经代理 3' })
+        check('proxy dispatcher cache bounded across proxyUrl changes (R8-F2)', proxied6c.text === 'OK-6' && svc6.oauthProxyDispatchers.size === 1 && svc6.oauthProxyDispatchers.has('http://127.0.0.1:7895') && !svc6.oauthProxyDispatchers.has('http://127.0.0.1:7890') && proxyCloseCount6 === 1 && proxyAgentCount6 === 2)
         state6.oauthProxyUrl = ''
         const direct6 = await svc6.run({ agentId: 'cgptchat', task: '直连' })
         check('codex call stays direct (no dispatcher) when no proxy', direct6.text === 'OK-6' && fetches6[fetches6.length - 1]?.init?.dispatcher === undefined)
