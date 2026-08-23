@@ -506,7 +506,28 @@ export async function runStatsTests(check) {
     rmSync(work, { recursive: true, force: true })
   }
 
-  // ── 19. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
+  // ── 19. R2-F1（P2）：setPersist 并发翻转竞态——最后写入者胜出 ─────────────
+  // 旧 #setPersist 首行 `if (want === this.persist) return` 在转换前比较：
+  // setPersist(false) 在途（await flush 期间 persist 仍为 true）时调
+  // setPersist(true) 命中早退 no-op → false 转换完成后终态倒置（应 true
+  // 实 false）。本组以"先关后开连续发起"复现该窗口 → 旧代码终态 false 必败。
+  console.log('setPersist concurrent-flip race (R2-F1):')
+  {
+    const work = mkdtempSync(join(tmpdir(), 'stats-r2f1-'))
+    const dir = join(work, 'stats')
+    const store = new StatsStore({ dir, flushThreshold: 50, now: NOW_AT })
+    store.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 1, at: T0 })
+    // 在 off 过渡在途（await flush 尚未落地 persist=false）时同步注入 on——
+    // 与 service.js applyStatsSettings fire-and-forget 同型触发。
+    const p1 = store.setPersist(false)
+    const p2 = store.setPersist(true)
+    await Promise.all([p1, p2])
+    check('R2-F1: last writer wins across concurrent flips (final state true)', store.persist === true)
+    await store.close()
+    rmSync(work, { recursive: true, force: true })
+  }
+
+  // ── 20. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
   console.log('dependency surface (acyclic):')
   {
     const source = readFileSync(new URL('../lib/stats.js', import.meta.url), 'utf8')
