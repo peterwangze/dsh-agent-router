@@ -220,6 +220,10 @@ export async function runClientRender(check) {
   let experimentalOn = false
   let presetMode = 'none'
   let confirmMode = true
+  // EVO-004 R8-F1（P2）：非成员 preset 值账号判据统一——未知 preset（'zzz'）
+  // 必须回落到通用 OAuth 卡（旧：宽判据排除 + 预设卡严格成员 → UI 黑箱 +
+  // 删除死锁）。true 时 catalog 注入一个 preset:'zzz' 的散账号。
+  let unknownPresetMode = false
   // EVO-002 Step 7（R7-F4 判别）：true 时 remoteMock.oauthLogout 返回
   // ok:false（store.delete 失败形态——凭据文件残留 + 无重试入口的旧行为判别）。
   let logoutFailMode = false
@@ -245,8 +249,9 @@ export async function runClientRender(check) {
               { id: 'codex', name: 'Codex 助手', type: 'cli', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', cliAgent: 'codexentry', effectiveProvider: 'cli:codexentry', effectiveModel: '', source: 'agent' },
               { id: 'vision', name: '视觉', type: 'chat', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', effectiveProvider: 'deepseek-official', effectiveModel: 'deepseek-v4-pro', source: 'main' },
             ],
-        oauthAccounts: presetMode === 'none' ? [] : [
+        oauthAccounts: presetMode === 'none' && !unknownPresetMode ? [] : [
           { id: 'chatgpt', name: 'ChatGPT（实验）', enabled: true, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', tokenRef: '', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.4-mini'], publicClient: false, preset: 'chatgpt-codex', presetLoggedIn: presetMode === 'logged-in' },
+          ...(unknownPresetMode ? [{ id: 'weird', name: '怪异账号', enabled: true, protocol: 'openai-completions', baseURL: '', tokenRef: 'ROUTER_OAUTH_WEIRD_TOKEN', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: [], publicClient: false, preset: 'zzz' }] : []),
         ],
         pools: presetMode === 'none' ? [] : [
           { id: 'main', name: '主池', enabled: true, strategy: 'healthy', accounts: ['chatgpt'], accountHealth: [] },
@@ -1083,5 +1088,33 @@ export async function runClientRender(check) {
     const galleryTree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: galleryBlock }), 'toolcard-gallery')
     const gallery = findAll(galleryTree, (node) => hasClass(node, 'dshrouter-toolgallery'))
     check('tool card renders image gallery container', gallery.length === 1)
+  }
+
+  // ── 断言：R8-F1（EVO-004）未知 preset 值账号判据统一 ────────────────────
+  // 旧代码：通用区宽判据（非空 preset 即排除）+ 预设卡严格成员
+  // （preset === 'chatgpt-codex'）→ 非成员 preset（'zzz'）账号无任何渲染
+  // 入口（UI 黑箱 + 删除死锁——服务端成员校验拒删）。修复后：非成员 preset
+  // 回落到通用 OAuth 卡（可删——非成员账号无独立凭据文件，通用删除安全）。
+  // 独立渲染设置页（不扰动前面断言的展开态）。
+  {
+    unknownPresetMode = true
+    presetMode = 'none'
+    experimentalOn = false
+    await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'settings-r8f1', 60)
+    const acctHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.accountTitle))
+    check('R8-F1 accounts category head present', !!acctHead)
+    if (acctHead) {
+      acctHead.props.onClick()
+      currentTree = await settle()
+      const advHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.advancedSection))
+      if (advHead) {
+        advHead.props.onClick()
+        currentTree = await settle()
+        check('unknown-preset account falls back to generic oauth card (R8-F1)', textOf(currentTree).includes('怪异账号') && textOf(currentTree).includes('weird'))
+      }
+    }
+    unknownPresetMode = false
+    presetMode = 'none'
+    experimentalOn = false
   }
 }
