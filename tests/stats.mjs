@@ -547,7 +547,25 @@ export async function runStatsTests(check) {
     rmSync(work, { recursive: true, force: true })
   }
 
-  // ── 21. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
+  // ── 21. R2-F3（P2）：record() 吞错零观测——selfReport 计数（P8 同型）──
+  // F2 修复后注入函数抛错被静默吞掉，但 selfReport 八项计数无一命中 record
+  // 路径——故障期静默丢统计无痕迹。R2-F3 要求 catch 内加 recordErrors 计数。
+  // 旧代码无该计数 → 本组断言必败。
+  console.log('record() error observation counter (R2-F3):')
+  {
+    const work = mkdtempSync(join(tmpdir(), 'stats-r2f3-'))
+    const dir = join(work, 'stats')
+    const store = new StatsStore({ dir, persist: false, getAgentName: () => { throw new Error('injected getAgentName boom') } })
+    store.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 10, at: T0 })
+    check('R2-F3: swallowed record failure observed via selfReport.recordErrors', store.statsSelfReport().recordErrors === 1)
+    store.record({ agentId: 'draw', provider: 'openai', model: 'dall-e-3', ok: true, ms: 5, at: T0 })
+    check('R2-F3: recordErrors accumulates across failures', store.statsSelfReport().recordErrors === 2)
+    check('R2-F3: no successful fold counted under injected failure', store.snapshot().totals.length === 0)
+    await store.close()
+    rmSync(work, { recursive: true, force: true })
+  }
+
+  // ── 22. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
   console.log('dependency surface (acyclic):')
   {
     const source = readFileSync(new URL('../lib/stats.js', import.meta.url), 'utf8')
