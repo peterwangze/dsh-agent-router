@@ -1,6 +1,6 @@
 ## Governance Bootstrap（由 software-project-governance 插件注入）
 
-> @bootstrap-version: 0.76.0（模板最低引导版本——低于 SKILL frontmatter active_version 即陈旧，先升级本段再继续）
+> @bootstrap-version: 0.78.0（模板最低引导版本——低于 SKILL frontmatter active_version 即陈旧，先升级本段再继续）
 
 ### 每次会话第一动作
 读取 `.governance/plan-tracker.md`，确认当前阶段、Gate 状态、活跃风险。如 `.governance/` 不存在，提醒先初始化。

@@ -9,7 +9,7 @@
 - **Profile**: lightweight（7 合并 Gate + 6 列精简跟踪）
 - **触发模式**: always-on
 - **操作权限模式**: maximum-autonomy
-- **工作流版本**: 0.76.0
+- **工作流版本**: 0.78.0
 - **当前阶段**: development（开发实现，6/11）
 - **接入方式**: Scenario B 半途接入（existing）——前置 Gate 标记 passed-on-entry
 
@@ -17,7 +17,7 @@
 
 | 项目 | 当前阶段 | 总任务数 | 已完成 | 阻塞中 | 关键风险数 | 最近 Gate 结论 | 最近复盘日期 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| dsh-agent-router | development (6/11) | 22（17 去重后 + FIX-003/FIX-003C/FIX-004/FIX-005/EVO-004 后续入账） | 21（15 基线 + FIX-003 + FIX-003C + EVO-002 + FIX-005 + FIX-004 + EVO-004；另 1 关闭 = DEV-001，22 行全部终态） | 0 | 1（RISK-001 活跃——主轨道 = DEV-002 + 演进路线） | G4 待评（v0.2.0/v0.2.1 已发布；CI 面仍缺——RISK-001；v0.3.x 演进定稿 DEC-020 + EVO-001 PoC 通过 C-1 解锁） | — |
+| dsh-agent-router | development (6/11) | 25（24 终态 + FIX-006 待实施；GOV-004 入账后修正——原 22 计数未含 FIX-006/REL-001/ARCH-002） | 24 终态（23 已完成含 GOV-004 + 1 关闭 DEV-001） | 0 | 1（RISK-001 活跃——主轨道 = DEV-002 + 演进路线） | G4 待评（v0.2.0/v0.2.1 已发布；CI 面仍缺——RISK-001；v0.3.x 演进定稿 DEC-020 + EVO-001 PoC 通过 C-1 解锁） | — |
 
 ## 当前活跃事项
 
@@ -33,6 +33,7 @@
 
 | 已完成任务 | 完成日期 | 摘要 |
 | --- | --- | --- |
+| GOV-004 | 2026-08-27 | 治理升级 0.76.0→0.78.0（/governance Scenario C：三处版本行 + 前序会话记录入仓 f8e9890 + FIX-006 过期锁清理 + 归档检测跳过；EV-071） |
 | OPS-001 | 2026-08-23 | 当前目录插件安装到 DSH（install.ps1 -LocalPath . @ 8938a54=v0.2.1+62：junction ~/.dsh/profiles/node_modules/dsh-agent-router + cordis.patch.yml router/tool-router 行；EV-069；重启生效） |
 | GOV-003 | 2026-08-23 | 治理版本同步 0.75.0→0.76.0（三处版本行 + 快照 28c 修复 + 归档检测跳过 + 锁检查；EV-070） |
 | FIX-005 | 2026-08-23 | 条件化引导（a484469 + R1 APPROVED_WITH_NOTES/0；EV-064/065） |
@@ -84,6 +85,7 @@
 | GOV-001 | development（治理快速通道） | 项目质量原则固化与持续改进机制建立 | 7 条原则 + 4 条编程要求立版（project-principles.md P-v1，含执行锚点映射）+ AGENTS.md 会话投影 + 持续演进协议（decision-log 入账制 + P-vN 版本化，质量基线只升不降） | **已完成**——DEC-016 决策入账 + EV-025 证据入账；check-governance 28 issues 经事实核查均为 pre-existing（插件仓自审计误期望 + 历史复审命名约定），无 GOV-001 引入项；原则文本与用户 2026-08-20 会话指令逐字一致 | P1 |
 | GOV-002 | development（治理快速通道） | 治理工作流升级 0.74.0→0.75.0（/governance Scenario C） | bootstrap 段版本行更新 + plan-tracker 版本行 + 归档触发检测 + 过时锁释放 + tracker 去重卫生（FIX-001 重复行/FIX-002 陈旧行） | **已完成**——AGENTS.md @bootstrap-version 0.75.0（轻量模板 diff 仅版本行）；归档检测：跳过（已发布版本 0<2）；EV-038 | P1 |
 | GOV-003 | development（治理快速通道） | 治理工作流升级 0.75.0→0.76.0（用户选定 2026-08-23） | bootstrap 段版本行更新 + plan-tracker/快照版本行 + 归档触发检测 + 过时锁检查 + 快照 28c 事实源修复（**工作流版本** 中文键对齐 FIX-105 正则） | **已完成**——三处版本行 0.76.0 一致（AGENTS.md @bootstrap-version + plan-tracker **工作流版本** + 快照 **工作流版本**）；轻量模板 diff 仅版本行（项目质量原则 P-v2 投影段为本项目自有，保留）；归档检测：跳过（已发布版本 0<2，与 GOV-002 先例一致）；锁检查：仅 FIX-006 在途锁（TTL 过期，保留至重派刷新，无终态残留锁）；EV-070 | P1 |
+| GOV-004 | development（治理快速通道） | 治理工作流升级 0.76.0→0.78.0（/governance Scenario C） | bootstrap 段版本行 + plan-tracker/快照版本行三处同步 + 归档触发检测 + 过期锁清理 | **已完成**——三处版本行 0.78.0 一致（AGENTS.md @bootstrap-version + plan-tracker **工作流版本** + 快照 **工作流版本**）；轻量模板 L195-255 diff 仅版本行（GOV-003 先例延续）；归档检测：跳过（已发布版本 0<2）；锁清理：FIX-006 三锁 TTL 过期（elapsed 381520s）释放——Check 26 3 blocking 消除，重派时重取；前序会话治理记录入仓（f8e9890）；EV-071 | P1 |
 | EVO-001 | development（v0.3.0 前置） | H2 运行时 PoC（C-1 实施第一步门禁，DEC-020） | 独立测试 profile 安装 yoke233/dsh-openai-codex-auth → 用户在场登录 ChatGPT → P1-P6 六步验证（凭据落盘 owner-only/用量面板/带图对话/token 过期自动刷新/失败形态样本/登出清理）；附加 V-EVO-2b（stream:false 直测）+ V-EVO-2c（originator 观测） | **已完成——PoC 六步全过**（EV-028）：P1 登录端到端（Plus 识别）/P2 用量 21%/P3 SSE 12 事件 POC-OK/P4 rotating+软轮换宽限窗/P5 失败样本×4/P6 全清+Codex CLI 隔离。**H2=可行，C-1 解锁（复杂度 L 确认）**。附加：V-EVO-2b 证伪（走 SSE 聚合）/V-EVO-2c 通过（自标识被接受）/代理发现（chatgpt.com 需代理 7890，auth 直连）/gpt-5.4 系支持 image 输入 | P0 |
 | EVO-002 | development（v0.3.0） | C-1 ChatGPT 订阅 OAuth 实施（ADR-005） | 按 evolution-roadmap-v1 §3 实施：schemas preset/credentialFile/oauthExperimental → lib/oauth-credentials.js → 1455 loopback → oauthBegin/Exchange preset 分支 → runOauthChat codex-responses 分支 → 账号卡 UI + ToS 确认 + 登出删除（含 W-5 删账号联动凭据清理）→ C-9 埋点；每步独立提交 + Code Reviewer 审查 + 534+ 断言零回退；~18 改造点/~1140 行 | **已完成（全任务终态）**——Step 1-7 全闭环（R1-R8 审查链；Step 6/7: R7/R8 APPROVED_WITH_NOTES/0，EV-048/050/058/059）；R7 遗留全清（F1-F5 + R6-F1）；W-5 三层防线；**DEC-022-D 用户裁决废弃（2026-08-23）**；遗留转 UI 批次：R8-F1 判据统一 + R8-F2 注释修正 + P3×6（R7-F9 枚举延续等）；**开放决策项：出口①真机首联（用户在场——1455+代理 7890+V-EVO-3+R6-F2/F5+dispatcher×原生 fetch 兼容 + R8-F6 可选 UX 观察）与出口③设备码流排期 = 用户决策项** | P0 |
 | EVO-003 | development（v0.3.1） | C-3 统计持久化实施（ADR-006，可与 EVO-002 并行开发） | lib/stats.js 分离（service.js 2965 基线净减 ~220）+ DSH_HOME 按天 JSONL + 异步批量 flush + 数据安全四件套单测 + 成本单价表 + CSV 导出 + W-4 persist 开关往返语义；~14 改造点/~1000 行 | **已完成（终态）**——Phase 1（1199c0b，R1 APPROVED_WITH_NOTES/0，EV-039/042，8 裁量点全 adopt）+ Phase 2（c2d01ea，R2 APPROVED_WITH_NOTES/0，EV-051/052，前置项 F1/F2/F4 闭合，4 裁量点全 adopt）；smoke 849/0 + stats 99/0 + routing-paths 95/95；遗留台账（转 UI 批次）：R2-F1/F2/F3 P2×3 + carried R1-F3 CSV 注入 + 出口②按天视图/⑤导出按钮 UI 面 + P3×4 | P1 |

@@ -9,8 +9,8 @@
 
 - **current_stage**: development (6/11)——v0.3.0/v0.3.1 机制面闭合（FIX-004 自证 + EVO-004 UI 面）
 - **current_gate**: G4 待评（CI 面缺——RISK-001；测试网：smoke 876-877 / stats 110 / routing 114 / parity 14）
-- **工作流版本**: 0.76.0（GOV-003 同步 2026-08-23：AGENTS.md bootstrap + plan-tracker + 本快照三处一致）
-- **tracker**: 23 任务 | 21 完成 + 1 关闭（DEV-001）| **FIX-006 待实施（P0）** | 0 阻塞
+- **工作流版本**: 0.78.0（GOV-004 同步 2026-08-27：AGENTS.md bootstrap + plan-tracker + 本快照三处一致）
+- **tracker**: 25 任务 | 23 完成 + 1 关闭（DEV-001）| **FIX-006 待实施（P0）** | 0 阻塞
 - **principles**: **P-v2**（P4 门控/P7 不可逆/P8 可观测/P9 宿主演进防御——本会话 P9 两次实证：
   FIX-004 自证落地 + FIX-006 宿主 dsh-llm rc 滚动漂移嫌疑）
 
@@ -19,6 +19,7 @@
 - ✅ **OPS-001 本地安装**（2026-08-23 16:10）：install.ps1 -LocalPath . 离线安装当前开发树（8938a54 = v0.2.1+62）到 DSH——junction ~/.dsh/profiles/node_modules/dsh-agent-router + cordis.patch.yml router/tool-router 宿主行（novel-writing 保留）；Node 解析三链（entry/依赖/./tool）验证通过；重启后生效（与 FIX-006 通道恢复同窗）；EV-069
 - ✅ **GOV-003 版本同步 0.75.0→0.76.0**（2026-08-23 16:20，用户选定）：AGENTS.md bootstrap 版本行（轻量模板 diff 仅版本行）+ plan-tracker/快照 **工作流版本** 三处一致；附带 28c 修复（快照键 `workflow_version`→中文 `**工作流版本**` 对齐 FIX-105 正则——20→19 issues）；归档检测跳过（0<2）；FIX-006 在途锁保留至重派刷新；EV-070
 
+- ✅ **GOV-004 版本同步 0.76.0→0.78.0**（2026-08-27，/governance Scenario C）：轻量模板 diff 仅版本行（GOV-003 先例延续）三处一致 0.78.0；前序会话治理记录入仓（f8e9890）；FIX-006 过期锁清理（Check 26 3 blocking 消除，重派时重取）；归档检测跳过（0<2）；EV-071
 - ✅ **A 类治理迁移**（26→16 issues 诊断与修复：28c 补节/配置格式/锁重建/快照版本行）
 - ✅ **FIX-004 闭环**：能力自证 + P8 双事件——6dd6e5b + R0 APPROVED_WITH_NOTES/0（EV-067）+ DEC-024 宿主申报入册
 - ✅ **EVO-004 闭环**：C-3 UI 面（按天视图/导出按钮）+ P2 遗留六修——7 commits + R0 APPROVED_WITH_NOTES/0（EV-068）+ 门控独立复跑全绿 + main 合并（8938a54）
