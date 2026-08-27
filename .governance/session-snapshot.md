@@ -1,7 +1,7 @@
-# 会话快照 — 2026-08-23（FIX-004/EVO-004 闭环 + 出口①真机首联进行中 + FIX-006 通道恢复暂停 + OPS-001 本地安装 + GOV-003 版本同步 0.76.0）
+# 会话快照 — 2026-08-27（GOV-004 升级 0.78.0 + FIX-006 闭环 + FIX-281 跨仓申报 + REL-002 v0.3.0 规划 M-0 裁决 + EVO-005 待实施）
 
-- **session_id**: 20260823-GOV-EXIT1-FIX006-CHANNEL-RECOVER
-- **session_date**: 2026-08-23
+- **session_id**: 20260827-GOV-UPGRADE-FIX006-REL002
+- **session_date**: 2026-08-27
 - **agent**: deepseek-v4-flash @ DeepSeek Harness + software-project-governance v0.75.0
 - **mode**: always-on × maximum-autonomy
 
@@ -10,7 +10,7 @@
 - **current_stage**: development (6/11)——v0.3.0/v0.3.1 机制面闭合（FIX-004 自证 + EVO-004 UI 面）
 - **current_gate**: G4 待评（CI 面缺——RISK-001；测试网：smoke 876-877 / stats 110 / routing 114 / parity 14）
 - **工作流版本**: 0.78.0（GOV-004 同步 2026-08-27：AGENTS.md bootstrap + plan-tracker + 本快照三处一致）
-- **tracker**: 25 任务 | 24 完成 + 1 关闭（DEV-001）| **全部终态——FIX-006 已闭环（2026-08-27）** | 0 阻塞
+- **tracker**: 27 任务 | 25 完成 + 1 关闭（DEV-001）+ REL-002 完成 | **EVO-005 设备码待实施（P1，v0.3.0 门禁）** | 0 阻塞
 - **principles**: **P-v2**（P4 门控/P7 不可逆/P8 可观测/P9 宿主演进防御——本会话 P9 两次实证：
   FIX-004 自证落地 + FIX-006 宿主 dsh-llm rc 滚动漂移嫌疑）
 
@@ -49,4 +49,4 @@
 
 1. skill 加载 software-project-governance → resolve_entry.py --json（resolved_root_ok）
 2. 读本快照 + plan-tracker（FIX-006 待实施）
-3. **出口①真机首联（用户在场）**：FIX-006 已闭环（R0 通过）——用户重试 vision-2 带图调用（oauthProxyUrl 7890 已配置 + 凭据有效 + undici 已装）→ 出口条件五项闭环 → v0.3.0 发布时点评估；**同窗验证 OPS-001 安装**（设置→Agent 路由页可见 + route_agent 工具注册）
+3. **EVO-005 设备码派发**（v0.3.0 门禁依赖，DEC-025 D-2a）：Developer（任务书见 tracker EVO-005 行 + TRIAGE-EVO-005 + execution packet）→ Code Reviewer → 门控；完成后 M-1 候选打包（peerDeps rc.8 bump + 三件套 + CHANGELOG 双主题披露 + Design/Release P2 闭合清单见 EV-076）；**出口①真机首联**（用户在场，vision-2 带图）与 **OPS-001 安装验证**（设置→Agent 路由页）随时可做
