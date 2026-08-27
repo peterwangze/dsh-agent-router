@@ -1,97 +1,93 @@
 {
   "version": 1,
-  "generated_at": "2026-08-23T10:01:04",
+  "generated_at": "2026-08-27T21:34:22",
   "packets": {
-    "FIX-006": {
-      "task_id": "FIX-006",
-      "priority": "P0",
-      "status": "待实施（入账 2026-08-23，真机实证 P0）",
-      "goal": "FIX-006 OAuth 代理路径修复：undici 依赖缺失 + dispatcher 版本兼容 + 依赖环境对齐（出口①真机首联阻断，v0.3.0 发布阻塞）",
+    "REL-002": {
+      "task_id": "REL-002",
+      "priority": "P1",
+      "status": "进行中（TRIAGE-REL-002 机器入账 2026-08-27；Release Agent 派发——规划先行，发布决策待用户）",
+      "goal": "REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
       "product_success_contract": {
-        "user": "使用 ChatGPT 订阅 OAuth 账号（oauthAccount preset=chatgpt-codex）通过代理访问 chatgpt.com 的 DSH 用户——出口①真机首联场景；以及所有依赖 tarball 开箱即用的发布环境用户",
-        "job_to_be_done": "配置代理（oauthProxyUrl）后，runCodexResponsesChat 经 chatgpt.com/backend-api/codex/responses 的调用真实可用（SSE 返回而非 fetch failed）；发布环境中 undici 依赖随包安装（发布后开箱即用而非运行时报错）；依赖树可复现（pnpm/npm install 一次成功，smoke 全绿无宿主滚动漂移）",
+        "user": "TO_BE_DEFINED: impacted persona for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
         "non_goals": [
-          "不改变 codex-responses 协议面/SSE 解析逻辑（runCodexResponsesChat 既有实现不动——只修依赖声明与 dispatcher 装配）",
-          "不引入全局代理强制（oauthProxyUrl 未配置时行为不变——显式配置才启用代理，保持 DEC-021 缺省直连语义）",
-          "不泛化到其它协议/账号通路（openai-completions 等既有路径不动）"
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
         ],
         "success_metrics": [
-          "用户可见场景：oauthProxyUrl 配置后 OAuth 带图/文本调用成功返回（不再 fetch failed）——真机端到端（401 级可达→SSE 正常返回）",
-          "可运行验证：node tests/smoke.mjs 新增判别断言（undici 缺失→明确报错形态 / dispatcher 版本兼容→真装 ProxyAgent 请求可用），全套零回退（含 admission raw-route 负向目击行——依赖对齐后恢复绿）"
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
         ],
-        "competitive_baseline": "dsh-codex-connect 生态基准（transport.ts 401/403→reauthRequired fail-loud + 安全文本）——代理可达性与错误形态不低于生态；Node 内置 fetch 原生行为直连（401/405 实证）即为网络层基线",
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
         "done_definition": [
-          "package.json 声明 undici 依赖（版本与 Node 内置 fetch 兼容——对齐策略由 RCA 定：7.x 匹配或兼容层），锁文件一并纳入",
-          "dispatcher 装配经实证可用（真机环境：ProxyAgent 或等价方案 fetch 通过——实验区分 invalid onRequestStart method 不复现）",
-          "依赖环境对齐：pnpm/npm 一次安装成功 + smoke 全绿（admission raw route 负向目击恢复 + 全套零回退）——宿主 rc 版本滚动导致的漂移有判定",
-          "判别测试覆盖：未声明依赖面（发布自检）+ 版本兼容面（测试桩）+ 全套零回退",
-          "Code Reviewer 独立审查 APPROVED/APPROVED_WITH_NOTES(0)"
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
         ]
       },
       "acceptance_contract": {
-        "scenario": "本机安装恢复后：①pnpm add undici（对齐版本）→ node tests/smoke.mjs 全绿；②真机：oauthProxyUrl 保持 http://127.0.0.1:7890 → vision-2 带图调用成功返回（SSE 事件链完整）；③发布面：npm pack 的 tarball 解包后 undici 在依赖清单且可安装",
-        "command": "node tests/smoke.mjs && node tests/stats.mjs && node tests/routing-paths.mjs",
-        "expected_output": "三个命令全部 exit 0（smoke 含新增判别断言：undici 缺失报错形态 + dispatcher 兼容；admission raw route 负向目击绿）；真机 vision-2 调用返回识别结果（非 fetch failed/invalid onRequestStart method）",
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
         "last_run": {
-          "status": "not_run_yet",
+          "status": "TO_BE_DEFINED",
           "exit_code": null,
-          "summary": "任务待实施：环境状态为 2026-08-23 出口①实测失败现场（undici 缺失→v8 不匹配 + smoke admission FAIL + pnpm 重建后 876/877）；修复后待复验"
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
         },
-        "demo_evidence": "planned——smoke 输出 + 真机 vision-2 调用成功截图/响应 + tarball 依赖清单"
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
       },
       "quality_budget": {
         "dimensions": {
           "performance": {
-            "threshold": "代理路径与直连同等开销（无额外请求/重试）；dispatcher 缓存复用既有 R8-F2 有界缓存",
-            "validation": "node tests/smoke.mjs（判别断言）+ 真机调用观测",
-            "status": "NOT_RUN_YET",
-            "evidence": "planned: smoke 输出 + 调用观测",
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
             "exception": ""
           },
           "reliability": {
-            "threshold": "undici 缺失/版本不匹配时 fail-loud（明确诊断——既有设计保持），配置正确时 100% 可走通（SSE 完整）；依赖安装一次成功（无 children null/版本漂移）",
-            "validation": "node tests/smoke.mjs（判别断言）+ 真机端到端 + pnpm install 冷装演练",
-            "status": "NOT_RUN_YET",
-            "evidence": "planned: smoke + 真机记录 + 冷装输出",
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
             "exception": ""
           },
           "security": {
-            "threshold": "代理配置仅经显式 oauthProxyUrl（无新增凭据面）；错误文本不泄漏 token（既有 SafeToolError 模式）",
-            "validation": "node tests/smoke.mjs（错误形态断言）+ code review",
-            "status": "NOT_RUN_YET",
-            "evidence": "planned: review 专项结论",
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
             "exception": ""
           },
           "accessibility": {
-            "threshold": "无用户界面面（纯运行时依赖/网络配置），以 NOT_RUN_YET 记录并由评审确认 EXEMPT",
-            "validation": "node tests/smoke.mjs（Code Reviewer 确认 EXEMPT）",
-            "status": "NOT_RUN_YET",
-            "evidence": "planned: Code Reviewer 确认",
-            "exception": "纯后端链路修复"
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
           },
           "ux": {
-            "threshold": "用户配置 oauthProxyUrl 后调用即通（无额外重启/无模糊报错）",
-            "validation": "真机验证（vision-2 调用成功）+ node tests/smoke.mjs 错误形态断言",
-            "status": "NOT_RUN_YET",
-            "evidence": "planned: 真机记录",
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
             "exception": ""
           },
           "maintainability": {
-            "threshold": "依赖声明集中（package.json 一处）+ dispatcher 装配单点（既有 loadOauthProxyDispatcher）；无重复代理逻辑；版本选择有注释依据",
-            "validation": "node tests/smoke.mjs（单点断言）+ code review",
-            "status": "NOT_RUN_YET",
-            "evidence": "planned: review 结论",
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
             "exception": ""
           }
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "用户配置 oauthProxyUrl 后，ChatGPT OAuth 账号调用真实可用——用户可见：vision-2 带图消息返回识别结果（无 fetch failed）",
-        "demo_path": "node tests/smoke.mjs + 真机 vision-2 带图调用成功（截图/响应记录）",
-        "scope_guard": "仅 package.json（依赖声明+锁）、lib/service.js（dispatcher 装配点 L2734-2760/L3434-3460 域）、tests/smoke.mjs（判别断言）+ 可能 lock 文件；不触碰 runCodexResponsesChat 的 SSE 解析/协议面",
-        "rollback_plan": "git revert 本任务提交；代理未配置时行为不变（缺省直连——DEC-021 语义）；undici 声明回退即可（无行为退化）",
-        "status": "NOT_RUN_YET",
-        "evidence": "planned: smoke 输出 + 真机成功记录"
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (进行中（TRIAGE-REL-002 机器入账 2026-08-27；Release Agent 派发——规划先行，发布决策待用户）)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
       },
       "interruption_policy": {
         "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
@@ -105,34 +101,31 @@
           "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
         ],
         "assumption_record": {
-          "assumption": "undici 版本对齐采用与 Node 内置 7.18.x 兼容的 7.x 系列（或经实证可行的兼容层）；锁文件采用 pnpm-lock（项目既有 pnpm 生态——profiles 用 pnpm）；smoke admission FAIL 为宿主 dsh-llm rc 版本滚动漂移（VERSION 实证后定对齐或环境修复）",
-          "basis": "Node v24.13.1 内置 undici 7.18.2（process.versions.undici 实证）；v8.10.0 实测 invalid onRequestStart method（本会话实验）；pnpm 重建后 admission raw-route 负向目击 FAIL（EVO-004 门控时同断言绿——宿主 rc 滚动可疑）",
-          "reversibility": "版本/锁文件均可回退（无行为面）；代理未配置时直连语义不变",
-          "validation": "node tests/smoke.mjs + 真机 vision-2 调用",
-          "rollback": "git revert + 依赖版本回退"
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
         },
         "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "仅修改：package.json（undici 声明/版本/可选依赖对齐）、lib/service.js（dispatcher 装配域仅限兼容修复）、tests/smoke.mjs（判别断言）、锁文件（pnpm-lock.yaml 或 package-lock.json 引入）、tests/adapter-parity.mjs（R0 F-2 事后补录 2026-08-27——P4 硬门槛 parity 全绿必需的同源漂移对齐，review-FIX-006-R0 裁量可接受）",
-        "不触碰 runCodexResponsesChat SSE 协议面/凭据解析/OAuth 其它协议分支；不改现有 oauthProxyUrl 解析语义"
+        "Only change files required by this task row: 进行中（TRIAGE-REL-002 机器入账 2026-08-27；Release Agent 派发——规划先行，发布决策待用户）",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
       ],
       "required_evidence": [
-        "evidence-log 条目含 事实依据/目标对齐/用户影响/结构化事实 JSON（含真机实验记录 + 宿主版本漂移判定）",
-        "验证命令 exit_code + 输出摘要（smoke 全量 + 真机调用）",
-        "独立 Code Reviewer 审查结论"
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
       ],
       "next_commands": [
-        "node tests/smoke.mjs",
-        "node tests/stats.mjs",
-        "node tests/routing-paths.mjs",
-        "python D:/AI/agent/claude/coding/project_management_workflow/skills/software-project-governance/infra/verify_workflow.py check-governance --summary-only"
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
       ],
       "done_definition": [
-        "package.json 声明 undici + 锁文件纳入；npm pack tarball 依赖清单含 undici",
-        "dispatcher 实证可用（真机 vision-2 调用成功）",
-        "判别测试 + 全套零回退（admission 恢复绿）+ Code Reviewer 通过",
-        "出口①真机首联闭环（v0.3.0 发布前提满足）"
+        "进行中（TRIAGE-REL-002 机器入账 2026-08-27；Release Agent 派发——规划先行，发布决策待用户）",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
       ],
       "source": "plan-tracker.md##当前活跃事项"
     }

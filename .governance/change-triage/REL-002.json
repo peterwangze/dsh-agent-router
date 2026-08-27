@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "task_id": "REL-002",
+  "title": "v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/里程碑/门禁/风险/回滚 + 发布时点建议（真机验证与发布决策解耦）",
+  "priority": "P1",
+  "target_version": "未规划版本",
+  "depends_on": [],
+  "files": [
+    "docs/release/version-plan-v0.3.0.md"
+  ],
+  "reason": "用户裁决 2026-08-27（/governance 会话 ask_user_question）：出口①真机首联前先行发布规划。注：--version 实际目标 = 路线图 v0.3.0，版本校验以工作流版本为 current 系 B 类缺陷（FIX-281 ⑨，EVO-004/EV-038 先例绕过）。依据：EVO-001 PoC 通过（C-1 解锁）+ EVO-002 C-1 全任务终态（出口①④机制面闭环）+ EVO-003/004 统计持久化与 UI 面终态 + FIX-006 发布阻塞清除（R0 通过）+ DEC-020 演进定稿 + ARCH-002 evolution-roadmap-v1（v0.3.0 = C-1：preset 账号/独立凭据/1455 回调/设备码后备/codex-responses 分支/kill-switch 三层/C-9 埋点 + W-5/S-3 绑定）。规划先行惯例 = 插件仓 REL-070/071 先例（规划只读+文档，transition/tag 待用户授权 DEC-143）。依赖：EVO-002✅ EVO-001✅ FIX-006✅ DEC-020✅——全解锁；发布前提仅剩出口①真机实证（规划中作为发布门禁项处理）。冲突：docs/release/ 无在途锁。",
+  "created_at": "2026-08-27",
+  "tool": "change-triage",
+  "tool_version": "0.77.0",
+  "analysis": {
+    "dependency": {
+      "unblocked": [
+        "FIX-004",
+        "EVO-004",
+        "FIX-006"
+      ],
+      "blocked": [],
+      "blocked_by": [],
+      "unknown_deps": [],
+      "cycles": [],
+      "cycle_warning": false,
+      "new_task_cycle": false
+    },
+    "priority_context": {
+      "proposed": "P1",
+      "in_flight": {
+        "P0": 1,
+        "P1": 2,
+        "P2": 0
+      },
+      "version_chain": []
+    },
+    "conflicts": [],
+    "version": {
+      "target": "未规划版本",
+      "current": "0.78.0",
+      "planned_next": null,
+      "issues": []
+    },
+    "side_effect": {
+      "detected": true,
+      "touches_real_env": true,
+      "requires_r1": true,
+      "declared": "无仓库外副作用——纯仓内规划文档产出",
+      "blast_radius": [
+        "输入含真实环境操作措辞（R5 禁令词）：真机"
+      ],
+      "review_conditions": [
+        "须满足 R1（三选一：隔离环境重定向 / 事先完整备份+一致性校验 / 用户 ask_user_question 逐项授权）并留痕（behavior-protocol.md M7.7 / AUDIT-146 / FIX-271）"
+      ],
+      "issues": []
+    }
+  },
+  "snapshot": {
+    "tool": "task-priority-analysis",
+    "module_version": "0.71.0",
+    "report_json": {
+      "total": 4,
+      "completed": [
+        "OPS-001"
+      ],
+      "blocked": [],
+      "unblocked": [
+        "FIX-004",
+        "EVO-004",
+        "FIX-006"
+      ],
+      "recommended_next": [
+        "FIX-006",
+        "EVO-004",
+        "FIX-004"
+      ],
+      "non_executable": [],
+      "cycles": [],
+      "cycle_warning": false
+    },
+    "report_text": "# Task Priority Analysis\n\nTotal: **4** tasks — 1 completed, 3 unblocked, 0 blocked, 0 non-executable.\n\n## Recommended next\n\n**Top pick: `FIX-006` [P0]**\n\n- `FIX-006` [P0] v=v0.3.0 status=已完成 deps=[—]\n- `EVO-004` [P1] v=v0.3.1 status=已完成 deps=[—]\n- `FIX-004` [P1] v=v0.3.x status=已完成 deps=[—]\n\n## Unblocked (ready to work)\n\n- `FIX-004` [P1] v=v0.3.x status=已完成 deps=[—]\n- `EVO-004` [P1] v=v0.3.1 status=已完成 deps=[—]\n- `FIX-006` [P0] v=v0.3.0 status=已完成 deps=[—]\n\n## Excluded (non-executable status)\n\n_None._\n\n## Blocked\n\n_None._\n\n## Completed\n\n- `OPS-001` [P9] v=— status=✅ 已完成 deps=[—]\n"
+  }
+}
