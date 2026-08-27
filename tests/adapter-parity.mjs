@@ -23,7 +23,12 @@ import { createWrapAdapter, WRAP_SUFFIX } from '../lib/wrapper.js'
  * 宿主 LlmAdapter 契约方法清单 = 动态枚举并集：
  * - `Object.getOwnPropertyNames(LlmAdapter.prototype)` 去掉 constructor——
  *   宿主基类的具体方法（宿主未来新增自动进入本清单，预警真实生效）；
- * - 静态补 `'stream'`——抽象声明（无运行时实现）不在原型上，纯枚举会漏检。
+ * - 静态补 `'stream'`——抽象声明（无运行时实现）不在原型上，纯枚举会漏检；
+ * - 静态补 `'prepareCall'`（FIX-006 宿主漂移对齐）——rc.6 时代
+ *   adapterStream 每次分发先调 adapter.prepareCall（FIX-001 实证）；rc.8
+ *   基类原型已无该方法（移至 LlmRuntime 层，adapterStream 直接调
+ *   adapter.stream）。twin 保留 prepareCall 作为跨 rc 兼容层（宿主 rc 系
+ *   滚动漂移下两个入口都必须可用），故静态补入继续受看护。
  */
 const ADAPTER_CONTRACT = [
   ...new Set([
@@ -31,6 +36,7 @@ const ADAPTER_CONTRACT = [
       ? Object.getOwnPropertyNames(LlmAdapter.prototype).filter((name) => name !== 'constructor')
       : []),
     'stream',
+    'prepareCall',
   ]),
 ]
 
@@ -61,9 +67,12 @@ function makeFakeLlm({ inputModalities = ['text'] } = {}) {
 }
 
 export async function runAdapterParityTests(check) {
-  // 0. 契约清单健康自检（FIX-001b F2）：动态枚举必须产出 ≥5 项具体方法且
-  //    必含 prepareCall——宿主导出形状变化（枚举失效）本身就要红。
-  check('ADAPTER_CONTRACT dynamic enum yields core methods (F2)', ADAPTER_CONTRACT.length >= 5 && ADAPTER_CONTRACT.includes('prepareCall') && ADAPTER_CONTRACT.includes('resolveModel') && ADAPTER_CONTRACT.includes('stream'))
+  // 0. 契约清单健康自检（FIX-001b F2，FIX-006 漂移对齐）：动态枚举必须产出
+  //    ≥4 项核心方法（rc.8 基类形状：providerInfo/providerRetryPolicy/
+  //    listModels/resolveModel）且必含 resolveModel；stream 与 prepareCall
+  //    为静态补集（抽象声明/跨 rc 兼容层）恒在清单——宿主导出形状变化
+  //    （枚举失效）本身就要红。
+  check('ADAPTER_CONTRACT dynamic enum yields core methods (F2)', ADAPTER_CONTRACT.length >= 4 && ADAPTER_CONTRACT.includes('prepareCall') && ADAPTER_CONTRACT.includes('resolveModel') && ADAPTER_CONTRACT.includes('stream') && ADAPTER_CONTRACT.includes('providerInfo') && ADAPTER_CONTRACT.includes('listModels'))
 
   // 1. 接口奇偶（核心看护）：契约方法在 twin 上逐一 typeof === 'function'。
   //    宿主未来新增契约方法而 twin 未跟进 → 此处红 = RISK-003 预警。
