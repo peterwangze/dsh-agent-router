@@ -17,7 +17,7 @@
 
 | 项目 | 当前阶段 | 总任务数 | 已完成 | 阻塞中 | 关键风险数 | 最近 Gate 结论 | 最近复盘日期 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| dsh-agent-router | development (6/11) | 27（GOV-004 修正后 + REL-002/EVO-005 入账） | 27 终态（26 已完成含 EVO-005 + 1 关闭 DEV-001）——**全部任务终态；v0.3.0 仓内依赖清零**（仅剩出口①用户门禁 + M-1 打包） | 0 | 1（RISK-001 活跃——主轨道 = DEV-002 + 演进路线） | G4 待评（v0.2.0/v0.2.1 已发布；CI 面仍缺——RISK-001；v0.3.x 演进定稿 DEC-020 + EVO-001 PoC 通过 C-1 解锁） | — |
+| dsh-agent-router | development (6/11) | 28（+REL-003） | 28 终态（27 已完成含 REL-003 + 1 关闭 DEV-001）——**v0.3.0 M-1 全段完成；仅剩 M-2 出口①用户门禁（GATE-1）→ M-4 授权** | 0 | 1（RISK-001 活跃——主轨道 = DEV-002 + 演进路线） | G4 待评（v0.2.0/v0.2.1 已发布；CI 面仍缺——RISK-001；v0.3.x 演进定稿 DEC-020 + EVO-001 PoC 通过 C-1 解锁） | — |
 
 ## 当前活跃事项
 
@@ -29,12 +29,14 @@
 | — | OPS-001 | 当前目录插件安装到 DSH 宿主（离线 LocalPath：junction→开发树 + cordis.patch.yml 宿主行；用户指令 2026-08-23） | — | — | ✅ 已完成（EV-069；junction/patch/Node 解析三链验证；重启生效待用户） |
 | P1 | REL-002 | v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议 | EVO-001✅ EVO-002✅ FIX-006✅ DEC-020✅ | v0.3.0 | 已完成（规划段 + M-0 闭环）——version-plan 双审 APPROVED_WITH_NOTES×2/0 + DEC-025 四项裁决入账；EV-075/076 |
 | P1 | EVO-005 | 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告） | EVO-002（1455 惰性启动 + 降级链） | v0.3.0 | 已完成（R0 APPROVED_WITH_NOTES/0——协议事实 13 项对照一手源码全相符；**P1×2 绑定 M-1 MUST 闭合**：F-1 登出×兑换 TOCTOU + F-2 传输错误终态化；EV-077） |
+| P1 | REL-003 | v0.3.0 M-1 候选打包（Developer 代码段）——EVO-005 P1×2 修复 + peerDeps rc.8 + version bump | EVO-005✅ DEC-025✅ | v0.3.0 | 已完成（M-1 全段：代码段 R0 APPROVED_WITH_NOTES/0 + 资产段 Release R1 APPROVED_WITH_NOTES/0 + Design R1 NEEDS_CHANGE→返工→R2 APPROVED_WITH_NOTES/0 T1 闭环；EV-078/079） |
 | — | 下一轮 | 无未完成任务——出口①真机首联/出口③设备码流/v0.3.0 发布时点（用户决策项）；插件仓申报已完成（FIX-281，2026-08-27） | — | v0.3.x | 待定 |
 
 ### 最近完成
 
 | 已完成任务 | 完成日期 | 摘要 |
 | --- | --- | --- |
+| REL-003 | 2026-08-28 | v0.3.0 M-1 全段终态（代码 5 commits R0 通过 + 资产 6 文件三审链 R1×2+R2 T1 闭环 + GATE-4/5/7 实采全绿 + 81 commits 三分账；EV-078/079） |
 | EVO-005 | 2026-08-27 | 设备码授权流终态（3 commits 协议原语/RPC 装配/客户端分支；R0 APPROVED_WITH_NOTES/0 协议 13/13 溯源相符；P1×2 绑 M-1 MUST；EV-077） |
 | REL-002 | 2026-08-27 | v0.3.0 发布规划先行段（version-plan 八节 + 双审 APPROVED_WITH_NOTES×2/0 + M-0 四项裁决 DEC-025 入账；EV-075/076） |
 | FIX-006 | 2026-08-27 | OAuth 代理路径修复终态（undici ^7.18.0 同 major 对齐 + major 判别 fail-loud + rc.8 漂移目击对齐 + parity F2；R0 APPROVED_WITH_NOTES/0；门控全绿 + 隔离冷装；EV-072/073） |
@@ -55,7 +57,7 @@
 - **v0.3.0 发布时点**（用户决策项）：出口条件①④机制面已闭环；真机首联后评估
 - **EVO-003 UI 批次**（待入账候选，P1）：出口②按天视图/⑤导出按钮 UI 面 + R2-F1/F2/F3 P2×3 + R1-F3 CSV 注入 + R8-F1/F2
 - **插件仓缺陷申报**（✅ 已申报 2026-08-27）：FIX-281 批次入账（插件仓 TRIAGE-FIX-281 机器记录 + tracker 行——9 项：Check 30 历史格式迁移 / Check 1 轻量表解析 / 活跃任务节边界 / Gate 节名括号 / review_record 覆盖风险 / EV-EVD 前缀 / tpa 完成态过滤 / 30c 溯源分类 / change-triage 版本校验混用）；版本定位随 DEC-172 后续裁决（0.78.1 PATCH 修复面 / 0.79.0 MINOR 判定面）——修复在插件仓会话执行
-- **M-1 打包 MUST 闭合清单**（v0.3.0 发布前）：①EVO-005 F-1（P1）登出×兑换 TOCTOU——persist 前 cancelled 复查 + 竞态判别测试；②EVO-005 F-2（P1）传输错误退避重试 + poll_transport_error reason 区分；③REL-002 ReleaseF-1（P2）三件套先例归属修正；④REL-002 DesignF-1/F-2/F-3（P2）GATE-5 挂点/出口①失败回路/pnpm-lock 时变披露；⑤DEC-025 落实面：peerDeps ^0.1.0-rc.8 bump + stats.persist 落盘 CHANGELOG 显著披露 + RISK-001 CHANGELOG 用户面披露；⑥三件套 + CHANGELOG 双主题 + version bump + tarball 隔离冷装
+- **M-1 打包 MUST 闭合清单**（✅ 全部闭合 2026-08-28——REL-003 终态）：①EVO-005 F-1/F-2（dcd44fa/6dbe57d，R0 验证闭合）②REL-002 ReleaseF-1/DesignF-1/2/3（资产段 R1 前修正）③DEC-025 落实面（peerDeps rc.8 d78dc00 + 披露面 CHANGELOG/README）④三件套 + CHANGELOG 双主题 + bump（850b30c）⑤tarball 隔离冷装（GATE-5 EV-078 通过）——遗留观察项：R2 N-1 version-plan 快照 M-4 刷新 + N-2 断言数 EV 留痕模板（本 EV-079 已补 918 权威值）
 
 ## Gate 状态跟踪
 

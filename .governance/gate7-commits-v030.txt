@@ -1,0 +1,81 @@
+﻿850b30c REL-003: version 0.2.1 → 0.3.0（MINOR——DEC-025 D-1a 双主题：EVO-005 设备码降级通道 + peerDeps 宿主 rc.8 对齐）；README 徽章/安装命令版本不动（归 Release 段）；pnpm install 复核 Already up to date（根版本不入锁文件，零锁变更）
+d78dc00 REL-003: peerDependencies 宿主声明 ^0.1.0-rc.6 → ^0.1.0-rc.8（DEC-025 D-4b）——8 个宿主包（dsh-attachment/agent/agent-default-model/session/settings/subagent/system-prompt/credentials）；pnpm install 落锁同步（importers 区 peer specifier + 解析版本/peer-suffix 哈希；dependencies 的 dsh-llm/dsh-tools/dsh-typert-protocol specifier 不动）
+fbdfc61 REL-003: R0 P3 批次——F-4 recordOauthEvent JSDoc kind 清单补 4 个 EVO-005 设备码事件（preset_device_begin/login_ok/login_fail/cancelled）；F-5 startDeviceAuthorization JSDoc 修正：错误消息不含响应 body（原文案误称保守截断）；F-6 begin 响应 expiresIn 由实效 timeoutMs 推导（Math.floor(timeoutMs/1000)，与 expiresAt 同源——注入覆盖时不再通告死值 900，客户端等待 deadline 与真实有效期一致）；F-7 轮询间隔下限 1ms→1000ms（DEVICE_MIN_POLL_INTERVAL_MS 地板值防服务端异常小 interval 热轮询；实例级 oauthDeviceMinIntervalMs 注入同 slow_down/timeout 先例保持测试提速）；F-6/F-7 判别测试先红后绿（注入 15ms 超时通告 expiresIn=0 + 0.01s interval 下限 1000ms）
+6dbe57d REL-003: F-2(P1) 传输错误终态化修复——pollDeviceAuthorizationToken 网络错误路径附 transport:true 判别标志（status 仍 failed，既有语义不变，协议拒绝路径无此标志）；pollDeviceLoop 对传输类失败非终态：记 poll_transport_error 事件 + 退避（intervalMs += DEVICE_TRANSPORT_RETRY_ADD_MS 5000，实例级 oauthDeviceTransportRetryAddMs 可注入提速）重试至 expiresAt，瞬时网络故障不再杀死 15 分钟会话；真协议 failed 保持 poll_rejected 终态；新增常量 DEVICE_TRANSPORT_RETRY_ADD_MS（与 slow_down 增量分立）+ JSDoc 同步（状态机/归一返回形状）；判别测试（先红后绿）：原语级 transport 标志有无两向断言 + 服务级传输错误×2 退避重试至成功落盘（对照服务器拒绝终态不重试）
+dcd44fa REL-003: F-1(P1) 登出×兑换 TOCTOU 修复——exchangeDeviceCode 落盘前复查 session.cancelled：poll complete 与 oauthLogout 交错（兑换 fetch 进行中登出置位）不再把新兑换凭据写回，消除登出后凭据复活窗口（兑现 oauthLogout 登出语义注释声明），记 preset_device_cancelled 事件 + 终态码 'cancelled'（JSDoc 同步）；竞态判别测试（先红后绿）：tokenUrl 桩在兑换 fetch 进行中完整执行 oauthLogout → 断言凭据文件不复活 + 会话终态 cancelled + 事件旅程 preset_logout→preset_device_cancelled 相邻 + 登出后零 login_ok 事件
+ac3976c EVO-005: 审查闭环 + 终态入账——Code Reviewer R0 APPROVED_WITH_NOTES/0（协议事实 13/13 一手溯源 + kill-switch 门控纯粹性 + 越域 3 处裁量正当已补录）；P1×2（F-1 TOCTOU/F-2 传输重试）绑定 M-1 MUST 清单；v0.3.0 仓内依赖清零；EV-077 + RECO-EVO-005
+d49ed4c EVO-005: 客户端设备码降级分支（lib/client.js）——runPresetLogin 增 mode:'device' 分支：打开验证页（弹窗拦截不阻断）+ 常显设备码提示（presetDeviceWaiting 双语，含验证页链接与设备码插值）+ catalog presetLoggedIn 轮询同款（deadline 取响应 expiresIn；不依赖弹窗存活——宿主侧后台轮询兑换，客户端只观察登录态翻转，与 1455 流同款观察面）；wOauthBeginResult 镜像 codec 同步 schemas.js 增补字段；zh/en 文案表同步（smoke 文案键守卫两表覆盖）——client-render 全绿零回退
+65e7e34 EVO-005: 设备码流 RPC 装配（lib/service.js + schemas.js）——1455 被占自动降级落地（DEC-025 D-2a / E4 降级链第②级）：oauthBeginPreset loopback 未就绪分支改调 oauthBeginDeviceFallback（usercode 发起 → 设备码会话 oauthDevicePending + 后台 pollDeviceLoop → mode:'device' 响应含 userCode/验证页/节奏/有效期；发起失败指第三兜底手动粘贴）；轮询状态机 pending 继续/slow_down 退避/complete 经 exchangeDeviceCode 兑换（redirect_uri=deviceauth/callback）→ persistPresetLogin（自 oauthTokenExchange preset 分支提取，行为逐字等价——1455 流与设备码流同路径落盘，roadmap §3.4 条目 4）；终态自清 Map + session.done + C-9 事件（preset_device_begin/login_ok/login_fail/cancelled，P8 降级可观测 + P7 零 token）；oauthLogout 取消活动会话（W-5 联动）；oauthBeginResult wire codec 增补 mode/userCode/verificationUrl/intervalSeconds/expiresIn；smoke EVO-005 集成块 17 断言（降级双路径/三态端到端/兑换形状/四元组落盘 owner-only/presetLoggedIn 卡面/超时/拒绝/登出取消/404 兜底/埋点）+ 4b 未就绪断言改写降级语义——总 908 ok
+6355eb7 EVO-005: 设备码流协议原语（lib/oauth-credentials.js）——H3-11 一手源码落地（.router-files/pi-ai-auth-oauth-openai-codex.js：usercode JSON {client_id} → {device_auth_id,user_code,interval} 字符串归一；轮询 {device_auth_id,user_code} → 2xx {authorization_code,code_verifier}/403,404,pending 码=继续/slow_down=退避/其他=终态；error string 与 {code} 双形状兼容）；CHATGPT_PRESET.deviceUrls 增补 exchangeRedirectUri（deviceauth/callback——与 1455 流死值不同的 pi-ai 一手事实）+ DEVICE_FLOW_TIMEOUT_SECONDS=900（H3-11 15 分钟）+ DEVICE_SLOW_DOWN_ADD_MS=5000（RFC 8628 §3.5，pi-ai device-code.js 快照缺失标注假设留出口③校准）；单测 17 项（请求形状/响应校验/404 未启用语义/三态归一化/网络错误不抛）全绿——模块总 96 assertions
+2646a22 REL-002: M-0 四项裁决入账（DEC-025——D-1a C-3 并入/D-2a 设备码补实现 EVO-005 入账/D-3a 带披露发布/D-4b peerDeps rc.8）+ 路线图 v0.3.0 范围变更 + v0.3.1 范围清空 + REL-002 终态 + 快照刷新；EV-076 + RECO-REL-002
+0c39bd8 REL-002: v0.3.0 发布规划先行段闭环——version-plan-v0.3.0.md（八节 288 行）+ 双审 R0 APPROVED_WITH_NOTES×2/0（ReleaseReviewer F-1 P2 先例归属 + DesignReviewer P2×3 蓝军 6 条 零编造 13/17）；REVIEW-REL-002-R0×2 机器行 + 完整报告持久化；M-0 四项裁决（D-1~D-4）待用户；EV-075
+2ae8a7e FIX-006: 会话收尾——插件仓 B 类缺陷申报闭环（FIX-281 批次 8 项机器入账 TRIAGE-FIX-281 + 插件仓 tracker 行；版本定位随 DEC-172 后续裁决）；router 待办项同步已申报；EV-074
+ca2b6b4 FIX-006: 审查闭环 + 终态入账——Code Reviewer R0 APPROVED_WITH_NOTES/0（REVIEW-FIX-006-R0 机器行）+ F-2 补录（change-triage/执行包追加 adapter-parity.mjs）+ tracker/快照终态（25 行全部终态）+ EV-072/073 + RECO-FIX-006；出口①真机首联转用户验证项
+69ccf94 FIX-006: adapter-parity F2 契约清单对齐宿主 rc.8 形状（同源漂移）——rc.8 LlmAdapter 基类原型已无 prepareCall（移至 LlmRuntime 层，adapterStream 直接调 adapter.stream；peerDeps ^0.1.0-rc.6 → pnpm-lock 解析 0.1.0-rc.8 滚动漂移同类）；契约清单改动态枚举 ∪ 静态补集 {stream, prepareCall}——twin 保留 prepareCall 作跨 rc 兼容层继续受看护（14 断言恢复：twin implements 六方法 + 行为八件全绿）；F2 健康自检改断言 ≥4 核心方法 + 双静态补集恒在
+669679e FIX-006: admission 负向目击对齐宿主 rc.8 语义（漂移实证记录）——宿主漂移实证：peerDeps 声明 ^0.1.0-rc.6 而 pnpm-lock 解析 0.1.0-rc.8（rc 滚动漂移），rc.8 adapterStream 无文本模型边界图片投影（forAdapter 仅清 replayState，目录声明 advisory 不拦截请求），EVO-004 门控时的 rc.2 投影语义（FIX-001 适配 projectImagesForTextModel）已消失；负向见证回归本源形态：裸图直达文本适配器 → UNSUPPORTED_CONTENT 自拒 → adapterFailureChunk 终态 error + 委托可见裸图块——twin 仍是图片轮唯一完成路径，判别力保持
+6a7ba76 FIX-006: dispatcher 装配点 undici 版本兼容判别（fail-loud）——loadOauthProxyDispatcher 探测已加载 undici 版本（oauthUndiciVersionProbe seam，缺省 createRequire 读 undici/package.json）与 Node 内置 fetch 的 undici（process.versions.undici）比对 major：跨 major handler 接口不匹配（v8 ProxyAgent 配内置 v7 fetch 实测 invalid onRequestStart 晦涩失败）→ 装配点明确报错含双版本与对齐指引；同 major 放行、探测不可得不阻断（依赖声明已钉 major，探测是快线诊断非可用性门）；smoke G2 判别断言三件（mismatch 明确报错/aligned 放行/探测缺失容忍——旧代码无判别必败形态：静默放行到 fetch 才炸）
+bef08eb FIX-006: undici 依赖声明对齐 + pnpm-lock 入仓 + 经代理 fetch 真实可用判别断言——package.json dependencies 声明 undici ^7.18.0（npm 7.x 最高 7.29.0，与 Node 24 内置 undici 7.18.2 同 major 对齐；npm latest 8.10.0 实证跨 major 接口不匹配 invalid onRequestStart）+ pnpm install 落锁（pnpm 重建是当前环境事实）+ smoke 判别断言四件：声明存在/major 对齐/锁文件一致/本地 CONNECT 隧道代理真实实证（内置 fetch + npm undici@7.29 ProxyAgent 经隧道 200 OK 到源站）
+16ea3e5 GOV-004: 治理工作流升级 0.76.0→0.78.0（/governance Scenario C）——三处版本行同步（AGENTS.md bootstrap + plan-tracker + 快照）+ 总览计数修正 25 行 + FIX-006 过期锁清理（Check 26×3 blocking 消除，18→15 issues）+ 归档检测跳过（0<2）；EV-071/RECO-GOV-004 随行
+f8e9890 GOV-003: 治理记录入仓（2026-08-23 会话遗留）——FIX-004/EVO-004 终态 + OPS-001 DSH 安装 + GOV-003 版本同步 0.76.0 + FIX-006 P0 入账；review-FIX-004-R0/review-EVO-004-R0 报告与 change-triage 记录随行
+8938a54 EVO-004: C-3 统计 UI 面（出口②按天视图 + 出口⑤导出按钮）——①stats.days 按天聚合表（i18n 中英 day 键）+ ②statsExport RPC 面 client 接线（wire 类型/ROUTER_REMOTE 描述符 + range/level 选择 + 导出按钮 + CSV 下载（Blob/<a download>，无 DOM 回落 data: URL））；+client-render 判别断言 877/0
+d8ee97c EVO-004: ⑦R8-F1 删除入口判据不对称——预设判据统一（isPresetAccount 成员判定，oauthIds 过滤/deleteOauthAccount 分流/预设卡渲染三处同源；未知 preset 值回落通用卡可删；+client-render 判别断言 871/0）
+dd5d310 EVO-004: ⑧R8-F2 ProxyAgent 缓存生命周期无界+注释错误——缓存有界（仅保留最近一次代理配置，替换时显式 close）+ 注释机制修正（Map 强引用不随 GC）；+smoke 有界判别断言（869/0）
+9fd6110 EVO-004: ⑥R2-F3 record 吞错零观测——selfReport.recordErrors 计数（P8 同型可观测；+判别断言 stats 110/0）
+a9f98b2 EVO-004: ⑤R2-F2 false 期 flush 契约洞——#drain 起点 persist 门控（false 期显式 flush 零写盘；+判别断言 stats 107/0）
+4d08990 EVO-004: ④R2-F1 setPersist 并发翻转竞态——转换串行化（#persistTransition 链）+ 在途后重读目标（最后写入者胜出；+判别断言 stats 105/0）
+31a8c74 EVO-004: ③R1-F3 CSV 公式注入防护——csvEscape 首字符 =+-@ 前缀单引号（+判别断言 stats 104/0）
+6dd6e5b FIX-004: 模型能力判定缺陷根治——能力自证 + 预检可观测
+1d49b85 GOV-002: tracker 计数同步（22 总/20 完成——FIX-005 闭环后权威值）
+a41b66c GOV-002: 会话快照更新（FIX-005 闭环 + 用户暂停——FIX-003 全链闭环/P-v2 立版/候选池与决策项固化 2026-08-23）
+934ed4c GOV-002: EV-065（FIX-005 终态——R1 APPROVED_WITH_NOTES/0，P3/P5/P8 验证通过；P2×2 台账）+ tracker 终态
+70589e7 GOV-002: EV-064（FIX-005 条件化引导——prestep reminder 分级 + 描述中性化；108/108 + 856/0；M7.4 补录）+ diff 审查存档
+a484469 FIX-005: route_agent 引导按主模型能力条件化——①prestep reminder 分级（能力判定提前共用：wrapper 分支剥 -router 探测原适配器，与 wrapper stream 语义对齐；accepts=true 不注入 reminder，accepts=false/失败保持注入+逃生组改写 C-3）②tool.js route_agent 描述追加中性句（普通看图无需路由，仅深析/跨轮旧图再查/显式要求）③service.js promptText 目录段同义中性句 ④routing-paths [G] 段 6 判别断言 + smoke ③ 语义同步（原生多模态零注入）；红相 4 FAIL→绿相 108/108（102+6）+ smoke 856 全绿 + stats 99/metrics/parity 14/oauth 80
+60a9c3e GOV-002: FIX-005 执行包入账（条件化引导——prestep reminder 分级 + 工具/目录描述中性化；用户提案）
+7b1ba9d GOV-002: FIX-005 入账（用户提案——route_agent 引导/注入按主模型能力条件化：prestep reminder 分级 + 描述中性化；判定复用 sourceAcceptsModality 单点）
+2456202 GOV-002: EV-063（FIX-003 全链闭环——用户真机验证通过：vision/气泡恢复，确认 dsh 模型配置陷阱）+ tracker 终态
+23451b8 GOV-002: EV-062（FIX-003 链延续——GUI 选模型覆盖内置能力声明：dsh-llm-deepseek resolveModels ?? [text] 判 text-only；fix=settings llm-deepseek vision-exp inputModalities 补全；宿主 GUI 写回缺陷 P9 申报 + FIX-004 输入）
+b878cdd GOV-002: EV-061（P-v2 升级证据——四项全选/P4 门控/P7 不可逆/P8 可观测/P9 宿主演进防御，DEC-022 入账）
+e33c25e GOV-002: 项目质量原则 P-v1→P-v2（DEC-022——用户四项全选：P4 自动化门控/P7 不可逆保护/新增 P8 可观测性/P9 宿主演进防御）+ DEC-023（DEC-022-D 废弃补记）+ AGENTS.md 投影同步（EV-061）
+79b3e20 GOV-002: 会话快照更新（2026-08-23 收口——18/20；验证优先暂停；候选池/用户决策项/宿主事实存档）
+e61cdbd GOV-002: EV-060 完成必推荐增量快照（Step7/FIX003C 锁释放 + UI 批次含 R8-F1/F2 + FIX-004 串行）
+448f83c GOV-002: EV-059（EVO-002 全任务终态——R8 APPROVED_WITH_NOTES/0；R7 遗留全清 W-5 三层防线；DEC-022-D 用户裁决废弃；R8-F1/F2 转 UI 批次）+ tracker 18/20
+468caa0 GOV-002: EV-058（Step 7 收尾批次 6/6 完成——W-5 双保险 + 文案/proxy 缓存/env 隔离/冷凭据断言；856/0）+ DEC-022-D 定义缺失申报（待用户裁决）+ diff 存档
+3e95034 EVO-002: Step 7b R7 收尾——R7-F3 ProxyAgent 按 proxyUrl 缓存（连接池复用）+ R7-F5 测试隔离代理 env（smoke Step6 块 + metrics C-9-1）+ R6-F1 调用期 kill-switch 冷凭据断言（拒绝+凭据文件字节不变）；smoke 849→856 全绿
+7eaca04 GOV-002: EV-057（FIX-003C 终态——R1 APPROVED/0，F-1/F-2/F-3 全闭 G-1~G-3 P3；FIX-003 遗留清单 F-1~F-3 清零）+ 锁释放（attachments/routing-paths 无主）
+cbfafcf EVO-002: Step 7a R7 收尾——R7-F1 W-5 旁路（deleteOauthAccount preset 分流至 W-5 联动 + 通用区过滤 preset 条目：消双卡渲染/消活 token 残留与池悬挂引用）+ R7-F2 删除成功文案（presetDeleted 键替代 oauthTokenBack）+ R7-F4 oauthLogout 失败中止后续 ops（账号保留可重试）+ client-render 判别断言×3（旧代码必败）
+303133c GOV-002: FIX-003C 实现完成状态（0782516 三修 + R1 派发）
+4657c70 GOV-002: EV-056（FIX-003C 三修闭环——F-1 .dsh/F-2 VP8X 30 门/F-3 B13cdef；红相 2 FAIL 实锤；M7.4 补录）+ diff 审查存档
+0782516 FIX-003C: R1 审查遗留三修——F-1 dshHomeAttachmentsRoot env 缺省回退补 .dsh（对齐宿主 resolveDshHome 默认）+ F-2 WebP 长度门 24→30（VP8X 截断头返回 undefined 而非 {1,1}）+ F-3 补 B13c/d/e/f 判别断言（内容哈希兜底接受/哈希不符拒绝/env 回退/VP8X 截断）；routing-paths 102/102 + smoke 849/0 零回退
+a3a5127 GOV-002: 两路并行派发入账——EVO-002 Step 7 收尾（R7-F1/F2/F4/F5/F3 + R6-F1 + DEC-022-D）+ FIX-003C 收尾（F-1/F-2/F-3）+ 锁分离（域不重叠）
+b9ed247 GOV-002: EV-055 完成必推荐快照（task_priority 空输出盲点复现→fail-closed 手工分析；4 候选池 + 并行/串行对）
+71a316c GOV-002: EV-054（FIX-003 终态——R1 APPROVED_WITH_NOTES/0，F-1 条件性升级裁决不触发：DSH_HOME env 实测已设；P5 泛化核验通过）+ 遗留台账 F-1/F-2/F-3 转收尾批次
+017595f GOV-002: FIX-004 入账（用户质疑成立的架构缺陷根治——宿主能力缺省 text-only 无热载 + 插件自证缺失；FIX-003 缺陷面转接）
+8dbab47 GOV-002: EV-053（FIX-003 RCA 三环 + b6581c5 + settings 能力声明修复——M7.4 补录）+ diff 审查存档 + R1 派发状态
+b6581c5 FIX-003: 多模态路由失效修复——①runChat 预检 declared 判定改用 listConfigurableProviders（真实宿主 listProviders 条目无 declared 字段——例外从不生效，FIX-003 实证）+ ②懒注册自取证降级（宿主 readImage 裸 id 元数据校验必败 ATTACHMENT_CORRUPT——读对象文件探测尺寸构造完整 ref 再走宿主读取/内容哈希兜底）+ ③测试 B13a/b + D15 判别（98/98）；settings 侧能力声明修复另述（宿主配置面）
+ceb1991 GOV-002: EV-052（EVO-003 全任务终态——R2 APPROVED_WITH_NOTES/0 4 裁量全 adopt 前置项闭合）+ R2-F8 包文面修订（Node 内建零包依赖）+ R1 恢复注记 + tracker 15 完成
+8a2a7a3 GOV-002: FIX-003 入账（P0 热修——宿主 21:28 静默重装同型事件：resolveModelInfo 能力探测回归 + 附件注册链 + 气泡图片消失；RCA 事实链留痕）
+88ff89b GOV-002: EVO-003 Phase 2 diff 审查存档（c2d01ea）
+c2d01ea EVO-003: Phase 2 统计集成——service 委托迁移（+73/-165 零残留）+ W-4 persist 往返开关 + statsExport RPC（17 号描述符）+ 前置项 F1/F2/F4 + smoke 接线（849/0，DSH_HOME 隔离）；EV-051
+376b1b2 GOV-002: EV-050（EVO-002 Step 6 终态——R7 APPROVED_WITH_NOTES/0 带收尾条件：P1×2 W-5 旁路+文案绑定 Step 7）+ Step 7 输入入账
+c0e8e70 GOV-002: EV-049（DEV-002 终态——Test Reviewer R1 APPROVED_WITH_NOTES/0，95 断言回归网就位，RISK-001 主轨道条件①达成）+ tracker 终态（14 完成）
+217eadf GOV-002: EV-048（EVO-002 Step 6 证据 + R7 派发 + 开放决策项入账：出口①真机首联/出口③设备码排期）+ EVO-003 Phase 2 派发落锁
+f9d8bf0 EVO-002 Step 6c: C-9 埋点观测——observeOauthTelemetry（C-9-1：登录旅程事件链 kill_switch/begin_ok/login_ok/调用采样/logout + P7 零 token 断言）
+522025e EVO-002 Step 6b: ChatGPT 账号卡 UI——实验区（§3.6 默认关闭开关 + ToS 一次性确认弹窗，拒绝不开/接受同落 oauthExperimental+oauthTosAccepted）+ PresetAccountCard（登录态圆点/登录弹窗轮询 presetLoggedIn/登出删除凭据/删除账号 W-5 三步联动：凭据删除+池引用清理+账号 unset）+ 模型列表编辑 + oauthLogout 客户端 wire/描述符 + 双语 i18n；client-render 判别断言 ×10（两级折叠展开/ToS 拒绝与接受/preset 卡/begin+popup/logout/W-5 ops 链）
+3e0e2b5 DEV-002: 核心通路独立回归套件——tests/routing-paths.mjs 95 断言（routing 70 + takeover 双层 30，5 突变判别矩阵实测，边界 5 类，缺陷 0；EV-047）
+5f5a38b EVO-002 Step 6a: 账号卡服务面——§3.6 ToS 门（oauthTosAccepted 服务端复核，手改配置不能绕过弹窗）+ oauthLogout RPC（W-5 凭据删除路径，合规删除不随实验开关失效）+ §3.5 Q2 per-protocol 能力接口（oauthCapabilities/runOauthDispatch 替代全局 chat 一刀切）+ 代理发现（resolveOauthProxy 配置>env 回退；chatgpt.com codex 调用 dispatcher 接线，undici 缺失 fail-loud；auth.openai.com 永不经代理）+ C-9 埋点启动（oauthEvents 登录旅程，P7 零 token）+ catalog preset/presetLoggedIn 镜像（账号卡数据源）
+cc3bd4e GOV-002: DEV-002 执行包入账 + EVO-002 Step 6 派发状态 + 三选编排落锁（Step6 先行/Phase2 排队/DEV-002 并行）
+886b94f GOV-002: EV-046（任务完成推荐快照——工具假阴性披露 + 三候选依赖依据）
+866517f GOV-002: EV-045（FIX-002 返工终态——R8 APPROVED_WITH_NOTES/0 blocker，F1-F4 全修复）+ tracker 终态（13 完成/0 阻塞）
+0b3c15d FIX-002: R7 返工批次 2——F4 smoke 不变量③④正式断言×8（L1790 掏空修复 + F2 形式化，三版本探针判别矩阵 5 实测必败）+ R7 报告原文恢复（CLI 覆盖事故）
+38897e6 GOV-002: EV-043（EVO-002 Step 5 终态——R6 APPROVED_WITH_NOTES/0 blocker，R5 P2 存量清零，必闭义务全闭合）+ Step 6 输入入账（代理发现必含）
+8fb907d GOV-002: EV-042（EVO-003 Phase 1 终态——R1 APPROVED_WITH_NOTES/0 blocker，8 裁量点 adopt）+ Phase 2 前置项 F1/F2/F4 入包
+b34b792 GOV-002: EV-041（EVO-002 Step 5 证据）+ 批次1/Step5 tracker 同步 + 锁转移（EVO-002/EVO-003 开发锁释放，F4 持 smoke.mjs）+ Step5 diff 审查存档
+72b2670 FIX-002: R7 返工批次 1——F1 客户端接管记忆三态（P0，takeoverMemory 对等机制）+ F2 遗留剥离一次性护栏（闭包级标记+自愈保持）+ F3 判别性断言×4（TDD-RED 实证，93/93）
+5bbd29d GOV-002: EV-039（EVO-003 Phase 1 证据补账——hook M7.4 违规即时修复）+ R7 审查报告入库 + tracker 状态同步
+db1ddf7 EVO-002 Step 5: codex-responses protocol branch (SSE aggregation + R5-F1 call-time kill-switch + R4-F1/R4-F2 hardening)
+1199c0b EVO-003: Phase 1 统计持久化内核——lib/stats.js（E6-a 按天 JSONL + E7-a 异步批量 flush + E8 成本纯函数 + §4.2 四件套）+ tests/stats.mjs（80 断言全绿：自愈/迁移/prune/软删除/CSV/丢弃计数）
+369caf1 GOV-002: 派发记录——FIX-002-R7 审查 + EVO-002 Step 5 fork 重派 + EVO-003 Phase 1（执行包补齐/锁更新/状态入账）
+f2d2cbc GOV-002: 治理工作流升级 0.74.0->0.75.0（Scenario C：bootstrap 版本行/plan-tracker 版本行/归档检测跳过/FIX-001+FIX-002 过时锁释放/tracker 去重卫生/EV-038）
+ba3cf91 REL-001: release fully closed — push complete (20 commits + tag v0.2.1) and GitHub Release published (tarball asset verified, non-draft); tracker terminal state
+067dde3 REL-001/governance: session records — DEC-022 host-compat strategy ruling + RISK-003 (host interface evolution, parity guard mitigation) + EVO-002 packet status + review reports R1-R6 (audit chain: 5 step reviews + FIX-001 R6 fork-channel independent review)
+4861774 REL-001: release records closed — EV-037 evidence (tarball offline-verified, validation baseline all green) + roadmap v0.2.1 row + tracker terminal state; pending: git push + GitHub Release upload

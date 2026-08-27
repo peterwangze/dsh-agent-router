@@ -10,7 +10,7 @@
 - **current_stage**: development (6/11)——v0.3.0/v0.3.1 机制面闭合（FIX-004 自证 + EVO-004 UI 面）
 - **current_gate**: G4 待评（CI 面缺——RISK-001；测试网：smoke 876-877 / stats 110 / routing 114 / parity 14）
 - **工作流版本**: 0.78.0（GOV-004 同步 2026-08-27：AGENTS.md bootstrap + plan-tracker + 本快照三处一致）
-- **tracker**: 27 任务 | 26 完成 + 1 关闭（DEV-001）| **全部终态（2026-08-27 深夜）——v0.3.0 仓内依赖清零** | 0 阻塞
+- **tracker**: 28 任务 | 27 完成 + 1 关闭（DEV-001）| **全部终态（2026-08-28）——v0.3.0 M-1 全段完成（代码+资产+三审链）** | 0 阻塞
 - **principles**: **P-v2**（P4 门控/P7 不可逆/P8 可观测/P9 宿主演进防御——本会话 P9 两次实证：
   FIX-004 自证落地 + FIX-006 宿主 dsh-llm rc 滚动漂移嫌疑）
 
@@ -49,4 +49,4 @@
 
 1. skill 加载 software-project-governance → resolve_entry.py --json（resolved_root_ok）
 2. 读本快照 + plan-tracker（FIX-006 待实施）
-3. **下一步双通道**：①**出口①真机首联**（用户在场，vision-2 带图——FIX-006 已闭环随时可做；同窗 OPS-001 安装验证）②**M-1 候选打包**（MUST 清单见 plan-tracker 待办：EVO-005 F-1/F-2 修复 + REL-002 双审 P2 闭合 + peerDeps rc.8 + 三件套 + CHANGELOG 双主题）——两通道可并行（用户验证 vs 仓内打包）；M-4 transition 授权 = 用户（DEC-143）
+3. **v0.3.0 发布收口双通道**：①**M-2 出口①真机首联**（唯一剩余 GATE-1 发布门禁——用户在场 vision-2 带图验证；同窗 OPS-001 安装验证）②完成后 **M-4 授权**（transition → tag v0.3.0 → push → GitHub Release——DEC-143 用户决策；checklist 第六步 candidate 态就绪）；M-5 执行后 M-7 收尾含归档检测 + R2 N-1/N-2 收口

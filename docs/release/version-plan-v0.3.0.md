@@ -21,7 +21,7 @@
 | 当前已发布版本 | **v0.2.1**（tag `a1ab717`，2026-08-22，REL-001） | plan-tracker 路线图行 v0.2.1；CHANGELOG.md:6 |
 | package.json version | `0.2.1`（bump 至 0.3.0 属 M-1 段） | package.json:4（实读） |
 | main 领先发布点 | v0.2.1 后约 30 commits（Coordinator 预核验；含 EVO-002 Step 5-7 终闭环/EVO-003/EVO-004/FIX-003C/FIX-004/FIX-005/FIX-006/GOV 记录） | 派发 prompt + plan-tracker 任务行 commit 留痕 |
-| v0.2.1 发布惯例（本规划沿用先例） | 三件套+bump+README → tarball 离线验证 → tag → push（c006639..067dde3，20 commits）→ GitHub Release（assets 含 tarball，非 draft，用户 gh 授权后执行）→ 治理记录随发布提交入仓 | plan-tracker REL-001 行；DEV-003（v0.2.0）行 |
+| 发布惯例先例（归属拆分——REL-002 Release R0 F-1 修正，随 M-1 落地） | **流程惯例 = REL-001/v0.2.1**：CHANGELOG+bump+README → tarball 离线验证 → tag → push（c006639..067dde3，20 commits）→ GitHub Release（assets 含 tarball，非 draft，用户 gh 授权后执行）→ 治理记录随发布提交入仓（EV-037）；**三件套中的 checklist+rollback 两件 = v0.2.0/DEV-003 惯例**（EV-024——v0.2.1 发布件无三件套）；**feature-flags 件 = v0.3.0 新增**（超出先例的增强；句式与 feature-flags §0 统一——R1 F-6） | plan-tracker REL-001 行；EV-037；EV-024（DEV-003/v0.2.0） |
 | 依赖面变更（v0.2.1 后） | `undici ^7.18.0` 新增声明 + pnpm-lock.yaml 入仓（FIX-006，bef08eb）；tarball 依赖完整性经隔离冷装验证 | plan-tracker FIX-006 行；EV-072 |
 | 宿主面实证 | 宿主 rc.6→rc.8 滚动漂移（peerDeps 声明 rc.6 / lock 解析 rc.8；rc.8 移除 LlmAdapter.prepareCall 与文本模型图片投影）；npm children-null = 宿主环境 npm 11.8.0 arborist 对 dsh-* 环形 peer 图缺陷（正交，非产品缺陷） | EV-072（RCA 结论）；package.json:43-56（实读） |
 | 治理面 | 当前阶段 development（6/11）；G4/G5 pending；RISK-001、RISK-003 活跃；25 任务全终态 | plan-tracker 项目总览/Gate 表；risk-log |
@@ -71,13 +71,13 @@
 
 | # | 变更项 | 类别 | 来源留痕 |
 | --- | --- | --- | --- |
-| S-1 | ChatGPT 订阅接入 C-1 全量：preset 账号 + 独立凭据文件（`$DSH_HOME/dsh-agent-router/chatgpt-codex-auth.json`）+ 1455 loopback 回调 + codex-responses 协议分支（第 4 分支，runCodexResponsesChat）+ 账号卡 UI（"ChatGPT（实验）"入口）+ ToS 确认 + 登出删除（W-5 联动） | 新增（功能） | DEC-020（decision-log:24）；EVO-002 终态；lib/service.js:2565/2611-2612/2728、lib/client.js:2412（源码目击）；v0.2.1 CHANGELOG:29 预告 |
+| S-1 | ChatGPT 订阅接入 C-1 全量：preset 账号 + 独立凭据文件（`$DSH_HOME/dsh-agent-router/chatgpt-codex-auth.json`）+ 1455 loopback 回调 + codex-responses 协议分支（第 4 分支，runCodexResponsesChat）+ 账号卡 UI（"ChatGPT（实验）"入口）+ ToS 确认 + 登出删除（W-5 联动） | 新增（功能） | DEC-020（decision-log:24）；EVO-002 终态；lib/service.js:2565/2611-2612/2728、lib/client.js:2412（源码目击）；CHANGELOG v0.2.1 节·变更预告 |
 | S-2 | Q2 per-protocol 能力接口（`oauthCapabilities(protocol)` 单点判定替代全局 chat-only 一刀切；image/speech 留桩） | 新增（接口层） | DEC-020/ADR-005 §3.5；lib/service.js:523/870/2557（源码目击） |
-| S-3 | 合规三层 kill-switch（`router.enabled` / 账号 `enabled` / `router.oauthExperimental` 缺省 false）+ S-3 绑定（凭据文件锁超时语义，CREDENTIAL_LOCK_TIMEOUT 族） | 新增（开关） | roadmap §3.3/§3.6；DEC-018 S-3 绑定 + DEC-020；lib/schemas.js:223；v0.2.1 CHANGELOG:29 |
+| S-3 | 合规三层 kill-switch（`router.enabled` / 账号 `enabled` / `router.oauthExperimental` 缺省 false）+ S-3 绑定（凭据文件锁超时语义，CREDENTIAL_LOCK_TIMEOUT 族） | 新增（开关） | roadmap §3.3/§3.6；DEC-018 S-3 绑定 + DEC-020；lib/schemas.js:223；CHANGELOG v0.2.1 节·变更 |
 | S-4 | C-9 埋点启动（v0.3.0 起采集；报告 v0.3.2 出） | 新增（观测） | DEC-020；EVO-002 Step 7（C-9 埋点） |
 | S-5 | FIX-006：undici ^7.18.0 依赖声明 + dispatcher major 判别 fail-loud + pnpm-lock 入仓 + parity F2 | 修复（发布阻塞解除） | plan-tracker FIX-006 行；EV-072/073 |
 | S-6 | FIX-004（能力自证 + 预检可观测）/ FIX-005（条件化引导）/ FIX-003C（遗留三修） | 修复 | 各任务终态行（6dd6e5b / a484469 / 0782516） |
-| S-7 | EVO-002 Step 5-7 相对 v0.2.1 的增量终闭环（v0.2.1 已含 Step 1-4b 不可见预置；CHANGELOG:29 预告 v0.3.0 转全量可见） | 新增（功能解锁） | v0.2.1 CHANGELOG:29；EVO-002 终态 |
+| S-7 | EVO-002 Step 5-7 相对 v0.2.1 的增量终闭环（v0.2.1 已含 Step 1-4b 不可见预置；CHANGELOG v0.2.1 节·变更预告 v0.3.0 转全量可见） | 新增（功能解锁） | CHANGELOG v0.2.1 节·变更；EVO-002 终态 |
 | S-8 | **[待 M-0 裁决 A-1]** C-3 统计持久化 + UI 面（EVO-003/EVO-004：stats.js 分离/按天 JSONL/数据安全四件套/成本单价表/CSV 导出/按天视图/导出按钮/P2 六修） | 新增（范围倒挂项） | 见 §2.2 A-1 |
 
 ### 2.2 裁决表（出槽/范围倒挂/待决——每项带来源留痕；裁决 = 用户，本规划不做决策）
@@ -96,7 +96,7 @@
 
 #### A-2 出口③设备码后备：DEC-020 范围内、未实现、排期待裁决
 
-**事实**：DEC-020 v0.3.0 范围含"设备码后备"；实现仅到 CHATGPT_PRESET.deviceUrls 常量（oauth-credentials.js:55-56），无 oauthDeviceBegin/account RPC；plan-tracker 待办列"出口③设备码流排期（用户决策项，P0）"；**v0.2.1 CHANGELOG:29 曾公开预告"完整功能（协议分支/UI/设备码）将在 v0.3.0 发布"**。
+**事实**：DEC-020 v0.3.0 范围含"设备码后备"；实现仅到 CHATGPT_PRESET.deviceUrls 常量（oauth-credentials.js:55-56），无 oauthDeviceBegin/account RPC；plan-tracker 待办列"出口③设备码流排期（用户决策项，P0）"；**v0.2.1 CHANGELOG 节·变更曾公开预告"完整功能（协议分支/UI/设备码）将在 v0.3.0 发布"**。
 
 | 选项 | 内容 | 利 | 弊 |
 | --- | --- | --- | --- |
@@ -131,7 +131,7 @@
 ### 2.3 semver 合规论证（0.2.1 → 0.3.0，MINOR）
 
 1. **变更性质**：向后兼容的新能力面——C-1 ChatGPT 订阅接入（S-1~S-4）+（若 A-1 裁 a）C-3 统计持久化，均为新增功能/新增配置，无公共 API 移除、无行为破坏。semver 0.x 阶段 MINOR bump = 新增向后兼容功能（项目先例：v0.1.7→v0.2.0 MINOR，DEC-015 用户确认）。
-2. **无 breaking 论证**：① 既有 OAuth 通用账号（tokenRef 粘贴）行为不变（ADR-005/E3-a 双轨设计，EVO-002 审查链验证）；② 新能力面全部由 `oauthExperimental`（缺省 false，schemas.js:223）门控——缺省安装用户零可见（v0.2.1 CHANGELOG:29 同款语义延续）；③ 依赖新增 undici ^7.18.0 属 dependencies 追加（非 peer 收窄），隔离冷装已验证（EV-072）；④ C-3（若并入）行为增量（统计持久化缺省开）带等价回退开关 `router.stats.persist=false`（ADR-006 可逆性）。
+2. **无 breaking 论证**：① 既有 OAuth 通用账号（tokenRef 粘贴）行为不变（ADR-005/E3-a 双轨设计，EVO-002 审查链验证）；② 新能力面全部由 `oauthExperimental`（缺省 false，schemas.js:223）门控——缺省安装用户零可见（CHANGELOG v0.2.1 节·变更同款语义延续）；③ 依赖新增 undici ^7.18.0 属 dependencies 追加（非 peer 收窄），隔离冷装已验证（EV-072）；④ C-3（若并入）行为增量（统计持久化缺省开）带等价回退开关 `router.stats.persist=false`（ADR-006 可逆性）。
 3. **不跳号**：0.2.1→0.3.0 为相邻 MINOR；不选 0.2.2（非 patch——大量新功能，patch 语义不符）；不选 0.4.0（无 breaking、无主题断层，跳 MINOR 违反"不跳号"门槛）。
 4. **版本号与范围裁决正交**：A-1 无论 a/b，版本号均为 0.3.0（b' 才可能引发范围重排，不建议）。
 
@@ -158,7 +158,7 @@
 | GATE-2 | 出口③设备码：按 A-2 裁决结果转为「实现+测试」或「出槽改口留痕」 | 裁决记录 + 对应交付物 | 待 M-0 |
 | GATE-3 | 出口②④复核：token 刷新 / kill-switch 三层 / ToS 确认 / 登出删除路径断言全绿（机制闭环证据链 R1-R8 之上复跑） | M-3 全量测试网含 oauth 域断言 + 源码目击（schemas.js:223、client.js:2412） | 机制闭环 |
 | GATE-4 | 全量测试网基线零回退：smoke 873 ok+1 skip/0、stats 110/0、routing-paths 114/114、client-render 全绿、adapter-parity 14/14（rc.8 漂移账目按 EV-072 口径披露） | M-3 复跑 exit 0 留痕 | 上次全绿 2026-08-27 |
-| GATE-5 | tarball 隔离冷装：TEMP 解包 + `--omit=dev --legacy-peer-deps`，tarball 清单含 undici、ProxyAgent 可构造、零触碰真实 ~/.dsh | 隔离环境安装冒烟记录（措辞按 §1.4——**不使用无限定语的"真实安装"表述**） | 上次通过 2026-08-27（EV-072） |
+| GATE-5 | tarball 隔离冷装：TEMP 解包 + `--omit=dev --legacy-peer-deps`，tarball 清单含 undici、ProxyAgent 可构造、零触碰真实 ~/.dsh | 隔离环境安装冒烟记录（措辞按 §1.4——**不使用无限定语的"真实安装"表述**） | 上次通过 2026-08-27（EV-072，FIX-006 时点包）；**执行里程碑 = M-3.5（M-4 前置）——Design F-1 修正挂点**：bump/rc.8 后包面已变，MUST 重打包复跑（runbook 见 release-checklist-v0.3.0.md） |
 | GATE-6 | 发布审查：Release Reviewer 终审本规划 + M-1 资产（checklist/rollback/feature-flags/CHANGELOG）APPROVED（unresolved_blockers=0 方为通过终态）+ Design Reviewer 对规划的独立审查（tracker REL-002 行要求双审） | review-record 机器落盘 | 待 M-1 后 |
 | GATE-7 | 版本一致性：package.json 0.3.0 + README 徽章与安装命令版本同步 + CHANGELOG 与 git log 对照（v0.2.1 后 ~30 commits 全覆盖、breaking 显式高亮=无、未完成功能排除=§2.4） | 逐项核对记录 | 待 M-1 |
 | GATE-8 | 归档触发检测（发布后）：`archive.py migrate --auto --dry-run`；**预计触发发布强制迁移**（25 终态任务均在热文件——非最新已发布版本外仍有热文件历史 task）→ 执行 migrate + `check-archive-integrity`，失败阻断发布完成 | 机器输出留痕 | 待 M-7（预判，非事实断言） |
@@ -184,9 +184,10 @@
 | 里程碑 | 内容 | 出口判据 | 边界 |
 | --- | --- | --- | --- |
 | **M-0 范围与策略裁决** | A-1 范围倒挂 / A-2 设备码 / A-3 RISK-001 / A-4 peerDeps 四项裁决（ask_user_question 呈报 §2.2 选项）→ 变更控制入账（decision-log + plan-tracker 路线图行同步） | 四项裁决全部留痕；路线图行与本规划 §2 一致化 | **用户决策点** |
-| **M-1 发布资产产出** | 三件套：`docs/release/release-checklist-v0.3.0.md` + `rollback-plan-v0.3.0.md` + `feature-flags-v0.3.0.md`；CHANGELOG v0.3.0 节（git log 实采对照——commit 清单以仓库为准，本规划 §1.1 已知 commit 留痕为底）；package.json bump 0.2.1→0.3.0（若 A-4 裁 b 同步 peerDeps 锚定）；README 徽章/安装命令同步 | 三件套 + CHANGELOG + bump + README 四件齐 | 自动（Developer bump / Release 三件套分工，REL-001 先例） |
-| **M-2 出口①用户端到端** | 用户在场真机验证：vision-2 带图调用（1455 + 代理 7890 + dispatcher×原生 fetch 链路） | 调用成功返回文本 + EV 留痕（GATE-1） | **用户在场动作（MUST 门禁）** |
+| **M-1 发布资产产出** | 三件套：`docs/release/release-checklist-v0.3.0.md` + `rollback-plan-v0.3.0.md` + `feature-flags-v0.3.0.md`；CHANGELOG v0.3.0 节（git log 实采对照——commit 清单以仓库为准，本规划 §1.1 已知 commit 留痕为底）；package.json bump 0.2.1→0.3.0（若 A-4 裁 b 同步 peerDeps 锚定）；README 徽章/安装命令同步 | 三件套 + CHANGELOG + bump + README 四件齐 | 自动（Developer bump / Release 三件套分工；流程先例 = REL-001，三件套中的 checklist+rollback 两件先例 = v0.2.0/DEV-003——feature-flags 件为 v0.3.0 新增；Release R0 F-1 归属拆分随 M-1 落地，句式统一 R1 F-6） |
+| **M-2 出口①用户端到端** | 用户在场真机验证：vision-2 带图调用（1455 + 代理 7890 + dispatcher×原生 fetch 链路）。**失败回路（Design F-2 / BC-R1）**：验证失败 → 缺陷走 change-triage 入账（triage 机器记录）→ 修复（含独立审查）→ 重回 M-2 复验——不跳过、不降级为"机制面闭环"表述、不绕过 GATE-1 | 调用成功返回文本 + EV 留痕（GATE-1）；失败时按回路逐步留痕 | **用户在场动作（MUST 门禁）** |
 | **M-3 门禁复跑** | 全量测试网（GATE-4）+ kill-switch 三层验证语义复核（GATE-3）+（若 A-1 裁 a）stats 四件套/迁移单测复核 + CHANGELOG/git log 对照（GATE-7 前置） | 全部 exit 0 + 留痕 | 自动 |
+| **M-3.5 tarball 重打包隔离冷装**（Design F-1 修正新增挂点——GATE-5 执行里程碑） | bump 0.3.0 + peerDeps rc.8 + EVO-005/REL-003 代码入版后包面已变：npm pack 重打包 → TEMP 解包 → 隔离安装（`--omit=dev --legacy-peer-deps`，环境变量重定向零触碰真实 ~/.dsh 与 DSH_HOME）→ 断言清单（version 0.3.0 / undici ^7.18.0 / 8 包 peer rc.8 / ProxyAgent 可构造 / 真实环境零变更） | 冷装 runbook 全断言 PASS + EV 留痕（措辞：隔离环境安装冒烟；runbook 落列 release-checklist-v0.3.0.md §冷装） | 自动（Coordinator 执行——Release Agent 无命令权限）；**M-4 前置** |
 | **M-4 发布终审 + transition 用户授权点** | Release Reviewer 终审（GATE-6，双审含 Design Reviewer 对本规划）→ checklist candidate 全 PASS（GATE-1~5、7）→ **用户 Go/No-Go + tag/push 逐项授权** | 审查 APPROVED（unresolved_blockers=0）+ 用户授权留痕 | **用户决策点（DEC-143）——唯一 transition 授权入口** |
 | **M-5 发布执行** | tag v0.3.0 + push + GitHub Release（assets 含 tarball，非 draft）——REL-001 先例流程 | tag/remote tag 一致 + Release 可见 | 授权后执行（maximum-autonomy 域内） |
 | **M-6 发布后验证** | tarball 隔离冷装冒烟复验（发布产物面）+ 宿主升级观察（OPS-001 junction 安装面：junction 指向开发树，升级路径 = tag 检出或刷新后重启，重启生效语义不变）+ C-9 埋点采集确认（v0.3.0 起） | 冒烟记录 + 观察窗无新阻断性缺陷 | 自动 + 用户观察 |
@@ -207,6 +208,8 @@
 | R-E2 H2 PoC 失败路径 | — | **已解除**（EVO-001 六步全过，EV-028） | 不再活跃——留痕引用 |
 | npm children-null（宿主环境 npm 11.8.0 arborist 环缺陷） | 低（环境正交） | 冷装/安装验证受扰 | 正交披露（EV-072）；冷装以 --legacy-peer-deps 验证；不在本版本修复 |
 | stats 实机规模项（若 A-1 裁 a：出口⑦ 加载 ≤200ms@100 天） | 低 | 未实证 | 列为发布后观察项（§6 No-overclaim），不虚报为已验证 |
+| **pnpm-lock 安装面时变**（Design F-3 / BC-R3——随 M-1 披露） | 中（残余如实披露） | npm tarball 不含 pnpm-lock.yaml（files 清单未列）——发布后新装用户解析 undici 7.x 最新版，与仓库锁/测试时点可能不同 | 缓解 = loadOauthProxyDispatcher major 判别 fail-loud（undici 非 7.x 即明确报错不静默，FIX-006）；残余 = 时变解析至未来 7.x minor/patch（major 下界守住）——如实披露，不虚报全覆盖 |
+| **dev 图 unmet-peer 警告**（REL-003 R0 N-1——处置 = 披露路径） | 低 | dev 图（pnpm-lock importers）dependencies 三包 dsh-llm/dsh-tools/dsh-typert-protocol 维持 ^0.1.0-rc.6 = **DEC-025 D-4b/A-4b 裁决范围**（裁决仅 peerDependencies 8 包）——dsh-agent@rc.8 peer 要求 typert-protocol ^rc.8 而 dev 图依锁解析 rc.6 → unmet-peer 警告（pnpm 警告级，不阻断 install） | 生产新装 ^0.1.0-rc.6 范围解析到 rc.8（EV-072 实测宿主环境）——dev/生产图轻微漂移如实记录；dependencies 三包对齐 bump 列为 Release 段裁量遗留候选（不阻塞发布） |
 
 ### 5.2 回滚方案（三层资产 + 验证语义）
 
@@ -254,7 +257,7 @@
 | 13 | RISK-001/RISK-003 活跃（不关闭不重开） | risk-log:5/:7 | ✅ |
 | 14 | REL-001 tag/push/GitHub Release 惯例 | plan-tracker REL-001 行（:100） | ✅ |
 | 15 | main ~30 commits since v0.2.1 | 派发 prompt（Coordinator 预核验；本 Agent 无 Bash 未自采——已声明） | ⚠️ 待 M-1 git log 实采对照 |
-| 16 | v0.2.1 预告"设备码将在 v0.3.0 发布" | CHANGELOG.md:29 | ✅ |
+| 16 | v0.2.1 预告"设备码将在 v0.3.0 发布" | CHANGELOG v0.2.1 节·变更（原引 :29——v0.3.0 节前置后行号漂移，R1 F-5 改节锚免漂移） | ✅ |
 | 17 | 归档触发条件（发布强制触发器） | AGENTS.md 治理数据归档段 + GOV-002/003/004 先例（跳过因已发布版本 <2——v0.3.0 后条件改变） | ✅（GATE-8 预判已标注为预判） |
 
 ---
