@@ -1025,6 +1025,8 @@ console.log('RouterService:')
     deviceService.codexLoopbackStarter = async () => ({ ready: false, reason: 'EADDRINUSE', dispose: () => {} })
     // 测试提速注入（实例级覆盖，同 lockTimeoutMs 先例）。
     deviceService.oauthDeviceSlowDownAddMs = 5
+    // F-7 配套：下限注入（默认 1000ms——见 oauthBeginDeviceFallback）。
+    deviceService.oauthDeviceMinIntervalMs = 10
     const realFetch5 = globalThis.fetch
     let usercodeMode = 'ok'
     let pollScript = []
@@ -1096,6 +1098,20 @@ console.log('RouterService:')
       await tsession.done
       check('device flow times out to expired terminal state', tbegin.ok === true && tsession.status === 'expired' && deviceService.oauthDevicePending.size === 0)
       check('device timeout leaves credential document untouched', readFileSync(deviceCredFile, 'utf8') === docBeforeTimeout)
+      // F-6（REL-003 / R0 P3）：begin 响应 expiresIn 由实效 timeoutMs 推导
+      //（与 expiresAt 同源）——注入 15ms 超时下通告 0 而非死值 900，客户端
+      // 等待 deadline 与真实有效期一致。
+      check('device begin advertises expiresIn derived from effective timeoutMs (F-6)', tbegin.expiresIn === 0)
+      // 3b. F-7（REL-003 / R0 P3）：轮询间隔下限 1000ms——服务端 interval
+      //     异常小（0.01s）不触发热轮询；默认下限可被实例级注入覆盖
+      //    （oauthDeviceMinIntervalMs，测试提速先例同 slow_down/timeout）。
+      deviceService.oauthDeviceMinIntervalMs = 0
+      pollScript = []
+      const floorBegin = await deviceService.oauthBegin({ accountId: 'cgpt' })
+      const floorSession = [...deviceService.oauthDevicePending.values()][0]
+      await floorSession.done
+      check('device poll interval floors at 1000ms against tiny server interval (F-7)', floorBegin.ok === true && floorSession.intervalMs === 1000 && floorSession.status === 'expired')
+      deviceService.oauthDeviceMinIntervalMs = 10
       deviceService.oauthDeviceTimeoutMs = 0
       // 4. 拒绝终态：access_denied → failed，不落盘。快速终态（首询即
       //    denied）与 begin 返回存在微任务竞态——不快照 session 引用，
