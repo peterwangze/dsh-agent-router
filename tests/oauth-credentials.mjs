@@ -19,7 +19,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, un
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { OauthCredentialStore, CHATGPT_PRESET, CREDENTIAL_ERROR_CODES, REFRESH_MARGIN_MS, REFRESH_TIMEOUT_MS, CREDENTIAL_LOCK_STALE_MS, accountIdFromJwt, resolveCredentialPath, defaultCredentialPath } from '../lib/oauth-credentials.js'
+import { OauthCredentialStore, CHATGPT_PRESET, CREDENTIAL_ERROR_CODES, REFRESH_MARGIN_MS, REFRESH_TIMEOUT_MS, CREDENTIAL_LOCK_STALE_MS, accountIdFromJwt, resolveCredentialPath, defaultCredentialPath, startDeviceAuthorization, pollDeviceAuthorizationToken, DEVICE_FLOW_TIMEOUT_SECONDS } from '../lib/oauth-credentials.js'
 import { OAUTH_PRESET_VALUES } from '../lib/schemas.js'
 
 /** 伪造 JWT（header.payload.signature；payload 为 base64url JSON）。 */
@@ -339,6 +339,85 @@ export async function runOauthCredentialTests(check) {
     check('failed lock meta write cleaned the lock file before any network call', !readdirSync(work).some((name) => name === 'metafail.json.lock') && metaFetchCalls === 0)
     const metaRetry = await new OauthCredentialStore(metaPath).ensureFresh(metaCred, { fetchImpl: async () => refreshOk('A13-new', 'R13-new', 864000) })
     check('no poisoned window: immediate retry with a clean store succeeds', metaRetry.access === 'A13-new')
+
+    // ── 12. 设备码流协议原语（EVO-005 / H3-11）───────────────────────────────
+    // 端点形状依据 = .router-files/pi-ai-auth-oauth-openai-codex.js（roadmap
+    // H3-11 引用源的一手快照，startOpenAICodexDeviceAuth :145-174 /
+    // pollOpenAICodexDeviceAuth :175-227）：usercode JSON {client_id} →
+    // {device_auth_id, user_code, interval}（interval 可为字符串）；轮询
+    // JSON {device_auth_id, user_code} → 2xx {authorization_code,
+    // code_verifier} / 403、404、error=deviceauth_authorization_pending =
+    // pending / error=slow_down = 退避 / 其他 = 终态失败。
+    console.log('device flow protocol primitives (EVO-005):')
+    check('device exchange redirect uri matches pi-ai source fact', CHATGPT_PRESET.deviceUrls.exchangeRedirectUri === 'https://auth.openai.com/deviceauth/callback')
+    check('device flow timeout is 15 minutes (H3-11)', DEVICE_FLOW_TIMEOUT_SECONDS === 900)
+    {
+      const { captured, fetchImpl } = makeCaptureFetch(() => ({ ok: true, json: async () => ({ device_auth_id: 'DAID-12', user_code: 'WDJB-MJHT', interval: 5 }) }))
+      const started = await startDeviceAuthorization(fetchImpl)
+      check('device usercode start returns normalized fields', started.deviceAuthId === 'DAID-12' && started.userCode === 'WDJB-MJHT' && started.intervalSeconds === 5)
+      const init = captured[0].init
+      const body = JSON.parse(String(init.body))
+      check('device usercode posts JSON {client_id} to H3-11 endpoint', captured[0].url === CHATGPT_PRESET.deviceUrls.userCode && init.method === 'POST' && String(init.headers['content-type']) === 'application/json' && body.client_id === CHATGPT_PRESET.clientId)
+    }
+    {
+      const { fetchImpl } = makeCaptureFetch(() => ({ ok: true, json: async () => ({ device_auth_id: 'd', user_code: 'u', interval: ' 7 ' }) }))
+      check('device usercode normalizes string interval (pi-ai compat)', (await startDeviceAuthorization(fetchImpl)).intervalSeconds === 7)
+    }
+    {
+      const { fetchImpl } = makeCaptureFetch(() => ({ ok: true, json: async () => ({ device_auth_id: 'd' }) }))
+      let err = null
+      try { await startDeviceAuthorization(fetchImpl) } catch (error) { err = error }
+      check('device usercode rejects malformed response clearly', !!err && /device_auth_id|user_code|interval/.test(err.message))
+    }
+    {
+      const { fetchImpl } = makeCaptureFetch(() => ({ ok: false, status: 404, text: async () => '' }))
+      let err = null
+      try { await startDeviceAuthorization(fetchImpl) } catch (error) { err = error }
+      check('device usercode 404 means server disabled wording', !!err && err.message.includes('未启用'))
+    }
+    {
+      let err = null
+      try { await startDeviceAuthorization(async () => { throw new Error('ECONNRESET') }) } catch (error) { err = error }
+      check('device usercode network failure errors clearly', !!err && err.message.includes('ECONNRESET'))
+    }
+    const pollWith = async (respond) => {
+      const { captured, fetchImpl } = makeCaptureFetch(respond)
+      const result = await pollDeviceAuthorizationToken({ deviceAuthId: 'DAID-9', userCode: 'CODE-9' }, fetchImpl)
+      return { result, captured }
+    }
+    {
+      const { result, captured } = await pollWith(() => ({ ok: true, json: async () => ({ authorization_code: 'AC-1', code_verifier: 'CV-1' }) }))
+      const body = JSON.parse(String(captured[0].init.body))
+      check('device poll 2xx complete carries code pair', result.status === 'complete' && result.authorizationCode === 'AC-1' && result.codeVerifier === 'CV-1')
+      check('device poll posts JSON {device_auth_id, user_code} to H3-11 endpoint', captured[0].url === CHATGPT_PRESET.deviceUrls.token && body.device_auth_id === 'DAID-9' && body.user_code === 'CODE-9' && String(captured[0].init.headers['content-type']) === 'application/json')
+    }
+    {
+      const { result } = await pollWith(() => ({ ok: true, json: async () => ({ foo: 1 }) }))
+      check('device poll 2xx missing fields is terminal failed', result.status === 'failed' && !!result.message)
+    }
+    {
+      const a = (await pollWith(() => ({ ok: false, status: 403 }))).result
+      const b = (await pollWith(() => ({ ok: false, status: 404 }))).result
+      const c = (await pollWith(() => ({ ok: false, status: 400, text: async () => JSON.stringify({ error: 'deviceauth_authorization_pending' }) }))).result
+      check('device poll maps 403/404/pending-code to pending', a.status === 'pending' && b.status === 'pending' && c.status === 'pending')
+    }
+    {
+      const a = (await pollWith(() => ({ ok: false, status: 400, text: async () => JSON.stringify({ error: 'slow_down' }) }))).result
+      const b = (await pollWith(() => ({ ok: false, status: 429, text: async () => JSON.stringify({ error: { code: 'slow_down' } }) }))).result
+      check('device poll maps slow_down in both error shapes', a.status === 'slow_down' && b.status === 'slow_down')
+    }
+    {
+      const a = (await pollWith(() => ({ ok: false, status: 400, text: async () => JSON.stringify({ error: { code: 'deviceauth_authorization_pending' } }) }))).result
+      check('device poll maps object-shaped pending code', a.status === 'pending')
+    }
+    {
+      const { result } = await pollWith(() => ({ ok: false, status: 400, text: async () => JSON.stringify({ error: 'access_denied' }) }))
+      check('device poll other error codes are terminal failed', result.status === 'failed' && !!result.message)
+    }
+    {
+      const { result } = await pollWith(async () => { throw new Error('ECONNRESET') })
+      check('device poll network error maps to failed (not throw)', result.status === 'failed' && result.message.includes('ECONNRESET'))
+    }
 
     // ── 11. resolveCredentialPath（F-01：credentialFile 回退默认路径）────────
     console.log('resolveCredentialPath (F-01):')
