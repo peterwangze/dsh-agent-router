@@ -42,7 +42,8 @@
     "@deepseek-ai/schemastery": "^3.18.1",
     "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6"
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
+    "undici": "^7.18.0"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-attachment": "^0.1.0-rc.6",

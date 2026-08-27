@@ -971,6 +971,68 @@ console.log('RouterService:')
     if (step6Crash) console.error('      step6 crash:', step6Crash && step6Crash.message)
   }
 
+  // ── FIX-006：OAuth 代理路径依赖对齐——发布环境 package.json 无 undici
+  // 声明（运行时 import('undici') fail-loud 设计在冷装环境必败 Cannot find
+  // package）+ 手装 undici@8（npm latest）与 Node 内置 undici 7 的 fetch
+  // 接口不匹配（invalid onRequestStart）。判别断言三件：声明存在且 major
+  // 对齐内置、锁文件记录一致、真实 ProxyAgent 经内置 fetch 可用。
+  console.log('oauth proxy dependency (FIX-006):')
+  {
+    const pkgMeta = JSON.parse(readFileSync(join(ROOT_DIR, 'package.json'), 'utf8'))
+    const declaredUndici = String(pkgMeta.dependencies?.undici ?? '')
+    const builtinUndici = String(process.versions?.undici ?? '')
+    const majorOf = (version) => Number.parseInt(version.split('.')[0], 10)
+    check('package.json declares undici dependency (FIX-006)', declaredUndici.startsWith('^7.'))
+    check('declared undici major matches builtin fetch undici (FIX-006)', builtinUndici !== '' && declaredUndici.startsWith('^7.') && majorOf(declaredUndici.slice(1)) === majorOf(builtinUndici))
+    const lockText = existsSync(join(ROOT_DIR, 'pnpm-lock.yaml')) ? readFileSync(join(ROOT_DIR, 'pnpm-lock.yaml'), 'utf8') : ''
+    check('pnpm-lock records undici aligned with package.json (FIX-006)', /undici:\s*\r?\n\s+specifier: \^7\./.test(lockText) && /\bundici@7\.\d+\.\d+/.test(lockText))
+    // 真实可用实证：本地 CONNECT 隧道代理 + 本地源站 + node_modules 真实
+    // undici（^7 对齐）+ Node 原生 fetch（内置 undici）——ProxyAgent 默认
+    // proxyTunnel:true 对所有目标先发 CONNECT（chatgpt.com https 同机制），
+    // dispatcher 接口同 major 才能走通；v8 错配形态（invalid
+    // onRequestStart）在此断言下必败。
+    const httpMod = await import('node:http')
+    const netMod = await import('node:net')
+    let originHits = 0
+    const originSrv = httpMod.createServer((req, res) => {
+      originHits += 1
+      res.writeHead(200, { 'content-type': 'text/plain' })
+      res.end(`origin-ok:${req.url}`)
+    })
+    await new Promise((resolve) => originSrv.listen(0, '127.0.0.1', resolve))
+    const originPort = originSrv.address().port
+    const connectTargets = []
+    const proxySrv = httpMod.createServer((req, res) => { res.writeHead(404); res.end('unexpected plain-http proxy request') })
+    proxySrv.on('connect', (req, clientSocket, head) => {
+      connectTargets.push(req.url)
+      const [host, port] = req.url.split(':')
+      const upstream = netMod.connect(Number(port), host, () => {
+        clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
+        upstream.write(head)
+        upstream.pipe(clientSocket)
+        clientSocket.pipe(upstream)
+      })
+      upstream.on('error', () => { clientSocket.destroy() })
+      clientSocket.on('error', () => { upstream.destroy() })
+    })
+    await new Promise((resolve) => proxySrv.listen(0, '127.0.0.1', resolve))
+    const proxyPort = proxySrv.address().port
+    try {
+      const undiciMod = await import('undici')
+      const agent = new undiciMod.ProxyAgent(`http://127.0.0.1:${proxyPort}`)
+      const response = await globalThis.fetch(`http://127.0.0.1:${originPort}/fix006-witness`, { dispatcher: agent })
+      const body = await response.text()
+      check('real undici ProxyAgent works with builtin fetch (FIX-006)', response.status === 200 && body === `origin-ok:/fix006-witness` && originHits === 1 && connectTargets.length === 1 && connectTargets[0] === `127.0.0.1:${originPort}`)
+      await agent.close().catch(() => {})
+    } catch (error) {
+      check('real undici ProxyAgent works with builtin fetch (FIX-006)', false)
+      console.error('      proxy witness error:', error && error.message)
+    } finally {
+      proxySrv.close()
+      originSrv.close()
+    }
+  }
+
   const text = service.promptText()
   check('promptText lists agents', text.includes('vision') && text.includes('draw') && text.includes('route_agent') && !text.includes('off'))
   check('promptText pool meta', text.includes('OAuth 账号池:G池') && text.includes('2 个账号'))
