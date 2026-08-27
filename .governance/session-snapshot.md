@@ -10,7 +10,7 @@
 - **current_stage**: development (6/11)——v0.3.0/v0.3.1 机制面闭合（FIX-004 自证 + EVO-004 UI 面）
 - **current_gate**: G4 待评（CI 面缺——RISK-001；测试网：smoke 876-877 / stats 110 / routing 114 / parity 14）
 - **工作流版本**: 0.78.0（GOV-004 同步 2026-08-27：AGENTS.md bootstrap + plan-tracker + 本快照三处一致）
-- **tracker**: 27 任务 | 25 完成 + 1 关闭（DEV-001）+ REL-002 完成 | **EVO-005 设备码待实施（P1，v0.3.0 门禁）** | 0 阻塞
+- **tracker**: 27 任务 | 26 完成 + 1 关闭（DEV-001）| **全部终态（2026-08-27 深夜）——v0.3.0 仓内依赖清零** | 0 阻塞
 - **principles**: **P-v2**（P4 门控/P7 不可逆/P8 可观测/P9 宿主演进防御——本会话 P9 两次实证：
   FIX-004 自证落地 + FIX-006 宿主 dsh-llm rc 滚动漂移嫌疑）
 
@@ -49,4 +49,4 @@
 
 1. skill 加载 software-project-governance → resolve_entry.py --json（resolved_root_ok）
 2. 读本快照 + plan-tracker（FIX-006 待实施）
-3. **EVO-005 设备码派发**（v0.3.0 门禁依赖，DEC-025 D-2a）：Developer（任务书见 tracker EVO-005 行 + TRIAGE-EVO-005 + execution packet）→ Code Reviewer → 门控；完成后 M-1 候选打包（peerDeps rc.8 bump + 三件套 + CHANGELOG 双主题披露 + Design/Release P2 闭合清单见 EV-076）；**出口①真机首联**（用户在场，vision-2 带图）与 **OPS-001 安装验证**（设置→Agent 路由页）随时可做
+3. **下一步双通道**：①**出口①真机首联**（用户在场，vision-2 带图——FIX-006 已闭环随时可做；同窗 OPS-001 安装验证）②**M-1 候选打包**（MUST 清单见 plan-tracker 待办：EVO-005 F-1/F-2 修复 + REL-002 双审 P2 闭合 + peerDeps rc.8 + 三件套 + CHANGELOG 双主题）——两通道可并行（用户验证 vs 仓内打包）；M-4 transition 授权 = 用户（DEC-143）

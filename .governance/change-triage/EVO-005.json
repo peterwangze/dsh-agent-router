@@ -8,7 +8,10 @@
   "files": [
     "lib/oauth-credentials.js",
     "lib/service.js",
-    "tests/smoke.mjs"
+    "tests/smoke.mjs",
+    "lib/schemas.js",
+    "lib/client.js",
+    "tests/oauth-credentials.mjs"
   ],
   "reason": "M-0 D-2a 用户裁决 2026-08-27（ask_user_question）：设备码随 v0.3.0 补实现。依据：v0.2.1 CHANGELOG:29 公开预告「完整功能（协议分支/UI/设备码）将在 v0.3.0 发布」；双审源码核验 = 仅常量无 RPC（oauth-credentials.js:54-58 三处 deviceUrls 常量，零 oauthDevice* 实现）；1455 被占降级路径（EVO-002 出口③）。注：--version 实际目标 v0.3.0（版本校验混用 FIX-281⑨ 绕过惯例）；工作量未量化（Design R0 F-5 要求 triage 附估算——Developer RCA 时补：reference dsh-codex-connect 设备码端点形状 + 1455 冲突探测分支）。v0.3.0 发布门禁依赖本任务完成。冲突：lib/service.js/tests/smoke.mjs 无在途锁（FIX-006 已终态）。",
   "created_at": "2026-08-27",

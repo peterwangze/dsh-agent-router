@@ -1,15 +1,15 @@
 {
   "version": 1,
-  "generated_at": "2026-08-27T21:34:22",
+  "generated_at": "2026-08-27T22:06:34",
   "packets": {
-    "REL-002": {
-      "task_id": "REL-002",
+    "EVO-005": {
+      "task_id": "EVO-005",
       "priority": "P1",
-      "status": "进行中（TRIAGE-REL-002 机器入账 2026-08-27；Release Agent 派发——规划先行，发布决策待用户）",
-      "goal": "REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+      "status": "待实施（TRIAGE-EVO-005 机器入账 2026-08-27；v0.3.0 发布门禁依赖）",
+      "goal": "EVO-005 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告）",
       "product_success_contract": {
-        "user": "TO_BE_DEFINED: impacted persona for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
-        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+        "user": "TO_BE_DEFINED: impacted persona for EVO-005 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告）",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for EVO-005 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告）",
         "non_goals": [
           "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
           "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
@@ -25,7 +25,7 @@
         ]
       },
       "acceptance_contract": {
-        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for EVO-005 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告）",
         "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
         "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
         "last_run": {
@@ -38,42 +38,42 @@
       "quality_budget": {
         "dimensions": {
           "performance": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for EVO-005 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
             "exception": ""
           },
           "reliability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for EVO-005 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
             "exception": ""
           },
           "security": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for EVO-005 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
             "exception": ""
           },
           "accessibility": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for EVO-005 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
             "exception": ""
           },
           "ux": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for EVO-005 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
             "exception": ""
           },
           "maintainability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for EVO-005 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
@@ -82,9 +82,9 @@
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for REL-002 v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议",
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for EVO-005 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告）",
         "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
-        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (进行中（TRIAGE-REL-002 机器入账 2026-08-27；Release Agent 派发——规划先行，发布决策待用户）)",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (待实施（TRIAGE-EVO-005 机器入账 2026-08-27；v0.3.0 发布门禁依赖）)",
         "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
         "status": "TO_BE_DEFINED",
         "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
@@ -110,7 +110,7 @@
         "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "Only change files required by this task row: 进行中（TRIAGE-REL-002 机器入账 2026-08-27；Release Agent 派发——规划先行，发布决策待用户）",
+        "Only change files required by this task row: 待实施（TRIAGE-EVO-005 机器入账 2026-08-27；v0.3.0 发布门禁依赖）",
         "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
       ],
       "required_evidence": [
@@ -123,7 +123,7 @@
         "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
       ],
       "done_definition": [
-        "进行中（TRIAGE-REL-002 机器入账 2026-08-27；Release Agent 派发——规划先行，发布决策待用户）",
+        "待实施（TRIAGE-EVO-005 机器入账 2026-08-27；v0.3.0 发布门禁依赖）",
         "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
         "Commit and push are completed for this single task."
       ],

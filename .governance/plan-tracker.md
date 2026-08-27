@@ -17,7 +17,7 @@
 
 | 项目 | 当前阶段 | 总任务数 | 已完成 | 阻塞中 | 关键风险数 | 最近 Gate 结论 | 最近复盘日期 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| dsh-agent-router | development (6/11) | 27（GOV-004 修正后 + REL-002/EVO-005 入账） | 26 终态（25 已完成含 GOV-004/FIX-006/REL-002 + 1 关闭 DEV-001）+ EVO-005 待实施（P1，v0.3.0 门禁） | 0 | 1（RISK-001 活跃——主轨道 = DEV-002 + 演进路线） | G4 待评（v0.2.0/v0.2.1 已发布；CI 面仍缺——RISK-001；v0.3.x 演进定稿 DEC-020 + EVO-001 PoC 通过 C-1 解锁） | — |
+| dsh-agent-router | development (6/11) | 27（GOV-004 修正后 + REL-002/EVO-005 入账） | 27 终态（26 已完成含 EVO-005 + 1 关闭 DEV-001）——**全部任务终态；v0.3.0 仓内依赖清零**（仅剩出口①用户门禁 + M-1 打包） | 0 | 1（RISK-001 活跃——主轨道 = DEV-002 + 演进路线） | G4 待评（v0.2.0/v0.2.1 已发布；CI 面仍缺——RISK-001；v0.3.x 演进定稿 DEC-020 + EVO-001 PoC 通过 C-1 解锁） | — |
 
 ## 当前活跃事项
 
@@ -28,13 +28,14 @@
 | P0 | FIX-006 | OAuth 代理路径修复：undici 依赖缺失 + dispatcher 版本兼容（出口①真机首联阻断） | — | v0.3.0 | 已完成（R0 APPROVED_WITH_NOTES/0——4 commits + 门控全绿 + 隔离冷装；真机 vision-2 端到端 = 出口①用户验证项） |
 | — | OPS-001 | 当前目录插件安装到 DSH 宿主（离线 LocalPath：junction→开发树 + cordis.patch.yml 宿主行；用户指令 2026-08-23） | — | — | ✅ 已完成（EV-069；junction/patch/Node 解析三链验证；重启生效待用户） |
 | P1 | REL-002 | v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议 | EVO-001✅ EVO-002✅ FIX-006✅ DEC-020✅ | v0.3.0 | 已完成（规划段 + M-0 闭环）——version-plan 双审 APPROVED_WITH_NOTES×2/0 + DEC-025 四项裁决入账；EV-075/076 |
-| P1 | EVO-005 | 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告） | EVO-002（1455 惰性启动 + 降级链） | v0.3.0 | 待实施（TRIAGE-EVO-005 机器入账 2026-08-27；v0.3.0 发布门禁依赖） |
+| P1 | EVO-005 | 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告） | EVO-002（1455 惰性启动 + 降级链） | v0.3.0 | 已完成（R0 APPROVED_WITH_NOTES/0——协议事实 13 项对照一手源码全相符；**P1×2 绑定 M-1 MUST 闭合**：F-1 登出×兑换 TOCTOU + F-2 传输错误终态化；EV-077） |
 | — | 下一轮 | 无未完成任务——出口①真机首联/出口③设备码流/v0.3.0 发布时点（用户决策项）；插件仓申报已完成（FIX-281，2026-08-27） | — | v0.3.x | 待定 |
 
 ### 最近完成
 
 | 已完成任务 | 完成日期 | 摘要 |
 | --- | --- | --- |
+| EVO-005 | 2026-08-27 | 设备码授权流终态（3 commits 协议原语/RPC 装配/客户端分支；R0 APPROVED_WITH_NOTES/0 协议 13/13 溯源相符；P1×2 绑 M-1 MUST；EV-077） |
 | REL-002 | 2026-08-27 | v0.3.0 发布规划先行段（version-plan 八节 + 双审 APPROVED_WITH_NOTES×2/0 + M-0 四项裁决 DEC-025 入账；EV-075/076） |
 | FIX-006 | 2026-08-27 | OAuth 代理路径修复终态（undici ^7.18.0 同 major 对齐 + major 判别 fail-loud + rc.8 漂移目击对齐 + parity F2；R0 APPROVED_WITH_NOTES/0；门控全绿 + 隔离冷装；EV-072/073） |
 | GOV-004 | 2026-08-27 | 治理升级 0.76.0→0.78.0（/governance Scenario C：三处版本行 + 前序会话记录入仓 f8e9890 + FIX-006 过期锁清理 + 归档检测跳过；EV-071） |
@@ -53,7 +54,8 @@
 - **出口③设备码流排期**（用户决策项，P0）：EVO-002 出口③ 1455 被占降级路径排期
 - **v0.3.0 发布时点**（用户决策项）：出口条件①④机制面已闭环；真机首联后评估
 - **EVO-003 UI 批次**（待入账候选，P1）：出口②按天视图/⑤导出按钮 UI 面 + R2-F1/F2/F3 P2×3 + R1-F3 CSV 注入 + R8-F1/F2
-- **插件仓缺陷申报**（✅ 已申报 2026-08-27）：FIX-281 批次入账（插件仓 TRIAGE-FIX-281 机器记录 + tracker 行——8 项：Check 30 历史格式迁移 / Check 1 轻量表解析 / 活跃任务节边界 / Gate 节名括号 / review_record 覆盖风险 / EV-EVD 前缀 / tpa 完成态过滤 / 30c 溯源分类）；版本定位随 DEC-172 后续裁决（0.78.1 PATCH 修复面 / 0.79.0 MINOR 判定面）——修复在插件仓会话执行
+- **插件仓缺陷申报**（✅ 已申报 2026-08-27）：FIX-281 批次入账（插件仓 TRIAGE-FIX-281 机器记录 + tracker 行——9 项：Check 30 历史格式迁移 / Check 1 轻量表解析 / 活跃任务节边界 / Gate 节名括号 / review_record 覆盖风险 / EV-EVD 前缀 / tpa 完成态过滤 / 30c 溯源分类 / change-triage 版本校验混用）；版本定位随 DEC-172 后续裁决（0.78.1 PATCH 修复面 / 0.79.0 MINOR 判定面）——修复在插件仓会话执行
+- **M-1 打包 MUST 闭合清单**（v0.3.0 发布前）：①EVO-005 F-1（P1）登出×兑换 TOCTOU——persist 前 cancelled 复查 + 竞态判别测试；②EVO-005 F-2（P1）传输错误退避重试 + poll_transport_error reason 区分；③REL-002 ReleaseF-1（P2）三件套先例归属修正；④REL-002 DesignF-1/F-2/F-3（P2）GATE-5 挂点/出口①失败回路/pnpm-lock 时变披露；⑤DEC-025 落实面：peerDeps ^0.1.0-rc.8 bump + stats.persist 落盘 CHANGELOG 显著披露 + RISK-001 CHANGELOG 用户面披露；⑥三件套 + CHANGELOG 双主题 + version bump + tarball 隔离冷装
 
 ## Gate 状态跟踪
 
@@ -91,7 +93,7 @@
 | GOV-003 | development（治理快速通道） | 治理工作流升级 0.75.0→0.76.0（用户选定 2026-08-23） | bootstrap 段版本行更新 + plan-tracker/快照版本行 + 归档触发检测 + 过时锁检查 + 快照 28c 事实源修复（**工作流版本** 中文键对齐 FIX-105 正则） | **已完成**——三处版本行 0.76.0 一致（AGENTS.md @bootstrap-version + plan-tracker **工作流版本** + 快照 **工作流版本**）；轻量模板 diff 仅版本行（项目质量原则 P-v2 投影段为本项目自有，保留）；归档检测：跳过（已发布版本 0<2，与 GOV-002 先例一致）；锁检查：仅 FIX-006 在途锁（TTL 过期，保留至重派刷新，无终态残留锁）；EV-070 | P1 |
 | GOV-004 | development（治理快速通道） | 治理工作流升级 0.76.0→0.78.0（/governance Scenario C） | bootstrap 段版本行 + plan-tracker/快照版本行三处同步 + 归档触发检测 + 过期锁清理 | **已完成**——三处版本行 0.78.0 一致（AGENTS.md @bootstrap-version + plan-tracker **工作流版本** + 快照 **工作流版本**）；轻量模板 L195-255 diff 仅版本行（GOV-003 先例延续）；归档检测：跳过（已发布版本 0<2）；锁清理：FIX-006 三锁 TTL 过期（elapsed 381520s）释放——Check 26 3 blocking 消除，重派时重取；前序会话治理记录入仓（f8e9890）；EV-071 | P1 |
 | REL-002 | release（v0.3.0 规划先行——用户裁决 2026-08-27） | v0.3.0 发布规划：版本范围（C-1 全量 + W-5/S-3 绑定）/ 发布门禁（出口①用户端到端 MUST + 全量测试网基线 + tarball 离线验证）/ 里程碑 M-0~M-8（DEC-143 授权点）/ 风险与回滚（kill-switch 三层 + RISK-001 CI 面披露）/ No-overclaim 边界 | **规划段完成（待 M-0）**——TRIAGE-REL-002 机器入账（注：--version 实际目标 v0.3.0，版本校验混用 = FIX-281⑨ 活体第三现）；Release Agent 产出 version-plan-v0.3.0.md（零真实环境操作——R1 以零操作事实满足）→ Release Reviewer R0 APPROVED_WITH_NOTES/0（F-1 P2 三件套先例归属失准→M-1 必改 + F-2/F-3 P3 + F-4 机制观察：execution-packets REL-002 占位 = FIX-281⑨ 同源）+ Design Reviewer R0 APPROVED_WITH_NOTES/0（F-1 GATE-5 挂点断链/F-2 出口①失败回路/F-3 pnpm-lock 安装面时变 P2×3→随 M-1 闭环 + P3×5；蓝军 6 条；零编造抽查 13/17 全相符含 D-2 源码核验）；REVIEW-REL-002-R0 ×2 机器行（CLI 单文件碰撞限制——canonical wrapper 为 Release 侧，两份完整报告持久化 .governance/review-REL-002-{DESIGN,RELEASE}-R0.md，同 task/round 双审覆盖 = review_record.py:327/335 设计限制，FIX-281⑤ 同源观察）；M-0 裁决 D-1~D-4 呈报用户后进 M-1；**M-0 已裁决（DEC-025，2026-08-27）：D-1a 并入 / D-2a 设备码补实现（EVO-005 入账）/ D-3a 带披露发布 / D-4b peerDeps rc.8**——EV-076 | P1 |
-| EVO-005 | development（v0.3.0 范围补齐——DEC-025 D-2a） | 设备码授权流实现（device flow RPC）——兑现 v0.2.1 CHANGELOG:29 公开预告 | ①设备码流端到端：1455 被占时用户走设备码 URL 授权 → 轮询/兑换 token 落盘（owner-only）→ 账号卡可见；②判别测试（1455 空闲优先/被占降级设备码双路径断言）；③smoke 全量零回退；④Code Reviewer 独立审查；⑤CHANGELOG 兑现预告表述。现状事实（双审源码核验）：全 lib 仅 oauth-credentials.js:54-58 三处 deviceUrls 常量，零 oauthDevice* RPC；工作量未量化（Design F-5——Developer RCA 时补估算：reference dsh-codex-connect 设备码端点形状 + 1455 冲突探测分支） | 待实施（TRIAGE-EVO-005 机器入账 2026-08-27；v0.3.0 发布门禁依赖） | P1 |
+| EVO-005 | development（v0.3.0 范围补齐——DEC-025 D-2a） | 设备码授权流实现（device flow RPC）——兑现 v0.2.1 CHANGELOG:29 公开预告 | ①设备码流端到端：1455 被占时用户走设备码 URL 授权 → 轮询/兑换 token 落盘（owner-only）→ 账号卡可见；②判别测试（1455 空闲优先/被占降级设备码双路径断言）；③smoke 全量零回退；④Code Reviewer 独立审查；⑤CHANGELOG 兑现预告表述。现状事实（双审源码核验）：全 lib 仅 oauth-credentials.js:54-58 三处 deviceUrls 常量，零 oauthDevice* RPC；工作量未量化（Design F-5——Developer RCA 时补估算：reference dsh-codex-connect 设备码端点形状 + 1455 冲突探测分支） | **已完成（终态）**——3 commits（6355eb7 协议原语 H3-11 一手落地 + 单测 17 / 65e7e34 RPC 装配：降级触发 + pollDeviceLoop 状态机 + exchangeDeviceCode 兑换 + persistPresetLogin 提取（逐字等价核验成立）+ C-9 埋点 + W-5 登出联动 + smoke 集成块 / d49ed4c 客户端 device 分支）+ Code Reviewer R0 APPROVED_WITH_NOTES/0（REVIEW-EVO-005-R0 机器行；协议事实 13/13 相符 + kill-switch 门控纯粹性成立 + 4b 断言改写 = 授权语义落地 + 越域 3 处裁量正当（已补录 triage files）；P4 账目 908=873+19+16 静态核验吻合）；**M-1 MUST 闭合清单：F-1（P1 登出 TOCTOU——persist 前 cancelled 复查一行修）+ F-2（P1 传输错误退避重试 + reason 区分）+ F-1 竞态判别测试**；F-3（P2 设备码失败客户端可见性）→ catalog 状态面演进域；F-4~F8 P3 台账；EV-077 | P1 |
 | EVO-001 | development（v0.3.0 前置） | H2 运行时 PoC（C-1 实施第一步门禁，DEC-020） | 独立测试 profile 安装 yoke233/dsh-openai-codex-auth → 用户在场登录 ChatGPT → P1-P6 六步验证（凭据落盘 owner-only/用量面板/带图对话/token 过期自动刷新/失败形态样本/登出清理）；附加 V-EVO-2b（stream:false 直测）+ V-EVO-2c（originator 观测） | **已完成——PoC 六步全过**（EV-028）：P1 登录端到端（Plus 识别）/P2 用量 21%/P3 SSE 12 事件 POC-OK/P4 rotating+软轮换宽限窗/P5 失败样本×4/P6 全清+Codex CLI 隔离。**H2=可行，C-1 解锁（复杂度 L 确认）**。附加：V-EVO-2b 证伪（走 SSE 聚合）/V-EVO-2c 通过（自标识被接受）/代理发现（chatgpt.com 需代理 7890，auth 直连）/gpt-5.4 系支持 image 输入 | P0 |
 | EVO-002 | development（v0.3.0） | C-1 ChatGPT 订阅 OAuth 实施（ADR-005） | 按 evolution-roadmap-v1 §3 实施：schemas preset/credentialFile/oauthExperimental → lib/oauth-credentials.js → 1455 loopback → oauthBegin/Exchange preset 分支 → runOauthChat codex-responses 分支 → 账号卡 UI + ToS 确认 + 登出删除（含 W-5 删账号联动凭据清理）→ C-9 埋点；每步独立提交 + Code Reviewer 审查 + 534+ 断言零回退；~18 改造点/~1140 行 | **已完成（全任务终态）**——Step 1-7 全闭环（R1-R8 审查链；Step 6/7: R7/R8 APPROVED_WITH_NOTES/0，EV-048/050/058/059）；R7 遗留全清（F1-F5 + R6-F1）；W-5 三层防线；**DEC-022-D 用户裁决废弃（2026-08-23）**；遗留转 UI 批次：R8-F1 判据统一 + R8-F2 注释修正 + P3×6（R7-F9 枚举延续等）；**开放决策项：出口①真机首联（用户在场——1455+代理 7890+V-EVO-3+R6-F2/F5+dispatcher×原生 fetch 兼容 + R8-F6 可选 UX 观察）与出口③设备码流排期 = 用户决策项** | P0 |
 | EVO-003 | development（v0.3.1） | C-3 统计持久化实施（ADR-006，可与 EVO-002 并行开发） | lib/stats.js 分离（service.js 2965 基线净减 ~220）+ DSH_HOME 按天 JSONL + 异步批量 flush + 数据安全四件套单测 + 成本单价表 + CSV 导出 + W-4 persist 开关往返语义；~14 改造点/~1000 行 | **已完成（终态）**——Phase 1（1199c0b，R1 APPROVED_WITH_NOTES/0，EV-039/042，8 裁量点全 adopt）+ Phase 2（c2d01ea，R2 APPROVED_WITH_NOTES/0，EV-051/052，前置项 F1/F2/F4 闭合，4 裁量点全 adopt）；smoke 849/0 + stats 99/0 + routing-paths 95/95；遗留台账（转 UI 批次）：R2-F1/F2/F3 P2×3 + carried R1-F3 CSV 注入 + 出口②按天视图/⑤导出按钮 UI 面 + P3×4 | P1 |
