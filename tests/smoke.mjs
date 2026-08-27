@@ -951,6 +951,28 @@ console.log('RouterService:')
         check('proxy configured but undici unavailable errors clearly', !!proxyLoadErr6 && proxyLoadErr6.message.includes('undici') && proxyLoadErr6.message.includes('代理'))
         state6.oauthProxyUrl = ''
         svc6.oauthUndiciLoader = null
+        // G2. FIX-006：dispatcher 版本兼容判别——npm undici 与 Node 原生
+        // fetch（内置 undici，process.versions.undici）必须同 major：跨
+        // major handler 接口不匹配（v8 ProxyAgent 配内置 v7 fetch 实测
+        // invalid onRequestStart——晦涩下游失败）。装配点 fail-loud：探测
+        // 到 major 不一致 → 明确报错（旧代码无判别的必败形态：静默放行
+        // 到 fetch 才炸晦涩错误）。探测不可得（''）不阻断——依赖声明已
+        // 钉 major，探测是快线诊断而非可用性门。
+        let stubAgentCount6 = 0
+        svc6.oauthUndiciLoader = async () => ({ ProxyAgent: class { constructor(url) { stubAgentCount6 += 1; this.url = url } close() {} } })
+        svc6.oauthUndiciVersionProbe = async () => '8.10.0'
+        let mismatchErr6 = null
+        try { await svc6.loadOauthProxyDispatcher({ proxyUrl: 'http://127.0.0.1:7896', source: 'config' }) } catch (error) { mismatchErr6 = error }
+        const builtinUndici6 = String(process.versions?.undici ?? '')
+        check('dispatcher rejects mismatched undici major with guidance (FIX-006)', !!mismatchErr6 && mismatchErr6.message.includes('undici') && mismatchErr6.message.includes('8.10.0') && builtinUndici6 !== '' && mismatchErr6.message.includes(builtinUndici6) && mismatchErr6.message.includes('版本不匹配'))
+        svc6.oauthUndiciVersionProbe = async () => '7.29.0'
+        const alignedDispatcher6 = await svc6.loadOauthProxyDispatcher({ proxyUrl: 'http://127.0.0.1:7897', source: 'config' })
+        check('dispatcher accepts aligned undici major (FIX-006)', !!alignedDispatcher6 && alignedDispatcher6.url === 'http://127.0.0.1:7897' && stubAgentCount6 === 1)
+        svc6.oauthUndiciVersionProbe = async () => ''
+        const unprobedDispatcher6 = await svc6.loadOauthProxyDispatcher({ proxyUrl: 'http://127.0.0.1:7898', source: 'config' })
+        check('dispatcher tolerates unresolvable version probe (FIX-006)', !!unprobedDispatcher6 && unprobedDispatcher6.url === 'http://127.0.0.1:7898' && stubAgentCount6 === 2)
+        svc6.oauthUndiciLoader = null
+        svc6.oauthUndiciVersionProbe = null
         // H. C-9 埋点：oauthEvents 记录登录旅程（begin fail/ok、login ok、
         //    logout），事件负载零 token 值（P7 红线）。
         const kinds6 = new Set(svc6.oauthEvents.map((event) => event.kind))
