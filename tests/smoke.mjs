@@ -2015,14 +2015,21 @@ console.log('twin wrapper mechanism (real LlmRuntime):')
   check('image turn via twin completes', assembler.finish.kind === 'stop' && twinText === 'delegated-ok')
   check('delegate saw rewritten text, not raw image', delegateCalls.length === 1 && delegateCalls[0].messages[0].content.some((block) => block.type === 'text' && block.text.includes('调用视觉工具查看')) && delegateCalls[0].messages[0].content.every((block) => block.type !== 'image'))
   // 4) 负向见证：裸图片块直接进原适配器必然失败（twin 是唯一放行路径）。
-  //  rc.2 语义演进（FIX-001 适配）：宿主 adapterStream 在文本模型边界直接投影
-  //  剥离图片块（projectImagesForTextModel）——裸图永不达文本适配器。负向
-  //  见证的新形态：宿主边界强制兜底（不依赖适配器自拒），投影后正常完成。
+  //  FIX-006 宿主漂移实证对齐：EVO-004 门控时的 rc 语义（FIX-001 适配
+  //  projectImagesForTextModel——宿主 adapterStream 在文本模型边界投影剥
+  //  离图片块、投影后正常完成 stop）已随宿主滚动漂移消失——本仓 peerDeps
+  //  声明 ^0.1.0-rc.6，pnpm-lock 实际解析 0.1.0-rc.8（rc 滚动漂移）；rc.8
+  //  的 adapterStream 无边界投影（forAdapter 仅清 replayState），目录声明
+  //  明确 advisory "never changes routing or request validation"。负向见证
+  //  回归本源形态：裸图直达文本适配器 → 适配器自拒（UNSUPPORTED_CONTENT）
+  //  → 宿主 adapterFailureChunk 终态 error + 委托可见裸图块（无投影实证）
+  //  ——twin 仍是图片轮唯一完成路径。
   const rawAssembler = new BlockAssembler()
   for await (const chunk of llm.stream({ provider: 'text-provider', model: 'brain-1', system: undefined, messages: [imageMessage] })) {
     rawAssembler.push(chunk)
   }
-  check('raw route projects image blocks at host boundary (negative witness)', rawAssembler.finish.kind === 'stop' && delegateCalls[delegateCalls.length - 1].messages[0].content.every((block) => block.type !== 'image'))
+  const rawDelegate = delegateCalls[delegateCalls.length - 1]
+  check('raw route fails loudly on image at adapter boundary (negative witness, rc.8)', rawAssembler.finish.kind === 'error' && !!rawDelegate && rawDelegate.messages[0].content.some((block) => block.type === 'image'))
   // 5) 文本轮原样委托（改写零开销、模型身份不变）。
   const textMessage = createUserMessage({ content: [{ type: 'text', text: '普通文本轮' }], source: { kind: 'user' } })
   const textAssembler = new BlockAssembler()
