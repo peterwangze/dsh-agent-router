@@ -1028,6 +1028,9 @@ console.log('RouterService:')
     const realFetch5 = globalThis.fetch
     let usercodeMode = 'ok'
     let pollScript = []
+    // F-1 竞态桩开关（REL-003）：兑换 fetch 进行中触发 oauthLogout——复现
+    // poll complete 与登出交错的 TOCTOU 窗口（cancelled 于落盘前置位）。
+    let exchangeLogoutRace = false
     const deviceFetches = []
     globalThis.fetch = async (url, options) => {
       deviceFetches.push({ url: String(url), init: options })
@@ -1045,6 +1048,13 @@ console.log('RouterService:')
         return { ok: true, json: async () => ({ authorization_code: 'AC-E5-1', code_verifier: 'CV-E5-1' }) }
       }
       if (String(url) === CHATGPT_PRESET.tokenUrl) {
+        // F-1 竞态桩（REL-003）：兑换请求进行中执行登出——logout 完整落定
+        //（cancelled=true + 凭据删除 + preset_logout 事件）后才放行兑换响应，
+        // 确定性复现"poll complete 后、persistPresetLogin 前"的取消交错。
+        if (exchangeLogoutRace) {
+          exchangeLogoutRace = false
+          await deviceService.oauthLogout({ accountId: 'cgpt' })
+        }
         return { ok: true, json: async () => ({ access_token: deviceAccess, refresh_token: 'REFRESH-E5-1', expires_in: 3600 }) }
       }
       return { ok: false, status: 404, text: async () => 'not found' }
@@ -1105,6 +1115,22 @@ console.log('RouterService:')
       const pollCountAfterCancel = deviceFetches.filter((call) => call.url === CHATGPT_PRESET.deviceUrls.token).length
       check('device polling cancelled by logout stops further polls', clo.ok === true && cbegin.ok === true && csession.status === 'cancelled' && pollCountAfterCancel === pollCountAtCancel)
       check('cancelled session leaves no credential file (logout deleted)', !existsSync(deviceCredFile))
+      // 5b. F-1 竞态判别（REL-003 / R0 P1）：poll complete 与 oauthLogout
+      //     交错——兑换 fetch 进行中登出（cancelled 在 persistPresetLogin 前
+      //     置位）→ 旧代码 TOCTOU 落盘"凭据复活"；修复后 exchangeDeviceCode
+      //     落盘前复查 cancelled：不写盘 + preset_device_cancelled 事件
+      //     （兑现 oauthLogout"登出语义下不再把新兑换的凭据写回"注释声明）。
+      pollScript = [{ kind: 'ok' }]
+      exchangeLogoutRace = true
+      const raceBegin = await deviceService.oauthBegin({ accountId: 'cgpt' })
+      const raceSession = [...deviceService.oauthDevicePending.values()][0]
+      await raceSession.done
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      check('device race (logout during exchange) does not resurrect credentials', raceBegin.ok === true && raceSession.status === 'cancelled' && !existsSync(deviceCredFile))
+      const raceCancelledIdx = deviceService.oauthEvents.findIndex((event) => event.kind === 'preset_device_cancelled')
+      const raceLogoutIdx = deviceService.oauthEvents.findIndex((event) => event.kind === 'preset_logout')
+      check('device race records cancelled event right after logout in journey order', raceCancelledIdx === 0 && raceLogoutIdx === 1)
+      check('device race records no login success after logout', !deviceService.oauthEvents.slice(0, raceLogoutIdx).some((event) => event.kind === 'preset_device_login_ok' || event.kind === 'preset_login_ok'))
       // 6. 降级链第三兜底：usercode 端点 404（服务端未启用）→ ok:false +
       //    手动粘贴指引（E4 链完整闭合）。
       usercodeMode = '404'
