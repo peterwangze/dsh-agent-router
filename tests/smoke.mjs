@@ -1045,6 +1045,7 @@ console.log('RouterService:')
         if (step.kind === 'pending-code') return { ok: false, status: 400, text: async () => JSON.stringify({ error: 'deviceauth_authorization_pending' }) }
         if (step.kind === 'slow_down') return { ok: false, status: 400, text: async () => JSON.stringify({ error: 'slow_down' }) }
         if (step.kind === 'denied') return { ok: false, status: 400, text: async () => JSON.stringify({ error: 'access_denied' }) }
+        if (step.kind === 'transport') throw new Error('ECONNRESET')
         return { ok: true, json: async () => ({ authorization_code: 'AC-E5-1', code_verifier: 'CV-E5-1' }) }
       }
       if (String(url) === CHATGPT_PRESET.tokenUrl) {
@@ -1104,6 +1105,17 @@ console.log('RouterService:')
       for (let i = 0; i < 100 && deviceService.oauthDevicePending.size > 0; i++) await new Promise((resolve) => setTimeout(resolve, 2))
       check('device flow rejection reaches failed terminal state', rbegin.ok === true && deviceService.oauthDevicePending.size === 0 && readFileSync(deviceCredFile, 'utf8') === docBeforeTimeout)
       check('device rejection recorded with poll_rejected reason', deviceService.oauthEvents.some((event) => event.kind === 'preset_device_login_fail' && event.reason === 'poll_rejected'))
+      // 4b. F-2 判别（REL-003 / R0 P1）：传输类失败（网络错误）非终态——
+      //     退避（实例级注入提速）后重试至成功落盘；对照 4. 真协议拒绝
+      //     （access_denied）保持终态 poll_rejected 不重试。
+      deviceService.oauthDeviceTransportRetryAddMs = 5
+      rmSync(deviceCredFile, { force: true })
+      pollScript = [{ kind: 'transport' }, { kind: 'transport' }, { kind: 'ok' }]
+      const xbegin = await deviceService.oauthBegin({ accountId: 'cgpt' })
+      for (let i = 0; i < 100 && deviceService.oauthDevicePending.size > 0; i++) await new Promise((resolve) => setTimeout(resolve, 2))
+      check('device transport errors back off and retry to success (not terminal)', xbegin.ok === true && deviceService.oauthDevicePending.size === 0 && existsSync(deviceCredFile))
+      check('device transport retry records poll_transport_error then login_ok', deviceService.oauthEvents[0].kind === 'preset_device_login_ok' && deviceService.oauthEvents.some((event) => event.kind === 'preset_device_login_fail' && event.reason === 'poll_transport_error'))
+      check('device transport retry keeps exchange on device redirect uri', (() => { const calls = deviceFetches.filter((call) => call.url === CHATGPT_PRESET.tokenUrl); const last = calls[calls.length - 1]; const body = new URLSearchParams(String(last?.init?.body ?? '')); return body.get('redirect_uri') === CHATGPT_PRESET.deviceUrls.exchangeRedirectUri && body.get('code') === 'AC-E5-1' })())
       // 5. 登出取消（W-5 联动）：轮询中的会话被 logout 打断，不再轮询/落盘。
       pollScript = []
       const cbegin = await deviceService.oauthBegin({ accountId: 'cgpt' })

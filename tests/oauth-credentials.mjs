@@ -418,6 +418,14 @@ export async function runOauthCredentialTests(check) {
       const { result } = await pollWith(async () => { throw new Error('ECONNRESET') })
       check('device poll network error maps to failed (not throw)', result.status === 'failed' && result.message.includes('ECONNRESET'))
     }
+    {
+      const { result } = await pollWith(async () => { throw new Error('ECONNRESET') })
+      check('device poll network error carries transport retry flag (F-2)', result.status === 'failed' && result.transport === true)
+    }
+    {
+      const { result } = await pollWith(() => ({ ok: false, status: 400, text: async () => JSON.stringify({ error: 'access_denied' }) }))
+      check('device poll protocol rejection has no transport flag (F-2)', result.status === 'failed' && result.transport !== true)
+    }
 
     // ── 11. resolveCredentialPath（F-01：credentialFile 回退默认路径）────────
     console.log('resolveCredentialPath (F-01):')
