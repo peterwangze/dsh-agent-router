@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "task_id": "EVO-004",
+  "title": "C-3 统计 UI 面（出口②按天视图/⑤导出按钮）+ P2 遗留五修（R1-F3/R2-F1/F2/F3/R8-F1/F2）",
+  "priority": "P1",
+  "target_version": "未规划版本",
+  "depends_on": [],
+  "files": [
+    "lib/client.js",
+    "lib/stats.js",
+    "lib/service.js",
+    "tests/client-render.mjs",
+    "tests/stats.mjs",
+    "tests/smoke.mjs"
+  ],
+  "reason": "v0.3.1 配套收尾：EVO-003 R2 遗留 P2×3（setPersist 竞态/false 期 flush 契约洞/吞错零观测 P8 同型）+ carried R1-F3 CSV 公式注入 + EVO-002 R8-F1/F2（判据不对称/缓存生命周期）+ 出口②⑤ UI 面（用户可见价值，C-3 出口条件需要）——均为明确遗留无新依赖；FIX-005/FIX-004 锁已释放无冲突；注：版本校验以工作流版本为 current 系 B 类缺陷，实际目标版本 = 路线图 v0.3.1",
+  "created_at": "2026-08-23",
+  "tool": "change-triage",
+  "tool_version": "0.73.0",
+  "analysis": {
+    "dependency": {
+      "unblocked": [
+        "FIX-004",
+        "EVO-004"
+      ],
+      "blocked": [],
+      "blocked_by": [],
+      "unknown_deps": [],
+      "cycles": [],
+      "cycle_warning": false,
+      "new_task_cycle": false
+    },
+    "priority_context": {
+      "proposed": "P1",
+      "in_flight": {
+        "P0": 0,
+        "P1": 2,
+        "P2": 0
+      },
+      "version_chain": []
+    },
+    "conflicts": [
+      {
+        "task_id": "FIX-004",
+        "files": [
+          "lib/index.js",
+          "lib/service.js"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      }
+    ],
+    "version": {
+      "target": "未规划版本",
+      "current": "0.75.0",
+      "planned_next": null,
+      "issues": []
+    }
+  },
+  "snapshot": {
+    "tool": "task-priority-analysis",
+    "module_version": "0.71.0",
+    "report_json": {
+      "total": 2,
+      "completed": [],
+      "blocked": [],
+      "unblocked": [
+        "FIX-004",
+        "EVO-004"
+      ],
+      "recommended_next": [
+        "EVO-004",
+        "FIX-004"
+      ],
+      "non_executable": [],
+      "cycles": [],
+      "cycle_warning": false
+    },
+    "report_text": "# Task Priority Analysis\n\nTotal: **2** tasks — 0 completed, 2 unblocked, 0 blocked, 0 non-executable.\n\n## Recommended next\n\n**Top pick: `EVO-004` [P1]**\n\n- `EVO-004` [P1] v=v0.3.1 status=待实施 deps=[—]\n- `FIX-004` [P1] v=v0.3.x status=已完成 deps=[—]\n\n## Unblocked (ready to work)\n\n- `FIX-004` [P1] v=v0.3.x status=已完成 deps=[—]\n- `EVO-004` [P1] v=v0.3.1 status=待实施 deps=[—]\n\n## Excluded (non-executable status)\n\n_None._\n\n## Blocked\n\n_None._\n\n## Completed\n\n_None._\n"
+  }
+}

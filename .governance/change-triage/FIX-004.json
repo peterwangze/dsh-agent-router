@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "task_id": "FIX-004",
+  "title": "模型能力判定缺陷根治：能力自证+预检可观测+热载替代评估+宿主缺陷申报",
+  "priority": "P1",
+  "target_version": "未规划版本",
+  "depends_on": [],
+  "files": [
+    "lib/service.js",
+    "lib/index.js"
+  ],
+  "reason": "P9/P8 原则落地：宿主 resolveModelInfo 判定缺失时插件无能力自证路径且静默拒绝（R2-F3 同型）——FIX-003 真机验证已闭环，无即时 P0 故障；RISK-003 域（宿主静默重装）缓解面；主轨道 DEV-002 关闭条件①达成为准 P1",
+  "created_at": "2026-08-23",
+  "tool": "change-triage",
+  "tool_version": "0.73.0",
+  "analysis": {
+    "dependency": {
+      "unblocked": [
+        "FIX-004"
+      ],
+      "blocked": [],
+      "blocked_by": [],
+      "unknown_deps": [],
+      "cycles": [],
+      "cycle_warning": false,
+      "new_task_cycle": false
+    },
+    "priority_context": {
+      "proposed": "P1",
+      "in_flight": {
+        "P0": 0,
+        "P1": 1,
+        "P2": 0
+      },
+      "version_chain": []
+    },
+    "conflicts": [],
+    "version": {
+      "target": "未规划版本",
+      "current": "0.75.0",
+      "planned_next": null,
+      "issues": []
+    }
+  },
+  "snapshot": {
+    "tool": "task-priority-analysis",
+    "module_version": "0.71.0",
+    "report_json": {
+      "total": 1,
+      "completed": [],
+      "blocked": [],
+      "unblocked": [
+        "FIX-004"
+      ],
+      "recommended_next": [
+        "FIX-004"
+      ],
+      "non_executable": [],
+      "cycles": [],
+      "cycle_warning": false
+    },
+    "report_text": "# Task Priority Analysis\n\nTotal: **1** tasks — 0 completed, 1 unblocked, 0 blocked, 0 non-executable.\n\n## Recommended next\n\n**Top pick: `FIX-004` [P1]**\n\n- `FIX-004` [P1] v=v0.3.x status=待派发 deps=[—]\n\n## Unblocked (ready to work)\n\n- `FIX-004` [P1] v=v0.3.x status=待派发 deps=[—]\n\n## Excluded (non-executable status)\n\n_None._\n\n## Blocked\n\n_None._\n\n## Completed\n\n_None._\n"
+  }
+}

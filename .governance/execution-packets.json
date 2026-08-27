@@ -1,297 +1,140 @@
 {
   "version": 1,
-  "generated_at": "2026-08-21T19:01:32",
+  "generated_at": "2026-08-23T10:01:04",
   "packets": {
-    "MIG-001": {
-      "task_id": "MIG-001",
+    "FIX-006": {
+      "task_id": "FIX-006",
       "priority": "P0",
-      "status": "已完成（2026-08-20）——Step 0-10 全 13 单元闭环；R1-R14 审查链全通过（含 R10→R11、R12→R13 两次返工复审）；EV-011~023；D-1 门判定：满足×2 + 部分满足×2 + 待实测×1（观测脚本 tests/metrics.mjs，31 项自动化观测）。遗留转后续域：R14-F-01 测试卫生 + P3 记录项 + D-1 待实测项 + R4 F-1/F-2（DEV-002/真实使用评估）。本包为终态记录，不再驱动执行",
-      "goal": "[终态] v3 迁移全部完成——本包仅作历史记录保留",
-      "next_commands": [
-        "node tests/smoke.mjs",
-        "node tests/metrics.mjs"
-      ],
-      "source": "MIG-001 完结记录（EV-023）"
-    },
-    "EVO-002": {
-      "task_id": "EVO-002",
-      "priority": "P0",
-      "status": "Step 1-6 实现闭环（Step 6: 5f5a38b/522025e/f9d8bf0，733/0，EV-048；R7 APPROVED_WITH_NOTES/0，EV-050/054 链）。**Step 7 收尾批次派发中（2026-08-23）**：R7-F1 W-5 旁路（通用 OAuth 区渲染 preset 账号双卡 + 通用删除仅 unset→活 token 残留+池悬挂引用——deleteOauthAccount 对 preset 分流至 W-5 联动或通用区过滤）+ R7-F2 删除成功文案（复用 oauthTokenBack 语义错误——新增 presetDeleted 键）+ R7-F4 deletePresetAccount 忽略 oauthLogout ok:false（失败提示/重试入口）+ R7-F5 测试隔离代理 env（HTTPS_PROXY 机器 smoke 直连断言+C-9-1 必败）+ R7-F3 ProxyAgent 按 proxyUrl 缓存 + R6-F1 kill-switch 冷凭据断言（Step 3 遗留）+ DEC-022-D 版本指纹 + R7-F9 执行包文件枚举刷新（rpc.js+client-render 列——Coordinator 治理记录，不属 Developer）。开放决策项：出口①真机首联（用户在场）+ 出口③设备码流排期",
-      "goal": "[unchanged] C-1 ChatGPT 订阅 OAuth 接入 v0.3.0 全量交付：preset 账号 + 独立凭据文件 + 1455 loopback + codex-responses 协议分支（SSE 聚合，已交付）+ Q2 per-protocol 能力接口 + 合规三层 kill-switch + C-9 埋点启动",
+      "status": "待实施（入账 2026-08-23，真机实证 P0）",
+      "goal": "FIX-006 OAuth 代理路径修复：undici 依赖缺失 + dispatcher 版本兼容 + 依赖环境对齐（出口①真机首联阻断，v0.3.0 发布阻塞）",
       "product_success_contract": {
-        "user": "dsh-agent-router 插件用户（DSH 主 agent 持有者，持有 ChatGPT Plus/Pro 订阅）",
-        "job_to_be_done": "在设置页一键登录 ChatGPT 订阅账号（无需自建 OAuth Client/手抄 token），让专业 agent 用订阅额度完成 chat 任务调用",
+        "user": "使用 ChatGPT 订阅 OAuth 账号（oauthAccount preset=chatgpt-codex）通过代理访问 chatgpt.com 的 DSH 用户——出口①真机首联场景；以及所有依赖 tarball 开箱即用的发布环境用户",
+        "job_to_be_done": "配置代理（oauthProxyUrl）后，runCodexResponsesChat 经 chatgpt.com/backend-api/codex/responses 的调用真实可用（SSE 返回而非 fetch failed）；发布环境中 undici 依赖随包安装（发布后开箱即用而非运行时报错）；依赖树可复现（pnpm/npm install 一次成功，smoke 全绿无宿主滚动漂移）",
         "non_goals": [
-          "不做 C-2 Claude OAuth（DEC-019 Q1 观察项，ChatGPT 落地后按风控反馈再议）",
-          "不注册 llm 路由、不进共享模型列表（schemas.js OAuth 不变量）",
-          "不伪装官方 CLI 的 UA/originator（诚实自标识，V-EVO-2c 已证可行）",
-          "不改变既有通用 OAuth 账号（粘贴 token/自建 Client）行为——P3 零回归",
-          "不做 image/speech 模态实施（Q2 仅 per-protocol 能力接口层预留，V-EVO-3 待验证）"
+          "不改变 codex-responses 协议面/SSE 解析逻辑（runCodexResponsesChat 既有实现不动——只修依赖声明与 dispatcher 装配）",
+          "不引入全局代理强制（oauthProxyUrl 未配置时行为不变——显式配置才启用代理，保持 DEC-021 缺省直连语义）",
+          "不泛化到其它协议/账号通路（openai-completions 等既有路径不动）"
         ],
         "success_metrics": [
-          "用户可见场景：设置页 preset 入口一键登录→凭据 owner-only 落盘→route_agent chat 调用返回文本（v0.3.0 出口条件①）",
-          "可运行验证：node tests/smoke.mjs 既有 534+ 断言零回退 + 新增 oauth 单测全绿（出口条件⑤）",
-          "token 过期自动刷新，重启后调用成功（出口条件②，PoC P4 rotating+软轮换机制已证）"
+          "用户可见场景：oauthProxyUrl 配置后 OAuth 带图/文本调用成功返回（不再 fetch failed）——真机端到端（401 级可达→SSE 正常返回）",
+          "可运行验证：node tests/smoke.mjs 新增判别断言（undici 缺失→明确报错形态 / dispatcher 版本兼容→真装 ProxyAgent 请求可用），全套零回退（含 admission raw-route 负向目击行——依赖对齐后恢复绿）"
         ],
-        "competitive_baseline": "dsh-codex / yoke233 dsh-openai-codex-auth 已验证的 ChatGPT 订阅登录体验（H3-16 三插件 DSH 生态先例）",
+        "competitive_baseline": "dsh-codex-connect 生态基准（transport.ts 401/403→reauthRequired fail-loud + 安全文本）——代理可达性与错误形态不低于生态；Node 内置 fetch 原生行为直连（401/405 实证）即为网络层基线",
         "done_definition": [
-          "v0.3.0 出口条件①-⑥（roadmap §2.1）逐项满足并记录证据",
-          "每步独立 commit + Code Reviewer 审查链 APPROVED（review-EVO-002-R*.md 留档）",
-          "产品成功证据（端到端一键登录实测）入 evidence-log 且含结构化事实 JSON"
+          "package.json 声明 undici 依赖（版本与 Node 内置 fetch 兼容——对齐策略由 RCA 定：7.x 匹配或兼容层），锁文件一并纳入",
+          "dispatcher 装配经实证可用（真机环境：ProxyAgent 或等价方案 fetch 通过——实验区分 invalid onRequestStart method 不复现）",
+          "依赖环境对齐：pnpm/npm 一次安装成功 + smoke 全绿（admission raw route 负向目击恢复 + 全套零回退）——宿主 rc 版本滚动导致的漂移有判定",
+          "判别测试覆盖：未声明依赖面（发布自检）+ 版本兼容面（测试桩）+ 全套零回退",
+          "Code Reviewer 独立审查 APPROVED/APPROVED_WITH_NOTES(0)"
         ]
       },
       "acceptance_contract": {
-        "scenario": "用户开启 oauthExperimental → 设置页出现 ChatGPT 预设入口 → 浏览器授权 → 1455 回调 → 凭据文件 owner-only 落盘 → 绑定该账号的 agent chat 调用返回文本",
-        "command": "node tests/smoke.mjs；node tests/oauth-credentials.mjs（新增）；node tests/metrics.mjs",
-        "expected_output": "全部测试断言通过（0 fail），既有 534+ 断言计数不减；凭据读/写/刷新/删除/自愈单测覆盖",
+        "scenario": "本机安装恢复后：①pnpm add undici（对齐版本）→ node tests/smoke.mjs 全绿；②真机：oauthProxyUrl 保持 http://127.0.0.1:7890 → vision-2 带图调用成功返回（SSE 事件链完整）；③发布面：npm pack 的 tarball 解包后 undici 在依赖清单且可安装",
+        "command": "node tests/smoke.mjs && node tests/stats.mjs && node tests/routing-paths.mjs",
+        "expected_output": "三个命令全部 exit 0（smoke 含新增判别断言：undici 缺失报错形态 + dispatcher 兼容；admission raw route 负向目击绿）；真机 vision-2 调用返回识别结果（非 fetch failed/invalid onRequestStart method）",
         "last_run": {
-          "status": "planned",
+          "status": "not_run_yet",
           "exit_code": null,
-          "summary": "Step 1 起步——基线 534 断言在 v0.2.0 main 全绿（EV-023）"
+          "summary": "任务待实施：环境状态为 2026-08-23 出口①实测失败现场（undici 缺失→v8 不匹配 + smoke admission FAIL + pnpm 重建后 876/877）；修复后待复验"
         },
-        "demo_evidence": "端到端登录实测留痕（pwsh 输出/凭据文件元数据）+ 审查报告 .governance/review-EVO-002-R*.md"
+        "demo_evidence": "planned——smoke 输出 + 真机 vision-2 调用成功截图/响应 + tarball 依赖清单"
       },
       "quality_budget": {
         "dimensions": {
-          "performance": {"threshold": "授权流与调用路径无同步磁盘 IO 阻塞（刷新在文件锁内异步进行）", "validation": "node tests/smoke.mjs 含时延相关断言", "status": "planned", "evidence": "tests/smoke.mjs 输出", "exception": ""},
-          "reliability": {"threshold": "凭据原子写（temp+rename）崩溃不产生半写文档；刷新失败明确终态错误码", "validation": "node tests/oauth-credentials.mjs 原子写/自愈用例", "status": "planned", "evidence": "tests/oauth-credentials.mjs 输出", "exception": ""},
-          "security": {"threshold": "凭据文件 owner-only；诊断信息永不回传 token 值；凭据文档未知字段拒绝", "validation": "node tests/oauth-credentials.mjs 权限与脱敏断言", "status": "planned", "evidence": "tests/oauth-credentials.mjs 输出", "exception": ""},
-          "accessibility": {"threshold": "预设入口/ToS 确认弹窗/错误文案中文可读、人话可理解", "validation": "UI 文案逐项检查（Code Reviewer checklist 项）", "status": "planned", "evidence": "review-EVO-002-R*.md", "exception": "CLI 插件无 WCAG 面"},
-          "ux": {"threshold": "一键登录用户操作 ≤3 次（对比自建 Client 路径 10+ 步）", "validation": "端到端登录路径测试与操作计数", "status": "planned", "evidence": "evidence-log EVO-002 条目", "exception": ""},
-          "maintainability": {"threshold": "新模块单职责（≤3 句）；协议分支与既有三协议分支同构；service.js 无关膨胀", "validation": "Code Reviewer 设计一致性检查项", "status": "planned", "evidence": "review-EVO-002-R*.md", "exception": ""}
+          "performance": {
+            "threshold": "代理路径与直连同等开销（无额外请求/重试）；dispatcher 缓存复用既有 R8-F2 有界缓存",
+            "validation": "node tests/smoke.mjs（判别断言）+ 真机调用观测",
+            "status": "NOT_RUN_YET",
+            "evidence": "planned: smoke 输出 + 调用观测",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "undici 缺失/版本不匹配时 fail-loud（明确诊断——既有设计保持），配置正确时 100% 可走通（SSE 完整）；依赖安装一次成功（无 children null/版本漂移）",
+            "validation": "node tests/smoke.mjs（判别断言）+ 真机端到端 + pnpm install 冷装演练",
+            "status": "NOT_RUN_YET",
+            "evidence": "planned: smoke + 真机记录 + 冷装输出",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "代理配置仅经显式 oauthProxyUrl（无新增凭据面）；错误文本不泄漏 token（既有 SafeToolError 模式）",
+            "validation": "node tests/smoke.mjs（错误形态断言）+ code review",
+            "status": "NOT_RUN_YET",
+            "evidence": "planned: review 专项结论",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "无用户界面面（纯运行时依赖/网络配置），以 NOT_RUN_YET 记录并由评审确认 EXEMPT",
+            "validation": "node tests/smoke.mjs（Code Reviewer 确认 EXEMPT）",
+            "status": "NOT_RUN_YET",
+            "evidence": "planned: Code Reviewer 确认",
+            "exception": "纯后端链路修复"
+          },
+          "ux": {
+            "threshold": "用户配置 oauthProxyUrl 后调用即通（无额外重启/无模糊报错）",
+            "validation": "真机验证（vision-2 调用成功）+ node tests/smoke.mjs 错误形态断言",
+            "status": "NOT_RUN_YET",
+            "evidence": "planned: 真机记录",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "依赖声明集中（package.json 一处）+ dispatcher 装配单点（既有 loadOauthProxyDispatcher）；无重复代理逻辑；版本选择有注释依据",
+            "validation": "node tests/smoke.mjs（单点断言）+ code review",
+            "status": "NOT_RUN_YET",
+            "evidence": "planned: review 结论",
+            "exception": ""
+          }
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "Step 6 账号卡：oauthExperimental 开启后设置页出现「ChatGPT（实验）」预设入口与登录/登出按钮（Step 1-5 为其地基，逐步交付）",
-        "demo_path": "设置页 UI 实测 + node tests/smoke.mjs 全绿",
-        "scope_guard": "仅 lib/schemas.js、lib/oauth-credentials.js（新增）、lib/index.js、lib/service.js、lib/client.js、tests/smoke.mjs、tests/oauth-credentials.mjs（新增）、tests/metrics.mjs（C-9 埋点）内 EVO-002 声明的改动；不改 M1-M5 模块与既有通用账号行为",
-        "rollback_plan": "用户层 oauthExperimental 关闭（入口隐藏+通路报错）；代码层每步独立 commit 可逐个 revert（ADR-005 可逆·中风险）",
-        "status": "planned",
-        "evidence": "evidence-log EVO-002 条目 + review-EVO-002-R*.md 链"
+        "user_visible_slice": "用户配置 oauthProxyUrl 后，ChatGPT OAuth 账号调用真实可用——用户可见：vision-2 带图消息返回识别结果（无 fetch failed）",
+        "demo_path": "node tests/smoke.mjs + 真机 vision-2 带图调用成功（截图/响应记录）",
+        "scope_guard": "仅 package.json（依赖声明+锁）、lib/service.js（dispatcher 装配点 L2734-2760/L3434-3460 域）、tests/smoke.mjs（判别断言）+ 可能 lock 文件；不触碰 runCodexResponsesChat 的 SSE 解析/协议面",
+        "rollback_plan": "git revert 本任务提交；代理未配置时行为不变（缺省直连——DEC-021 语义）；undici 声明回退即可（无行为退化）",
+        "status": "NOT_RUN_YET",
+        "evidence": "planned: smoke 输出 + 真机成功记录"
       },
       "interruption_policy": {
         "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
         "critical_triggers": [
-          "实现与 ADR-005/roadmap §3 设计或 H3/H2 PoC 事实冲突时停下上报（如协议形状不符）",
-          "需要引入新依赖或改变既有 OAuth 通用账号行为时上报",
-          "发布决策/风险接受/外部依赖变更由 Coordinator 转用户裁决"
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
         ],
         "auto_execute": [
-          "分步实现/测试/commit（每步一个独立 commit，含 EVO-002 前缀）",
-          "既有断言回归验证与治理记录更新（Coordinator 侧）"
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
         ],
         "assumption_record": {
-          "assumption": "Step 边界按 roadmap §3.3/§3.4 顺序切分：schemas → oauth-credentials → 1455 loopback → service 授权流 → 协议分支 → client UI → C-9 埋点",
-          "basis": "plan-tracker EVO-002 任务行 + session-snapshot 下次会话优先级 1",
-          "reversibility": "步骤边界可重排，不影响单步 commit 粒度与回滚",
-          "validation": "每步 Code Reviewer 审查通过后进入下一步",
-          "rollback": "revert 单步 commit"
+          "assumption": "undici 版本对齐采用与 Node 内置 7.18.x 兼容的 7.x 系列（或经实证可行的兼容层）；锁文件采用 pnpm-lock（项目既有 pnpm 生态——profiles 用 pnpm）；smoke admission FAIL 为宿主 dsh-llm rc 版本滚动漂移（VERSION 实证后定对齐或环境修复）",
+          "basis": "Node v24.13.1 内置 undici 7.18.2（process.versions.undici 实证）；v8.10.0 实测 invalid onRequestStart method（本会话实验）；pnpm 重建后 admission raw-route 负向目击 FAIL（EVO-004 门控时同断言绿——宿主 rc 滚动可疑）",
+          "reversibility": "版本/锁文件均可回退（无行为面）；代理未配置时直连语义不变",
+          "validation": "node tests/smoke.mjs + 真机 vision-2 调用",
+          "rollback": "git revert + 依赖版本回退"
         },
-        "interruption_budget": "每工作单元（Step）至多一次用户打断，无新 critical trigger 不追加"
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "Only change files required by this task: lib/schemas.js, lib/oauth-credentials.js (new), lib/index.js, lib/service.js, lib/client.js, tests/smoke.mjs, tests/oauth-credentials.mjs (new), tests/metrics.mjs (C-9 metric hooks)",
-        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+        "仅修改：package.json（undici 声明/版本/可选依赖对齐）、lib/service.js（dispatcher 装配域仅限兼容修复）、tests/smoke.mjs（判别断言）、锁文件（pnpm-lock.yaml 或 package-lock.json 引入）",
+        "不触碰 runCodexResponsesChat SSE 协议面/凭据解析/OAuth 其它协议分支；不改现有 oauthProxyUrl 解析语义"
       ],
       "required_evidence": [
-        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
-        "validation commands with exit_code and concise output summary (node tests/smoke.mjs 等)",
-        "independent review evidence per step (Code Reviewer APPROVED, review-EVO-002-R*.md) or explicit degraded review evidence that does not claim full separation"
+        "evidence-log 条目含 事实依据/目标对齐/用户影响/结构化事实 JSON（含真机实验记录 + 宿主版本漂移判定）",
+        "验证命令 exit_code + 输出摘要（smoke 全量 + 真机调用）",
+        "独立 Code Reviewer 审查结论"
       ],
       "next_commands": [
         "node tests/smoke.mjs",
-        "node tests/metrics.mjs"
+        "node tests/stats.mjs",
+        "node tests/routing-paths.mjs",
+        "python D:/AI/agent/claude/coding/project_management_workflow/skills/software-project-governance/infra/verify_workflow.py check-governance --summary-only"
       ],
       "done_definition": [
-        "v0.3.0 出口条件①-⑥（roadmap §2.1）逐项满足：①一键登录端到端 ②token 过期自动刷新 ③设备码后备可用 ④默认关闭+显式确认+登出删除路径全可用 ⑤534+ 断言零回退+新增用例全绿 ⑥H2 PoC 报告归档（EV-028 已完成）",
-        "Code Reviewer per-step review chain APPROVED（.governance/review-EVO-002-R*.md）",
-        "Commit per step with EVO-002 prefix and push completed for this task"
+        "package.json 声明 undici + 锁文件纳入；npm pack tarball 依赖清单含 undici",
+        "dispatcher 实证可用（真机 vision-2 调用成功）",
+        "判别测试 + 全套零回退（admission 恢复绿）+ Code Reviewer 通过",
+        "出口①真机首联闭环（v0.3.0 发布前提满足）"
       ],
-      "source": "plan-tracker.md EVO-002 任务行 + docs/architecture/evolution-roadmap-v1.md §3（ADR-005）+ EV-028（PoC 发现：SSE 聚合路径/代理发现 chatgpt.com 需代理 7890 而 auth.openai.com 直连/软轮换宽限窗/V-EVO-2c 自标识可行/gpt-5.3 不在白名单）"
-    },
-    "EVO-003": {
-      "task_id": "EVO-003",
-      "priority": "P1",
-      "status": "已完成（终态，2026-08-23）——Phase 1（1199c0b）+ Phase 2（c2d01ea）全闭环；R1 APPROVED_WITH_NOTES/0（EV-039/042）+ R2 APPROVED_WITH_NOTES/0（EV-051/052）；前置项 F1/F2/F4 闭合；4 裁量点全 adopt；W-4 往返语义落地。遗留台账（转 UI 批次）：R2-F1/F2/F3 P2×3 + carried R1-F3 CSV 注入 + 出口②按天视图/⑤导出按钮 UI 面 + P3×4。本包为终态记录，UI 批次另立",
-      "goal": "C-3 统计持久化（ADR-006）：lib/stats.js 分离（service.js 2965 基线净减 ~220）+ DSH_HOME 按天 JSONL + 异步批量 flush + 数据安全四件套 + 成本单价表 + CSV 导出 + W-4 persist 开关往返语义——重启保留 + 按天聚合/p50/p95/成本",
-      "product_success_contract": {
-        "user": "dsh-agent-router 插件用户",
-        "job_to_be_done": "统计面板数据重启不丢；可看按天聚合/p50/p95/成本估算；可导出 CSV",
-        "non_goals": [
-          "不做 C-4 失败分类落地（v0.3.2；errorClass 仅 v1 行格式预留字段——§4.3 向前兼容）",
-          "不引入 SQLite/原生依赖（E6 已裁 JSONL）",
-          "统计写绝不反压调用路径（E7-a 性能红线）",
-          "Phase 1 不触碰 lib/service.js、lib/schemas.js、tests/smoke.mjs（EVO-002 文件锁）",
-          "backup 目录不自动清理（用户自治）"
-        ],
-        "success_metrics": [
-          "重启后统计保留（v0.3.1 出口条件①）",
-          "node tests/stats.mjs 四件套用例全绿（原子写/自愈计数/版本迁移/prune+软删除）",
-          "kill -9 模拟：无半行残留或不完整行被自愈跳过（§4.2 验证列）"
-        ],
-        "competitive_baseline": "LiteLLM 本地单价表（litellm-custom-pricing.md §2/§5 对标）+ OpenRouter usage.cost 直读双口径（E8）",
-        "done_definition": [
-          "v0.3.1 出口条件八项（roadmap §2.1）逐项满足并记录证据",
-          "每工作单元独立 commit（EVO-003 前缀）+ Code Reviewer 审查链 APPROVED（review-EVO-003-R*.md）",
-          "产品成功证据（重启保留实测）入 evidence-log 且含结构化事实 JSON"
-        ]
-      },
-      "acceptance_contract": {
-        "scenario": "record 事件入有界内存队列（微秒级 push，零阻塞）→ 异步批量 append $DSH_HOME/dsh-agent-router/stats/daily-YYYY-MM-DD.jsonl（每行 at/agentId/provider/model/ok/ms/tokens/errorClass/costEstimate/v）→ 重启加载恢复聚合 + index.json（非权威，可从明细重建）",
-        "command": "node tests/stats.mjs",
-        "expected_output": "全部断言 0 fail：存储往返/kill-9 无半行/坏行自愈 skippedLines+corrupt rename 现场/v1→v2 migrateLine/retentionDays prune/软删除 stats-backup-<ts>/CSV 列齐全（date/agent/account/model/calls/errors/inputTokens/outputTokens/p50ms/p95ms/costEstimate）/队列满丢弃计数 statsSelfReport.dropped",
-        "last_run": {"status": "planned", "exit_code": null, "summary": "Phase 1 起步——tests/stats.mjs 新增"},
-        "demo_evidence": "tests/stats.mjs 输出 + .governance/review-EVO-003-R1.md"
-      },
-      "quality_budget": {
-        "dimensions": {
-          "performance": {"threshold": "record() = 一次数组 push（E7-a）；flush 异步批量；绝不反压", "validation": "tests/stats.mjs 队列/flush 用例", "status": "planned", "evidence": "tests/stats.mjs 输出", "exception": ""},
-          "reliability": {"threshold": "JSONL 单行原子 append；index temp+rename；崩溃丢失窗口 ≤5s（P7：可丢统计不可损用户数据）", "validation": "kill -9 模拟用例", "status": "planned", "evidence": "tests/stats.mjs 输出", "exception": ""},
-          "security": {"threshold": "统计行不含凭据/token 值；corrupt 文件 rename 保留现场不静默丢弃", "validation": "行内容断言", "status": "planned", "evidence": "tests/stats.mjs 输出", "exception": ""},
-          "maintainability": {"threshold": "stats.js 职责 ≤3 句（聚合/持久化/生命周期 API）；Node 内建零包依赖（R2 裁量①文面——原'仅依赖 node:fs/node:path'广义化），被 service.js 消费不反向依赖（无环）", "validation": "Code Reviewer 设计一致性检查", "status": "planned", "evidence": "review-EVO-003-R*.md", "exception": ""}
-        }
-      },
-      "vertical_slice": {
-        "user_visible_slice": "Phase 2 完成后：统计面板重启数据保留 + 按天/agent/账号视图 + CSV 导出（Phase 1 为其持久化内核）",
-        "demo_path": "重启 DSH → 统计面板数据保留；node tests/stats.mjs 全绿",
-        "scope_guard": "Phase 1 仅新增 lib/stats.js 与 tests/stats.mjs；禁止修改 lib/service.js、lib/schemas.js、lib/client.js、tests/smoke.mjs（EVO-002 文件锁/串行集成）；Phase 2 集成点待 Coordinator 解锁后另行派发",
-        "rollback_plan": "Phase 1 纯新增文件——revert 单 commit 即回滚（ADR-006 低风险）",
-        "status": "planned",
-        "evidence": "evidence-log EVO-003 条目 + review-EVO-003-R*.md"
-      },
-      "interruption_policy": {
-        "mode": "critical-only",
-        "critical_triggers": [
-          "实现与 ADR-006/§4 设计（E6-a/E7-a/四件套）冲突时停下上报",
-          "需要触碰锁内文件（service.js/schemas.js/smoke.mjs）才能继续时上报——不得越锁",
-          "发现 §4 设计本身缺陷（如 JSONL 方案不可行证据）上报 Coordinator"
-        ],
-        "auto_execute": ["Phase 1 范围内实现/测试（不 commit——Coordinator 统一提交避免与 EVO-002 git index 竞争）"],
-        "assumption_record": {
-          "assumption": "Phase 切分：持久化内核先行，service.js 委托迁移与 schemas persist 开关随 Phase 2",
-          "basis": "M7.6 文件锁串行约束 + DEC-011 attachments.js 分离先例（§4.4）",
-          "reversibility": "纯新增文件，单 commit 回滚",
-          "validation": "Phase 1 测试全绿 + Code Reviewer R1",
-          "rollback": "revert Phase 1 commit"
-        },
-        "interruption_budget": "Phase 1 至多一次用户打断"
-      },
-      "allowed_change_scope": [
-        "Phase 1 only: lib/stats.js (new), tests/stats.mjs (new)",
-        "Keep service.js/schemas.js/client.js/smoke.mjs untouched (EVO-002 locks); no fixture sync, no version bumps"
-      ],
-      "required_evidence": [
-        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
-        "validation commands with exit_code and concise output (node tests/stats.mjs)",
-        "independent review evidence (Code Reviewer APPROVED, review-EVO-003-R*.md) or explicit degraded evidence"
-      ],
-      "next_commands": ["node tests/stats.mjs"],
-      "done_definition": [
-        "v0.3.1 出口条件八项（roadmap §2.1）逐项：①重启保留 ②按天聚合视图 ③p50/p95 ④成本双口径 ⑤CSV 导出 ⑥retention 90d ⑦四件套单测 ⑧W-4 persist 开关往返语义",
-        "Code Reviewer per-unit review chain APPROVED（.governance/review-EVO-003-R*.md）",
-        "Commit per unit with EVO-003 prefix"
-      ],
-      "source": "plan-tracker.md EVO-003 任务行 + docs/architecture/evolution-roadmap-v1.md §4（L321-388：E6-a/E7-a/E8/§4.2 四件套/§4.4 模块分离）+ ADR-006（L515 起）+ ARCH-002 W-4 绑定 + DEC-018 Q3（DSH_HOME + 90d 裁决）"
-    },
-    "DEV-002": {
-      "task_id": "DEV-002",
-      "priority": "P1",
-      "status": "进行中（2026-08-23 派发，QA 执行 + Test Reviewer 后置）——与 EVO-002 Step 6 并行：仅新增测试文件（tests/ 新文件），不改产品代码与既有测试（M7.6 并行安全切分）",
-      "goal": "核心通路自动化测试补强：routing 决策链（route_agent 参数解析/附件统一编址/模态路由）+ takeover 双层开关语义（FIX-002 终态行为：默认 false 零触碰/一次性接管/用户改回尊重/遗留剥离 one-shot）具备独立可重复测试套件——RISK-001 主轨道（触发条件：下一版本发布前未完成）",
-      "product_success_contract": {
-        "user": "dsh-agent-router 维护者（本项目用户=开发者自身）",
-        "job_to_be_done": "核心通路行为变化能被独立测试套件即时捕获，不依赖单进程 smoke 全局状态",
-        "non_goals": [
-          "不修改产品代码（发现缺陷→缺陷报告上报，修复归 Developer）",
-          "不修改既有测试文件（tests/smoke.mjs、client-render.mjs、metrics.mjs 等 EVO-002 Step 6 持锁）",
-          "不做性能/安全全量专项（本轮聚焦 routing/takeover 关键路径功能回归）"
-        ],
-        "success_metrics": [
-          "新增独立测试文件 node 可直跑（exit 0/1 语义，非 vacuous——R6-F1/R7 教训：必须有 CLI runner 与非空输出）",
-          "routing 决策链与 takeover 双层语义各有行为验证断言（非存在性断言）",
-          "每条断言可指认所验证的行为语义与失败形态"
-        ],
-        "done_definition": [
-          "新测试套件 0 FAIL + 断言-行为映射清单",
-          "Test Reviewer 审查 APPROVED（review-DEV-002-R*.md）",
-          "覆盖声明：测什么/不测什么+理由（stage-testing 纪律）"
-        ]
-      },
-      "acceptance_contract": {
-        "scenario": "维护者改动 lib/ 核心通路后运行新套件，行为回归被捕获",
-        "command": "node tests/<新文件>.mjs",
-        "expected_output": "非空输出 + PASS/FAIL 计数 + exit 0（全绿）；断言覆盖 routing 参数解析/附件编址/模态路由/接管开关四语义域",
-        "last_run": {"status": "planned", "exit_code": null, "summary": "起步——现有 4 冒烟文件 + smoke 695 基线为参照系"}
-      },
-      "quality_budget": {
-        "dimensions": {
-          "correctness": {"threshold": "断言验证真实行为（旧代码缺陷下必败——判别性自推演逐条留痕）", "validation": "自推演记录 + Test Reviewer 抽查", "status": "planned", "evidence": "测试文件注释 + review 报告", "exception": ""},
-          "coverage": {"threshold": "routing/takeover 关键路径各 ≥3 行为断言；边界 ≥5 类各 ≥1（null/空/超长/并发语义/超时）", "validation": "断言清单计数", "status": "planned", "evidence": "测试报告", "exception": ""},
-          "maintainability": {"threshold": "新文件独立可跑（CLI runner + 非空输出）；不引入对 smoke 内部状态的依赖", "validation": "独立运行验证", "status": "planned", "evidence": "命令输出", "exception": ""}
-        }
-      },
-      "vertical_slice": {
-        "user_visible_slice": "维护者获得可重复的核心通路回归套件",
-        "demo_path": "node tests/<新文件>.mjs 全绿输出",
-        "scope_guard": "仅 tests/ 下新增文件；禁止修改 lib/** 与既有 tests/**（EVO-002 Step 6 持锁）",
-        "rollback_plan": "纯新增——revert 单 commit",
-        "status": "planned",
-        "evidence": "evidence-log DEV-002 条目"
-      },
-      "interruption_policy": {
-        "mode": "critical-only",
-        "critical_triggers": ["发现产品缺陷（测试揭示真实行为 bug）→ 停下写缺陷报告上报，不顺手修"],
-        "auto_execute": ["测试设计与实现（新文件域）"],
-        "assumption_record": {
-          "assumption": "套件聚焦 routing+takeover 两域；其他域（oauth/stats）已有专属套件覆盖",
-          "basis": "tracker DEV-002 行 + 现有测试布局盘点",
-          "reversibility": "纯新增文件",
-          "validation": "Test Reviewer R1",
-          "rollback": "revert"
-        },
-        "interruption_budget": "至多一次用户打断"
-      },
-      "allowed_change_scope": ["tests/ NEW files only (e.g. tests/routing-paths.mjs)", "No edits to lib/** or existing tests/**"],
-      "required_evidence": [
-        "evidence-log entry with 事实依据/目标对齐/用户影响/结构化事实 JSON",
-        "命令输出（exit_code + 计数）",
-        "Test Reviewer 独立审查（review-DEV-002-R*.md）"
-      ],
-      "next_commands": ["node tests/<新文件>.mjs"],
-      "done_definition": ["0 FAIL + 判别性推演留痕 + 覆盖声明（测/不测+理由）+ Test Reviewer APPROVED + commit（DEV-002 前缀）"],
-      "source": "plan-tracker.md DEV-002 行 + RISK-001（主轨道）+ session-snapshot 遗留任务 + FIX-002 R7/R8 审查链（takeover 语义基线 72b2670/0b3c15d）"
-    },
-    "FIX-003C": {
-      "task_id": "FIX-003C",
-      "priority": "P1",
-      "status": "派发中（2026-08-23，Developer 承接 c0ee8dc2 会话）——FIX-003 R1 遗留收尾批次",
-      "goal": "FIX-003 R1 审查 8 发现中的代码面三条最小修：F-1（P1）dshHomeAttachmentsRoot env 缺省回退 homedir() 缺 .dsh（L424，与自身注释及宿主默认 homedir()/.dsh 矛盾——1 行修复 join(homedir(), '.dsh')）；F-3（P1）哈希兜底分支与环境 fallback 无测试（补 B13c/B13d/B13e 三条判别：宿主仍拒→哈希兜底接受 / 哈希不符→undefined / env fallback 路径）；F-2（P2）probeImageDimensions WebP VP8X 长度门 off-by-N（入口 24 vs 需 30→截断头返回 {1,1} 仅元数据错）",
-      "allowed_change_scope": ["lib/attachments.js", "tests/routing-paths.mjs（新增 B13c/d/e 断言）"],
-      "required_evidence": ["evidence-log entry（EV 行）", "node tests/routing-paths.mjs 全绿输出", "node tests/smoke.mjs 0 FAIL（849 基线——回归信号）"],
-      "next_commands": ["node tests/routing-paths.mjs", "node tests/smoke.mjs"],
-      "done_definition": ["F-1/F-2/F-3 三修落点明确 + routing-paths 101/101（98+3）+ smoke 850/0（849 基线）零回退 + commit（FIX-003C 前缀）", "Code Reviewer 审查 APPROVED"],
-      "source": "review-FIX-003-R1.md（F-1/F-2/F-3）+ EV-054 台账 + 用户 2026-08-23 候选确认"
-    },
-    "FIX-005": {
-      "task_id": "FIX-005",
-      "priority": "P1",
-      "status": "派发中（2026-08-23，Developer fork——用户提案落地：条件化引导）",
-      "goal": "route_agent 引导/注入按主模型能力条件化：原生多模态（accepts=true）不注入 reminder/不引导误调；纯文本主模型（C-3 图丢失防护）保持现状；工具/目录描述中性化（普通看图无需路由，深析/跨轮/显式任务才调用）",
-      "accepted_thresholds": {
-        "bug_identifier": "prestep.js installPreStep L181-235——reminder（L195-196 构建 + L225 注入）无条件（accepts 判定只在非 wrapper 分支用于改写，reminder 路径未分级）",
-        "user_proposal": "主模型原生多模态时不应注入 route_agent 主动引导（用户 2026-08-23：\"我发给的就是多模态模型，为什么还是会被接管\"）"
-      },
-      "allowed_change_scope": ["lib/prestep.js", "lib/tool.js（route_agent 描述中性句）", "lib/service.js（系统提示目录段中性句）", "tests/smoke.mjs", "tests/routing-paths.mjs"],
-      "quality_budget": {
-        "dimensions": {
-          "correctness": {"threshold": "accepts=true → 不注入 reminder；accepts=false/探测失败 → 现状保持（C-3）", "validation": "判别性断言（mock 原 adapter resolveModel 两态）", "status": "planned", "evidence": "routing-paths 新增块", "exception": ""},
-          "coverage": {"threshold": "原生/纯文本/wrapper 分支三态 + tool 描述静态断言 + smoke 856 零回退", "validation": "断言计数 + smoke 输出", "status": "planned", "evidence": "tests 输出", "exception": ""},
-          "maintainability": {"threshold": "判定单点复用 sourceAcceptsModality（不复制实现）；wrapper 分支 provider 剥离语义对齐 wrapper.js L343", "validation": "Code Reviewer 检查", "status": "planned", "evidence": "review 报告", "exception": ""}
-        }
-      },
-      "required_evidence": ["evidence-log entry", "全量测试网输出（P-v2 P4 门控：routing-paths/smoke/stats/metrics/parity/oauth-credentials）", "Code Reviewer 审查（review-FIX-005-R*.md）"],
-      "done_definition": ["子项 1-4 全闭 + 全量测试网零回退 + 独立 commit（FIX-005 前缀） + Code Reviewer APPROVED"],
-      "source": "plan-tracker.md FIX-005 行 + 用户提案（2026-08-23 多模态误调观察）+ wrapper.js/sourceAcceptsModality 判定 + prestep.js 源码定位"
+      "source": "plan-tracker.md##当前活跃事项"
     }
   }
 }

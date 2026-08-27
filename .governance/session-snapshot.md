@@ -1,51 +1,50 @@
-# 会话快照 — 2026-08-23（FIX-005 闭环 + 用户暂停——FIX-003 全链闭环 + P-v2 立版）
+# 会话快照 — 2026-08-23（FIX-004/EVO-004 闭环 + 出口①真机首联进行中 + FIX-006 通道恢复暂停 + OPS-001 本地安装 + GOV-003 版本同步 0.76.0）
 
-- **session_id**: 20260823-GOV-FIX005-COMPLETE-USER-PAUSE
+- **session_id**: 20260823-GOV-EXIT1-FIX006-CHANNEL-RECOVER
 - **session_date**: 2026-08-23
 - **agent**: deepseek-v4-flash @ DeepSeek Harness + software-project-governance v0.75.0
 - **mode**: always-on × maximum-autonomy
 
 ## 当前状态
 
-- **current_stage**: development (6/11)——v0.3.0/v0.3.1 机制面大体闭合
-- **current_gate**: G4 待评（CI 面缺——RISK-001；测试网：smoke 856 / routing-paths 108 / stats 99 / oauth-credentials 80 / metrics / parity 14）
-- **workflow_version**: 0.75.0（AGENTS.md bootstrap 段同步）
-- **tracker**: 22 任务 | 20 完成 | 0 阻塞 | 1 关闭（DEV-001）
-- **principles**: **P-v2**（DEC-022——P4 门控/P7 不可逆保护/P8 可观测性/P9 宿主演进防御；AGENTS.md 投影同步）
+- **current_stage**: development (6/11)——v0.3.0/v0.3.1 机制面闭合（FIX-004 自证 + EVO-004 UI 面）
+- **current_gate**: G4 待评（CI 面缺——RISK-001；测试网：smoke 876-877 / stats 110 / routing 114 / parity 14）
+- **工作流版本**: 0.76.0（GOV-003 同步 2026-08-23：AGENTS.md bootstrap + plan-tracker + 本快照三处一致）
+- **tracker**: 23 任务 | 21 完成 + 1 关闭（DEV-001）| **FIX-006 待实施（P0）** | 0 阻塞
+- **principles**: **P-v2**（P4 门控/P7 不可逆/P8 可观测/P9 宿主演进防御——本会话 P9 两次实证：
+  FIX-004 自证落地 + FIX-006 宿主 dsh-llm rc 滚动漂移嫌疑）
 
-## 本会话闭环（证据链 EV-029~065）
+## 本会话闭环（EV-029~069 续）
 
-- ✅ EVO-002 全任务（Step 1-7，R1-R8；W-5 三层防线；DEC-022-D 废弃；R8-F1/F2 → UI 批次）
-- ✅ EVO-003 全任务（Phase 1+2；W-4 persist；P2×3 + R1-F3 + 出口②⑤ UI 面 → UI 批次）
-- ✅ DEV-002（95 断言套件）；✅ FIX-003 + FIX-003C（RCA 三环 + 遗留清零）
-- ✅ **FIX-003 全链闭环（真机验证：EV-062 GUI 模型配置陷阱修复 + EV-063 用户确认"已经解决"——主模型原生看图恢复；宿主 GUI 写回丢能力声明 = P9 申报面）**
-- ✅ **P-v2 原则升级**（用户四项全选：P4 门控/P7 不可逆/P8 可观测/P9 宿主演进防御；DEC-022/023）
-- ✅ **FIX-005（用户提案：条件化引导）**——prestep reminder 按能力分级（原生多模态零注入）+ route_agent 描述/系统提示中性化；a484469 + R1 APPROVED_WITH_NOTES/0；**实测：原生多模态零引导（read_image 全程未触发 route_agent）**；P2×2 台账（F-1 prestep 63 行/F-2 探测失败回落判别用例）
-- 📌 FIX-004 已入账未派发（P9 落地载体——能力自证/预检可观测/热载替代/宿主缺陷申报）
+- ✅ **OPS-001 本地安装**（2026-08-23 16:10）：install.ps1 -LocalPath . 离线安装当前开发树（8938a54 = v0.2.1+62）到 DSH——junction ~/.dsh/profiles/node_modules/dsh-agent-router + cordis.patch.yml router/tool-router 宿主行（novel-writing 保留）；Node 解析三链（entry/依赖/./tool）验证通过；重启后生效（与 FIX-006 通道恢复同窗）；EV-069
+- ✅ **GOV-003 版本同步 0.75.0→0.76.0**（2026-08-23 16:20，用户选定）：AGENTS.md bootstrap 版本行（轻量模板 diff 仅版本行）+ plan-tracker/快照 **工作流版本** 三处一致；附带 28c 修复（快照键 `workflow_version`→中文 `**工作流版本**` 对齐 FIX-105 正则——20→19 issues）；归档检测跳过（0<2）；FIX-006 在途锁保留至重派刷新；EV-070
 
-## 待办池（EV-055/EV-060 快照 + FIX-005 后更新 2026-08-23）
+- ✅ **A 类治理迁移**（26→16 issues 诊断与修复：28c 补节/配置格式/锁重建/快照版本行）
+- ✅ **FIX-004 闭环**：能力自证 + P8 双事件——6dd6e5b + R0 APPROVED_WITH_NOTES/0（EV-067）+ DEC-024 宿主申报入册
+- ✅ **EVO-004 闭环**：C-3 UI 面（按天视图/导出按钮）+ P2 遗留六修——7 commits + R0 APPROVED_WITH_NOTES/0（EV-068）+ 门控独立复跑全绿 + main 合并（8938a54）
+- ✅ **出口①真机首联（进行中）**：登录端到端 ✓（chatgpt-codex-auth.json 2151B @9:47）· 网络层 401/405 实证 ✓· V-EVO-3 实读 ✓（dsh-codex-connect src/transport.ts：401/403→reauthRequired 无 usage_* 细分；image 端点形状可复用，Q2 前置）
+- 📌 **FIX-006 入账**（P0 发布阻塞，真机实证）：① undici 依赖缺失（package.json 未声明——发布即运行失败）② dispatcher 版本不兼容（Node 24 内置 undici 7.18.2 vs 装 8.10 → invalid onRequestStart method——R6-F2/F5 原生 fetch 兼容真实暴露）③ smoke admission `raw route projects image blocks` FAIL（EVO-004 门控时绿——宿主 dsh-llm rc 滚动嫌疑 P9）④ npm 树损坏（children null——pnpm 恢复：smoke 876 + stats 110 + routing 114 仅 admission 1 项 FAIL）；triage/执行包 18c-18i 全过/锁已写
+
+## 待办池（含用户决策项）
 
 | 候选 | 状态 | 说明 |
 |---|---|---|
-| EVO-003 UI 批次 | **unblocked** | 出口②按天视图/⑤导出按钮 UI 面 + R2-F1/F2/F3 P2×3 + R1-F3 CSV 注入 + R8-F1 判据统一 + R8-F2 注释修正（FIX-005 已释放 service.js/smoke 锁） |
-| FIX-004 | unblocked（与 UI 批次 service.js 重叠 → 串行） | 能力自证/预检可观测/热载替代/宿主缺陷申报（含 GUI 写回缺陷） |
-| 出口①真机首联 | **用户决策项** | 1455+代理 7890+V-EVO-3+R6-F2/F5+dispatcher×原生 fetch；**需用户在场** |
-| 出口③设备码流排期 | **用户决策项** | 1455 被占降级路径已在册（Step 6）；排期决策 |
-| v0.3.0 发布时点 | **用户决策项** | 出口条件①④机制面已闭环；真机首联后评估 |
-| 出口③设备码流 | **用户决策项** | 未排期（1455 被占降级提示已含未来支持声明） |
-| FIX-003 宿主验证 | **用户动作** | 重启 DSH 或 settings 热载后验证：vision 带图/气泡图片/attachmentIds 跨轮（发布前必做） |
-| v0.3.0 发布 | 待定 | 出口①验证 + 出口③决策后；Step 7 代码已就位（发布决策属用户） |
+| **FIX-006 续派** | **通道恢复后立即** | 子代理通道会话级故障（3 连失败 + 最小探测 Error）→ 用户重启宿主恢复 → 重派 Developer（任务书已就绪：RCA 四现象 → undici 声明 → dispatcher 兼容 → admission 判定 → 判别断言 → 冷装演练） |
+| 出口①收尾 | 依赖 FIX-006 | 修复后用户重试 vision-2 带图调用（oauthProxyUrl 已配置 http://127.0.0.1:7890 + 凭据有效）→ 出口条件五项闭环 |
+| 出口③设备码流排期 | 用户决策项 | 1455 被占降级路径（Step 6 代码已就位声明） |
+| v0.3.0 发布时点 | 用户决策项 | 出口①验证 + ③ 决策后评估（FIX-006 修复为发布前提） |
+| 插件仓缺陷申报 | B 类 7 项入账 | 轻量表解析矛盾/配置格式/节边界/CLI 覆盖风险/版本校验混用/EV- EVD 前缀/tpa 完成态识别——走插件仓项目 |
+| 遗留台账 | 后续域 | FIX-004 P1-1/P2-1/P2-2 + EVO-004 P1×1/P2×3 + R2-F4~F7/R8-F3/F4/F6/F8 P3 |
 
 ## 重要事实存档
 
-- **宿主 dsh-llm 0.1.1-rc.2 npx cache 于 08-22 21:28:41 静默重装**（FIX-001 06:05 同型）——settings 无热载（adapters 构建时快照），改配置需重启；opencode-go-new 的两模型已加 `input: [text, image]` 声明（回滚=删两处 input 块；未入 git——权威记录 EV-053/054）
-- **插件仓产品缺陷线索 #1/#2**：task_priority.py lightweight 表头盲点（EV-038/046/055）；review-record CLI --report 覆盖审查报告（PROCESS-1 EV-052——R1 报告恢复注记在 review-EVO-003-R1.md 尾部）
-- 子代理会话清空事件（导致 Step 7 两轮无声失败）——恢复手段：工作树保留 + 任务书完整重派 + fork 通道（Step 6/7 成功）
-- 测试基线：smoke 856/0（849+7）· routing-paths 102/102 · stats 99 · metrics ALL · parity 14 · oauth-credentials 80
-- 治理提交链：f2d2cbc →…→ e61cdbd（30+ commit）
+- **出口①现场**：settings.yaml router 段已加 `oauthProxyUrl: http://127.0.0.1:7890`（备份 `settings.yaml.bak-20260823-exit1`）；oauthAccounts.chatgpt（preset=chatgpt-codex/protocol=codex-responses/baseURL=chatgpt.com/backend-api/models=[gpt-5.4-mini,gpt-5.4]）；oauthExperimental/oauthTosAccepted=true；vision-2 agent（account=chatgpt/gpt-5.4）验证载体
+- **环境状态**：node_modules 由 pnpm 重建（2026-08-23 10:xx）——undici 未装（待 FIX-006）；package-lock 无（项目原无 lock）——FIX-006 锁策略待 RCA；pnpm-lock.yaml untracked 待决策
+- **研究区**：.tmp-research/dsh-codex-connect/（V-EVO-3 源，transport.ts 实读记录见本会话）
+- 子代理通道故障：0e6daacc/3c7542bf(fork)/cedf5a0c/60484df8 全失败——最小探测硬失败——恢复手段=宿主重启（快照先例 Step 6/7 同型）
 
 ## 下次会话第一动作
 
 1. skill 加载 software-project-governance → resolve_entry.py --json（resolved_root_ok）
-2. 用户若已重启宿主：**立即验证 FIX-003 三环**（vision 带图调用/气泡图片/attachmentIds）+ 重试用户图片识别诉求
-3. 验证通过 → FIX-003 终态标记 + 继续候选（UI 批次 → FIX-004 串行）或用户决策项
+2. 读本快照 + plan-tracker（FIX-006 待实施）
+3. 通道探测（最小 subagent）→ 恢复 → **续派 FIX-006 Developer**（任务书见 plan-tracker 行 + 本会话派发记录）→ 完成 → Code Reviewer → 门控 → 用户重试 vision-2（出口①闭环）；**同窗验证 OPS-001 安装**（设置→Agent 路由页可见 + route_agent 工具注册）
