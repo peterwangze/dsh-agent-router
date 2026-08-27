@@ -10,7 +10,7 @@
 - **current_stage**: development (6/11)——v0.3.0/v0.3.1 机制面闭合（FIX-004 自证 + EVO-004 UI 面）
 - **current_gate**: G4 待评（CI 面缺——RISK-001；测试网：smoke 876-877 / stats 110 / routing 114 / parity 14）
 - **工作流版本**: 0.78.0（GOV-004 同步 2026-08-27：AGENTS.md bootstrap + plan-tracker + 本快照三处一致）
-- **tracker**: 25 任务 | 23 完成 + 1 关闭（DEV-001）| **FIX-006 待实施（P0）** | 0 阻塞
+- **tracker**: 25 任务 | 24 完成 + 1 关闭（DEV-001）| **全部终态——FIX-006 已闭环（2026-08-27）** | 0 阻塞
 - **principles**: **P-v2**（P4 门控/P7 不可逆/P8 可观测/P9 宿主演进防御——本会话 P9 两次实证：
   FIX-004 自证落地 + FIX-006 宿主 dsh-llm rc 滚动漂移嫌疑）
 
@@ -20,6 +20,7 @@
 - ✅ **GOV-003 版本同步 0.75.0→0.76.0**（2026-08-23 16:20，用户选定）：AGENTS.md bootstrap 版本行（轻量模板 diff 仅版本行）+ plan-tracker/快照 **工作流版本** 三处一致；附带 28c 修复（快照键 `workflow_version`→中文 `**工作流版本**` 对齐 FIX-105 正则——20→19 issues）；归档检测跳过（0<2）；FIX-006 在途锁保留至重派刷新；EV-070
 
 - ✅ **GOV-004 版本同步 0.76.0→0.78.0**（2026-08-27，/governance Scenario C）：轻量模板 diff 仅版本行（GOV-003 先例延续）三处一致 0.78.0；前序会话治理记录入仓（f8e9890）；FIX-006 过期锁清理（Check 26 3 blocking 消除，重派时重取）；归档检测跳过（0<2）；EV-071
+- ✅ **FIX-006 闭环**（2026-08-27 晚，用户选定续派）：Developer 4 commits（undici ^7.18.0 同 major 对齐 + major 判别 fail-loud + rc.8 漂移目击对齐 + parity F2）→ Code Reviewer R0 APPROVED_WITH_NOTES/0（REVIEW-FIX-006-R0 机器行）→ 门控全绿 + 隔离冷装通过；EV-072/073；真机 vision-2 端到端 = 出口①用户验证项（随时可执行）
 - ✅ **A 类治理迁移**（26→16 issues 诊断与修复：28c 补节/配置格式/锁重建/快照版本行）
 - ✅ **FIX-004 闭环**：能力自证 + P8 双事件——6dd6e5b + R0 APPROVED_WITH_NOTES/0（EV-067）+ DEC-024 宿主申报入册
 - ✅ **EVO-004 闭环**：C-3 UI 面（按天视图/导出按钮）+ P2 遗留六修——7 commits + R0 APPROVED_WITH_NOTES/0（EV-068）+ 门控独立复跑全绿 + main 合并（8938a54）
@@ -48,4 +49,4 @@
 
 1. skill 加载 software-project-governance → resolve_entry.py --json（resolved_root_ok）
 2. 读本快照 + plan-tracker（FIX-006 待实施）
-3. 通道探测（最小 subagent）→ 恢复 → **续派 FIX-006 Developer**（任务书见 plan-tracker 行 + 本会话派发记录）→ 完成 → Code Reviewer → 门控 → 用户重试 vision-2（出口①闭环）；**同窗验证 OPS-001 安装**（设置→Agent 路由页可见 + route_agent 工具注册）
+3. **出口①真机首联（用户在场）**：FIX-006 已闭环（R0 通过）——用户重试 vision-2 带图调用（oauthProxyUrl 7890 已配置 + 凭据有效 + undici 已装）→ 出口条件五项闭环 → v0.3.0 发布时点评估；**同窗验证 OPS-001 安装**（设置→Agent 路由页可见 + route_agent 工具注册）

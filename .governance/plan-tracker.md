@@ -17,7 +17,7 @@
 
 | 项目 | 当前阶段 | 总任务数 | 已完成 | 阻塞中 | 关键风险数 | 最近 Gate 结论 | 最近复盘日期 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| dsh-agent-router | development (6/11) | 25（24 终态 + FIX-006 待实施；GOV-004 入账后修正——原 22 计数未含 FIX-006/REL-001/ARCH-002） | 24 终态（23 已完成含 GOV-004 + 1 关闭 DEV-001） | 0 | 1（RISK-001 活跃——主轨道 = DEV-002 + 演进路线） | G4 待评（v0.2.0/v0.2.1 已发布；CI 面仍缺——RISK-001；v0.3.x 演进定稿 DEC-020 + EVO-001 PoC 通过 C-1 解锁） | — |
+| dsh-agent-router | development (6/11) | 25（GOV-004 计数修正——原 22 未含 FIX-006/REL-001/ARCH-002） | 25 终态（24 已完成含 GOV-004/FIX-006 + 1 关闭 DEV-001）——全部任务终态 | 0 | 1（RISK-001 活跃——主轨道 = DEV-002 + 演进路线） | G4 待评（v0.2.0/v0.2.1 已发布；CI 面仍缺——RISK-001；v0.3.x 演进定稿 DEC-020 + EVO-001 PoC 通过 C-1 解锁） | — |
 
 ## 当前活跃事项
 
@@ -25,7 +25,7 @@
 | --- | --- | --- | --- | --- | --- |
 | P1 | FIX-004 | 模型能力判定缺陷根治：能力自证 + 预检可观测 + 热载替代评估 + 宿主缺陷申报 | — | v0.3.x | 已完成（6dd6e5b + R0 APPROVED_WITH_NOTES/0） |
 | P1 | EVO-004 | C-3 统计 UI 面（出口②按天视图/⑤导出按钮）+ R1-F3/R2-F1/F2/F3/R8-F1/F2 遗留六修 | — | v0.3.1 | 已完成（7 commits + R0 APPROVED_WITH_NOTES/0 + 门控实测全绿） |
-| P0 | FIX-006 | OAuth 代理路径修复：undici 依赖缺失 + dispatcher 版本兼容（出口①真机首联阻断） | — | v0.3.0 | 待实施（入账 2026-08-23，真机实证 P0） |
+| P0 | FIX-006 | OAuth 代理路径修复：undici 依赖缺失 + dispatcher 版本兼容（出口①真机首联阻断） | — | v0.3.0 | 已完成（R0 APPROVED_WITH_NOTES/0——4 commits + 门控全绿 + 隔离冷装；真机 vision-2 端到端 = 出口①用户验证项） |
 | — | OPS-001 | 当前目录插件安装到 DSH 宿主（离线 LocalPath：junction→开发树 + cordis.patch.yml 宿主行；用户指令 2026-08-23） | — | — | ✅ 已完成（EV-069；junction/patch/Node 解析三链验证；重启生效待用户） |
 | — | 下一轮 | 无未完成任务——出口①真机首联/出口③设备码流/v0.3.0 发布时点（用户决策项）或插件仓缺陷申报（B 类 7 项入账） | — | v0.3.x | 待定 |
 
@@ -33,6 +33,7 @@
 
 | 已完成任务 | 完成日期 | 摘要 |
 | --- | --- | --- |
+| FIX-006 | 2026-08-27 | OAuth 代理路径修复终态（undici ^7.18.0 同 major 对齐 + major 判别 fail-loud + rc.8 漂移目击对齐 + parity F2；R0 APPROVED_WITH_NOTES/0；门控全绿 + 隔离冷装；EV-072/073） |
 | GOV-004 | 2026-08-27 | 治理升级 0.76.0→0.78.0（/governance Scenario C：三处版本行 + 前序会话记录入仓 f8e9890 + FIX-006 过期锁清理 + 归档检测跳过；EV-071） |
 | OPS-001 | 2026-08-23 | 当前目录插件安装到 DSH（install.ps1 -LocalPath . @ 8938a54=v0.2.1+62：junction ~/.dsh/profiles/node_modules/dsh-agent-router + cordis.patch.yml router/tool-router 行；EV-069；重启生效） |
 | GOV-003 | 2026-08-23 | 治理版本同步 0.75.0→0.76.0（三处版本行 + 快照 28c 修复 + 归档检测跳过 + 锁检查；EV-070） |
@@ -45,7 +46,7 @@
 ## 待办与决策项（非任务项——18c/18d/18e 不判定域）
 
 - **FIX-003 宿主验证**（用户动作，P0）：宿主重启或 settings 热载后验证 vision 带图 / 气泡图片 / attachmentIds 跨轮——发布前必做
-- **出口①真机首联**（用户决策项，P0）：EVO-002 出口①——1455 + 代理 7890 + V-EVO-3 + R6-F2/F5 + dispatcher×原生 fetch；需用户在场
+- **出口①真机首联**（用户决策项，P0）：EVO-002 出口①——1455 + 代理 7890 + V-EVO-3 + R6-F2/F5 + dispatcher×原生 fetch；需用户在场；**FIX-006 已闭环（2026-08-27）——随时可执行**
 - **出口③设备码流排期**（用户决策项，P0）：EVO-002 出口③ 1455 被占降级路径排期
 - **v0.3.0 发布时点**（用户决策项）：出口条件①④机制面已闭环；真机首联后评估
 - **EVO-003 UI 批次**（待入账候选，P1）：出口②按天视图/⑤导出按钮 UI 面 + R2-F1/F2/F3 P2×3 + R1-F3 CSV 注入 + R8-F1/F2
@@ -93,7 +94,7 @@
 | FIX-001 | development（P0 热修） | twin adapter 补 prepareCall——宿主 dsh-llm prepared-dispatch 接口演进兼容 | RCA：宿主 adapterStream 每次分发先调 adapter.prepareCall，twin 手工对象字面量缺该方法 → 接管路由全量 TypeError。修复：twin 显式 prepareCall + 接口奇偶回归测试 | **已完成**——f1c4c91（EV-034）+ R6 审查 APPROVED_WITH_NOTES（EV-036）+ FIX-001b 返工 cba0d98（R6-F1 空转通过修复/F2 动态枚举/F3 增强 + 2 测试 bug；parity 首次真实运行 14 断言全绿）——终态闭环 | P0 |
 | RES-003 | research | 战略对齐与演进调研（DEC-017 方向授权） | ① 目的对齐审查：当前实现 vs 插件本源目的（扩展主 agent 能力边界 / 主 agent 专注主路径 / 任意多模态 agent 扩展 / 多模态账号配置 / 无头模式调用）② 易用性+用户吸引力+粘性评估（安装/配置/统计体验现状）③ 三方向差距分析：A 账号配置易用性（api key 配置 / cli 无头模式 / oauth 一键登录——参考 opencodex / 账号池管理）；B 专业 Agent 调用成功率与交互效果（实际产出+交互界面）；C 统计专业性与持久化+安装配置体验 ④ 演进候选方向与优先级输入（供 ARCH-002） | **已完成——审查 APPROVED_WITH_NOTES**（review-RES-003.md：unresolved_blockers=0；0 BLOCKING/2 WARNING/3 SUGGESTION；40 处抽查 0 不符；W 级经 DEC-018 落实）。核心结论：未偏离目的；OAuth 从未被 DEC 否定（被否定的是 gcloud 公开 Client 路线）；Top3 = ChatGPT 订阅 OAuth（Q1 前置）→ 统计持久化（Q3 已裁 DSH_HOME+90d）→ 成功率闭环；Q4 已裁不引入免费链 | P0 |
 | FIX-002 | development（P0 热修） | 默认模型接管行为修正（双层）——覆盖用户手动选择 + 中间层故障放大 | 用户报障 ×2（①切 session/起子代理时模型被强制切 twin ②文本强制走 twin 失败）。RCA：两个独立接管面均无开关——服务端 wrapper syncDefaultModel 三触发点无条件接管 + 客户端 ModelTakeover 会话级接管（effect 依赖 sessionId，起子代理即触发）。修复（用户裁决方案 A）：takeoverDefaultModel 开关默认 false 统一约束两层（服务端一次性接管+来源记忆；客户端 catalog 镜像开关+armed 条件） | **已完成（终态）**——双层实现（d264f03+5c8f2dc）→ R7 NEEDS_CHANGE（P0×1 用户主权反转缺陷）→ 批次 1（72b2670：F1 takeoverMemory 三态/F2 闭包标记/F3 判别断言）+ 批次 2（0b3c15d：F4 不变量③④断言+掏空修复）→ **R8 复审 APPROVED_WITH_NOTES/0 blocker**（EV-040/044/045；F1-F4 全修复，N1-N3 P3 遗留，F8 转发布说明）；返工载体待下版本承载（发布决策属用户）；DEC-022-D 版本指纹转 EVO-002 Step 6/7 | P0 |
-| FIX-006 | development（出口①真机首联阻断——v0.3.0 发布阻塞） | OAuth 代理路径修复：undici 依赖缺失 + dispatcher 版本兼容 | **问题定性（真机实证，2026-08-23）**：①package.json dependencies 无 undici 声明——运行时代理 dispatcher（service.js:3434 `import('undici')` fail-loud 设计）在发布环境必失败（Cannot find package）——v0.3.0 发布即运行失败（P0 发布阻塞）；②本机装 undici@8.10 后 ProxyAgent dispatcher 报 `invalid onRequestStart method`——Node 24 内置 undici 7.18.2 与新装 v8 接口不匹配——代理路径完全不可用（R6-F2/F5 "dispatcher×原生 fetch 兼容"真实暴露）；实验：原生 fetch 无 dispatcher 直连 chatgpt.com → 401（网络可达）；带 ProxyAgent dispatcher → invalid onRequestStart method（版本接口不匹配）；③npm 依赖树损坏（npm install/ci 冷装均报 children null——npm 缓存已 verify/GC、pnpm 恢复中）。**目标**：①package.json 声明 undici（版本对齐策略——Node 内置 7.18.x 匹配或兼容层）②dispatcher 兼容实现（或修复装配——经代理 fetch 真实可用）③判别测试（旧代码必败：undefined undici 明确报错/版本不匹配必败——测试桩注入）④锁文件策略（package-lock/pnpm-lock 引入与发布 tarball 依赖完整性） | 待实施（入账 2026-08-23） | P0 |
+| FIX-006 | development（出口①真机首联阻断——v0.3.0 发布阻塞） | OAuth 代理路径修复：undici 依赖缺失 + dispatcher 版本兼容 | **问题定性（真机实证，2026-08-23）**：①package.json dependencies 无 undici 声明——运行时代理 dispatcher（service.js:3434 `import('undici')` fail-loud 设计）在发布环境必失败（Cannot find package）——v0.3.0 发布即运行失败（P0 发布阻塞）；②本机装 undici@8.10 后 ProxyAgent dispatcher 报 `invalid onRequestStart method`——Node 24 内置 undici 7.18.2 与新装 v8 接口不匹配——代理路径完全不可用（R6-F2/F5 "dispatcher×原生 fetch 兼容"真实暴露）；实验：原生 fetch 无 dispatcher 直连 chatgpt.com → 401（网络可达）；带 ProxyAgent dispatcher → invalid onRequestStart method（版本接口不匹配）；③npm 依赖树损坏（npm install/ci 冷装均报 children null——npm 缓存已 verify/GC、pnpm 恢复中）。**目标**：①package.json 声明 undici（版本对齐策略——Node 内置 7.18.x 匹配或兼容层）②dispatcher 兼容实现（或修复装配——经代理 fetch 真实可用）③判别测试（旧代码必败：undefined undici 明确报错/版本不匹配必败——测试桩注入）④锁文件策略（package-lock/pnpm-lock 引入与发布 tarball 依赖完整性） | **已完成（终态）**——4 commits（bef08eb undici ^7.18.0 声明 + pnpm-lock 入仓 + 判别断言四件含 CONNECT 隧道实证 / 6a7ba76 loadOauthProxyDispatcher major 判别 fail-loud / 669679e admission 负向目击对齐宿主 rc.8 / 69ccf94 parity F2 契约对齐）+ Code Reviewer R0 APPROVED_WITH_NOTES/0（REVIEW-FIX-006-R0 机器行；F-1 P2/F-2 P2 已补录/F-3 P3）；门控全绿（smoke 873 ok+1 skip/0 + stats 110 + routing 114 + client-render + parity 14）+ 隔离冷装通过（TEMP + --legacy-peer-deps，tarball 含 undici）；现象③=宿主 rc.6→rc.8 滚动漂移实证（非产品缺陷）、现象④=npm 11.8.0 arborist peer 环境缺陷（正交）；EV-072/073 | P0 |
 | REL-001 | release（v0.2.1） | v0.2.1 热修版本发布（承载 FIX-001/001b/002/002b） | 用户指令"发布版本承载修改"：P0 修复不等 v0.3.0。范围 = v0.2.0 以来 main 全部；含 metrics 夹具 prepareCall 补齐（发布门禁发现，D-1-2 恢复 100%）；CHANGELOG/bump/README/tag/tarball 离线验证/归档检测 | **已完成（全链）**——EV-037；tag v0.2.1（a1ab717）；tarball 离线验证 OK；**push 完成（c006639..067dde3，20 commits）+ GitHub Release 已发布**（assets 含 tarball，非 draft；用户 gh 重新授权后 Coordinator 执行）；治理记录随 067dde3 入仓 | P0 |
 | ARCH-002 | architecture | 演进路径与方案设计（依赖 RES-003 结论） | 基于 RES-003 产出：演进路线图（阶段划分+版本规划建议）+ 分方向方案设计（含 oauth/账号池可行性边界）+ 风险与回滚分析；供 D-6 演进定稿决策用 | **已完成——审查 APPROVED_WITH_NOTES**（review-ARCH-002.md：unresolved_blockers=0；0 BLOCKING/5 WARNING/3 SUGGESTION；28 处抽查；独立蓝军 5 条）。产出：evolution-roadmap-v1.md（662 行）——v0.3.0~v0.3.3 四版本分期 + H3 源码级验证 16 项（Codex OAuth 全协议事实固化）+ ADR-005/006/007 + S-2 量化 + proposed DEC-020。W 级 5 处已修/3 处绑定实施任务书（W-4→v0.3.1/W-5+S-3→v0.3.0）。待 D-6 用户定稿 | P0 |
 

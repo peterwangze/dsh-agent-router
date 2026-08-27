@@ -8,7 +8,8 @@
   "files": [
     "package.json",
     "lib/service.js",
-    "tests/smoke.mjs"
+    "tests/smoke.mjs",
+    "tests/adapter-parity.mjs"
   ],
   "reason": "出口①真机首联实测（2026-08-23）：①Cannot find package 'undici'（package.json dependencies 无 undici 声明——v0.3.0 发布即运行失败，P0 发布阻塞）；②本机安装 undici 后 ProxyAgent dispatcher 报 invalid onRequestStart method（Node 24 内置 undici 7.18.2 vs 新装 8.10.0 接口不匹配）——代理路径完全不可用（R6-F2/F5 dispatcher×原生 fetch 兼容真实暴露）；npm 依赖树亦受损（npm install/ci 均失败——lock 缺失 + 树损坏状态，环境冷装恢复中等待验证。修复域：package.json 依赖声明（版本对齐策略）+ dispatcher 兼容实现 + smoke 判别断言 + tarball 依赖完整性验证",
   "created_at": "2026-08-23",

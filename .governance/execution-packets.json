@@ -114,7 +114,7 @@
         "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "仅修改：package.json（undici 声明/版本/可选依赖对齐）、lib/service.js（dispatcher 装配域仅限兼容修复）、tests/smoke.mjs（判别断言）、锁文件（pnpm-lock.yaml 或 package-lock.json 引入）",
+        "仅修改：package.json（undici 声明/版本/可选依赖对齐）、lib/service.js（dispatcher 装配域仅限兼容修复）、tests/smoke.mjs（判别断言）、锁文件（pnpm-lock.yaml 或 package-lock.json 引入）、tests/adapter-parity.mjs（R0 F-2 事后补录 2026-08-27——P4 硬门槛 parity 全绿必需的同源漂移对齐，review-FIX-006-R0 裁量可接受）",
         "不触碰 runCodexResponsesChat SSE 协议面/凭据解析/OAuth 其它协议分支；不改现有 oauthProxyUrl 解析语义"
       ],
       "required_evidence": [
