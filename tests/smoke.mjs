@@ -15,7 +15,7 @@ import { BlockAssembler, LlmRuntime, contentHasImage } from '@deepseek-ai/dsh-ll
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -549,10 +549,12 @@ console.log('RouterService:')
       const killed = await presetService.oauthBegin({ accountId: 'cgpt' })
       check('preset begin kill-switch closed by default', killed.ok === false && killed.message.includes('实验通路已关闭'))
       oauthExperimental = true
-      // 2. 惰性 loopback 未就绪（1455 被占，E4 降级链入口）→ 明确报错。
+      // 2. 惰性 loopback 未就绪（1455 被占，E4 降级链入口）→ EVO-005 起自动
+      //    降级设备码流；本块 fetch 桩对 usercode 端点返回 404 → 设备码发起
+      //    失败 → 第三兜底（手动粘贴）指引。完整设备码成功路径由 EVO-005 块专测。
       presetService.codexLoopbackStarter = async () => ({ ready: false, reason: 'EADDRINUSE', dispose: () => {} })
       const notReady = await presetService.oauthBegin({ accountId: 'cgpt' })
-      check('preset begin rejects when 1455 loopback not ready', notReady.ok === false && notReady.message.includes('1455') && notReady.message.includes('占用'))
+      check('preset begin degrades to device flow when 1455 occupied, manual paste on 404 (E4)', notReady.ok === false && notReady.message.includes('设备码') && notReady.message.includes('手动粘贴'))
       // 3. 正常路径：preset 常量预填 + PKCE/state + H3-4 附加参数 + originator。
       presetService.codexLoopbackStarter = async () => ({ ready: true, port: 1455, dispose: () => {} })
       const pbegin = await presetService.oauthBegin({ accountId: 'cgpt', redirectUri: 'https://ignored.example/cb' })
@@ -991,6 +993,133 @@ console.log('RouterService:')
     }
     check('step6 block completes without unexpected throw', step6Crash === null)
     if (step6Crash) console.error('      step6 crash:', step6Crash && step6Crash.message)
+  }
+
+  // ── EVO-005：设备码流 RPC（DEC-025 D-2a / roadmap §3.4 条目 4 / E4 降级链
+  // 第②级落地）——1455 被占（EADDRINUSE）时 oauthBegin 自动降级返回设备码
+  // 路径：发起 usercode（H3-11 端点）→ 展示验证页 + userCode → 服务端轮询
+  // token 端点（pending 持续 / slow_down 退避 / 成功兑换）→ 凭据四元组落盘
+  // （复用 EVO-002 store，owner-only）→ 账号卡登录态可见。测试桩注入——
+  // 零真实端点调用；双路径判别（1455 空闲不回归）+ 状态机三态 + 超时/拒绝
+  // 终态 + 登出取消 + 事件埋点。
+  console.log('oauth preset device flow (EVO-005):')
+  {
+    const deviceWork = mkdtempSync(join(tmpdir(), 'router-device-'))
+    const b64url5 = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
+    const deviceAccess = `${b64url5({ alg: 'RS256', typ: 'JWT' })}.${b64url5({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acct-device-1' } })}.sig-device`
+    const deviceRoot = new Context()
+    deviceRoot.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
+    const deviceCredFile = join(deviceWork, 'device-auth.json')
+    const deviceService = new RouterService(deviceRoot)
+    deviceService.attach({ get: () => ({
+      enabled: true,
+      oauthExperimental: true,
+      oauthTosAccepted: true,
+      oauthAccounts: {
+        cgpt: { name: 'ChatGPT', enabled: true, preset: 'chatgpt-codex', credentialFile: deviceCredFile, protocol: 'codex-responses' },
+      },
+      agents: {},
+    })})
+    // 1455 恒被占（EADDRINUSE）——降级触发前置（EVO-002 测试已证明空闲路径
+    // 不回归：上方 4b 块 ready:true 走 authorize URL 分支）。
+    deviceService.codexLoopbackStarter = async () => ({ ready: false, reason: 'EADDRINUSE', dispose: () => {} })
+    // 测试提速注入（实例级覆盖，同 lockTimeoutMs 先例）。
+    deviceService.oauthDeviceSlowDownAddMs = 5
+    const realFetch5 = globalThis.fetch
+    let usercodeMode = 'ok'
+    let pollScript = []
+    const deviceFetches = []
+    globalThis.fetch = async (url, options) => {
+      deviceFetches.push({ url: String(url), init: options })
+      if (String(url) === CHATGPT_PRESET.deviceUrls.userCode) {
+        if (usercodeMode === '404') return { ok: false, status: 404, text: async () => '' }
+        return { ok: true, json: async () => ({ device_auth_id: 'DAID-E5', user_code: 'E5JB-MJHT', interval: 0.01 }) }
+      }
+      if (String(url) === CHATGPT_PRESET.deviceUrls.token) {
+        // 脚本空时默认 pending-code（长轮询场景语义）。
+        const step = pollScript.shift() ?? { kind: 'pending-code' }
+        if (step.kind === 'pending-403') return { ok: false, status: 403 }
+        if (step.kind === 'pending-code') return { ok: false, status: 400, text: async () => JSON.stringify({ error: 'deviceauth_authorization_pending' }) }
+        if (step.kind === 'slow_down') return { ok: false, status: 400, text: async () => JSON.stringify({ error: 'slow_down' }) }
+        if (step.kind === 'denied') return { ok: false, status: 400, text: async () => JSON.stringify({ error: 'access_denied' }) }
+        return { ok: true, json: async () => ({ authorization_code: 'AC-E5-1', code_verifier: 'CV-E5-1' }) }
+      }
+      if (String(url) === CHATGPT_PRESET.tokenUrl) {
+        return { ok: true, json: async () => ({ access_token: deviceAccess, refresh_token: 'REFRESH-E5-1', expires_in: 3600 }) }
+      }
+      return { ok: false, status: 404, text: async () => 'not found' }
+    }
+    try {
+      // 1. 降级触发（先红断言：现状返回 ok:false 报"设备码将在后续版本提供"）：
+      //    1455 被占 → oauthBegin 返回设备码路径（userCode + 验证页）。
+      pollScript = [{ kind: 'pending-403' }, { kind: 'slow_down' }, { kind: 'ok' }]
+      const dbegin = await deviceService.oauthBegin({ accountId: 'cgpt' })
+      check('device fallback triggers on EADDRINUSE with userCode + verification url', dbegin.ok === true && dbegin.mode === 'device' && dbegin.userCode === 'E5JB-MJHT' && dbegin.verificationUrl === CHATGPT_PRESET.deviceUrls.verification && dbegin.authUrl === CHATGPT_PRESET.deviceUrls.verification && dbegin.intervalSeconds === 0.01 && dbegin.expiresIn === 900)
+      const usercodeCall = deviceFetches.find((call) => call.url === CHATGPT_PRESET.deviceUrls.userCode)
+      const usercodeBody = JSON.parse(String(usercodeCall?.init?.body ?? '{}'))
+      check('device fallback posts usercode request with preset client id (JSON)', usercodeBody.client_id === CHATGPT_PRESET.clientId && String(usercodeCall.init.headers['content-type']) === 'application/json')
+      check('device fallback registers pending device session', deviceService.oauthDevicePending.size === 1)
+      const session = [...deviceService.oauthDevicePending.values()][0]
+      // 2. 状态机三态端到端：pending(403) → slow_down（退避）→ success 兑换落盘。
+      await session.done
+      check('device poll loop reaches terminal ok state', session.status === 'ok')
+      const tokenCalls = deviceFetches.filter((call) => call.url === CHATGPT_PRESET.deviceUrls.token)
+      check('device poll loop walks pending/slow_down/success sequence', tokenCalls.length === 3)
+      check('device slow_down backs off poll interval', session.intervalMs === session.initialIntervalMs + 5)
+      const exchangeCall = deviceFetches.find((call) => call.url === CHATGPT_PRESET.tokenUrl)
+      const exBody = new URLSearchParams(String(exchangeCall?.init?.body ?? ''))
+      check('device exchange posts code+verifier with device redirect_uri (pi-ai fact)', exBody.get('grant_type') === 'authorization_code' && exBody.get('code') === 'AC-E5-1' && exBody.get('code_verifier') === 'CV-E5-1' && exBody.get('redirect_uri') === CHATGPT_PRESET.deviceUrls.exchangeRedirectUri && exBody.get('client_id') === CHATGPT_PRESET.clientId)
+      const savedDoc5 = JSON.parse(readFileSync(deviceCredFile, 'utf8'))
+      check('device flow persists full credential quad via EVO-002 store', savedDoc5.version === 1 && savedDoc5.credential.type === 'oauth' && savedDoc5.credential.access === deviceAccess && savedDoc5.credential.refresh === 'REFRESH-E5-1' && savedDoc5.credential.accountId === 'acct-device-1')
+      if (process.platform !== 'win32') {
+        check('device credential file is owner-only (0o600, POSIX)', (statSync(deviceCredFile).mode & 0o777) === 0o600)
+      }
+      check('device session cleared after terminal state', deviceService.oauthDevicePending.size === 0)
+      check('device login visible on account card (presetLoggedIn)', (await deviceService.presetLoggedInOf(deviceService.getOAuthAccount('cgpt'))) === true)
+      // 3. 超时终态：timeoutMs 注入极小 → expired，不兑换不落盘。
+      deviceService.oauthDeviceTimeoutMs = 15
+      pollScript = []
+      const docBeforeTimeout = readFileSync(deviceCredFile, 'utf8')
+      const tbegin = await deviceService.oauthBegin({ accountId: 'cgpt' })
+      const tsession = [...deviceService.oauthDevicePending.values()][0]
+      await tsession.done
+      check('device flow times out to expired terminal state', tbegin.ok === true && tsession.status === 'expired' && deviceService.oauthDevicePending.size === 0)
+      check('device timeout leaves credential document untouched', readFileSync(deviceCredFile, 'utf8') === docBeforeTimeout)
+      deviceService.oauthDeviceTimeoutMs = 0
+      // 4. 拒绝终态：access_denied → failed，不落盘。快速终态（首询即
+      //    denied）与 begin 返回存在微任务竞态——不快照 session 引用，
+      //    以终态自清 + 事件原因为证（poll_rejected）。
+      pollScript = [{ kind: 'denied' }]
+      const rbegin = await deviceService.oauthBegin({ accountId: 'cgpt' })
+      for (let i = 0; i < 100 && deviceService.oauthDevicePending.size > 0; i++) await new Promise((resolve) => setTimeout(resolve, 2))
+      check('device flow rejection reaches failed terminal state', rbegin.ok === true && deviceService.oauthDevicePending.size === 0 && readFileSync(deviceCredFile, 'utf8') === docBeforeTimeout)
+      check('device rejection recorded with poll_rejected reason', deviceService.oauthEvents.some((event) => event.kind === 'preset_device_login_fail' && event.reason === 'poll_rejected'))
+      // 5. 登出取消（W-5 联动）：轮询中的会话被 logout 打断，不再轮询/落盘。
+      pollScript = []
+      const cbegin = await deviceService.oauthBegin({ accountId: 'cgpt' })
+      const csession = [...deviceService.oauthDevicePending.values()][0]
+      const pollCountAtCancel = deviceFetches.filter((call) => call.url === CHATGPT_PRESET.deviceUrls.token).length
+      const clo = await deviceService.oauthLogout({ accountId: 'cgpt' })
+      await csession.done
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      const pollCountAfterCancel = deviceFetches.filter((call) => call.url === CHATGPT_PRESET.deviceUrls.token).length
+      check('device polling cancelled by logout stops further polls', clo.ok === true && cbegin.ok === true && csession.status === 'cancelled' && pollCountAfterCancel === pollCountAtCancel)
+      check('cancelled session leaves no credential file (logout deleted)', !existsSync(deviceCredFile))
+      // 6. 降级链第三兜底：usercode 端点 404（服务端未启用）→ ok:false +
+      //    手动粘贴指引（E4 链完整闭合）。
+      usercodeMode = '404'
+      const fbegin = await deviceService.oauthBegin({ accountId: 'cgpt' })
+      check('device fallback failure points to manual paste (third fallback)', fbegin.ok === false && fbegin.message.includes('设备码') && fbegin.message.includes('手动粘贴'))
+      usercodeMode = 'ok'
+      // 7. C-9 埋点：设备码旅程事件（降级 begin / 登录 ok / 失败形态 / 取消），
+      //    负载零 token 值（P7 红线）。
+      const kinds5 = new Set(deviceService.oauthEvents.map((event) => event.kind))
+      check('device journey telemetry recorded (C-9)', kinds5.has('preset_device_begin') && kinds5.has('preset_device_login_ok') && kinds5.has('preset_device_login_fail') && kinds5.has('preset_device_cancelled'))
+      check('device telemetry never carries token values (P7)', !JSON.stringify(deviceService.oauthEvents).includes('sig-device') && !JSON.stringify(deviceService.oauthEvents).includes('REFRESH-E5'))
+    } finally {
+      globalThis.fetch = realFetch5
+      try { rmSync(deviceWork, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
+    }
   }
 
   // ── FIX-006：OAuth 代理路径依赖对齐——发布环境 package.json 无 undici
