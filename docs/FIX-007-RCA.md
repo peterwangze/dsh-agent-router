@@ -166,11 +166,11 @@ attachments.js:152 分支条件 `(u8[14]===0x20 && u8[15]===0x00 && u8[16]===0x0
 
 ### F-2（R2）probeImageDimensions VP8 偏移修正
 
-按 RIFF/WEBP 规范重写 VP8 分支：FourCC 校验 `u8[12..15] === "VP8 "`（0x56 0x50 0x38 0x20），chunk size 在 16-19（小端），帧标签在 20-22——关键帧判定 `u8[20] & 0xC0 === 0`，宽高取 `u16le(26) & 0x3FFF` / `u16le(28) & 0x3FFF`（保持既有取位，仅修偏移）。判别测试：sharp 产物 VP8 WebP（真实字节）旧代码 undefined、新代码返回正确尺寸；VP8L/VP8X 既有断言零回退。
+按 RIFF/WEBP 规范重写 VP8 分支：FourCC 校验 `u8[12..15] === "VP8 "`（0x56 0x50 0x38 0x20），chunk size 在 16-19（小端），帧标签在 20-22——关键帧判定 `u8[20] & 0x01 === 0`（bit0 = 帧类型，0 = 关键帧；RFC 6386），宽高取 `u16le(26) & 0x3FFF` / `u16le(28) & 0x3FFF`——14 位字段**直存实际值、无 -1 编码**（与 VP8X/VP8L 的 "-1 编码"不同；实测 sharp 640x480 产物 offset26-27 = 0x0280 = 640）。判别测试：sharp 产物 VP8 WebP（真实字节）旧代码 undefined、新代码返回正确尺寸；VP8L/VP8X 既有断言零回退。
 
 ### F-3（R3）resolveAttachmentIds ref 构造收紧 + imageData 客户端/服务端对称
 
-- `resolveAttachmentIds`：解析成功后**经 F-1 单点读取**取回宿主权威 ref（readImage 返回的 `stored.ref`），以其字段构造派发 ref——width/height/mediaType/bytes 不再条件展开/兜底，缺失即走失败路径（fail-loud，不再产出会被客户端拒绝的畸形 ref）。
+- `resolveAttachmentIds`：解析成功后**经 F-1 单点读取**取回宿主权威 ref（readImage 返回的 `stored.ref`），以其字段构造派发 ref——width/height/mediaType/bytes 不再条件展开/兜底；条目缺元数据时先经读取单点 + 字节魔数/尺寸探测补全（尽力而为，宽松宿主兼容）；**双重失败（字节也不可得）时保留兜底 ref 并记 `attachment_ref_degraded` 降级诊断事件——降级永不静默（P8，R0 F-1 收紧后的实际实现语义）**。
 - `service.imageData`：同样经 F-1 单点（完整 ref 读取），服务端保持权威校验。
 - （可选不动面）客户端 `wImageDataRequest` 保持严格——它是防畸形 ref 的最后防线；修的是上游产出而非放宽下游。
 

@@ -406,6 +406,31 @@ export async function runAttachmentTests(check) {
       try { img = await svc2.imageData({ ref: parsed }) } catch (error) { imgError = error }
       check('F-3d imageData reads via full-ref single point under strict host', imgError === null && img !== null && img.ok === true && img.width === 640 && img.height === 480 && typeof img.data === 'string' && img.data.length > 0)
     }
+
+    // F-1 判别（R0 F-1 / P8）：双重失败（条目缺元数据 + 读取单点/自取证均
+    // 不可得）时的降级永不静默——保留兜底 ref（宽松宿主兼容）但必须产生
+    // attachment_ref_degraded 诊断事件（host='unreadable'：服务在而不可读）。
+    // 场景构造：宿主 readImage 恒拒（任何 ref 形状）+ 对象文件不存在 →
+    // readStoredImage 双路皆败；预注册缺 width/height 的条目使 resolve 命中
+    // missingMeta 分支。旧代码：无事件（静默畸形 ref）→ 断言必败。
+    {
+      const { RouterService: Svc } = await import('../lib/service.js')
+      const svcRoot3 = new Context()
+      svcRoot3.provide('attachments', {
+        imageLimits: { maxImageBytes: 20 * 1024 * 1024, maxImagesPerMessage: 8, maxMessageImageBytes: 40 * 1024 * 1024, mediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] },
+        async readImage() { throw new Error('host always refuses (strict x)') },
+      })
+      svcRoot3.provide('fs', makeFs({}))
+      const svc3 = new Svc(svcRoot3)
+      svc3.attach({ get: () => ({ enabled: true, agents: {} }) })
+      const degradedId = `sha256:${'e'.repeat(64)}`
+      // 预注册缺 width/height 的条目（selectAttachments 兜底注册的真实形态）。
+      svc3.registry.registerEntry({ id: degradedId, mediaType: 'image/png', bytes: 12, name: 'degraded.png', source: 'image-block' })
+      const degradedRefs = await svc3.resolveAttachmentIds([degradedId], {})
+      const degradedEvents = svc3.capabilityEvents.filter((event) => event.kind === 'attachment_ref_degraded')
+      check('F-1f degraded double-failure emits attachment_ref_degraded event (P8)', degradedEvents.length >= 1 && degradedEvents[0].host === 'unreadable' && typeof degradedEvents[0].id === 'string' && degradedEvents[0].id.length > 0)
+      check('F-1g degraded ref still dispatched (lenient-host compat) with bounded fallback shape', degradedRefs.length === 1 && degradedRefs[0].attachmentId === degradedId && degradedRefs[0].mediaType === 'image/png' && degradedRefs[0].bytes === 12 && degradedRefs[0].width === undefined)
+    }
     } finally {
       if (prevDshHome === undefined) delete process.env.DSH_HOME
       else process.env.DSH_HOME = prevDshHome
@@ -414,15 +439,17 @@ export async function runAttachmentTests(check) {
 
   // ── FIX-007 F-2：probeImageDimensions VP8（有损 WebP）字节偏移判别 ────────────
   // RIFF/WEBP 布局：0-3 "RIFF" 4-7 size 8-11 "WEBP" 12-15 FourCC("VP8 ") 16-19
-  // chunk size(LE) 20-22 frame tag 23-25 start code(0x9d 0x01 0x2a) 26-27 width-1(LE,14bit)
-  // 28-29 height-1(LE,14bit)。旧代码把 u8[14] 当 0x20/0x10 帧标签比对 → 恒 false。
+  // chunk size(LE) 20-22 frame tag（bit0 = 帧类型，0 = 关键帧）23-25 start code
+  // (0x9d 0x01 0x2a) 26-27 width(LE,14bit) 28-29 height(LE,14bit)——14 位字段直存
+  // 实际值、无 -1 编码（与 VP8X/VP8L 不同，RFC 6386；实测 sharp 640x480 的
+  // offset26-27 = 0x0280 = 640）。旧代码把 u8[14] 当 0x20/0x10 帧标签比对 → 恒 false。
   console.log('fix-007 VP8 webp probe:')
   {
     const vp8 = new Uint8Array(30)
     vp8.set([0x52, 0x49, 0x46, 0x46, 0x16, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50], 0) // RIFF....WEBP
     vp8.set([0x56, 0x50, 0x38, 0x20], 12) // "VP8 "
     vp8.set([0x0a, 0x00, 0x00, 0x00], 16) // chunk size 10
-    vp8.set([0x30, 0x01, 0x00], 20) // frame tag: keyframe (top 2 bits 0)
+    vp8.set([0x30, 0x01, 0x00], 20) // frame tag: keyframe (bit0 = 0)
     vp8.set([0x9d, 0x01, 0x2a], 23) // start code
     vp8[26] = 0x7f // width = 127（VP8 keyframe 14 位字段直存实际值）
     vp8[27] = 0x00
