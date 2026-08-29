@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "task_id": "REL-004",
+  "title": "v0.3.1 发布链——EVO-006 转正承载 + R0 台账收尾（P2x3/P3x3）+ M-3 无沙箱复跑 + 版本规划/发布",
+  "priority": "P1",
+  "target_version": "0.3.1",
+  "depends_on": [],
+  "files": [
+    "lib/service.js",
+    "CHANGELOG.md",
+    "README.md",
+    "docs/release/feature-flags-v0.3.0.md",
+    "tests/oauth-promotion.mjs",
+    "package.json"
+  ],
+  "reason": "用户裁决 2026-08-29（本会话 ask_user_question 选定 v0.3.1 发布链启动）；EVO-006 已终态（EV-085 / R0 APPROVED_WITH_NOTES/0）待发布承载；P2x3/P3x3 = review-EVO-006-R0 台账；M-3 无沙箱复跑绑定发布门（smoke §6 全量 946 投影 + hooks 复跑 + metrics ③ 确认——三项均非 EVO-006 diff 引入面，R0 复核在案）",
+  "created_at": "2026-08-29",
+  "tool": "change-triage",
+  "tool_version": "0.77.0",
+  "analysis": {
+    "dependency": {
+      "unblocked": [],
+      "blocked": [
+        "REL-002"
+      ],
+      "blocked_by": [],
+      "unknown_deps": [],
+      "cycles": [],
+      "cycle_warning": false,
+      "new_task_cycle": false
+    },
+    "priority_context": {
+      "proposed": "P1",
+      "in_flight": {
+        "P0": 2,
+        "P1": 6,
+        "P2": 0
+      },
+      "version_chain": []
+    },
+    "conflicts": [
+      {
+        "task_id": "EVO-004",
+        "files": [
+          "lib/client.js",
+          "lib/service.js",
+          "lib/stats.js",
+          "tests/client-render.mjs",
+          "tests/smoke.mjs",
+          "tests/stats.mjs"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "EVO-005",
+        "files": [
+          "lib/client.js",
+          "lib/oauth-credentials.js",
+          "lib/schemas.js",
+          "lib/service.js",
+          "tests/oauth-credentials.mjs",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "EVO-006",
+        "files": [
+          "lib/client.js",
+          "lib/schemas.js",
+          "lib/service.js"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "FIX-004",
+        "files": [
+          "lib/index.js",
+          "lib/service.js"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "FIX-006",
+        "files": [
+          "lib/service.js",
+          "package.json",
+          "tests/adapter-parity.mjs",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/service.js",
+          "package.json"
+        ]
+      },
+      {
+        "task_id": "FIX-007",
+        "files": [
+          "lib/attachments.js",
+          "lib/index.js",
+          "lib/service.js",
+          "lib/tool.js"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "REL-003",
+        "files": [
+          "lib/oauth-credentials.js",
+          "lib/service.js",
+          "package.json",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/service.js",
+          "package.json"
+        ]
+      }
+    ],
+    "version": {
+      "target": "0.3.1",
+      "current": "",
+      "planned_next": null,
+      "issues": []
+    },
+    "side_effect": {
+      "detected": true,
+      "touches_real_env": false,
+      "requires_r1": false,
+      "declared": "发布段网络面：git push（main+tag）+ GitHub Release 创建（gh）——M-4 用户授权点后执行；本地无仓外写（tarball 冷装在临时目录，环境变量重定向）",
+      "blast_radius": [
+        "输入含仓库外副作用措辞（安装器/发布/profile 写入）：安装冒烟"
+      ],
+      "review_conditions": [],
+      "issues": []
+    }
+  },
+  "snapshot": {
+    "tool": "task-priority-analysis",
+    "module_version": "0.71.0",
+    "report_json": {
+      "total": 9,
+      "completed": [
+        "OPS-001"
+      ],
+      "blocked": [
+        {
+          "task_id": "REL-002",
+          "blocking_dependencies": [
+            "FIX-006"
+          ]
+        }
+      ],
+      "unblocked": [],
+      "recommended_next": [],
+      "non_executable": [
+        "FIX-004",
+        "EVO-004",
+        "FIX-006",
+        "EVO-005",
+        "REL-003",
+        "FIX-007",
+        "EVO-006"
+      ],
+      "cycles": [],
+      "cycle_warning": false
+    },
+    "report_text": "# Task Priority Analysis\n\nTotal: **9** tasks — 1 completed, 0 unblocked, 1 blocked, 7 non-executable.\n\n## Recommended next\n\n_No unblocked tasks — REQ-110 fallback: blocked-chain unblock recommendation (FIX-254)._\n\n**Unblock pick: `FIX-006` [P0] (non_executable_status status='已完成')**\n\n- reason: status stop: `FIX-006` is dependency-satisfied but held by terminal status '已完成' — re-evaluate or resume `FIX-006` to reopen the chain\n- unlocks 1 downstream blocked task(s): `REL-002`\n- empty reason: all_blocked — no executable candidate: 1 active task(s) are all blocked by unresolved task-family dependencies; 7 dependency-satisfied row(s) additionally held by non-executable status markers\n- nearest action: unblock `FIX-006` (non_executable_status) — highest-value chain, 1 downstream blocked task(s)\n\n## Unblocked (ready to work)\n\n_None._\n\n## Excluded (non-executable status)\n\n_Dependency-satisfied rows excluded from Unblocked / Recommended next: their status leading marker is terminal / non-executable (⛔/⏸/🔴/🚧/🛑/📋/✅) or their wording is terminal without an emoji marker (FIX-237.2 / ADR-017 §4.4 P1-3 / FIX-288 ⑦) even though their dependencies are met._\n\n- `FIX-004` [P1] v=v0.3.x status=已完成 deps=[—]\n- `EVO-004` [P1] v=v0.3.1 status=已完成 deps=[—]\n- `FIX-006` [P0] v=v0.3.0 status=已完成 deps=[—]\n- `EVO-005` [P1] v=v0.3.0 status=已完成 deps=[—]  [refs: EVO-002]\n- `REL-003` [P1] v=v0.3.0 status=已完成 deps=[—]  [refs: EVO-005, DEC-025]\n- `FIX-007` [P0] v=v0.3.0（或热修） status=已完成 deps=[—]  [refs: RISK-003]\n- `EVO-006` [P1] v=v0.3.1 status=已完成 deps=[—]  [refs: EVO-002, EVO-005, DEC-026]\n\n## Blocked\n\n- `REL-002` [P1] v=v0.3.0 status=已完成 blocked_by=[FIX-006]\n\n## Completed\n\n- `OPS-001` [P9] v=— status=✅ 已完成 deps=[—]\n"
+  }
+}

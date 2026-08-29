@@ -1,94 +1,94 @@
 {
   "version": 1,
-  "generated_at": "2026-08-29T22:17:26",
+  "generated_at": "2026-08-29T23:34:58",
   "packets": {
-    "EVO-006": {
-      "task_id": "EVO-006",
+    "REL-004": {
+      "task_id": "REL-004",
       "priority": "P1",
-      "status": "已完成（代码/审查闭环——R0 APPROVED_WITH_NOTES/0；P2×3/P3×3 台账 + M-3 无沙箱复跑绑定 v0.3.1 发布链）",
-      "goal": "EVO-006 GPT OAuth 实验通道转正式（DEC-026 用户裁决——仅 GPT 通道，其余方向待后续需求；v0.3.1 载体）",
+      "status": "进行中——TRIAGE-REL-004 机录 2026-08-29（用户裁决启动发布链）；收尾段 Developer 派发中；后续：Code Reviewer（收尾段）→ M-3 无沙箱复跑 → Release 规划 + Release Reviewer → M-4 发布授权（用户）→ 发布执行",
+      "goal": "REL-004 v0.3.1 发布链——EVO-006 转正承载 + R0 台账收尾（P2×3/P3×3）+ M-3 无沙箱复跑 + 版本规划/发布",
       "product_success_contract": {
-        "user": "DSH 主用户（ChatGPT Plus/Pro 订阅者）——经 dsh-agent-router 把 ChatGPT 订阅作为 GPT 专业 agent 的正式调用通道",
-        "job_to_be_done": "把 GPT OAuth 从实验通道转为正式登录通道：无 oauthExperimental 实验开关与 ToS 实验确认弹窗，登录→调用→登出即用；平台 ToS/账号风控提示以正式告知形态保留（DEC-026 C2 完整转正）",
+        "user": "DSH 主用户（ChatGPT 订阅者）与插件使用者——获得 v0.3.1 正式版：GPT OAuth 为正式登录通道（EVO-006 转正承载）+ R0 台账收尾",
+        "job_to_be_done": "把已闭环的 EVO-006 转正与 R0 P2×3/P3×3 收尾打包为 v0.3.1：版本 bump/CHANGELOG 收口/README 版本行/tag/tarball/GitHub Release；用户升级后 GPT OAuth 即正式通道、老用户行为有明确披露",
         "non_goals": [
-          "不做 Claude C-2 / 账号池 C-6 / 其它 OAuth 方向——DEC-026 用户裁决「其他的等后续」（仅 GPT 通道）",
-          "不做 v0.3.1 发布链（版本 bump/打包/push/tag 归后续 Release 任务，部署决策归用户）；治理流程证据不替代产品价值"
+          "不做新功能开发（EVO-006 已闭环——本链仅台账收尾 + 发布执行）",
+          "不做 Claude C-2/账号池/成功率闭环等后续演进（等用户需求）；发布执行（push/tag/Release）以 M-4 用户授权为前置，不在授权前执行"
         ],
         "success_metrics": [
-          "用户可用场景：GPT OAuth 对用户呈现为正式登录通道（无实验开关/无 ToS 实验弹窗/无实验标签），登录→调用→登出全场景即用——oauthExperimental 按 DEC-026 C2 重构为「通道开关+账号开关+登出删除」三层语义，判别断言证明新语义落地",
-          "全量门控零回退：node tests/smoke.mjs（934 ok 基线）/ tests/stats.mjs(110) / tests/routing-paths.mjs(114) / tests/adapter-parity.mjs(14) / tests/attachments.mjs(65) 全绿"
+          "用户可见场景：升级 v0.3.1 后 GPT OAuth 为正式登录通道（无实验面），且「开过又关」老用户升级后行为（通道默认可用）已在 CHANGELOG 明确披露——无静默意外",
+          "可运行验收：八套件零回退（936/110/114/14/65/98/20/11 基线）+ M-3 无沙箱复跑（smoke 全量 946 投影 + hooks 双确认 + metrics ③确认）+ tarball 隔离环境安装冒烟（环境变量重定向至临时目录）通过"
         ],
-        "competitive_baseline": "与 api-key 通道同级 UX：OAuth preset 登录即用、无额外实验确认步骤（对齐 DSH 宿主原生 preset 登录体验）",
+        "competitive_baseline": "对齐主流插件发布基线：tag + tarball + GitHub Release 三件套齐、CHANGELOG 逐版本收口、升级路径零手动清理（遗留配置键容忍已由 A2 断言看护）",
         "done_definition": [
-          "RCA 触点盘点清单（schemas 开关语义/service 门控链/client ToS 弹窗+实验标签/README·CHANGELOG·feature-flags 文档口径/kill-switch 三层语义/C-9 埋点标记）入 evidence-log 并逐项标注转正处置",
-          "五套件门控全绿零回退（934/110/114/14/65 基线）+ 判别测试覆盖新语义（结构化事实记录）",
-          "Code Reviewer APPROVED 或 APPROVED_WITH_NOTES(unresolved_blockers=0)——独立审查确认用户结果未被流程完成替代"
+          "P2×3/P3×3 收尾落地 + M-3 无沙箱复跑通过（smoke 全量 946 投影 + hooks 双确认 + metrics ③确认）——结构化事实入 evidence-log",
+          "v0.3.1 三件套（bump 0.3.1/CHANGELOG/README）+ tag + tarball + GitHub Release 发布完成（M-4 用户授权后执行）——结构化事实入 evidence-log",
+          "Code Reviewer（收尾段）+ Release Reviewer（发布段）独立审查通过（APPROVED / APPROVED_WITH_NOTES unresolved_blockers=0）——用户结果未被流程完成替代"
         ]
       },
       "acceptance_contract": {
-        "scenario": "用户配置 GPT OAuth preset → 登录（无实验开关/无 ToS 实验弹窗）→ 凭据 owner-only 落盘 → 通用子 agent 调用成功 → 登出删除凭据（W-5 三层联动不变）——隔离环境全流程验证；真机 OAuth 端到端为用户决策项（不在本任务）",
-        "command": "node tests/smoke.mjs; node tests/stats.mjs; node tests/routing-paths.mjs; node tests/adapter-parity.mjs; node tests/attachments.mjs; node tests/client-render.mjs; node tests/oauth-credentials.mjs（工作目录 D:/AI/agent/deepseek/plugins/router）",
-        "expected_output": "七套件全部 0 失败零回退（smoke ≥934 ok 基线）；新增判别断言证明：实验门控缺省语义已翻转/移除、ToS 实验弹窗路径不存在、实验标签文案清除、kill-switch 关闭能力保留",
+        "scenario": "用户升级/安装 v0.3.1（tarball 或 Release）→ 配置 GPT OAuth preset → 登录（正式通道：无实验 UI/无 ToS 实验弹窗/账号名无实验标）→ 调用成功 → 登出删除凭据；曾显式关闭实验开关的老用户升级后行为已被 CHANGELOG 披露覆盖",
+        "command": "node tests/smoke.mjs; node tests/stats.mjs; node tests/routing-paths.mjs; node tests/adapter-parity.mjs; node tests/attachments.mjs; node tests/client-render.mjs; node tests/oauth-credentials.mjs; node tests/oauth-loopback.mjs; node tests/oauth-promotion.mjs（工作目录 D:/AI/agent/deepseek/plugins/router）+ tarball 隔离冷装冒烟（TEMP 环境变量重定向）+ git pre-commit/commit-msg hooks 复跑（M-3 无沙箱）",
+        "expected_output": "八套件全绿零回退（smoke ≥936 ok 可跑口径 / 946 全量投影）；隔离环境安装冒烟（环境变量重定向至临时目录）通过；hooks 双确认通过；tarball 内容白名单不变",
         "last_run": {
           "status": "NOT_RUN_YET",
           "exit_code": null,
-          "summary": "沙箱部分运行已录（EV-085：smoke 936 ok/0 fail/1 skip，exit 1 = §6 仓外 mkdir 被拒（先在基线即如此）+ 其余七套件 exit 0 零回退）；完整验收命令全 exit-0 运行绑定 M-3 无沙箱复跑（v0.3.1 发布链）"
+          "summary": "收尾段未开始——基线 = EVO-006 终态八套件（smoke 936 ok/1 skip、stats 110、routing 114、parity 14、attachments 65、oauth-credentials 98、oauth-loopback 20、promotion 11，EV-085）；M-3 无沙箱复跑与冷装冒烟待发布链执行后回填"
         },
-        "demo_evidence": "client-render 渲染输出（账号卡无实验标签）+ smoke OAuth 流程断言输出摘要——Developer 返回后入 evidence-log EVO-006 段"
+        "demo_evidence": "tarball 隔离冷装输出 + 八套件输出摘要 + tag/Release URL——发布段完成后入 evidence-log（EV-086+）"
       },
       "quality_budget": {
         "dimensions": {
           "performance": {
-            "threshold": "五套件运行时长与 v0.3.0 基线同量级（无 >2 倍回退）；OAuth 登录路径无新增同步阻塞",
-            "validation": "本地运行 node tests/smoke.mjs 等五套件计时，与 EV-079/EV-084 基线值对比",
+            "threshold": "八套件与 M-3 复跑时长与 v0.3.0/EVO-006 基线同量级；发布链不引入运行时性能变化（纯文档 + telemetry 事件）",
+            "validation": "M-3 无沙箱复跑计时，对比 EV-085/EV-079 基线值",
             "status": "NOT_RUN_YET",
-            "evidence": "无计时数据——绑定 M-3 无沙箱复跑（EV-085 m3_binding；七套件沙箱运行全绿零回退已录）",
+            "evidence": "待 M-3 执行后回填（evidence-log REL-004 段）",
             "exception": ""
           },
           "reliability": {
-            "threshold": "OAuth 登录/token 刷新/登出删除/设备码降级链行为与 v0.3.0 等价（除实验门控移除外零行为回归）",
-            "validation": "node tests/oauth-credentials.mjs + node tests/oauth-loopback.mjs + smoke OAuth 块断言",
-            "status": "PASS",
-            "evidence": "EV-085 门控终态复跑：oauth-credentials 98 / oauth-loopback 20 exit 0；smoke OAuth 块 936 ok 零回退",
+            "threshold": "P2-b telemetry 事件不改变 oauthBegin 拒绝路径行为（仅可观测性增强，零实验 reason 断言保持）；P2-a 披露方案零行为迁移（老配置不动）",
+            "validation": "node tests/oauth-promotion.mjs + node tests/oauth-loopback.mjs + smoke OAuth 块断言",
+            "status": "NOT_RUN_YET",
+            "evidence": "待收尾段门控后回填（evidence-log REL-004 段）",
             "exception": ""
           },
           "security": {
-            "threshold": "凭据文件 owner-only 权限不变；无新增明文 token 日志；kill-switch 通道关闭能力保留（router.enabled/账号 enabled/登出删除）",
-            "validation": "oauth-credentials 权限断言 + Code Reviewer 安全清单审查",
-            "status": "PASS",
-            "evidence": "review-EVO-006-R0.md：安全面无 P0/P1（凭据路径未变 / P7 零 token 断言保留 / 无新增敏感日志）",
+            "threshold": "telemetry 事件不含凭据/token 明文；发布 tarball 内容白名单不变（无多余文件）；gh 发布鉴权仅 peterwangze",
+            "validation": "Code Reviewer 安全清单 + npm pack 内容清单核查",
+            "status": "NOT_RUN_YET",
+            "evidence": "待 Reviewer 审查与发布段 npm pack 后回填",
             "exception": ""
           },
           "accessibility": {
-            "threshold": "UI 文案中英 i18n 字典同步转正（无实验字样残留键、无未翻译新增键）",
-            "validation": "node tests/client-render.mjs 渲染断言 + i18n 字典键覆盖检查",
-            "status": "PASS",
-            "evidence": "EV-085：client-render exit 0 + R0 i18n 完整性核验（旧键零残留 / presetTitle·presetNotice 中英齐备）",
+            "threshold": "CHANGELOG/README 披露文案口径一致；如涉及 i18n 新键则中英字典同步（无未翻译键）",
+            "validation": "node tests/client-render.mjs + 文档 diff 审查",
+            "status": "NOT_RUN_YET",
+            "evidence": "待收尾段门控后回填（evidence-log REL-004 段）",
             "exception": ""
           },
           "ux": {
-            "threshold": "GPT OAuth 登录路径零实验确认步骤；账号卡无实验标识；平台 ToS/风控正式告知保留且不阻断登录",
-            "validation": "node tests/client-render.mjs + smoke UI 断言（实验标签清除判别）",
-            "status": "PASS",
-            "evidence": "EV-085：client-render/smoke UI 块绿 + R0（UI 实验面全清、账号名去实验、ToS 告知非阻断保留）",
+            "threshold": "用户升级 v0.3.1 后实验面零残留；「开过又关」行为披露可发现（CHANGELOG 未发布段→v0.3.1 发布段）",
+            "validation": "node tests/client-render.mjs + smoke UI 断言 + CHANGELOG 收口 diff 审查",
+            "status": "NOT_RUN_YET",
+            "evidence": "待发布段完成后回填（evidence-log REL-004 段）",
             "exception": ""
           },
           "maintainability": {
-            "threshold": "开关语义判定单点化（P5 禁复制）；feature-flags §3 转正评估恰满窗——flag 债务清理入档（docs/release/feature-flags-v0.3.0.md 口径更新）",
-            "validation": "Code Reviewer 设计一致性检查 + feature-flags 文档 diff 审查",
-            "status": "PASS",
-            "evidence": "review-EVO-006-R0.md：DEC-026 C2 六点设计一致性成立 + P5 单点核验（②层与池过滤同判别式）+ feature-flags 四节注记闭环",
+            "threshold": "P2-c/P3×3 文档口径与代码语义一致（feature-flags §4 行更新、promotion 注释归属、oauthDiscover 边界注记）",
+            "validation": "Code Reviewer + Release Reviewer 文档一致性检查",
+            "status": "NOT_RUN_YET",
+            "evidence": "待 Reviewer 审查结论回填（review-REL-004-*）",
             "exception": ""
           }
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "用户可见场景：账号卡与登录入口中 GPT OAuth 呈现为正式通道（无实验标签/无实验开关步骤），用户登录后即可调用——v0.3.0 真机已证链路可行（EV-081/083）",
-        "demo_path": "node tests/client-render.mjs（账号卡渲染）+ node tests/smoke.mjs（OAuth 流程块）——隔离环境",
-        "scope_guard": "仅动实验→正式语义触点：lib/schemas.js（oauthExperimental 语义）/ lib/service.js（门控链与 C-9 标记）/ lib/client.js（ToS 弹窗+实验标签）/ 对应测试（tests/smoke.mjs、tests/client-render.mjs、tests/oauth-credentials.mjs、tests/oauth-loopback.mjs + 新增判别测试）/ 文档口径（README.md、CHANGELOG.md、docs/release/feature-flags-v0.3.0.md）——不做无关重构、不动 Claude/账号池方向、不做版本 bump",
-        "rollback_plan": "commit 序列单一承载可逐个 git revert；v0.3.1 未发布前 main 可整体回退；kill-switch 三层语义保留确保通道随时可关",
-        "status": "PASS",
-        "evidence": "EV-085：client-render（账号卡无实验标签渲染断言）+ smoke OAuth 流程块绿；R0 核验 UI 实验面全清"
+        "user_visible_slice": "用户场景：升级 v0.3.1 后 GPT OAuth 即正式登录通道（登录入口恒可见、无实验开关与实验标签）；曾关闭实验开关的老用户升级后通道默认可用——该行为已在 CHANGELOG 披露，无静默意外",
+        "demo_path": "node tests/client-render.mjs（账号区正式渲染）+ node tests/smoke.mjs（OAuth 流程块）+ tarball 隔离冷装冒烟命令输出",
+        "scope_guard": "仅动：lib/service.js（P2-b telemetry + 相关注释）、CHANGELOG.md（P2-a 披露 + 发布段收口）、README.md（披露 + 版本行）、docs/release/feature-flags-v0.3.0.md（P2-c §4 行 + P3-f 注记）、tests/oauth-promotion.mjs（P3-d/e 注释与断言）、package.json（仅发布段 bump 0.3.1）——不做无关重构、不做新功能、不动其它套件既有断言（新增断言除外）",
+        "rollback_plan": "收尾段 commit 可逐个 git revert；发布段 tag/Release 可删除重打；v0.3.1 push 前 main 可整体回退（push 后走 revert commit）",
+        "status": "NOT_RUN_YET",
+        "evidence": "待收尾段 + 发布段完成后入 evidence-log（EV-086+）"
       },
       "interruption_policy": {
         "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
@@ -102,16 +102,16 @@
           "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
         ],
         "assumption_record": {
-          "assumption": "oauthExperimental 按 DEC-026 C2 重构为通道开关语义（router.enabled/账号 enabled 保留，登出删除 W-5 不变）而非仅删文案",
-          "basis": "DEC-026 决策文本（C2 完整转正——开关语义重构 + kill-switch 三层语义）+ TRIAGE-EVO-006 触点清单",
-          "reversibility": "语义重构为独立 commit，可单独 revert 不影响其它转正面",
-          "validation": "判别断言（旧实验默认关语义必败）+ Code Reviewer 审查",
-          "rollback": "git revert 对应 commit"
+          "assumption": "P2-a 采用 CHANGELOG/README 披露方案（不迁移老配置、不写用户 settings）——DEC-026 转正 = 用户主权已裁 + P7 最小侵入（loader 迁移写用户配置属高侵入备选，不默认实施）",
+          "basis": "review-EVO-006-R0.md P2-a 双方案建议 + DEC-026 裁决语义 + project-principles P7（数据删除/覆盖路径不可逆保护）",
+          "reversibility": "如后续用户要求自动迁移，可另行独立 commit 增加 loader 迁移段（含 P7 防护），不影响披露方案",
+          "validation": "CHANGELOG/README 披露文案存在性 + 老配置键容忍断言（oauth-promotion A2）保持绿",
+          "rollback": "git revert 对应披露 commit"
         },
         "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "Only change files required by this task row: lib/schemas.js, lib/service.js, lib/client.js, tests/smoke.mjs, tests/client-render.mjs, tests/oauth-credentials.mjs, tests/oauth-loopback.mjs, 新增判别测试文件（tests/）, README.md, CHANGELOG.md, docs/release/feature-flags-v0.3.0.md（EVO-006 转正触点）",
+        "Only change files required by this task row: lib/service.js, CHANGELOG.md, README.md, docs/release/feature-flags-v0.3.0.md, tests/oauth-promotion.mjs, package.json（REL-004 收尾段 + 发布段；TRIAGE-REL-004 在案）",
         "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
       ],
       "required_evidence": [
@@ -126,12 +126,14 @@
         "node tests/adapter-parity.mjs",
         "node tests/attachments.mjs",
         "node tests/client-render.mjs",
-        "node tests/oauth-credentials.mjs"
+        "node tests/oauth-credentials.mjs",
+        "node tests/oauth-loopback.mjs",
+        "node tests/oauth-promotion.mjs"
       ],
       "done_definition": [
-        "RCA 触点盘点 + 转正改造 + 判别测试 + 五套件零回退（934/110/114/14/65 基线）全绿——evidence-log 结构化事实入账",
+        "P2×3/P3×3 收尾 + M-3 无沙箱复跑 + v0.3.1 三件套/tag/tarball/GitHub Release 全部完成（M-4 授权后执行 push/tag/Release）——结构化事实入 evidence-log",
         "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
-        "Commits completed locally for this single task（push 随 v0.3.1 发布链执行——部署决策归用户）"
+        "Commits completed for this single task（push/tag/Release 随 M-4 授权执行——部署决策归用户）"
       ],
       "source": "plan-tracker.md##当前活跃事项"
     }
