@@ -73,6 +73,9 @@ export async function runOauthPromotionTests(check) {
       const begin = await svc.oauthBegin({ accountId: 'cgpt', redirectUri: 'https://ignored.example/cb' })
       check('promotion: preset begin proceeds without experimental gate keys', begin.ok === true && typeof begin.authUrl === 'string' && begin.authUrl.startsWith('https://auth.openai.com/oauth/authorize'))
       check('promotion: oauth events carry no experimental reasons (kill_switch/tos)', !svc.oauthEvents.some((event) => event.reason === 'kill_switch' || event.reason === 'tos'))
+      // P2-b 判别补面（REL-004）：正常路径（启用账号 begin 成功）不产生
+      // account_disabled 事件——防遥测过宽（把启用账号也记为停用拒绝）。
+      check('promotion: enabled-account begin records no account_disabled telemetry (P2-b)', !svc.oauthEvents.some((event) => event.reason === 'account_disabled'))
       const seeded = new OauthCredentialStore(credFile)
       await seeded.write({ type: 'oauth', access: accessJwt, refresh: 'REFRESH-PROMO', expires: Date.now() + 3_600_000, accountId: 'acct-promotion' })
       const resolved = await svc.resolvePresetCredential(state.oauthAccounts.cgpt)
@@ -118,8 +121,13 @@ export async function runOauthPromotionTests(check) {
       check('kill-switch ②: disabled account call touches no credential bytes', bytesBefore.equals(readFileSync(credFile)))
 
       // B2. ②层·发起授权：停用账号不得发起新登录。
+      //     telemetry 判别（REL-004 / R0 P2-b）：拒绝必须留痕——
+      //     reason='account_disabled'（旧代码拒绝无事件 → 本断言先红；
+      //     实验语义 reason kill_switch/tos 不复活，上行「零实验 reason」
+      //     断言保持绿）。
       const beginOff = await svc.oauthBegin({ accountId: 'cgpt' })
       check('kill-switch ②: oauthBegin rejects disabled account', beginOff.ok === false && beginOff.message.includes('已停用'))
+      check('kill-switch ②: disabled begin rejection records account_disabled telemetry (P2-b)', svc.oauthEvents.some((event) => event.kind === 'preset_begin_fail' && event.reason === 'account_disabled' && event.accountId === 'cgpt'))
 
       // B3. ②层·账号池：停用账号被候选过滤（既有语义回归看护）。
       const poolResolved = await svc.resolveAgent('poolchat')
