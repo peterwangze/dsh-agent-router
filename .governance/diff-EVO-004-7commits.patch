@@ -1,0 +1,662 @@
+diff --git a/lib/client.js b/lib/client.js
+index f242b5f..ccb6e6d 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -74,6 +74,9 @@ window.__ModuleLoader__.load({
+     }
+     const wEmpty = wv.object({})
+     const wAgentId = wv.object({ agentId: wv.string() })
++    // EVO-004 出口⑤导出按钮：statsExport RPC 请求/结果（与 lib/rpc.js 同构）。
++    const wStatsExportRequest = wv.object({ range: wv.string(), level: wv.string() })
++    const wStatsExportResult = wv.object({ ok: wv.boolean(), message: wv.string(), csv: wv.string(true) })
+     const wCatalog = wv.object({
+       ok: wv.boolean(), enabled: wv.boolean(),
+       defaults: wv.object({ provider: wv.string(), model: wv.string(), reasoningEffort: wv.string(true) }),
+@@ -207,6 +210,7 @@ window.__ModuleLoader__.load({
+       descriptors: [
+         { id: 'dsh-agent-router#router/catalog', service: 'router', namespace: 'router', method: 'catalog', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('CatalogResult', wCatalog) },
+         { id: 'dsh-agent-router#router/stats', service: 'router', namespace: 'router', method: 'stats', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('StatsResult', wStats) },
++        { id: 'dsh-agent-router#router/statsExport', service: 'router', namespace: 'router', method: 'statsExport', invocation: { kind: 'direct' }, parameters: [parameter('request', wStatsExportRequest)], result: resultOf('StatsExportResult', wStatsExportResult) },
+         { id: 'dsh-agent-router#router/test', service: 'router', namespace: 'router', method: 'test', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('TestResult', wTest) },
+         { id: 'dsh-agent-router#router/reset', service: 'router', namespace: 'router', method: 'reset', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('ResetResult', wReset) },
+         { id: 'dsh-agent-router#router/config', service: 'router', namespace: 'router', method: 'config', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('ConfigResult', wConfig) },
+@@ -483,6 +487,16 @@ window.__ModuleLoader__.load({
+       statsAccountLevel: '账号级明细（服务商）',
+       statsModelDetail: '模型细分',
+       statsNoCalls: '暂无调用记录',
++      statsDayLevel: '按天聚合',
++      statsDate: '日期',
++      statsDayMs: '耗时',
++      statsCost: '成本（约）',
++      statsExport: '导出 CSV',
++      statsExportRange: '时间范围',
++      statsExportLevel: '分组粒度',
++      statsExportDone: '已导出：',
++      statsExportFailed: '导出失败',
++      statsExportMissing: '导出不可用（宿主行 dsh-agent-router 未挂载或 Remote 缺 statsExport）',
+       agentsTitle: '专业 Agent',
+       agentsSummary: (n) => `${n} 个专业 agent`,
+       agentsIntro: '每个专业 Agent 用独立的服务商与模型处理特定能力（图片识别、生成、翻译、语音识别等）。卡片默认折叠，点击展开配置；服务商与模型留空时自动复用主 Agent 模型，点击末尾「+」添加。',
+@@ -773,6 +787,16 @@ window.__ModuleLoader__.load({
+       statsAccountLevel: 'Account level (provider)',
+       statsModelDetail: 'Model breakdown',
+       statsNoCalls: 'No calls recorded yet',
++      statsDayLevel: 'By-day aggregate',
++      statsDate: 'Date',
++      statsDayMs: 'Latency',
++      statsCost: 'Cost (est.)',
++      statsExport: 'Export CSV',
++      statsExportRange: 'Range',
++      statsExportLevel: 'Granularity',
++      statsExportDone: 'Exported: ',
++      statsExportFailed: 'Export failed',
++      statsExportMissing: 'Export unavailable (host dsh-agent-router not mounted or Remote lacks statsExport)',
+       agentsTitle: 'Specialist Agents',
+       agentsSummary: (n) => `${n} specialist agent(s)`,
+       agentsIntro: 'Each specialist agent handles one capability (vision, image generation, translation, speech recognition, …) with its own provider and model. Cards are collapsed by default — click to expand and configure; unset provider/model inherits the main agent model; use "+" at the end to add one.',
+@@ -913,6 +937,28 @@ window.__ModuleLoader__.load({
+       if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
+       return String(n)
+     }
++    function fmtCost(value) {
++      const n = Number(value) || 0
++      if (n === 0) return '0'
++      return String(Math.round(n * 1e6) / 1e6)
++    }
++    /** EVO-004 出口⑤：CSV 下载——浏览器用 Blob + <a download>（不离开当前页）；
++     *  无 DOM 环境（宿主预渲染/测试）回落 data: URL 新标签页（用户可保存）。 */
++    function downloadCsv(csv, filename) {
++      if (typeof document !== 'undefined' && typeof document.createElement === 'function' && typeof window !== 'undefined' && window.URL && typeof window.URL.createObjectURL === 'function') {
++        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
++        const url = window.URL.createObjectURL(blob)
++        const anchor = document.createElement('a')
++        anchor.href = url
++        anchor.download = filename
++        document.body.appendChild(anchor)
++        anchor.click()
++        document.body.removeChild(anchor)
++        window.URL.revokeObjectURL(url)
++        return
++      }
++      window.open(`data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`, '_blank')
++    }
+ 
+     /** 从 describe 结果中取一个 namespace view。 */
+     function viewOf(namespaces, ns) {
+@@ -995,6 +1041,13 @@ window.__ModuleLoader__.load({
+       { id: 'grok', label: 'Grok · xAI（自建网关）', draft: { name: 'Grok', protocol: 'openai-completions', baseURL: 'https://api.x.ai/v1' } },
+     ]
+ 
++    /** 预设账号成员值集合（R8-F1 判据统一）：与 schemas.js OAUTH_PRESET_VALUES
++     *  对齐（客户端无法 import——本地镜像常量）。preset 存在且为成员值 = 预设
++     *  账号（专属账号卡 + W-5 联动删除）；非成员 preset 值（未知值）回落到
++     *  通用账号（可删——非成员账号无独立凭据文件，通用删除安全）。 */
++    const OAUTH_PRESET_MEMBER_VALUES = ['chatgpt-codex']
++    const isPresetAccount = (entry) => !!entry && typeof entry.preset === 'string' && OAUTH_PRESET_MEMBER_VALUES.includes(entry.preset)
++
+     // ── OAuth2 PKCE 工具 ────────────────────────────────────────────────────
+     function pkceBase64Url(bytes) {
+       let text = ''
+@@ -1565,6 +1618,11 @@ window.__ModuleLoader__.load({
+       const [discover, setDiscover] = useState(null)
+       const [account, setAccount] = useState({ provider: '', baseUrl: '', key: '', custom: false, api: 'openai-completions', models: '', busy: false, failure: null, state: null })
+       const [stats, setStats] = useState(null)
++      // EVO-004 出口⑤导出按钮 UI 面：range/level 选择 + 导出状态/提示。
++      const [exportRange, setExportRange] = useState('7d')
++      const [exportLevel, setExportLevel] = useState('agent')
++      const [exportBusy, setExportBusy] = useState(false)
++      const [exportNotice, setExportNotice] = useState('')
+       const [expandedAgents, setExpandedAgents] = useState({})
+       const [expandedAccounts, setExpandedAccounts] = useState({})
+       const [accountDrafts, setAccountDrafts] = useState({})
+@@ -1702,6 +1760,30 @@ window.__ModuleLoader__.load({
+         if (response.ok) setStats(response.value)
+       }
+ 
++      /** EVO-004 出口⑤导出按钮：调 statsExport RPC（range/level）→ CSV 文本 →
++       *  浏览器下载。宿主行缺 statsExport（未重启）显式报错，绝不静默失败。 */
++      const exportStats = async () => {
++        const routerRemote = remote()
++        if (!routerRemote || typeof routerRemote.statsExport !== 'function') {
++          setExportNotice(t('statsExportMissing'))
++          return
++        }
++        setExportBusy(true)
++        try {
++          const response = await routerRemote.statsExport({ range: exportRange, level: exportLevel })
++          if (response && response.ok && response.value && response.value.ok) {
++            downloadCsv(response.value.csv, 'dsh-agent-router-stats.csv')
++            setExportNotice(`${t('statsExportDone')}${response.value.message ?? ''}`)
++          } else {
++            setExportNotice(response && response.error && response.error.message ? response.error.message : (response && response.value && response.value.message ? response.value.message : t('statsExportFailed')))
++          }
++        } catch (error) {
++          setExportNotice(`${t('statsExportFailed')}：${messageOf(error)}`)
++        } finally {
++          setExportBusy(false)
++        }
++      }
++
+       // ── cli 子代理：登录状态 / 交互式登录 / 模型列表 ──────────────────
+       // 接口探测：宿主行旧版本（未重启）时 remote 缺少 cliStatus/cliLogin/
+       // cliModels——一律显式报错，绝不静默失败（按钮"无效"的第一大原因）。
+@@ -1987,6 +2069,7 @@ window.__ModuleLoader__.load({
+       const accountTotalsById = stats ? new Map((stats.accountTotals ?? []).map((entry) => [entry.provider, entry])) : new Map()
+       const accountSeriesById = stats ? new Map((stats.accountSeries ?? []).map((entry) => [entry.provider, entry.buckets ?? []])) : new Map()
+       const recentCalls = stats ? stats.recent ?? [] : []
++      const statsDays = stats ? (stats.days ?? {}) : {}
+       const sumAll = (stats ? stats.totals ?? [] : []).reduce(
+         (acc, entry) => ({ calls: acc.calls + entry.calls, errors: acc.errors + entry.errors, inTokens: acc.inTokens + entry.inputTokens, outTokens: acc.outTokens + entry.outputTokens }),
+         { calls: 0, errors: 0, inTokens: 0, outTokens: 0 })
+@@ -2191,11 +2274,10 @@ window.__ModuleLoader__.load({
+ 
+       // ── OAuth 账号（插件独立管理）派生与操作 ──────────────────────────
+       const oauthById = new Map(oauthEntries.map((entry) => [entry.id, entry]))
+-      // R7-F1：通用 OAuth 区排除 preset 账号（preset 条目由专职账号卡管理，
+-      // §3.6 实验区）——消除"双卡渲染 + 展示服务端忽略的可编辑字段"误导。
+-      // 实验开关关闭时 preset 账号不可见但数据无恙（开开关即见卡片，§3.6
+-      // 默认隐藏语义）；删除入口恒为 W-5 联动（deleteOauthAccount 分流兜底）。
+-      const oauthIds = oauthEntries.filter((entry) => typeof entry.preset !== 'string' || !entry.preset.trim()).map((entry) => entry.id).sort()
++      // R8-F1：判据统一——通用 OAuth 区只排除**成员** preset 账号（专职账号卡
++      // 管理）；非成员 preset（未知值）回落到通用卡（可删，非成员无独立凭据
++      // 文件——通用删除安全，不再 UI 黑箱/删除死锁）。
++      const oauthIds = oauthEntries.filter((entry) => !isPresetAccount(entry)).map((entry) => entry.id).sort()
+       const defaultOauthDraft = () => ({
+         name: '', enabled: true, protocol: 'openai-completions', baseURL: '',
+         clientId: '', clientSecret: '', publicClient: false, authUrl: '', tokenUrl: '', scope: '', models: [],
+@@ -2235,8 +2317,10 @@ window.__ModuleLoader__.load({
+         // 残留 + 池悬挂引用）；preset 账号的合规删除只有一条路径（删凭据 +
+         // 清池引用 + unset 三步联动，§3.6）。确认文案用 presetDeleteConfirm
+         // （明确告知凭据删除），与预设卡删除语义一致。
++        // R8-F1：判据统一——仅**成员** preset 账号分流至 W-5 联动删除；非成员
++        // preset（未知值）走通用删除（无独立凭据文件，unset 条目安全）。
+         const entry = oauthById.get(id)
+-        if (entry && typeof entry.preset === 'string' && entry.preset.trim()) return deletePresetAccount(id)
++        if (entry && isPresetAccount(entry)) return deletePresetAccount(id)
+         if (!window.confirm(t('oauthConfirmDelete'))) return
+         if (entry && entry.tokenRef) await api.credentials.unset({ ref: entry.tokenRef }).catch(() => undefined)
+         await mutate([{ op: 'unset', path: ['oauthAccounts', id] }])
+@@ -2305,7 +2389,7 @@ window.__ModuleLoader__.load({
+ 
+       // ── ChatGPT 订阅登录（实验，EVO-002 Step 6 / §3.6 合规边界）─────────
+       const oauthExperimentalOn = state.value?.oauthExperimental === true
+-      const presetOauthEntries = oauthEntries.filter((entry) => entry.preset === 'chatgpt-codex')
++      const presetOauthEntries = oauthEntries.filter((entry) => isPresetAccount(entry))
+ 
+       /** 实验开关切换：开启前弹一次性 ToS 确认（§3.6 显式开启确认——拒绝则
+        *  不开）；接受则同时落 oauthTosAccepted（服务端 begin 侧复核，手改
+@@ -2887,6 +2971,19 @@ window.__ModuleLoader__.load({
+           el('span', { className: 'dshrouter-meta' }, `${t('statsTokens')}: ${fmtTokens(sumAll.inTokens)} / ${fmtTokens(sumAll.outTokens)}`),
+           el('span', { className: 'dshrouter-spacer' }),
+           el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: clearStats }, t('statsReset'))),
++        // 出口⑤导出按钮：range/level 选择 + 触发 statsExport → CSV 下载。
++        el('div', { className: 'dshrouter-row' },
++          el('span', { className: 'dshrouter-meta' }, t('statsExportRange')),
++          el('select', { className: 'dshrouter-select', 'aria-label': t('statsExportRange'), value: exportRange, onChange: (event) => setExportRange(event.target.value) },
++            el('option', { value: '7d' }, '7d'),
++            el('option', { value: '30d' }, '30d'),
++            el('option', { value: '90d' }, '90d')),
++          el('span', { className: 'dshrouter-meta' }, t('statsExportLevel')),
++          el('select', { className: 'dshrouter-select', 'aria-label': t('statsExportLevel'), value: exportLevel, onChange: (event) => setExportLevel(event.target.value) },
++            el('option', { value: 'agent' }, 'agent'),
++            el('option', { value: 'account' }, 'account')),
++          el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: exportBusy, onClick: exportStats }, t('statsExport')),
++          exportNotice ? el('span', { className: 'dshrouter-meta' }, exportNotice) : null),
+         // Agent 级明细卡片
+         el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-subtitle' }, t('statsAgentLevel'))),
+         agentIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')) : null,
+@@ -2936,6 +3033,27 @@ window.__ModuleLoader__.load({
+             onToggle: () => toggleStatCard(statKey),
+           })
+         }),
++        // 出口②按天视图：stats.days 按天聚合表（日期/调用/失败/tokens/耗时/成本）。
++        Object.keys(statsDays).length > 0 ? el('div', { className: 'dshrouter-head', style: { marginTop: 8 } },
++          el('span', { className: 'dshrouter-subtitle' }, t('statsDayLevel'))) : null,
++        Object.keys(statsDays).length > 0 ? el('table', { className: 'dshrouter-table' },
++          el('thead', null, el('tr', null,
++            el('th', null, t('statsDate')),
++            el('th', null, t('statsCalls')),
++            el('th', null, t('statsErrors')),
++            el('th', null, t('statsTokens')),
++            el('th', null, t('statsDayMs')),
++            el('th', null, t('statsCost')))),
++          el('tbody', null, ...Object.keys(statsDays).sort().reverse().map((date) => {
++            const day = statsDays[date]
++            return el('tr', { key: date },
++              el('td', null, date),
++              el('td', null, day.calls),
++              el('td', null, day.errors),
++              el('td', null, `${fmtTokens(day.inputTokens)} / ${fmtTokens(day.outputTokens)}`),
++              el('td', null, fmtMs(day.ms)),
++              el('td', null, fmtCost(day.cost)))
++          }))) : null,
+         recentCalls.length > 0 ? el('details', null,
+           el('summary', { className: 'dshrouter-meta' }, `${t('statsRecent')}（${recentCalls.length}）`),
+           el('table', { className: 'dshrouter-table' },
+diff --git a/lib/service.js b/lib/service.js
+index 9fcad75..7d31e83 100644
+--- a/lib/service.js
++++ b/lib/service.js
+@@ -633,7 +633,10 @@ export class RouterService extends TypertRemoteService {
+     /** R7-F3：代理 dispatcher 实例缓存（proxyUrl → ProxyAgent）。每次调用
+      *  新建连接池会重复 TLS 握手且不显式关闭（GC 依赖）——高频调用下
+      *  socket/FD 压力；同 oauthCredentialStores 按路径缓存的先例模式。
+-     *  键 = proxyUrl：配置变更时自然失效（旧键实例随 GC 回收）。 */
++     *  键 = proxyUrl。R8-F2（P2）：Map 强引用——旧键实例不随 GC 回收（原
++     *  注释"随 GC 回收"机制错误）；读取面旧键自然失效（不再被查询），但
++     *  实例被 Map 持有至替换。缓存有界：仅保留最近一次代理配置（代理
++     *  配置实际单一），替换时显式 close 旧实例——见 loadOauthProxyDispatcher。 */
+     this.oauthProxyDispatchers = new Map()
+     /** M2 附件统一编址层（v3 §4.3.1/§5.1，Step 5a 模块 + Step 5b 接线）：
+      *  三调用点（prepareChatFiles / materializeCliImages / selectAttachments）
+@@ -3443,7 +3446,20 @@ export class RouterService extends TypertRemoteService {
+       const undici = await load()
+       if (!undici || typeof undici.ProxyAgent !== 'function') throw new Error('undici 模块未暴露 ProxyAgent')
+       const dispatcher = new undici.ProxyAgent(proxy.proxyUrl)
+-      if (this.oauthProxyDispatchers) this.oauthProxyDispatchers.set(proxy.proxyUrl, dispatcher)
++      if (this.oauthProxyDispatchers) {
++        // R8-F2（P2）：缓存有界——Map 强引用下旧键实例不会随 GC 回收；替换
++        // 时显式 close 旧实例（连接池/底层 socket 释放）并淘汰，仅保留最近
++        // 一次代理配置（代理配置实际单一——简单淘汰满足有界语义）。
++        const firstUrl = this.oauthProxyDispatchers.keys().next().value
++        if (firstUrl !== undefined && firstUrl !== proxy.proxyUrl) {
++          for (const [url, old] of this.oauthProxyDispatchers) {
++            if (url === proxy.proxyUrl) continue
++            try { await old?.close?.() } catch { /* close 失败不阻断新代理可用 */ }
++            this.oauthProxyDispatchers.delete(url)
++          }
++        }
++        this.oauthProxyDispatchers.set(proxy.proxyUrl, dispatcher)
++      }
+       return dispatcher
+     } catch (error) {
+       throw new Error(`已配置代理（${proxy.source}：${proxy.proxyUrl}）但无法加载 undici 代理支持（${errorMessage(error)}）；chatgpt.com 在当前网络需经代理可达——请为宿主环境安装 undici，或配置可直连的网络环境`)
+diff --git a/lib/stats.js b/lib/stats.js
+index f86075f..b3b145f 100644
+--- a/lib/stats.js
++++ b/lib/stats.js
+@@ -173,11 +173,15 @@ function minuteKeyOf(at) {
+   return new Date(at).toISOString().slice(0, 16)
+ }
+ 
+-/** CSV 字段转义（含逗号/引号/换行时双引号包裹，引号翻倍）。 */
++/** CSV 字段转义（含逗号/引号/换行时双引号包裹，引号翻倍）。
++ *  R1-F3（carried P2）：公式注入防护——首字符为 = + - @ 时前缀单引号
++ *  （OWASP/RFC 建议：Excel 会把 =+-@ 开头的单元格当公式求值）。对已
++ *  双引号包裹的字段同样生效（前导 ' 使单元格视为文本，Excel 不再求值）。 */
+ function csvEscape(value) {
+   const text = String(value)
+-  if (/[",\n\r]/.test(text)) return `"${text.replaceAll('"', '""')}"`
+-  return text
++  const escaped = /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
++  if (/^[=+\-@]/.test(text)) return `'${escaped}`
++  return escaped
+ }
+ 
+ /** 成本数值格式化（µ 精度舍入，避免浮点噪声进入 CSV）。 */
+@@ -196,6 +200,9 @@ const DAILY_CORRUPT_RE = /^daily-(\d{4}-\d{2}-\d{2})\.corrupt-(\d+)$/
+ export class StatsStore {
+   /** in-flight flush 合并句柄。 */
+   #flushing = null
++  /** setPersist 转换串行链（R2-F1：并发翻转时后请求链到在途转换之后，
++   *  保证"最后写入者胜出"——旧实现首行早退在转换窗口内吞掉新请求）。 */
++  #persistTransition = null
+   /** flush 定时器句柄。 */
+   #timer = null
+   /** 每日 prune 定时器句柄。 */
+@@ -239,7 +246,7 @@ export class StatsStore {
+ 
+     /** 待写队列（E7-a：有界，满丢最旧）。 */
+     this.queue = []
+-    this.selfReport = { dropped: 0, skippedLines: 0, skippedVersionLines: 0, corruptFiles: 0, migratedLines: 0, writeErrors: 0, indexRebuilt: 0, detailDropped: 0 }
++    this.selfReport = { dropped: 0, skippedLines: 0, skippedVersionLines: 0, corruptFiles: 0, migratedLines: 0, writeErrors: 0, indexRebuilt: 0, detailDropped: 0, recordErrors: 0 }
+ 
+     this.#flushing = null
+     this.#timer = null
+@@ -305,7 +312,10 @@ export class StatsStore {
+       if (this.queue.length >= this.flushThreshold) this.flush()
+       else this.#armTimer()
+     } catch {
+-      // 吞掉：统计失败绝不影响调用路径（P7）。
++      // 吞掉：统计失败绝不影响调用路径（P7）。R2-F3（P2）：吞错必须可观测——
++      // 计入 selfReport.recordErrors（存储自诊断计数面，P8 同型——fail/digrade
++      // 路径产生明确诊断事件，禁止无观测吞错）。wire 面留待下次增量。
++      this.selfReport.recordErrors += 1
+     }
+   }
+ 
+@@ -425,6 +435,11 @@ export class StatsStore {
+   }
+ 
+   async #drain() {
++    // R2-F2（P2）：false 期契约洞——#drain 无 persist 门控会把 toggle-off
++    // 写失败回队的残留批次在 false 期显式 flush() 时写盘，违反 F1 不读不写
++    // 契约。与 #writeIndex 同构的门控：persist=false 直接退出（不影响
++    // toggle-off 语义——该场景 flush 时 persist 仍为 true）。
++    if (!this.persist) return
+     for (;;) {
+       const batch = this.queue.splice(0, this.queue.length)
+       if (batch.length === 0) break
+@@ -565,35 +580,49 @@ export class StatsStore {
+    *   记录时折叠，再 load 会双计）→ 跳过 load 仅重建 index 镜像；内存为空
+    *   （false 期重启/清空后开启）→ load() 全量恢复磁盘聚合 + 重建索引
+    *  （IBC-1 ①③：数据不损、空窗后索引重建时机 = 重新启用时）。
++   *
++   * R2-F1（P2）：并发翻转竞态修复——任意调用先链到在途转换（#persistTransition）
++   * 之后执行，等待完成后**重新比较**目标与当前状态；旧实现 `want === this.persist`
++   * 首行早退发生在转换窗口内（off 在途 persist 仍为 true 时来 on 请求被吞掉），
++   * 终态倒置。串行化后每次请求按到达顺序执行且终态由最后请求决定。
+    */
+   async setPersist(next) {
+     const want = next !== false
+-    if (want === this.persist) return
+-    if (!want) {
+-      if (this.#flushing) {
+-        try {
+-          await this.#flushing
+-        } catch { /* in-flight flush 收尾失败不阻断关停 */ }
+-      }
+-      await this.flush()
+-      this.persist = false
+-      this.#clearTimers()
+-      return
+-    }
+-    this.persist = true
+-    if (!this.#exitHandler) {
+-      this.#exitHandler = () => this.flushSync()
+-      process.on('exit', this.#exitHandler)
+-    }
+-    const memoryEmpty = this.totals.size === 0 && this.accountTotals.size === 0 && this.days.size === 0 && this.detail.length === 0
+-    if (memoryEmpty) {
+-      await this.load()
+-      return
+-    }
++    const prevTransition = this.#persistTransition
++    let release
++    this.#persistTransition = new Promise((resolve) => { release = resolve })
+     try {
+-      await this.#writeIndex()
+-    } catch {
+-      this.selfReport.writeErrors += 1
++      if (prevTransition) await prevTransition
++      // 等待在途转换结束后再比较——转换窗口内 persist 可能仍是过渡值。
++      if (want === this.persist) return
++      if (!want) {
++        if (this.#flushing) {
++          try {
++            await this.#flushing
++          } catch { /* in-flight flush 收尾失败不阻断关停 */ }
++        }
++        await this.flush()
++        this.persist = false
++        this.#clearTimers()
++        return
++      }
++      this.persist = true
++      if (!this.#exitHandler) {
++        this.#exitHandler = () => this.flushSync()
++        process.on('exit', this.#exitHandler)
++      }
++      const memoryEmpty = this.totals.size === 0 && this.accountTotals.size === 0 && this.days.size === 0 && this.detail.length === 0
++      if (memoryEmpty) {
++        await this.load()
++        return
++      }
++      try {
++        await this.#writeIndex()
++      } catch {
++        this.selfReport.writeErrors += 1
++      }
++    } finally {
++      release()
+     }
+   }
+ 
+diff --git a/tests/client-render.mjs b/tests/client-render.mjs
+index 26fb14a..d5eb206 100644
+--- a/tests/client-render.mjs
++++ b/tests/client-render.mjs
+@@ -171,7 +171,7 @@ export async function runClientRender(check) {
+   }
+ 
+   // ── 装配：评估浏览器包 → mock ctx → apply → 渲染 ─────────────────────
+-  const captured = { registrations: [], listeners: [], uploadFileCalls: [], readWorkspaceFileCalls: [], saveOps: [], oauthLogoutCalls: [], beginCalls: [], openCalls: [] }
++  const captured = { registrations: [], listeners: [], uploadFileCalls: [], readWorkspaceFileCalls: [], saveOps: [], oauthLogoutCalls: [], beginCalls: [], openCalls: [], statsExportCalls: [] }
+   const fakeWindow = {
+     __ModuleLoader__: { load: (payload) => { captured.bundle = payload } },
+     location: { search: '', pathname: '/' },
+@@ -220,6 +220,10 @@ export async function runClientRender(check) {
+   let experimentalOn = false
+   let presetMode = 'none'
+   let confirmMode = true
++  // EVO-004 R8-F1（P2）：非成员 preset 值账号判据统一——未知 preset（'zzz'）
++  // 必须回落到通用 OAuth 卡（旧：宽判据排除 + 预设卡严格成员 → UI 黑箱 +
++  // 删除死锁）。true 时 catalog 注入一个 preset:'zzz' 的散账号。
++  let unknownPresetMode = false
+   // EVO-002 Step 7（R7-F4 判别）：true 时 remoteMock.oauthLogout 返回
+   // ok:false（store.delete 失败形态——凭据文件残留 + 无重试入口的旧行为判别）。
+   let logoutFailMode = false
+@@ -245,8 +249,9 @@ export async function runClientRender(check) {
+               { id: 'codex', name: 'Codex 助手', type: 'cli', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', cliAgent: 'codexentry', effectiveProvider: 'cli:codexentry', effectiveModel: '', source: 'agent' },
+               { id: 'vision', name: '视觉', type: 'chat', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', effectiveProvider: 'deepseek-official', effectiveModel: 'deepseek-v4-pro', source: 'main' },
+             ],
+-        oauthAccounts: presetMode === 'none' ? [] : [
++        oauthAccounts: presetMode === 'none' && !unknownPresetMode ? [] : [
+           { id: 'chatgpt', name: 'ChatGPT（实验）', enabled: true, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', tokenRef: '', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.4-mini'], publicClient: false, preset: 'chatgpt-codex', presetLoggedIn: presetMode === 'logged-in' },
++          ...(unknownPresetMode ? [{ id: 'weird', name: '怪异账号', enabled: true, protocol: 'openai-completions', baseURL: '', tokenRef: 'ROUTER_OAUTH_WEIRD_TOKEN', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: [], publicClient: false, preset: 'zzz' }] : []),
+         ],
+         pools: presetMode === 'none' ? [] : [
+           { id: 'main', name: '主池', enabled: true, strategy: 'healthy', accounts: ['chatgpt'], accountHealth: [] },
+@@ -269,7 +274,11 @@ export async function runClientRender(check) {
+         codexentry: { name: 'Codex 子代理', enabled: true, command: 'codex', args: '', timeoutMs: 0, maxConcurrent: 1, loginArgs: '', statusArgs: '', modelsArgs: '' },
+       },
+     }, user: null } }),
+-    stats: async () => ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [] } }),
++    stats: async () => ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [], days: {
++      '2026-01-15': { calls: 3, errors: 1, inputTokens: 110, outputTokens: 50, tokens: 160, ms: 180, cost: 0.5 },
++      '2026-01-16': { calls: 2, errors: 0, inputTokens: 20, outputTokens: 0, tokens: 20, ms: 60, cost: 0 },
++    } } }),
++    statsExport: async (request) => { captured.statsExportCalls.push(request); return { ok: true, value: { ok: true, message: '已导出 2 行', csv: 'date,agent,account,model,calls,errors,inputTokens,outputTokens,p50ms,p95ms,costEstimate\n2026-01-15,vision,openai,gpt-4o,3,1,110,50,60,180,0.5' } } },
+     save: async (request) => { captured.saveOps.push(...((request && request.ops) ?? [])); return { ok: true, value: { ok: true, revision: 1 } } },
+     oauthBegin: async (request) => { captured.beginCalls.push(request); return { ok: true, value: { ok: true, message: '授权 URL 已生成', authUrl: 'https://auth.openai.com/oauth/authorize?x=1', state: 'st-6' } } },
+     oauthLogout: async (request) => {
+@@ -1084,4 +1093,74 @@ export async function runClientRender(check) {
+     const gallery = findAll(galleryTree, (node) => hasClass(node, 'dshrouter-toolgallery'))
+     check('tool card renders image gallery container', gallery.length === 1)
+   }
++
++  // ── 断言：R8-F1（EVO-004）未知 preset 值账号判据统一 ────────────────────
++  // 旧代码：通用区宽判据（非空 preset 即排除）+ 预设卡严格成员
++  // （preset === 'chatgpt-codex'）→ 非成员 preset（'zzz'）账号无任何渲染
++  // 入口（UI 黑箱 + 删除死锁——服务端成员校验拒删）。修复后：非成员 preset
++  // 回落到通用 OAuth 卡（可删——非成员账号无独立凭据文件，通用删除安全）。
++  // 独立渲染设置页（不扰动前面断言的展开态）。
++  {
++    unknownPresetMode = true
++    presetMode = 'none'
++    experimentalOn = false
++    await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'settings-r8f1', 60)
++    const acctHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.accountTitle))
++    check('R8-F1 accounts category head present', !!acctHead)
++    if (acctHead) {
++      acctHead.props.onClick()
++      currentTree = await settle()
++      const advHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.advancedSection))
++      if (advHead) {
++        advHead.props.onClick()
++        currentTree = await settle()
++        check('unknown-preset account falls back to generic oauth card (R8-F1)', textOf(currentTree).includes('怪异账号') && textOf(currentTree).includes('weird'))
++      }
++    }
++    unknownPresetMode = false
++    presetMode = 'none'
++    experimentalOn = false
++  }
++
++  // ── 断言：①（EVO-004 出口②）按天视图 UI 面——stats.days 按天聚合表 ────
++  // 旧代码 statsBody 只渲染 totals/series/recent，无 stats.days 消费面（UI 面
++  // 零改动）→ 本组断言必败。构造：remoteMock.stats 返回 days（两日期聚合）。
++  {
++    experimentalOn = false
++    presetMode = 'none'
++    unknownPresetMode = false
++    await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'settings-daily', 60)
++    const statsHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.statsTitle))
++    check('daily-view stats category head present', !!statsHead)
++    if (statsHead) {
++      statsHead.props.onClick()
++      currentTree = await settle()
++      check('daily view renders by-day aggregate table (①)', textOf(currentTree).includes(zh.statsDayLevel) && textOf(currentTree).includes('2026-01-15') && textOf(currentTree).includes('2026-01-16'))
++      check('daily view rows carry day call counts', textOf(currentTree).includes('3') && textOf(currentTree).includes('2'))
++    }
++  }
++
++  // ── 断言：②（EVO-004 出口⑤）导出按钮 UI 面——statsExport RPC + CSV 下载
++  // 旧代码 statsBody 无导出按钮（UI 面零改动）→ 本组断言必败。
++  {
++    experimentalOn = false
++    presetMode = 'none'
++    unknownPresetMode = false
++    captured.statsExportCalls = []
++    captured.openCalls = []
++    await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'settings-export', 60)
++    const statsHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.statsTitle))
++    if (statsHead) {
++      statsHead.props.onClick()
++      currentTree = await settle()
++      const exportButton = buttonsOf(currentTree).find((node) => textOf(node) === zh.statsExport)
++      check('export button renders in stats panel (②)', !!exportButton)
++      if (exportButton) {
++        exportButton.props.onClick()
++        currentTree = await settle()
++        check('export triggers statsExport RPC with range/level', captured.statsExportCalls.length === 1 && captured.statsExportCalls[0].range === '7d' && captured.statsExportCalls[0].level === 'agent')
++        check('export downloads CSV via data: URL (②)', captured.openCalls.some((url) => url.startsWith('data:text/csv;charset=utf-8,') && decodeURIComponent(url.split(',')[1]).includes('date,agent,account,model')))
++      }
++    }
++  }
+ }
+diff --git a/tests/smoke.mjs b/tests/smoke.mjs
+index 0eca537..24a733c 100644
+--- a/tests/smoke.mjs
++++ b/tests/smoke.mjs
+@@ -926,12 +926,19 @@ console.log('RouterService:')
+         //    变化）；undici 不可用 → 明确报错（代理来源 + 指引）。
+         await seed6()
+         let proxyAgentCount6 = 0
+-        svc6.oauthUndiciLoader = async () => ({ ProxyAgent: class { constructor(url) { proxyAgentCount6 += 1; this.url = url } } })
++        let proxyCloseCount6 = 0
++        svc6.oauthUndiciLoader = async () => ({ ProxyAgent: class { constructor(url) { proxyAgentCount6 += 1; this.url = url } close() { proxyCloseCount6 += 1 } } })
+         state6.oauthProxyUrl = 'http://127.0.0.1:7890'
+         const proxied6 = await svc6.run({ agentId: 'cgptchat', task: '经代理' })
+         check('codex call routes via proxy dispatcher when configured', proxied6.text === 'OK-6' && fetches6[fetches6.length - 1]?.init?.dispatcher?.url === 'http://127.0.0.1:7890')
+         const proxied6b = await svc6.run({ agentId: 'cgptchat', task: '经代理 2' })
+         check('proxy dispatcher cached per proxyUrl (R7-F3)', proxied6b.text === 'OK-6' && proxyAgentCount6 === 1 && fetches6[fetches6.length - 1]?.init?.dispatcher === fetches6[fetches6.length - 2]?.init?.dispatcher)
++        // R8-F2（P2）：缓存生命周期有界 + 注释机制修正——Map 强引用下旧键实例
++        // 不随 GC 回收（注释"随 GC 回收"为机制错误）；切换到新 proxyUrl 时旧
++        // 实例显式 close + 淘汰，缓存仅保留最近一次（有界）。
++        state6.oauthProxyUrl = 'http://127.0.0.1:7895'
++        const proxied6c = await svc6.run({ agentId: 'cgptchat', task: '经代理 3' })
++        check('proxy dispatcher cache bounded across proxyUrl changes (R8-F2)', proxied6c.text === 'OK-6' && svc6.oauthProxyDispatchers.size === 1 && svc6.oauthProxyDispatchers.has('http://127.0.0.1:7895') && !svc6.oauthProxyDispatchers.has('http://127.0.0.1:7890') && proxyCloseCount6 === 1 && proxyAgentCount6 === 2)
+         state6.oauthProxyUrl = ''
+         const direct6 = await svc6.run({ agentId: 'cgptchat', task: '直连' })
+         check('codex call stays direct (no dispatcher) when no proxy', direct6.text === 'OK-6' && fetches6[fetches6.length - 1]?.init?.dispatcher === undefined)
+diff --git a/tests/stats.mjs b/tests/stats.mjs
+index 94eaf48..a373e62 100644
+--- a/tests/stats.mjs
++++ b/tests/stats.mjs
+@@ -478,7 +478,94 @@ export async function runStatsTests(check) {
+     rmSync(work, { recursive: true, force: true })
+   }
+ 
+-  // ── 18. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
++  // ── 18. R1-F3（carried P2）：CSV 公式注入防护 ─────────────────────────
++  // 字段首字符为 = + - @ 时须加 ' 前缀（OWASP/RFC 建议——excel 会把这些
++  // 当公式求值）。agentId/provider/model 为外部可注入字段。旧 csvEscape
++  // 只处理引号/逗号/换行，=+-@ 开头字段原样输出 → 本组断言必败。
++  console.log('CSV formula-injection escape (R1-F3):')
++  {
++    const work = mkdtempSync(join(tmpdir(), 'stats-f3-'))
++    const dir = join(work, 'stats')
++    const store = new StatsStore({ dir, persist: false, now: NOW_AT })
++    store.record({ agentId: '=1+1', provider: 'openai', model: 'gpt-4o', ok: true, ms: 1, at: T0 })
++    store.record({ agentId: '+=cmd', provider: '+SUM(A1)', model: 'gpt-4o', ok: true, ms: 2, at: T0 })
++    store.record({ agentId: '-2', provider: '@import', model: 'gpt-4o', ok: true, ms: 3, at: T0 })
++    const csv = store.export({ range: '7d', level: 'agent' })
++    const rows = csv.split('\n').slice(1)
++    const cell = (row, index) => {
++      const cols = row.split(',')
++      return cols[index]
++    }
++    check('R1-F3: agent field leading = prefixed with single quote', rows.some((r) => cell(r, 1) === "'=1+1"))
++    check('R1-F3: provider field leading + prefixed', rows.some((r) => cell(r, 2) === "'+SUM(A1)"))
++    check('R1-F3: agent field leading - prefixed', rows.some((r) => cell(r, 1) === "'-2"))
++    check('R1-F3: provider field leading @ prefixed', rows.some((r) => cell(r, 2) === "'@import"))
++    // 模型/账号等正常字段不受影响（无 =+-@ 开头前缀不加引号）。
++    check('R1-F3: safe fields unchanged', rows.every((r) => cell(r, 3) === 'gpt-4o' && !cell(r, 3).startsWith("'")))
++    await store.close()
++    rmSync(work, { recursive: true, force: true })
++  }
++
++  // ── 19. R2-F1（P2）：setPersist 并发翻转竞态——最后写入者胜出 ─────────────
++  // 旧 #setPersist 首行 `if (want === this.persist) return` 在转换前比较：
++  // setPersist(false) 在途（await flush 期间 persist 仍为 true）时调
++  // setPersist(true) 命中早退 no-op → false 转换完成后终态倒置（应 true
++  // 实 false）。本组以"先关后开连续发起"复现该窗口 → 旧代码终态 false 必败。
++  console.log('setPersist concurrent-flip race (R2-F1):')
++  {
++    const work = mkdtempSync(join(tmpdir(), 'stats-r2f1-'))
++    const dir = join(work, 'stats')
++    const store = new StatsStore({ dir, flushThreshold: 50, now: NOW_AT })
++    store.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 1, at: T0 })
++    // 在 off 过渡在途（await flush 尚未落地 persist=false）时同步注入 on——
++    // 与 service.js applyStatsSettings fire-and-forget 同型触发。
++    const p1 = store.setPersist(false)
++    const p2 = store.setPersist(true)
++    await Promise.all([p1, p2])
++    check('R2-F1: last writer wins across concurrent flips (final state true)', store.persist === true)
++    await store.close()
++    rmSync(work, { recursive: true, force: true })
++  }
++
++  // ── 20. R2-F2（P2）：false 期显式 flush 契约洞——#drain 无 persist 门控 ──
++  // 旧 #drain 起点无 `if (!this.persist) return`：toggle-off 时 await flush
++  // 写失败批次 unshift 回队 → persist=false 生效后残留队列，false 期显式
++  // flush() 会继续写盘——违反 F1 "不读不写"文档契约。本组直接向 persist=false
++  // store 注入残留队列再显式 flush → 旧代码写盘必败。
++  console.log('persist=false explicit flush with residual queue (R2-F2):')
++  {
++    const work = mkdtempSync(join(tmpdir(), 'stats-r2f2-'))
++    const dir = join(work, 'stats')
++    const store = new StatsStore({ dir, persist: false, now: NOW_AT })
++    // 模拟 toggle-off 写失败回队后 false 生效的残留待写行（字段形状同 #lineForWrite）。
++    store.queue.push({ v: 1, at: T0, agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 1, inputTokens: 0, outputTokens: 0, costEstimate: 0 })
++    await store.flush()
++    const dailyPath = join(dir, `daily-${D0}.jsonl`)
++    check('R2-F2: false-period explicit flush writes nothing even with residual queue', !existsSync(dailyPath))
++    check('R2-F2: false-period flush leaves no stats dir artifacts', !existsSync(dir) || readdirSync(dir).filter((n) => n.endsWith('.jsonl')).length === 0)
++    await store.close()
++    rmSync(work, { recursive: true, force: true })
++  }
++
++  // ── 21. R2-F3（P2）：record() 吞错零观测——selfReport 计数（P8 同型）──
++  // F2 修复后注入函数抛错被静默吞掉，但 selfReport 八项计数无一命中 record
++  // 路径——故障期静默丢统计无痕迹。R2-F3 要求 catch 内加 recordErrors 计数。
++  // 旧代码无该计数 → 本组断言必败。
++  console.log('record() error observation counter (R2-F3):')
++  {
++    const work = mkdtempSync(join(tmpdir(), 'stats-r2f3-'))
++    const dir = join(work, 'stats')
++    const store = new StatsStore({ dir, persist: false, getAgentName: () => { throw new Error('injected getAgentName boom') } })
++    store.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 10, at: T0 })
++    check('R2-F3: swallowed record failure observed via selfReport.recordErrors', store.statsSelfReport().recordErrors === 1)
++    store.record({ agentId: 'draw', provider: 'openai', model: 'dall-e-3', ok: true, ms: 5, at: T0 })
++    check('R2-F3: recordErrors accumulates across failures', store.statsSelfReport().recordErrors === 2)
++    check('R2-F3: no successful fold counted under injected failure', store.snapshot().totals.length === 0)
++    await store.close()
++    rmSync(work, { recursive: true, force: true })
++  }
++
++  // ── 22. 依赖面结构断言（§4.4：仅 node: 内建，不反向依赖——无环）──────────
+   console.log('dependency surface (acyclic):')
+   {
+     const source = readFileSync(new URL('../lib/stats.js', import.meta.url), 'utf8')
