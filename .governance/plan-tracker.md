@@ -32,7 +32,7 @@
 | P1 | REL-003 | v0.3.0 M-1 候选打包（Developer 代码段）——EVO-005 P1×2 修复 + peerDeps rc.8 + version bump | EVO-005✅ DEC-025✅ | v0.3.0 | 已完成（M-1 全段：代码段 R0 APPROVED_WITH_NOTES/0 + 资产段 Release R1 APPROVED_WITH_NOTES/0 + Design R1 NEEDS_CHANGE→返工→R2 APPROVED_WITH_NOTES/0 T1 闭环；EV-078/079） |
 | P0 | FIX-007 | 宿主 0.1.1-rc.2 演进回归：route_agent 图片附件链 rejected「图片加载失败」+ 整链变慢/卡住（M-2 出口①失败回路受理——GATE-1 验证即失败） | RISK-003（活性） | v0.3.0（或热修） | 已完成（b816601 RCA 先行修复 + R0 APPROVED_WITH_NOTES/0 + 08accbd F-1 P8 增补；附件链 7 格式回归看护成立；FIX-008 候选已登记——R5 目录空根因 + 附件 parity 守卫 + F-6/F-10 加固） |
 | P1 | EVO-006 | GPT OAuth 实验通道转正式（DEC-026 用户裁决——仅 GPT 通道，其余方向待后续需求；v0.3.1 载体） | EVO-002✅ EVO-005✅ DEC-026✅ | v0.3.1 | 已完成（代码/审查闭环——3 commits（bf667b3 服务端语义 + 6ebe9ed 客户端 UI + a4d33cd 文档口径）+ R0 APPROVED_WITH_NOTES/0（C2 六点成立；P2×3/P3×3 台账 + M-3 无沙箱复跑绑定 v0.3.1 发布链）；门控 936/110/114/14/65/98/20/11 零回退；EV-085） |
-| P1 | REL-004 | v0.3.1 发布链——EVO-006 转正承载 + R0 台账收尾（P2×3/P3×3）+ M-3 无沙箱复跑 + 版本规划/发布 | EVO-006✅ DEC-026✅ | v0.3.1 | 进行中——**收尾段+M-3 已闭环**（4 commits + R0 APPROVED_WITH_NOTES/0 + M-3 全绿：smoke 948/0/exit0/13s + metrics exit0 + hooks 自证；EV-086）；规划段 Release agent 派发中 → Release Reviewer → M-4 发布授权（用户）→ 发布执行 |
+| P1 | REL-004 | v0.3.1 发布链——EVO-006 转正承载 + R0 台账收尾（P2×3/P3×3）+ M-3 无沙箱复跑 + 版本规划/发布 | EVO-006✅ DEC-026✅ | v0.3.1 | 进行中——收尾段+M-3 闭环（EV-086）+ **规划段三产物 + R1 发布审查 APPROVED_WITH_NOTES/0**（W-1：M-5 E-1 三分账基线 = ahead **11**（含 b2a1f66/a6acd06 治理 commits——零产品面增量）；W-2 三产物已入仓；S-1 tracker:61 陈旧行 M-7 清账）→ **M-4 发布授权待用户（唯一授权点）** → E-1~E-8 执行 |
 | — | 下一轮 | **REL-004 v0.3.1 发布链进行中**——收尾段返回 → Code Reviewer R0（收尾 diff）→ M-3 无沙箱复跑 → Release agent 规划 + Release Reviewer → M-4 发布授权（用户）；其余（FIX-008/出口③/C-4+C-5/C-6/C-2）等用户需求 | — | v0.3.1 | 进行中 |
 
 ### 最近完成
