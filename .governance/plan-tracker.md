@@ -17,7 +17,7 @@
 
 | 项目 | 当前阶段 | 总任务数 | 已完成 | 阻塞中 | 关键风险数 | 最近 Gate 结论 | 最近复盘日期 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| dsh-agent-router | development (6/11) | 28（+REL-003） | 28 终态（27 已完成含 REL-003 + 1 关闭 DEV-001）——**v0.3.0 M-1 全段完成；仅剩 M-2 出口①用户门禁（GATE-1）→ M-4 授权** | 0 | 1（RISK-001 活跃——主轨道 = DEV-002 + 演进路线） | G4 待评（v0.2.0/v0.2.1 已发布；CI 面仍缺——RISK-001；v0.3.x 演进定稿 DEC-020 + EVO-001 PoC 通过 C-1 解锁） | — |
+| dsh-agent-router | development (6/11) | 29（+FIX-007） | 29 终态（28 已完成含 FIX-007 + 1 关闭 DEV-001）——FIX-007 附件链修复闭环；**v0.3.0 待用户 M-2 复验（GATE-1）→ M-4 授权** | 0 | 1（RISK-001 活跃——主轨道 = DEV-002 + 演进路线） | G4 待评（v0.2.0/v0.2.1 已发布；CI 面仍缺——RISK-001；v0.3.x 演进定稿 DEC-020 + EVO-001 PoC 通过 C-1 解锁） | — |
 
 ## 当前活跃事项
 
@@ -30,13 +30,14 @@
 | P1 | REL-002 | v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议 | EVO-001✅ EVO-002✅ FIX-006✅ DEC-020✅ | v0.3.0 | 已完成（规划段 + M-0 闭环）——version-plan 双审 APPROVED_WITH_NOTES×2/0 + DEC-025 四项裁决入账；EV-075/076 |
 | P1 | EVO-005 | 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告） | EVO-002（1455 惰性启动 + 降级链） | v0.3.0 | 已完成（R0 APPROVED_WITH_NOTES/0——协议事实 13 项对照一手源码全相符；**P1×2 绑定 M-1 MUST 闭合**：F-1 登出×兑换 TOCTOU + F-2 传输错误终态化；EV-077） |
 | P1 | REL-003 | v0.3.0 M-1 候选打包（Developer 代码段）——EVO-005 P1×2 修复 + peerDeps rc.8 + version bump | EVO-005✅ DEC-025✅ | v0.3.0 | 已完成（M-1 全段：代码段 R0 APPROVED_WITH_NOTES/0 + 资产段 Release R1 APPROVED_WITH_NOTES/0 + Design R1 NEEDS_CHANGE→返工→R2 APPROVED_WITH_NOTES/0 T1 闭环；EV-078/079） |
-| P0 | FIX-007 | 宿主 0.1.1-rc.2 演进回归：route_agent 图片附件链 rejected「图片加载失败」+ 整链变慢/卡住（M-2 出口①失败回路受理——GATE-1 验证即失败） | RISK-003（活性） | v0.3.0（或热修） | 进行中（TRIAGE-FIX-007 机器入账 2026-08-29；Coordinator 诊察：宿主 npx 15:34 刷新 + 三包 0.1.1-rc.2 + 代理 7890 未运行；Developer RCA+修复执行中） |
+| P0 | FIX-007 | 宿主 0.1.1-rc.2 演进回归：route_agent 图片附件链 rejected「图片加载失败」+ 整链变慢/卡住（M-2 出口①失败回路受理——GATE-1 验证即失败） | RISK-003（活性） | v0.3.0（或热修） | 已完成（b816601 RCA 先行修复 + R0 APPROVED_WITH_NOTES/0 + 08accbd F-1 P8 增补；附件链 7 格式回归看护成立；FIX-008 候选已登记——R5 目录空根因 + 附件 parity 守卫 + F-6/F-10 加固） |
 | — | 下一轮 | v0.3.0 发布前提——FIX-007 修复后用户 M-2 复验（GATE-1 出口①）+ 出口③设备码流排期 + 发布时点（用户决策项）；插件仓申报已完成（FIX-281，2026-08-27） | — | v0.3.x | 待定 |
 
 ### 最近完成
 
 | 已完成任务 | 完成日期 | 摘要 |
 | --- | --- | --- |
+| FIX-007 | 2026-08-29 | 宿主 rc.2 附件链回归闭环（b816601 RCA 修复 + R0 APPROVED_WITH_NOTES/0 + 08accbd P8 增补；934 ok 零回退 + 真实 rc.2 隔离 7 格式全绿；R5 目录空/F-6/F-10 → FIX-008 候选；EV-080~083） |
 | REL-003 | 2026-08-28 | v0.3.0 M-1 全段终态（代码 5 commits R0 通过 + 资产 6 文件三审链 R1×2+R2 T1 闭环 + GATE-4/5/7 实采全绿 + 81 commits 三分账；EV-078/079） |
 | EVO-005 | 2026-08-27 | 设备码授权流终态（3 commits 协议原语/RPC 装配/客户端分支；R0 APPROVED_WITH_NOTES/0 协议 13/13 溯源相符；P1×2 绑 M-1 MUST；EV-077） |
 | REL-002 | 2026-08-27 | v0.3.0 发布规划先行段（version-plan 八节 + 双审 APPROVED_WITH_NOTES×2/0 + M-0 四项裁决 DEC-025 入账；EV-075/076） |
