@@ -3,7 +3,7 @@
 > dsh-agent-router 的版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 > 内部注解（提交号 / EV 编号）供追溯，用户可忽略。
 
-## v0.3.1 — 2026-08-30（发布候选——正式日期以 v0.3.1 tag 为准）
+## v0.3.1 — 2026-08-30
 
 ### 摘要
 
