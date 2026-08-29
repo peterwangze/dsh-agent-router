@@ -4,7 +4,7 @@
 >
 > DeepSeek Harness（DSH）多模型路由插件：为任意 DSH 主 agent 挂载专业 agent 目录，按任务自动路由到带独立模型的视觉、翻译、语音、子代理等专业 agent，扩展主 agent 的能力边界。
 
-[![version](https://img.shields.io/badge/version-v0.3.0-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
+[![version](https://img.shields.io/badge/version-v0.3.1-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## 项目目标
@@ -32,24 +32,24 @@
 
 安装脚本自动完成：克隆源码 → 链接到 `~/.dsh/profiles/node_modules/` → 在 `profiles/web/cordis.patch.yml` 写入宿主行（幂等，可重复执行）。完成后**重启 DSH** 即可。
 
-固定版本：把命令中的 `main` 换成版本号，如 `v0.3.0`。
+固定版本：把命令中的 `main` 换成版本号，如 `v0.3.1`。
 
 ### 离线安装
 
-1. 下载发行包：[dsh-agent-router-v0.3.0.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.3.0/dsh-agent-router-v0.3.0.tar.gz)
+1. 下载发行包：[dsh-agent-router-v0.3.1.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.3.1/dsh-agent-router-v0.3.1.tar.gz)
 2. 解压并进入包目录：
 
 ```powershell
 # Windows
-tar -xzf dsh-agent-router-v0.3.0.tar.gz
-cd dsh-agent-router-v0.3.0
+tar -xzf dsh-agent-router-v0.3.1.tar.gz
+cd dsh-agent-router-v0.3.1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -LocalPath .
 ```
 
 ```sh
 # macOS / Linux
-tar -xzf dsh-agent-router-v0.3.0.tar.gz
-cd dsh-agent-router-v0.3.0
+tar -xzf dsh-agent-router-v0.3.1.tar.gz
+cd dsh-agent-router-v0.3.1
 ./install.sh --local .
 ```
 
