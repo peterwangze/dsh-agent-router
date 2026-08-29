@@ -6,10 +6,10 @@
  * 调用（smoke 回归 = 本文件 + 既有断言全绿）。
  */
 import { Context } from '@deepseek-ai/cordis'
-import { rmSync, readFileSync, statSync } from 'node:fs'
+import { rmSync, readFileSync, statSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { AttachmentRegistry, isAttachmentId, contentHashId, ATTACHMENT_ID_RE, ATTACHMENT_REGISTRY_MAX_ENTRIES, ATTACHMENT_ERROR_CODES } from '../lib/attachments.js'
+import { AttachmentRegistry, isAttachmentId, contentHashId, ATTACHMENT_ID_RE, ATTACHMENT_REGISTRY_MAX_ENTRIES, ATTACHMENT_ERROR_CODES, probeImageDimensions } from '../lib/attachments.js'
 import { RouterService } from '../lib/service.js'
 
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -270,6 +270,192 @@ export async function runAttachmentTests(check) {
     registry.close()
     check('close clears registry state', registry.entries.size === 0 && registry.pathIndex.size === 0 && registry.materialized.size === 0)
   }
+
+  // ── FIX-007：宿主 rc.2 形状（readImage 元数据严格校验——裸 id ref 恒拒）────────
+  // 判别语义：宿主 dsh-attachment-local readImageFile 对 ref 执行 digest +
+  // mediaType/bytes/width/height 全等校验；裸 id（无元数据）ref 恒 throw
+  // ATTACHMENT_CORRUPT（"Stored attachment metadata does not match its reference."）。
+  // 对象文件按宿主布局落 DSH_HOME/attachments/v1/objects/<xx>/<hex>（隔离临时
+  // 目录，与生产形状一致——自取证降级读真实文件系统）。该 mock 与 FIX-003 的
+  // routing-paths B13 桩同型，但覆盖 materialize/read/resolveAttachmentIds/
+  // imageData 全链（B13 只覆盖 byId）——P9 盲区补齐。
+  console.log('fix-007 rc.2 strict-metadata host shape:')
+  {
+    const prevDshHome = process.env.DSH_HOME
+    const tmpHome = join(WORKSPACE, 'fix007-dsh-home')
+    mkdirSync(tmpHome, { recursive: true })
+    process.env.DSH_HOME = tmpHome
+    try {
+    /** rc.2 形状附件服务：saveImage 内容寻址落盘（宿主对象布局），
+     *  readImage 严格校验 ref 元数据与存储对象一致——裸 id 恒拒。 */
+    const makeStrictHost = () => {
+      const calls = { readImage: 0, readImageBareId: 0 }
+      const objectsRoot = join(tmpHome, 'attachments', 'v1', 'objects')
+      const store = new Map()
+      const service = {
+        calls,
+        imageLimits: { maxImageBytes: 20 * 1024 * 1024, maxImagesPerMessage: 8, maxMessageImageBytes: 40 * 1024 * 1024, mediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] },
+        async saveImage(input) {
+          const id = contentHashId(input.data)
+          const ref = { attachmentId: id, mediaType: input.mediaType, bytes: input.data.length, width: 640, height: 480, name: input.name }
+          const dir = join(objectsRoot, id.slice('sha256:'.length + 0, 'sha256:'.length + 2))
+          mkdirSync(dir, { recursive: true })
+          writeFileSync(join(dir, id.slice('sha256:'.length)), input.data)
+          store.set(id, { ref, data: input.data })
+          return ref
+        },
+        async readImage(ref) {
+          calls.readImage++
+          const stored = store.get(String(ref?.attachmentId ?? ''))
+          if (!stored) throw new Error('Attachment object is missing.')
+          // rc.2 readImageFile 元数据全等校验：任一字段缺失/不一致 → ATTACHMENT_CORRUPT。
+          const meta = ['mediaType', 'bytes', 'width', 'height']
+          if (meta.some((key) => ref?.[key] !== stored.ref[key])) {
+            if (meta.some((key) => ref?.[key] === undefined)) calls.readImageBareId++
+            const error = new Error('Stored attachment metadata does not match its reference.')
+            error.code = 'ATTACHMENT_CORRUPT'
+            throw error
+          }
+          return { ref: stored.ref, data: stored.data }
+        },
+      }
+      return service
+    }
+    const strictRoot = new Context()
+    const strictAttachments = makeStrictHost()
+    strictRoot.provide('attachments', strictAttachments)
+    strictRoot.provide('fs', makeFs({}))
+    const strictRegistry = new AttachmentRegistry(strictRoot)
+
+    // 最小可探测 PNG（IHDR 携带 640x480）——自取证探测器需要 IHDR 在场
+    // （纯签名字节 probe undefined，与宿主行为一致地走失败路径）。
+    const minimalPng = (width, height) => {
+      const ihdr = new Uint8Array(13)
+      ihdr.set([0x49, 0x48, 0x44, 0x52], 0)
+      const dv = new DataView(ihdr.buffer)
+      dv.setUint32(4, width)
+      dv.setUint32(8, height)
+      ihdr[12] = 8
+      return new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        0, 0, 0, 13, ...ihdr, 0, 0, 0, 0,
+        0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+      ])
+    }
+    // 预置宿主对象（绕过注册表 saveImage）——模拟"用户消息 image 块引用的附件"。
+    const STRICT_PNG = minimalPng(640, 480)
+    const savedRef = await strictAttachments.saveImage({ data: STRICT_PNG, mediaType: 'image/png', name: 'strict.png' })
+    const strictId = savedRef.attachmentId
+
+    // F-1 判别（R1）：先 byId 注册条目（peek 命中、bytes=null），再 materialize。
+    // 旧代码：内联 readImage({attachmentId}) 裸 id → ATTACHMENT_CORRUPT → 必败；
+    // 新代码：完整 ref 单点（自取证构造）→ 物化成功。
+    const strictEntry = await strictRegistry.byId(strictId)
+    check('F-1a strict host: byId lazy-registers with full metadata', strictEntry !== undefined && strictEntry.width === 640 && strictEntry.height === 480 && strictEntry.bytes === STRICT_PNG.length)
+    let strictMatError = null
+    let strictMat = null
+    try { strictMat = await strictRegistry.materialize(strictId, { cwd: WORKSPACE, sessionId: 'fix007-strict' }) } catch (error) { strictMatError = error }
+    check('F-1b materialize succeeds under strict host after registration (R1)', strictMat !== null && String(strictMat.path).endsWith('.png') && strictMatError === null)
+    check('F-1c materialized file bytes match stored object', strictMat !== null && readFileSync(strictMat.path).length === STRICT_PNG.length)
+
+    // F-1 判别（R1 变体）：未注册 id 直接 materialize（lazy 路径字节复用）——
+    // 宿主裸 id 拒绝时自取证兜底后物化成功。
+    const STRICT_PNG_2 = minimalPng(320, 240)
+    const savedRef2 = await strictAttachments.saveImage({ data: STRICT_PNG_2, mediaType: 'image/png', name: 'strict2.png' })
+    let strictMat2 = null
+    try { strictMat2 = await strictRegistry.materialize(savedRef2.attachmentId, { cwd: WORKSPACE, sessionId: 'fix007-strict2' }) } catch { strictMat2 = null }
+    check('F-1d materialize unregistered id under strict host (self-forensics fallback)', strictMat2 !== null && String(strictMat2.path).endsWith('.png'))
+
+    // F-1 判别（R1 变体）：read() 同样经完整 ref 单点（旧代码 read 对已注册
+    // 条目走 readImage({attachmentId}) 裸 id → 必败）。
+    let strictRead = null
+    try { strictRead = await strictRegistry.read(strictId) } catch { strictRead = null }
+    check('F-1e read succeeds under strict host via full-ref single point', strictRead !== null && strictRead.bytes.length === STRICT_PNG.length && strictRead.ref.width === 640)
+
+    // F-3 判别（R3）：resolveAttachmentIds 产出的 ref 必含全字段——用客户端
+    // wireCheck 的必填集合做判别（服务端 imageDataRequest codec 同构）。
+    // 旧代码：width/height 条件展开 + bytes 兜底 0 + mediaType 兜底——严格
+    // 宿主下条目缺失字段时产出畸形 ref；新代码经权威 ref 构造。
+    {
+      const { RouterService: Svc } = await import('../lib/service.js')
+      const svcRoot2 = new Context()
+      svcRoot2.provide('attachments', strictAttachments)
+      svcRoot2.provide('fs', makeFs({}))
+      const svc2 = new Svc(svcRoot2)
+      svc2.attach({ get: () => ({ enabled: true, agents: {} }) })
+      const REQUIRED_FIELDS = ['attachmentId', 'mediaType', 'bytes', 'width', 'height']
+      let refs = null
+      let resolveError = null
+      try { refs = await svc2.resolveAttachmentIds([strictId], {}) } catch (error) { resolveError = error }
+      check('F-3a resolveAttachmentIds resolves under strict host (R3)', resolveError === null && Array.isArray(refs) && refs.length === 1)
+      const complete = refs !== null && refs.length === 1 && REQUIRED_FIELDS.every((key) => typeof refs[0][key] === 'string' || typeof refs[0][key] === 'number') && refs[0].width === 640 && refs[0].height === 480 && refs[0].bytes === STRICT_PNG.length && refs[0].mediaType === 'image/png'
+      check('F-3b resolveAttachmentIds ref carries authoritative metadata (R3)', complete)
+      // 标记往返 + 客户端 wireCheck 判别：畸形 ref 在浏览器侧必拒（rejected "request"）。
+      let wireOk = false
+      let parsed = null
+      if (complete) {
+        const marker = svc2.imageMarkerOf(refs[0])
+        const match = /\[router:image:([^\]\n]+)\]/.exec(marker)
+        parsed = match ? JSON.parse(match[1]) : null
+        wireOk = parsed !== null && REQUIRED_FIELDS.every((key) => typeof parsed[key] === 'string' || typeof parsed[key] === 'number')
+      }
+      check('F-3c marker round-trip passes client wire required fields (R3)', wireOk)
+      // 服务端 imageData 同样经单点：读取成功且返回宿主权威尺寸。
+      let img = null
+      let imgError = null
+      try { img = await svc2.imageData({ ref: parsed }) } catch (error) { imgError = error }
+      check('F-3d imageData reads via full-ref single point under strict host', imgError === null && img !== null && img.ok === true && img.width === 640 && img.height === 480 && typeof img.data === 'string' && img.data.length > 0)
+    }
+    } finally {
+      if (prevDshHome === undefined) delete process.env.DSH_HOME
+      else process.env.DSH_HOME = prevDshHome
+    }
+  }
+
+  // ── FIX-007 F-2：probeImageDimensions VP8（有损 WebP）字节偏移判别 ────────────
+  // RIFF/WEBP 布局：0-3 "RIFF" 4-7 size 8-11 "WEBP" 12-15 FourCC("VP8 ") 16-19
+  // chunk size(LE) 20-22 frame tag 23-25 start code(0x9d 0x01 0x2a) 26-27 width-1(LE,14bit)
+  // 28-29 height-1(LE,14bit)。旧代码把 u8[14] 当 0x20/0x10 帧标签比对 → 恒 false。
+  console.log('fix-007 VP8 webp probe:')
+  {
+    const vp8 = new Uint8Array(30)
+    vp8.set([0x52, 0x49, 0x46, 0x46, 0x16, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50], 0) // RIFF....WEBP
+    vp8.set([0x56, 0x50, 0x38, 0x20], 12) // "VP8 "
+    vp8.set([0x0a, 0x00, 0x00, 0x00], 16) // chunk size 10
+    vp8.set([0x30, 0x01, 0x00], 20) // frame tag: keyframe (top 2 bits 0)
+    vp8.set([0x9d, 0x01, 0x2a], 23) // start code
+    vp8[26] = 0x7f // width = 127（VP8 keyframe 14 位字段直存实际值）
+    vp8[27] = 0x00
+    vp8[28] = 0x95 // height = 149
+    vp8[29] = 0x00
+    const dims = probeImageDimensions(vp8)
+    check('F-2a VP8 (lossy webp) probe returns dimensions', dims !== undefined && dims.width === 127 && dims.height === 149)
+    // 截断头（<30 字节）→ undefined（与 B13f VP8X 同款长度门语义）。
+    const vp8Trunc = vp8.slice(0, 27)
+    check('F-2b VP8 truncated header returns undefined', probeImageDimensions(vp8Trunc) === undefined)
+    // VP8L（真实形状：sharp lossless 产物实测字节 2f 3f c1 31 00 = 320x200）——
+    // 旧公式只拼部分位（实测读成 128x29），按位流语义断言正确尺寸。
+    const vp8l = new Uint8Array(30)
+    vp8l.set([0x52, 0x49, 0x46, 0x46, 0x18, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50], 0)
+    vp8l.set([0x56, 0x50, 0x38, 0x4c], 12) // "VP8L"
+    vp8l.set([0x0d, 0x00, 0x00, 0x00], 16)
+    vp8l[20] = 0x2f // signature
+    vp8l[21] = 0x3f // bits32 = 0x0031c13f：14 位宽-1=319 → 320；14 位高-1=199 → 200
+    vp8l[22] = 0xc1
+    vp8l[23] = 0x31
+    vp8l[24] = 0x00
+    const vp8lDims = probeImageDimensions(vp8l)
+    check('F-2c VP8L real-shape bitstream yields exact dimensions', vp8lDims !== undefined && vp8lDims.width === 320 && vp8lDims.height === 200)
+    // 非法 VP8L 签名（非 0x2f）→ undefined。
+    const vp8lBad = new Uint8Array(vp8l)
+    vp8lBad[20] = 0x2e
+    check('F-2d VP8L invalid signature returns undefined', probeImageDimensions(vp8lBad) === undefined)
+    // 非关键帧 VP8（帧标签位 0 = 1）→ undefined（无尺寸字段可解析）。
+    const vp8Inter = new Uint8Array(vp8)
+    vp8Inter[20] = 0xd1
+    check('F-2e VP8 inter-frame (tag bit0=1) returns undefined', probeImageDimensions(vp8Inter) === undefined)
+  }
+
 
   // ── Step 5b 迁移后断言：三调用点寻址经 M2（RouterService 接线）────────
   console.log('step 5b addressing via M2:')
