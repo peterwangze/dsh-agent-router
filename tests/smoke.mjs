@@ -7,6 +7,7 @@ import { runClientRender } from './client-render.mjs'
 import { runInstallEntryTests } from './install-entry.mjs'
 import { runAttachmentTests } from './attachments.mjs'
 import { runOauthCredentialTests } from './oauth-credentials.mjs'
+import { runOauthPromotionTests } from './oauth-promotion.mjs'
 import { runLoopbackTests } from './oauth-loopback.mjs'
 import { runStatsTests } from './stats.mjs'
 import { OauthCredentialStore, CHATGPT_PRESET } from '../lib/oauth-credentials.js'
@@ -84,20 +85,22 @@ console.log('schemas:')
   check('cli fields resolve defaults', b.agents.vision.command === '' && b.agents.vision.args === '' && b.agents.vision.timeoutMs === 0 && b.agents.vision.maxConcurrent === 1)
   check('name kept', b.agents.vision.name === 'V')
   // EVO-002 Step 1（C-1 ChatGPT 订阅 OAuth / ADR-005 / roadmap §3.2 E2-a + §3.6）：
-  // preset/credentialFile 字段与 oauthExperimental 开关的 schema 层扩展——纯声明式、
-  // 零运行时行为变更。关闭词汇表沿用自由字符串先例（protocol/type/strategy）：
-  // 未知值放行、消费点校验（OAUTH_PRESET_VALUES 常量供后续步骤与 UI 消费）。
+  // preset/credentialFile 字段的 schema 层扩展——纯声明式。
+  // EVO-006（DEC-026 C2 转正）：oauthExperimental/oauthTosAccepted 实验开关键
+  // 废弃移除——通道转正式，关闭能力由 ① router.enabled ② 账号 enabled ③ 登出
+  // 删除承担；旧配置遗留键经未知字段透传兼容（升级零操作）。
   const c = routerSchema({})
-  check('default oauthExperimental=false (§3.6 默认关闭)', c.oauthExperimental === false)
-  check('default oauthTosAccepted=false + oauthProxyUrl empty (EVO-002 Step 6)', c.oauthTosAccepted === false && c.oauthProxyUrl === '')
+  check('promotion: gate keys retired from schema (DEC-026 C2)', !('oauthExperimental' in c) && !('oauthTosAccepted' in c))
+  check('default oauthProxyUrl empty (EVO-002 Step 6)', c.oauthProxyUrl === '')
+  check('promotion: legacy gate keys tolerated as unknown fields (upgrade compat)', (() => { try { routerSchema({ oauthExperimental: false, oauthTosAccepted: true }); return true } catch { return false } })())
   check('default takeoverDefaultModel=false (FIX-002 默认不接管)', c.takeoverDefaultModel === false)
   const d = routerSchema({ oauthAccounts: { legacy: { name: 'L' } } })
   check('oauth entry preset defaults to empty (P3 既有配置零破坏)', d.oauthAccounts.legacy.preset === '')
   check('oauth entry credentialFile defaults to empty', d.oauthAccounts.legacy.credentialFile === '')
-  const e = routerSchema({ oauthExperimental: true, oauthAccounts: { cgpt: { name: 'ChatGPT', preset: 'chatgpt-codex', credentialFile: 'X:\\path.json' } } })
-  check('preset/credentialFile/oauthExperimental explicit values kept', e.oauthExperimental === true && e.oauthAccounts.cgpt.preset === 'chatgpt-codex' && e.oauthAccounts.cgpt.credentialFile === 'X:\\path.json')
-  const e6 = routerSchema({ oauthTosAccepted: true, oauthProxyUrl: 'http://127.0.0.1:7890' })
-  check('oauthTosAccepted/oauthProxyUrl explicit values kept (Step 6 schema)', e6.oauthTosAccepted === true && e6.oauthProxyUrl === 'http://127.0.0.1:7890')
+  const e = routerSchema({ oauthAccounts: { cgpt: { name: 'ChatGPT', preset: 'chatgpt-codex', credentialFile: 'X:\\path.json' } } })
+  check('preset/credentialFile explicit values kept', e.oauthAccounts.cgpt.preset === 'chatgpt-codex' && e.oauthAccounts.cgpt.credentialFile === 'X:\\path.json')
+  const e6 = routerSchema({ oauthProxyUrl: 'http://127.0.0.1:7890' })
+  check('oauthProxyUrl explicit value kept (Step 6 schema)', e6.oauthProxyUrl === 'http://127.0.0.1:7890')
   const f = routerSchema({ oauthAccounts: { odd: { preset: 'foo' } } })
   check('unknown preset tolerated (R-5 放行语义)', f.oauthAccounts.odd.preset === 'foo')
   check('OAUTH_PRESET_VALUES frozen + chatgpt-codex (P5 泛化)', Object.isFrozen(OAUTH_PRESET_VALUES) && OAUTH_PRESET_VALUES.length === 1 && OAUTH_PRESET_VALUES[0] === 'chatgpt-codex')
@@ -509,16 +512,12 @@ console.log('RouterService:')
     const refreshJwt = fakeJwt('acct-cgpt-1', 'sig-refresh')
     const presetRoot = new Context()
     presetRoot.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
-    let oauthExperimental = false
-    // Step 6 起 begin 侧新增 ToS 门（§3.6 显式开启确认，experimental 检查之后）；
-    // 本夹具聚焦授权流本体——预置已确认态，ToS 语义由 Step 6 块专测。
-    const oauthTosAccepted = true
+    // EVO-006（DEC-026 C2 转正）：state 不再携带 oauthExperimental/oauthTosAccepted
+    // 实验键——转正自然态；begin 侧无门控直达 starter/loopback 链。
     const presetCredFile = join(presetWork, 'cgpt-auth.json')
     const presetService = new RouterService(presetRoot)
     presetService.attach({ get: () => ({
       enabled: true,
-      oauthExperimental,
-      oauthTosAccepted,
       oauthAccounts: {
         // 同名字段故意填干扰值：preset 语义 = 常量预填（零配置），账号内
         // authUrl/tokenUrl/clientId/scope 必须被忽略（roadmap §3.4 条目 1）。
@@ -545,17 +544,15 @@ console.log('RouterService:')
       return { ok: false, status: 404, text: async () => 'not found' }
     }
     try {
-      // 1. kill-switch（§3.6 第③层）：oauthExperimental 默认 false → 明确拒绝。
-      const killed = await presetService.oauthBegin({ accountId: 'cgpt' })
-      check('preset begin kill-switch closed by default', killed.ok === false && killed.message.includes('实验通路已关闭'))
-      oauthExperimental = true
-      // 2. 惰性 loopback 未就绪（1455 被占，E4 降级链入口）→ EVO-005 起自动
+      // 1. 无实验门控（DEC-026 转正判别——旧实现此处先报"实验通路已关闭"）：
+      //    惰性 loopback 未就绪（1455 被占，E4 降级链入口）→ EVO-005 起自动
       //    降级设备码流；本块 fetch 桩对 usercode 端点返回 404 → 设备码发起
       //    失败 → 第三兜底（手动粘贴）指引。完整设备码成功路径由 EVO-005 块专测。
       presetService.codexLoopbackStarter = async () => ({ ready: false, reason: 'EADDRINUSE', dispose: () => {} })
       const notReady = await presetService.oauthBegin({ accountId: 'cgpt' })
       check('preset begin degrades to device flow when 1455 occupied, manual paste on 404 (E4)', notReady.ok === false && notReady.message.includes('设备码') && notReady.message.includes('手动粘贴'))
-      // 3. 正常路径：preset 常量预填 + PKCE/state + H3-4 附加参数 + originator。
+      check('preset begin carries no experimental gate (DEC-026 promotion)', notReady.ok === false && !notReady.message.includes('实验通路'))
+      // 2. 正常路径：preset 常量预填 + PKCE/state + H3-4 附加参数 + originator。
       presetService.codexLoopbackStarter = async () => ({ ready: true, port: 1455, dispose: () => {} })
       const pbegin = await presetService.oauthBegin({ accountId: 'cgpt', redirectUri: 'https://ignored.example/cb' })
       // URLSearchParams 编码（空格→+、:/→%3A%2F）与实现同机制推导期望值。
@@ -570,8 +567,9 @@ console.log('RouterService:')
       check('preset begin carries PKCE + H3-4 params + originator', pbegin.authUrl.includes('response_type=code') && pbegin.authUrl.includes('code_challenge=') && pbegin.authUrl.includes('code_challenge_method=S256') && pbegin.authUrl.includes('id_token_add_organizations=true') && pbegin.authUrl.includes('codex_cli_simplified_flow=true') && pbegin.authUrl.includes('originator=dsh-agent-router'))
       check('preset begin ignores same-named account fields (zero-config)', !pbegin.authUrl.includes('evil.example') && !pbegin.authUrl.includes('WRONG'))
       check('preset begin registers pending session', presetService.oauthPending.get(pbegin.state)?.accountId === 'cgpt' && typeof presetService.oauthPending.get(pbegin.state)?.verifier === 'string' && presetService.oauthPending.get(pbegin.state)?.redirectUri === CHATGPT_PRESET.redirectUri)
-      // 4. 未知 preset → 消费点校验明确报错（schemas Step 1 放行语义的闭合）。
+      // 3. 未知 preset → 消费点校验明确报错（schemas Step 1 放行语义的闭合）。
       const odd = await presetService.oauthBegin({ accountId: 'odd' })
+      check('preset begin unknown preset records fail event (C-9)', presetService.oauthEvents.some((event) => event.kind === 'preset_begin_fail' && event.reason === 'unknown_preset'))
       check('preset begin unknown preset rejected', odd.ok === false && odd.message.includes('未知预设类型'))
       // 5. exchange preset：fake token 响应（含 refresh_token/expires_in）→
       //    完整四元组凭据落盘（roadmap §3.4 条目 2），wire 形状沿用现有 codec。
@@ -636,11 +634,9 @@ console.log('RouterService:')
     const codexRoot = new Context()
     codexRoot.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
     codexRoot.provide('attachments', { readImage: async () => ({ data: Uint8Array.from([1, 2, 3]), ref: { mediaType: 'image/png' } }) })
-    let oauthExperimental5 = false
     const codexService = new RouterService(codexRoot)
     codexService.attach({ get: () => ({
       enabled: true,
-      oauthExperimental: oauthExperimental5,
       oauthAccounts: {
         cgpt: { name: 'ChatGPT订阅', enabled: true, preset: 'chatgpt-codex', credentialFile: codexCredFile, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', models: ['gpt-5.4-mini'] },
         bare: { name: '零配置', enabled: true, preset: 'chatgpt-codex', credentialFile: bareCredFile, protocol: 'codex-responses', models: ['gpt-5.4'] },
@@ -699,15 +695,11 @@ console.log('RouterService:')
       try { return { result: await codexService.run({ agentId, task, images: [], ...extra }) } } catch (error) { return { error } }
     }
     try {
-      // 1. R5-F1 调用期 kill-switch：凭据在盘且新鲜，但 oauthExperimental=false →
-      //    调用明确报"实验通路已关闭"，且零网络（读凭据后的刷新/调用请求都
-      //    不得越过开关——R5-F1 义务原文）。
-      const killed = await run5('cgptchat', 'x')
-      check('codex call blocked while oauthExperimental=false (R5-F1)', !!killed.error && killed.error.message.includes('实验通路已关闭') && codexFetches5.length === 0)
-      let killResolveError = null
-      try { await codexService.resolveOauthToken(codexService.getOAuthAccount('cgpt')) } catch (error) { killResolveError = error }
-      check('codex kill-switch guards resolveOauthToken (oauthDiscover path)', !!killResolveError && killResolveError.message.includes('实验通路已关闭') && codexFetches5.length === 0)
-      oauthExperimental5 = true
+      // 1. 无实验门控（DEC-026 转正判别——旧实现此处调用被"实验通路已关闭"
+      //    拒绝）：凭据在盘且新鲜 → resolve 直达凭据（零网络快路径——读凭据
+      //    后无刷新请求；旧实现的门控拒绝语义已随转正移除）。
+      const freshToken5 = await codexService.resolveOauthToken(codexService.getOAuthAccount('cgpt'))
+      check('codex resolve has no experimental gate, fresh credential zero network (DEC-026)', freshToken5 === accessJwt5 && codexFetches5.length === 0)
       // 2. 未知 preset 在 resolve 侧同样拒绝（与 begin 侧同一闭合语义）。
       let unknownPresetError = null
       try { await codexService.resolveOauthToken({ preset: 'mystery-preset' }) } catch (error) { unknownPresetError = error }
@@ -805,8 +797,6 @@ console.log('RouterService:')
       root6.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
       const state6 = {
         enabled: true,
-        oauthExperimental: false,
-        oauthTosAccepted: false,
         oauthProxyUrl: '',
         oauthAccounts: {
           cgpt: { name: 'ChatGPT订阅', enabled: true, preset: 'chatgpt-codex', credentialFile: credFile6, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', models: ['gpt-5.4-mini'] },
@@ -861,7 +851,6 @@ console.log('RouterService:')
         const caps6 = ['openai-completions', 'anthropic', 'gemini', 'codex-responses', 'mystery'].map((protocol) => oauthCapabilities(protocol))
         check('oauthCapabilities returns [chat] for every protocol (§3.5)', caps6.every((caps) => Array.isArray(caps) && caps.length === 1 && caps[0] === 'chat'))
         // B. runOauthDispatch per-protocol 类型拒绝（替代全局一刀切）+ chat 放行。
-        state6.oauthExperimental = true
         await seed6()
         let imgErr6 = null
         try { await svc6.run({ agentId: 'cgptimg', task: '画一张图' }) } catch (error) { imgErr6 = error }
@@ -874,28 +863,27 @@ console.log('RouterService:')
         check('oauth dispatch passes chat through to protocol branch', chat6.kind === 'chat' && chat6.text === 'OK-6')
         const poolChat6 = await svc6.run({ agentId: 'poolchat', task: '池调用' })
         check('pool dispatch passes chat through', poolChat6.kind === 'chat' && poolChat6.text === 'OK-6')
-        // C. §3.6 ToS 门：experimental 开 + ToS 未确认 → begin 拒绝（先于
-        //    loopback 就绪检查——1455 ready 也不放行；文案含条款指引）。
-        const tosBlocked6 = await svc6.oauthBegin({ accountId: 'cgpt' })
-        check('preset begin requires ToS acceptance before loopback (§3.6)', tosBlocked6.ok === false && tosBlocked6.message.includes('条款') && !tosBlocked6.message.includes('1455'))
-        state6.oauthTosAccepted = true
+        // C. 无 ToS 门（DEC-026 转正判别——旧实现此处先拒绝并要求条款确认）：
+        //    begin 直接到达授权 URL 生成分支；oauth 事件不带实验 reason。
         const begin6 = await svc6.oauthBegin({ accountId: 'cgpt' })
-        check('preset begin proceeds once ToS accepted', begin6.ok === true && begin6.authUrl.startsWith(`${CHATGPT_PRESET.authUrl}?`))
+        check('preset begin proceeds without ToS gate (DEC-026 promotion)', begin6.ok === true && begin6.authUrl.startsWith(`${CHATGPT_PRESET.authUrl}?`))
+        check('oauth events carry no experimental reasons after begin (DEC-026)', !svc6.oauthEvents.some((event) => event.reason === 'kill_switch' || event.reason === 'tos'))
         const ex6 = await svc6.oauthTokenExchange({ code: 'code-6', state: begin6.state })
         check('preset exchange completes login journey', ex6.ok === true && existsSync(credFile6))
-        // R6-F1（kill-switch 冷凭据半边断言）：开关关闭时调用期拒绝——
-        // 不读凭据文件（字节不变 = 无读改写）、不发刷新（网络零访问由
-        // resolvePresetCredential 早退保证），文案明确"实验通路已关闭"。
-        // 判别：旧实现（无调用期检查）会读文件并成功调用 → 必败。
+        // ②层账号开关（DEC-026 C2 三层重构判别——旧实验开关语义的关闭能力
+        // 由账号级 enabled 承接）：停用账号调用明确报错——不读凭据文件（字节
+        // 不变 = 无读改写）、不发刷新（fetch 零新访问），文案明确"已停用"。
+        // 判别：无②层判别的实现会读文件并成功调用 → 必败。
         const coldBytes6 = readFileSync(credFile6)
-        state6.oauthExperimental = false
+        const fetchesBeforeDisabled6 = fetches6.length
+        state6.oauthAccounts.cgpt.enabled = false
         let coldErr6 = null
-        try { await svc6.run({ agentId: 'cgptchat', task: '冷凭据' }) } catch (error) { coldErr6 = error }
-        check('kill-switch call-side rejects cold preset credential (R6-F1)', !!coldErr6 && coldErr6.message.includes('实验通路已关闭'))
-        check('kill-switch call-side touches no credential file (R6-F1)', coldBytes6.equals(readFileSync(credFile6)))
-        state6.oauthExperimental = true
+        try { await svc6.run({ agentId: 'cgptchat', task: '停用账号' }) } catch (error) { coldErr6 = error }
+        check('kill-switch ② call-side rejects disabled preset account (DEC-026)', !!coldErr6 && coldErr6.message.includes('已停用'))
+        check('kill-switch ② call-side touches no credential file (DEC-026)', coldBytes6.equals(readFileSync(credFile6)) && fetches6.length === fetchesBeforeDisabled6)
+        state6.oauthAccounts.cgpt.enabled = true
         // D. oauthLogout（W-5）：删凭据文件 + 幂等 + 非 preset 拒绝 + 未知账号
-        //    拒绝；实验开关关闭不拦截登出（合规删除路径恒可用）。
+        //    拒绝；账号停用不拦截登出（合规删除路径恒可用）。
         const lo6 = await svc6.oauthLogout({ accountId: 'cgpt' })
         check('preset logout deletes credential file (W-5)', lo6.ok === true && lo6.message.includes('登出') && !existsSync(credFile6))
         const lo6again = await svc6.oauthLogout({ accountId: 'cgpt' })
@@ -904,11 +892,11 @@ console.log('RouterService:')
         check('logout rejects non-preset account', loPlain6.ok === false && loPlain6.message.includes('ChatGPT 预设'))
         const loUnknown6 = await svc6.oauthLogout({ accountId: 'nope' })
         check('logout rejects unknown account', loUnknown6.ok === false && loUnknown6.message.includes('不存在'))
-        state6.oauthExperimental = false
+        state6.oauthAccounts.cgpt.enabled = false
         await seed6()
         const loOff6 = await svc6.oauthLogout({ accountId: 'cgpt' })
-        check('logout stays usable while experimental off (compliance path)', loOff6.ok === true && !existsSync(credFile6))
-        state6.oauthExperimental = true
+        check('logout stays usable while account disabled (compliance path)', loOff6.ok === true && !existsSync(credFile6))
+        state6.oauthAccounts.cgpt.enabled = true
         // E. catalog 镜像：preset 标志 + presetLoggedIn（登录态随凭据文件翻转）。
         await seed6()
         const cat6a = await svc6.catalog({})
@@ -975,10 +963,11 @@ console.log('RouterService:')
         check('dispatcher tolerates unresolvable version probe (FIX-006)', !!unprobedDispatcher6 && unprobedDispatcher6.url === 'http://127.0.0.1:7898' && stubAgentCount6 === 2)
         svc6.oauthUndiciLoader = null
         svc6.oauthUndiciVersionProbe = null
-        // H. C-9 埋点：oauthEvents 记录登录旅程（begin fail/ok、login ok、
-        //    logout），事件负载零 token 值（P7 红线）。
+        // H. C-9 埋点：oauthEvents 记录登录旅程（begin ok、login ok、logout），
+        //    事件负载零 token 值（P7 红线）；转正后本流程无实验 reason 事件
+        //    （fail 事件由未知 preset 等真实失败形态生产——4b 块断言）。
         const kinds6 = new Set(svc6.oauthEvents.map((event) => event.kind))
-        check('oauth telemetry records login journey kinds (C-9)', kinds6.has('preset_begin_fail') && kinds6.has('preset_begin_ok') && kinds6.has('preset_login_ok') && kinds6.has('preset_logout'))
+        check('oauth telemetry records login journey kinds (C-9)', kinds6.has('preset_begin_ok') && kinds6.has('preset_login_ok') && kinds6.has('preset_logout') && !svc6.oauthEvents.some((event) => event.reason === 'kill_switch' || event.reason === 'tos'))
         check('oauth telemetry never carries token values (P7)', !JSON.stringify(svc6.oauthEvents).includes('sig-step6') && !JSON.stringify(svc6.oauthEvents).includes('REFRESH-STEP6'))
       } finally {
         globalThis.fetch = realFetch6
@@ -1013,8 +1002,6 @@ console.log('RouterService:')
     const deviceService = new RouterService(deviceRoot)
     deviceService.attach({ get: () => ({
       enabled: true,
-      oauthExperimental: true,
-      oauthTosAccepted: true,
       oauthAccounts: {
         cgpt: { name: 'ChatGPT', enabled: true, preset: 'chatgpt-codex', credentialFile: deviceCredFile, protocol: 'codex-responses' },
       },
@@ -2094,6 +2081,10 @@ console.log('apply wiring:')
   // EVO-002 Step 2/3：ChatGPT preset 凭据模块 + 1455 惰性 loopback 回调服务。
   await runOauthCredentialTests(check)
   await runLoopbackTests(check)
+
+  // EVO-006（DEC-026 C2）：GPT OAuth 通道转正判别组（旧实验语义必败 +
+  // kill-switch 关闭能力保留）接入 smoke（独立入口 node tests/oauth-promotion.mjs）。
+  await runOauthPromotionTests(check)
 
   // EVO-003 Phase 2（C-3）：统计持久化模块测试接入 smoke（runStatsTests 与
   // oauth-credentials 同构导出；独立入口 node tests/stats.mjs 互补——执行包

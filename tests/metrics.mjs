@@ -653,13 +653,9 @@ async function observeOauthTelemetry() {
     const credFile = join(work, 'c9-auth.json')
     const root = new Context()
     root.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
-    let experimental = false
     const service = new RouterService(root)
     service.attach({ get: () => ({
       enabled: true,
-      oauthExperimental: experimental,
-      oauthTosAccepted: true,
-      oauthProxyUrl: '',
       oauthAccounts: { cgpt: { name: 'ChatGPT订阅', enabled: true, preset: 'chatgpt-codex', credentialFile: credFile, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', models: ['gpt-5.4-mini'] } },
       agents: { cgptchat: { name: 'CGPT', type: 'chat', enabled: true, account: 'cgpt' } },
     }) })
@@ -685,10 +681,10 @@ async function observeOauthTelemetry() {
       return { ok: false, status: 404, text: async () => 'not found' }
     }
     try {
-      const blocked = await service.oauthBegin({ accountId: 'cgpt' })
-      checks.push(['kill-switch begin 拒绝且留事件', blocked.ok === false && service.oauthEvents.some((event) => event.kind === 'preset_begin_fail' && event.reason === 'kill_switch')])
-      experimental = true
+      // EVO-006（DEC-026 C2 转正）：无实验门控——begin 直达授权 URL；事件
+      // 面不再产生 kill_switch/tos reason（判别：旧实现此处 begin 被拒）。
       const begin = await service.oauthBegin({ accountId: 'cgpt' })
+      checks.push(['无实验门控直达授权 + 事件零实验 reason', begin.ok === true && !service.oauthEvents.some((event) => event.reason === 'kill_switch' || event.reason === 'tos')])
       const exchange = await service.oauthTokenExchange({ code: 'c9', state: begin.state })
       checks.push(['登录旅程事件链（begin_ok + login_ok）', begin.ok === true && exchange.ok === true && service.oauthEvents.some((event) => event.kind === 'preset_begin_ok') && service.oauthEvents.some((event) => event.kind === 'preset_login_ok')])
       const run = await service.run({ agentId: 'cgptchat', task: 'C-9 采样调用' })
