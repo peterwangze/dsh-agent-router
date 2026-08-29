@@ -5,7 +5,7 @@
     "REL-004": {
       "task_id": "REL-004",
       "priority": "P1",
-      "status": "进行中——TRIAGE-REL-004 机录 2026-08-29（用户裁决启动发布链）；收尾段 Developer 派发中；后续：Code Reviewer（收尾段）→ M-3 无沙箱复跑 → Release 规划 + Release Reviewer → M-4 发布授权（用户）→ 发布执行",
+      "status": "已完成（终态——M-4 用户授权 Go 2026-08-30 → E-1~E-7 全链闭环：tag v0.3.1@5ca8b87 + GitHub Release + GATE-8 归档跳过；审查链 Code R0 + Release R1 双 APPROVED_WITH_NOTES/0；EV-086/087）",
       "goal": "REL-004 v0.3.1 发布链——EVO-006 转正承载 + R0 台账收尾（P2×3/P3×3）+ M-3 无沙箱复跑 + 版本规划/发布",
       "product_success_contract": {
         "user": "DSH 主用户（ChatGPT 订阅者）与插件使用者——获得 v0.3.1 正式版：GPT OAuth 为正式登录通道（EVO-006 转正承载）+ R0 台账收尾",
@@ -30,9 +30,9 @@
         "command": "node tests/smoke.mjs; node tests/stats.mjs; node tests/routing-paths.mjs; node tests/adapter-parity.mjs; node tests/attachments.mjs; node tests/client-render.mjs; node tests/oauth-credentials.mjs; node tests/oauth-loopback.mjs; node tests/oauth-promotion.mjs（工作目录 D:/AI/agent/deepseek/plugins/router）+ tarball 隔离冷装冒烟（TEMP 环境变量重定向）+ git pre-commit/commit-msg hooks 复跑（M-3 无沙箱）",
         "expected_output": "八套件全绿零回退（smoke ≥936 ok 可跑口径 / 946 全量投影）；隔离环境安装冒烟（环境变量重定向至临时目录）通过；hooks 双确认通过；tarball 内容白名单不变",
         "last_run": {
-          "status": "NOT_RUN_YET",
-          "exit_code": null,
-          "summary": "收尾段未开始——基线 = EVO-006 终态八套件（smoke 936 ok/1 skip、stats 110、routing 114、parity 14、attachments 65、oauth-credentials 98、oauth-loopback 20、promotion 11，EV-085）；M-3 无沙箱复跑与冷装冒烟待发布链执行后回填"
+          "status": "PASS",
+          "exit_code": 0,
+          "summary": "E-2 十面门控复跑全 exit 0（smoke 948 权威值 + 九套件零回退）+ E-3 隔离环境安装冒烟（TEMP 解包 + --omit=dev --legacy-peer-deps，环境变量重定向至临时目录）通过——EV-087"
         },
         "demo_evidence": "tarball 隔离冷装输出 + 八套件输出摘要 + tag/Release URL——发布段完成后入 evidence-log（EV-086+）"
       },
@@ -41,43 +41,43 @@
           "performance": {
             "threshold": "八套件与 M-3 复跑时长与 v0.3.0/EVO-006 基线同量级；发布链不引入运行时性能变化（纯文档 + telemetry 事件）",
             "validation": "M-3 无沙箱复跑计时，对比 EV-085/EV-079 基线值",
-            "status": "NOT_RUN_YET",
-            "evidence": "待 M-3 执行后回填（evidence-log REL-004 段）",
+            "status": "PASS",
+            "evidence": "EV-086/087：smoke 全量 948 ok / 13s（与 v0.3.0 基线同量级）；E-2 十面复跑全 exit 0",
             "exception": ""
           },
           "reliability": {
             "threshold": "P2-b telemetry 事件不改变 oauthBegin 拒绝路径行为（仅可观测性增强，零实验 reason 断言保持）；P2-a 披露方案零行为迁移（老配置不动）",
             "validation": "node tests/oauth-promotion.mjs + node tests/oauth-loopback.mjs + smoke OAuth 块断言",
-            "status": "NOT_RUN_YET",
-            "evidence": "待收尾段门控后回填（evidence-log REL-004 段）",
+            "status": "PASS",
+            "evidence": "EV-086/087：十面复跑零回退（promotion 13 / loopback 20 / credentials 98）；P2-b telemetry 判别断言在案",
             "exception": ""
           },
           "security": {
             "threshold": "telemetry 事件不含凭据/token 明文；发布 tarball 内容白名单不变（无多余文件）；gh 发布鉴权仅 peterwangze",
             "validation": "Code Reviewer 安全清单 + npm pack 内容清单核查",
-            "status": "NOT_RUN_YET",
-            "evidence": "待 Reviewer 审查与发布段 npm pack 后回填",
+            "status": "PASS",
+            "evidence": "R0/R1 审查（凭据路径未变 / P7 零 token 断言保留）+ E-3 清单核验（tarball files=11 白名单 / undici ^7.18.0 / peers 全 rc.8）",
             "exception": ""
           },
           "accessibility": {
             "threshold": "CHANGELOG/README 披露文案口径一致；如涉及 i18n 新键则中英字典同步（无未翻译键）",
             "validation": "node tests/client-render.mjs + 文档 diff 审查",
-            "status": "NOT_RUN_YET",
-            "evidence": "待收尾段门控后回填（evidence-log REL-004 段）",
+            "status": "PASS",
+            "evidence": "EV-086/087：client-render exit 0 + CHANGELOG/README 披露口径一致（R0 核验；E-1 七处版本同步）",
             "exception": ""
           },
           "ux": {
             "threshold": "用户升级 v0.3.1 后实验面零残留；「开过又关」行为披露可发现（CHANGELOG 未发布段→v0.3.1 发布段）",
             "validation": "node tests/client-render.mjs + smoke UI 断言 + CHANGELOG 收口 diff 审查",
-            "status": "NOT_RUN_YET",
-            "evidence": "待发布段完成后回填（evidence-log REL-004 段）",
+            "status": "PASS",
+            "evidence": "EV-087：CHANGELOG v0.3.1 用户视角六节 + 「开过又关」披露子条保留 + 已知问题延续披露",
             "exception": ""
           },
           "maintainability": {
             "threshold": "P2-c/P3×3 文档口径与代码语义一致（feature-flags §4 行更新、promotion 注释归属、oauthDiscover 边界注记）",
             "validation": "Code Reviewer + Release Reviewer 文档一致性检查",
-            "status": "NOT_RUN_YET",
-            "evidence": "待 Reviewer 审查结论回填（review-REL-004-*）",
+            "status": "PASS",
+            "evidence": "R1 发布审查 APPROVED_WITH_NOTES/0（三产物 + 6 项裁量复核过）+ Code R0（P2-c/P3×3 文档口径一致）",
             "exception": ""
           }
         }
@@ -86,9 +86,9 @@
         "user_visible_slice": "用户场景：升级 v0.3.1 后 GPT OAuth 即正式登录通道（登录入口恒可见、无实验开关与实验标签）；曾关闭实验开关的老用户升级后通道默认可用——该行为已在 CHANGELOG 披露，无静默意外",
         "demo_path": "node tests/client-render.mjs（账号区正式渲染）+ node tests/smoke.mjs（OAuth 流程块）+ tarball 隔离冷装冒烟命令输出",
         "scope_guard": "仅动：lib/service.js（P2-b telemetry + 相关注释）、CHANGELOG.md（P2-a 披露 + 发布段收口）、README.md（披露 + 版本行）、docs/release/feature-flags-v0.3.0.md（P2-c §4 行 + P3-f 注记）、tests/oauth-promotion.mjs（P3-d/e 注释与断言）、package.json（仅发布段 bump 0.3.1）——不做无关重构、不做新功能、不动其它套件既有断言（新增断言除外）",
-        "rollback_plan": "收尾段 commit 可逐个 git revert；发布段 tag/Release 可删除重打；v0.3.1 push 前 main 可整体回退（push 后走 revert commit）",
-        "status": "NOT_RUN_YET",
-        "evidence": "待收尾段 + 发布段完成后入 evidence-log（EV-086+）"
+        "rollback_plan": "收尾段 commit 可逐个 git revert；发布段 tag/Release 可删除重打；v0.3.1 push 前 main 可整体回退（push 后走 revert commit）——rollback-plan-v0.3.1.md 三阶段在案",
+        "status": "PASS",
+        "evidence": "EV-087：tag v0.3.1@5ca8b87 + GitHub Release（tarball asset）+ 隔离环境安装冒烟通过；容忍迁移升级路径断言在案（promotion A 组）"
       },
       "interruption_policy": {
         "mode": "critical-only: default execute routine reversible work and record assumptions when needed",

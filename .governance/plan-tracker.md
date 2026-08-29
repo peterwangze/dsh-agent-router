@@ -17,7 +17,7 @@
 
 | 项目 | 当前阶段 | 总任务数 | 已完成 | 阻塞中 | 关键风险数 | 最近 Gate 结论 | 最近复盘日期 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| dsh-agent-router | development (6/11) | 30（29 任务 + EVO-006） | 30 终态（29 已完成 + 1 关闭 DEV-001）——**EVO-006 GPT OAuth 转正闭环（R0 APPROVED_WITH_NOTES/0，EV-085）**；v0.3.0 已发布（2026-08-29） | 0 | 1（RISK-001 活跃——主轨道 = CI 面缺 + v0.3.1 发布链） | G4 待评（v0.3.0/v0.2.1 已发布；CI 面仍缺——RISK-001；EVO-006 待 v0.3.1 承载发布） | — |
+| dsh-agent-router | development (6/11) | 31（29 任务 + EVO-006 + REL-004） | 31 终态（30 已完成 + 1 关闭 DEV-001）——**v0.3.1 已发布（2026-08-30，tag v0.3.1 = 5ca8b87）**：EVO-006 转正 + 收尾段承载 | 0 | 1（RISK-001 活跃——主轨道 = CI 面缺） | G4 待评（v0.3.0/v0.3.1 已发布；CI 面仍缺——RISK-001） | — |
 
 ## 当前活跃事项
 
@@ -32,13 +32,14 @@
 | P1 | REL-003 | v0.3.0 M-1 候选打包（Developer 代码段）——EVO-005 P1×2 修复 + peerDeps rc.8 + version bump | EVO-005✅ DEC-025✅ | v0.3.0 | 已完成（M-1 全段：代码段 R0 APPROVED_WITH_NOTES/0 + 资产段 Release R1 APPROVED_WITH_NOTES/0 + Design R1 NEEDS_CHANGE→返工→R2 APPROVED_WITH_NOTES/0 T1 闭环；EV-078/079） |
 | P0 | FIX-007 | 宿主 0.1.1-rc.2 演进回归：route_agent 图片附件链 rejected「图片加载失败」+ 整链变慢/卡住（M-2 出口①失败回路受理——GATE-1 验证即失败） | RISK-003（活性） | v0.3.0（或热修） | 已完成（b816601 RCA 先行修复 + R0 APPROVED_WITH_NOTES/0 + 08accbd F-1 P8 增补；附件链 7 格式回归看护成立；FIX-008 候选已登记——R5 目录空根因 + 附件 parity 守卫 + F-6/F-10 加固） |
 | P1 | EVO-006 | GPT OAuth 实验通道转正式（DEC-026 用户裁决——仅 GPT 通道，其余方向待后续需求；v0.3.1 载体） | EVO-002✅ EVO-005✅ DEC-026✅ | v0.3.1 | 已完成（代码/审查闭环——3 commits（bf667b3 服务端语义 + 6ebe9ed 客户端 UI + a4d33cd 文档口径）+ R0 APPROVED_WITH_NOTES/0（C2 六点成立；P2×3/P3×3 台账 + M-3 无沙箱复跑绑定 v0.3.1 发布链）；门控 936/110/114/14/65/98/20/11 零回退；EV-085） |
-| P1 | REL-004 | v0.3.1 发布链——EVO-006 转正承载 + R0 台账收尾（P2×3/P3×3）+ M-3 无沙箱复跑 + 版本规划/发布 | EVO-006✅ DEC-026✅ | v0.3.1 | 进行中——收尾段+M-3 闭环（EV-086）+ **规划段三产物 + R1 发布审查 APPROVED_WITH_NOTES/0**（W-1：M-5 E-1 三分账基线 = ahead **11**（含 b2a1f66/a6acd06 治理 commits——零产品面增量）；W-2 三产物已入仓；S-1 tracker:61 陈旧行 M-7 清账）→ **M-4 发布授权待用户（唯一授权点）** → E-1~E-8 执行 |
-| — | 下一轮 | **REL-004 v0.3.1 发布链进行中**——收尾段返回 → Code Reviewer R0（收尾 diff）→ M-3 无沙箱复跑 → Release agent 规划 + Release Reviewer → M-4 发布授权（用户）；其余（FIX-008/出口③/C-4+C-5/C-6/C-2）等用户需求 | — | v0.3.1 | 进行中 |
+| P1 | REL-004 | v0.3.1 发布链——EVO-006 转正承载 + R0 台账收尾（P2×3/P3×3）+ M-3 无沙箱复跑 + 版本规划/发布 | EVO-006✅ DEC-026✅ | v0.3.1 | 已完成（终态）——M-4 用户授权 Go（2026-08-30）→ E-1~E-7 全链：f7dbf5c bump+CHANGELOG（三分账 12=7+5）+ 十面复跑全绿 + 隔离冷装通过 + tag v0.3.1@5ca8b87 + push main/tag + GitHub Release + GATE-8 归档跳过（0<2）；审查链 Code R0 + Release R1 双 APPROVED_WITH_NOTES/0；EV-086/087；**发布后用户重启验证待做** |
+| — | 下一轮 | **v0.3.1 发布后验证**（用户重启宿主→验证正式通道 UI + 0.3.1）→ 后续等用户需求（FIX-008 残留 / 出口③真机验证 / C-4+C-5 成功率闭环 v0.3.2 候选 / C-6 账号池 / C-2 Claude / 插件仓 FIX-281） | — | v0.3.2+ | 待定 |
 
 ### 最近完成
 
 | 已完成任务 | 完成日期 | 摘要 |
 | --- | --- | --- |
+| REL-004 | 2026-08-30 | v0.3.1 发布全链终态（M-4 Go → E-1 bump/收口 f7dbf5c + 十面复跑全绿 + 隔离冷装通过 + tag v0.3.1@5ca8b87 + push + GitHub Release + 归档跳过；Code R0 + Release R1 双 APPROVED_WITH_NOTES/0；EV-086/087） |
 | EVO-006 | 2026-08-29 | GPT OAuth 转正闭环（DEC-026 C2 全落地：开关废弃 + 门控链移除 + kill-switch ②层补全 + UI/i18n 转正 + 文档口径；3 commits + R0 APPROVED_WITH_NOTES/0；八套件零回退——smoke §6 沙箱待 M-3；EV-085） |
 | FIX-007 | 2026-08-29 | 宿主 rc.2 附件链回归闭环（b816601 RCA 修复 + R0 APPROVED_WITH_NOTES/0 + 08accbd P8 增补；934 ok 零回退 + 真实 rc.2 隔离 7 格式全绿；R5 目录空/F-6/F-10 → FIX-008 候选；EV-080~083） |
 | REL-003 | 2026-08-28 | v0.3.0 M-1 全段终态（代码 5 commits R0 通过 + 资产 6 文件三审链 R1×2+R2 T1 闭环 + GATE-4/5/7 实采全绿 + 81 commits 三分账；EV-078/079） |
@@ -56,11 +57,12 @@
 
 ## 待办与决策项（非任务项——18c/18d/18e 不判定域）
 
-- **FIX-003 宿主验证**（用户动作，P0）：宿主重启或 settings 热载后验证 vision 带图 / 气泡图片 / attachmentIds 跨轮——发布前必做
-- **出口①真机首联**（用户决策项，P0）：EVO-002 出口①——1455 + 代理 7890 + V-EVO-3 + R6-F2/F5 + dispatcher×原生 fetch；需用户在场；**FIX-006 已闭环（2026-08-27）——随时可执行**
-- **出口③设备码流排期**（用户决策项，P0）：EVO-002 出口③ 1455 被占降级路径排期
-- **v0.3.0 发布时点**（用户决策项）：出口条件①④机制面已闭环；真机首联后评估
-- **EVO-003 UI 批次**（待入账候选，P1）：出口②按天视图/⑤导出按钮 UI 面 + R2-F1/F2/F3 P2×3 + R1-F3 CSV 注入 + R8-F1/F2
+- ~~**FIX-003 宿主验证**~~（✅ 已关闭 2026-08-23——EV-063 用户验证通过）
+- ~~**出口①真机首联**~~（✅ 已关闭 2026-08-29——EV-081 用户真机 OAuth 登录+通用子 agent 调用成功）
+- ~~**出口③设备码流排期**~~（✅ 已关闭——设备码实现随 EVO-005/v0.3.0 发布；**真机降级路径验证**为可选用户动作，随时可做，无排期依赖）（S-1 清账 2026-08-30）
+- ~~**v0.3.0 发布时点**~~（✅ 已关闭 2026-08-29——v0.3.0 发布 EV-084；v0.3.1 亦已发布 2026-08-30 EV-087）
+- ~~**EVO-003 UI 批次**~~（✅ 已关闭——EVO-004 承载完成随 v0.3.0 发布）
+- **v0.3.1 发布后用户验证**（用户动作）：DSH 宿主重启后验证 GPT OAuth 正式通道 UI（无实验面）+ 版本号 0.3.1——用户已裁决发布完成后一次重启
 - **插件仓缺陷申报**（✅ 已申报 2026-08-27）：FIX-281 批次入账（插件仓 TRIAGE-FIX-281 机器记录 + tracker 行——9 项：Check 30 历史格式迁移 / Check 1 轻量表解析 / 活跃任务节边界 / Gate 节名括号 / review_record 覆盖风险 / EV-EVD 前缀 / tpa 完成态过滤 / 30c 溯源分类 / change-triage 版本校验混用）；版本定位随 DEC-172 后续裁决（0.78.1 PATCH 修复面 / 0.79.0 MINOR 判定面）——修复在插件仓会话执行
 - **M-1 打包 MUST 闭合清单**（✅ 全部闭合 2026-08-28——REL-003 终态）：①EVO-005 F-1/F-2（dcd44fa/6dbe57d，R0 验证闭合）②REL-002 ReleaseF-1/DesignF-1/2/3（资产段 R1 前修正）③DEC-025 落实面（peerDeps rc.8 d78dc00 + 披露面 CHANGELOG/README）④三件套 + CHANGELOG 双主题 + bump（850b30c）⑤tarball 隔离冷装（GATE-5 EV-078 通过）——遗留观察项：R2 N-1 version-plan 快照 M-4 刷新 + N-2 断言数 EV 留痕模板（本 EV-079 已补 918 权威值）
 
@@ -123,7 +125,7 @@
 | v0.2.0 | **已发布（2026-08-20）** | 2026-08-20 | v3 附件路由架构全量（MIG-001）/ D-1 验收门 | MIG-001, DEV-003 | tag v0.2.0 + tarball + CHANGELOG |
 | **v0.2.1** | **已发布（2026-08-22，REL-001）** | 2026-08-22 | P0 热修承载：FIX-001/001b（宿主 prepared-dispatch 兼容 + parity 看护网）+ FIX-002/002b（双层接管用户主权，takeoverDefaultModel 默认 false）+ EVO-002 Step 1-4b OAuth 地基（kill-switch 零可见）+ metrics 夹具修复 | FIX-001, FIX-002, REL-001（EVO-002 Step 1-4b 顺带承载） | tag v0.2.1（a1ab717）+ tarball 1460KB 离线验证 + CHANGELOG；验证基线 smoke 656/parity 14/metrics 31 全绿 |
 | **v0.3.0** | **已发布（2026-08-29，tag v0.3.0 = bb81abf）** | 2026-08-29 | ChatGPT 订阅接入（C-1）：preset 账号 + 独立凭据文件 + 1455 回调 + 设备码流 + codex-responses 协议分支 + Q2 per-protocol 能力接口 + 合规三层 kill-switch + C-9 埋点；**DEC-025 M-0 裁决追加**：C-3 统计（EVO-003/004）并入双主题 + peerDeps ^0.1.0-rc.8 + RISK-001 带披露；FIX-006/007 发布阻塞清除 | EVO-001✅ EVO-002✅ EVO-003✅ EVO-004✅ FIX-006✅ EVO-005✅ REL-002✅ REL-003✅ FIX-007✅ | GitHub Release 带 tarball 1,507,506B；发布决策=用户 2026-08-29（M-4）；残留披露：对话内图片附件显示层（FIX-008 候选，已知问题入 CHANGELOG）；GATE-8 归档检测跳过（已发布版本 <2） |
-| **v0.3.1** | **范围重划——EVO-006 GPT OAuth 转正载体（DEC-026）**；含 P2×3/P3×3 收尾 + M-3 无沙箱复跑 | 待定（发布授权归用户） | GPT OAuth 实验通道转正式（代码已闭环）+ R0 台账收尾 | EVO-006✅（代码/审查，待发布承载） | CHANGELOG 未发布段已在案；tag/tarball/Release 随发布链 |
+| **v0.3.1** | **已发布（2026-08-30，tag v0.3.1 = 5ca8b87，REL-004）** | 2026-08-30 | GPT OAuth 实验通道转正式（EVO-006，DEC-026 C2）+ R0 台账收尾（P2×3/P3×3）+ 停用拒绝遥测 | EVO-006✅ REL-004✅ | GitHub Release 带 tarball 1,507,454B；三分账 12（7 产品/5 治理）；发布后用户重启验证待做 |
 | **v0.3.2** | 规划中 | 待定 | 成功率闭环（C-4+C-5）：五分类 + 预算制重试 + 诊断卡 + doctor 预检 + C-9 报告 | 待拆分（EVO-004 域） | 失败分类覆盖 + 重试预算 + C-9 实测报告 |
 | **v0.3.3** | 规划中 | 待定 | 二梯队收敛：C-6 池泛化 + C-7 onboarding 向导（+C-8 官方安装通道可选） | 待拆分（EVO-005 域） | 池泛化 + 首次成功 3 分钟向导 |
 
