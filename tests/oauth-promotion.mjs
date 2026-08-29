@@ -5,7 +5,8 @@
  * - A 组「旧实验语义必败」：转正前实现（oauthExperimental/oauthTosAccepted
  *   schema 键 + begin/调用期门控）下本组断言必败——证明语义已移除；
  * - B 组「kill-switch 关闭能力保留」：三层语义重构为
- *   ① router.enabled 总开关（tool.js 既有断言看护）② 账号级 enabled
+ *   ① router.enabled 总开关（tests/routing-paths.mjs C13/D8b 既有断言看护——
+ *   看护对象为 lib/tool.js 行为，勿按文件名找断言）② 账号级 enabled
  *   （本组判别——直连调用/发起授权两路）③ 登出删除（W-5 恒可用，
  *   不随任何开关失效）。重构后关闭能力必须真实存在，不得出现
  *   「开关废了、关不掉」的半转正态。
@@ -40,9 +41,14 @@ export async function runOauthPromotionTests(check) {
     // A2. 旧配置遗留键升级兼容：显式 oauthExperimental=false 不阻塞解析
     //     （schemastery 未知字段容忍——rollback-plan v0.3.0 L116 先例语义），
     //     转正语义优先于遗留值。
+    //     判别性标注（R0 P3-e）：本断言「非判别——容忍性断言」（旧 schema
+    //     合法接受两键，旧实现下亦通过），系升级兼容回归断言。事实注记：
+    //     schemastery 对未知字段为透传（遗留键会出现在装配结果中，实测），
+    //     故「遗留键不影响装配结果」形态的判别加强不可达；本面判别力由
+    //     A1（schema 键移除）与 A3/A4（begin/调用期门控链移除）承担。
     let legacyOk = false
     try { routerSchema({ oauthExperimental: false, oauthTosAccepted: false }); legacyOk = true } catch { legacyOk = false }
-    check('promotion: legacy gate keys tolerated as unknown fields (upgrade compat)', legacyOk)
+    check('promotion: legacy gate keys tolerated as unknown fields (upgrade compat; non-discriminating tolerance assertion)', legacyOk)
 
     // A3/A4. 服务端门控链移除：state 完全不含实验键（转正自然态）时
     //     begin 直接产出授权 URL、凭据直接解析——旧实现分别在 begin 侧
