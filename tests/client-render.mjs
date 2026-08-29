@@ -214,10 +214,10 @@ export async function runClientRender(check) {
   // FIX-002-R7 F3：接管开关可切换（catalog.takeoverDefaultModel 镜像值）——
   // 默认 true 维持既有接管断言语义；false 供"开关关闭"判别双断言组。
   let takeoverSwitch = true
-  // EVO-002 Step 6：ChatGPT 实验区——experimentalOn 控制开关态（config value
-  // 镜像），presetMode 控制目录 preset 账号形态（'none'|'logged-out'|
-  // 'logged-in'），confirmMode 控制 ToS/登出/删除确认对话（decline 判别）。
-  let experimentalOn = false
+  // EVO-002 Step 6 → EVO-006 转正：ChatGPT 订阅登录分区（正式通道——EVO-006
+  // 起 config 无实验开关键），presetMode 控制目录 preset 账号形态
+  // （'none'|'logged-out'|'logged-in'），confirmMode 控制登出/删除确认对话
+  // （decline 判别）。
   let presetMode = 'none'
   let confirmMode = true
   // EVO-004 R8-F1（P2）：非成员 preset 值账号判据统一——未知 preset（'zzz'）
@@ -250,7 +250,7 @@ export async function runClientRender(check) {
               { id: 'vision', name: '视觉', type: 'chat', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', effectiveProvider: 'deepseek-official', effectiveModel: 'deepseek-v4-pro', source: 'main' },
             ],
         oauthAccounts: presetMode === 'none' && !unknownPresetMode ? [] : [
-          { id: 'chatgpt', name: 'ChatGPT（实验）', enabled: true, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', tokenRef: '', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.4-mini'], publicClient: false, preset: 'chatgpt-codex', presetLoggedIn: presetMode === 'logged-in' },
+          { id: 'chatgpt', name: 'ChatGPT', enabled: true, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', tokenRef: '', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.4-mini'], publicClient: false, preset: 'chatgpt-codex', presetLoggedIn: presetMode === 'logged-in' },
           ...(unknownPresetMode ? [{ id: 'weird', name: '怪异账号', enabled: true, protocol: 'openai-completions', baseURL: '', tokenRef: 'ROUTER_OAUTH_WEIRD_TOKEN', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: [], publicClient: false, preset: 'zzz' }] : []),
         ],
         pools: presetMode === 'none' ? [] : [
@@ -262,8 +262,6 @@ export async function runClientRender(check) {
     }),
     config: async () => ({ ok: true, value: { ok: true, enabled: true, revision: 1, writable: true, value: {
       enabled: true,
-      oauthExperimental: experimentalOn,
-      oauthTosAccepted: experimentalOn,
       agents: {
         codex: { name: 'Codex 助手', type: 'cli', enabled: true, description: 'd', capabilities: ['image'], command: '', args: '', timeoutMs: 0, maxConcurrent: 1, cliAgent: 'codexentry' },
         vision: { name: '视觉', type: 'chat', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', maxRounds: 1 },
@@ -854,12 +852,12 @@ export async function runClientRender(check) {
     }
   }
 
-  // EVO-002 Step 6：ChatGPT 实验区（§3.6 默认关闭 + ToS 显式确认 + preset
-  // 账号卡 + W-5 删除联动）。判别性推演：断言 ②③④⑤⑥ 在"无实验区/无 ToS
-  // 门/无登出联动"的旧客户端代码下必败——旧代码不渲染 experimentalSwitch/
-  // presetAdd/presetLogin/presetLogout/presetDelete 元素（findAll 查空 →
-  // undefined 分支跳过点击 → 捕获数组为空 → 断言失败），saveOps 亦无
-  // oauthExperimental/oauthTosAccepted/pools 清理 op。
+  // EVO-002 Step 6 → EVO-006 转正（DEC-026 C2）：ChatGPT 订阅登录为正式通道
+  // （无实验开关、无 ToS 门；平台 ToS/账号风控提示保留）+ preset 账号卡 +
+  // W-5 删除联动。判别性推演：断言 ①② 在"实验开关门控入口"的旧客户端代码
+  // 下必败——旧代码 config 无 oauthExperimental=true 时分区不渲染 presetAdd/
+  // presetLogin 元素（findAll 查空 → undefined 分支跳过点击 → 捕获数组为空
+  // → 断言失败）；断言 ③④⑤⑥ 在"无登出联动"的旧代码下必败。
   {
     const settingsReg6 = captured.registrations.find((reg) => reg && reg.name === 'settings.section')
     const listener6 = captured.listeners.find((entry) => entry.event === 'settings/document-updated')
@@ -875,37 +873,30 @@ export async function runClientRender(check) {
       if (advHead6) advHead6.props.onClick()
       return settle()
     }
-    const experimentalSwitchOf = (tree) => {
-      // checkbox 自身无子文本（label 文本在其兄弟位置）——先按 label 文本定位
-      // dshrouter-switch，再取其 input 子节点。
-      const label6 = findAll(tree, (node) => hasClass(node, 'dshrouter-switch') && textOf(node).includes(tOf('experimentalSwitch')))[0]
-      return label6 ? (label6.children ?? []).find((child) => child && child.type === 'input') : undefined
-    }
-    // ① 默认关闭：开关未勾选 + preset 入口隐藏（§3.6 默认关闭）。
+    // ① 转正渲染：正式分区标题 + 平台提示 + 添加入口恒可见 + 全树无实验字样。
     {
-      const tree6 = await renderSettings6('step6-off')
-      const switch6 = experimentalSwitchOf(tree6)
-      check('step6: experimental switch off by default (§3.6)', !!switch6 && switch6.props.checked === false)
-      check('step6: preset entry hidden while off (§3.6)', !textOf(tree6).includes(tOf('presetAdd')) && !textOf(tree6).includes(tOf('presetLogin')))
+      presetMode = 'none'
+      if (listener6) listener6.listener()
+      await new Promise((resolve) => setImmediate(resolve))
+      const tree6 = await renderSettings6('step6-promotion')
+      check('step6: official channel section title renders (DEC-026)', textOf(tree6).includes(tOf('presetTitle')) && textOf(tree6).includes(tOf('presetNotice')))
+      check('step6: preset add entry always visible, no experimental labels (DEC-026)', textOf(tree6).includes(tOf('presetAdd')) && !textOf(tree6).includes('实验') && !textOf(tree6).includes('Experimental'))
     }
-    // ② ToS 拒绝 → 不写开关；③ 接受 → oauthExperimental + oauthTosAccepted
-    //    两 op 同时落（服务端 begin 复核的数据面）。
+    // ② 无 ToS 门添加：拒绝一切 confirm 仍可创建账号并发起授权；转正后任何
+    //    操作不得写入 oauthExperimental/oauthTosAccepted 键。
     {
-      const tree6 = await renderSettings6('step6-tos')
+      const tree6 = await renderSettings6('step6-add')
       confirmMode = false
       captured.saveOps.length = 0
-      const switch6 = experimentalSwitchOf(tree6)
-      if (switch6) switch6.props.onChange({ target: { checked: true } })
+      captured.beginCalls.length = 0
+      const addBtn6 = buttonsOf(tree6).find((node) => textOf(node) === tOf('presetAdd'))
+      if (addBtn6) addBtn6.props.onClick()
       await settle()
-      check('step6: ToS declined leaves switch untouched', captured.saveOps.filter((op) => (op.path ?? []).includes('oauthExperimental')).length === 0)
+      const accountOps6 = captured.saveOps.filter((op) => op.path[0] === 'oauthAccounts')
+      const gateOps6 = captured.saveOps.filter((op) => op.path[0] === 'oauthExperimental' || op.path[0] === 'oauthTosAccepted')
+      check('step6: add account proceeds without ToS confirm (DEC-026)', !!addBtn6 && accountOps6.length === 1 && captured.beginCalls.length === 1 && captured.beginCalls[0]?.accountId === 'chatgpt')
+      check('step6: retired gate keys never written (DEC-026)', gateOps6.length === 0)
       confirmMode = true
-      const switch6b = experimentalSwitchOf(currentTree)
-      captured.saveOps.length = 0
-      if (switch6b) switch6b.props.onChange({ target: { checked: true } })
-      await settle()
-      const ops6 = captured.saveOps.filter((op) => op.path[0] === 'oauthExperimental' || op.path[0] === 'oauthTosAccepted')
-      check('step6: ToS accepted persists switch + acceptance together', ops6.length === 2 && ops6.every((op) => op.value === true))
-      experimentalOn = true
       presetMode = 'logged-out'
       if (listener6) listener6.listener()
       await new Promise((resolve) => setImmediate(resolve))
@@ -972,7 +963,6 @@ export async function runClientRender(check) {
       logoutFailMode = false
     }
     // 复位（不污染后续块）。
-    experimentalOn = false
     presetMode = 'none'
     confirmMode = true
     if (listener6) listener6.listener()
@@ -1103,7 +1093,6 @@ export async function runClientRender(check) {
   {
     unknownPresetMode = true
     presetMode = 'none'
-    experimentalOn = false
     await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'settings-r8f1', 60)
     const acctHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.accountTitle))
     check('R8-F1 accounts category head present', !!acctHead)
@@ -1119,14 +1108,12 @@ export async function runClientRender(check) {
     }
     unknownPresetMode = false
     presetMode = 'none'
-    experimentalOn = false
   }
 
   // ── 断言：①（EVO-004 出口②）按天视图 UI 面——stats.days 按天聚合表 ────
   // 旧代码 statsBody 只渲染 totals/series/recent，无 stats.days 消费面（UI 面
   // 零改动）→ 本组断言必败。构造：remoteMock.stats 返回 days（两日期聚合）。
   {
-    experimentalOn = false
     presetMode = 'none'
     unknownPresetMode = false
     await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'settings-daily', 60)
@@ -1143,7 +1130,6 @@ export async function runClientRender(check) {
   // ── 断言：②（EVO-004 出口⑤）导出按钮 UI 面——statsExport RPC + CSV 下载
   // 旧代码 statsBody 无导出按钮（UI 面零改动）→ 本组断言必败。
   {
-    experimentalOn = false
     presetMode = 'none'
     unknownPresetMode = false
     captured.statsExportCalls = []
