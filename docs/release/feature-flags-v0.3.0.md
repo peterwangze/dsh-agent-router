@@ -59,9 +59,11 @@
 |---|---|---|---|
 | `oauthExperimental=false` | 入口隐藏 + 调用报「实验通路已关闭」+ 1455 零监听（惰性启动不触发）+ 既有 OAuth 通用账号/API Key/其它通路零影响。**→ v0.3.1 转正后本行语义退役（EVO-006）：关闭态由 `router.enabled=false`（总开关）、账号 `enabled=false`（调用/发起授权明确拒绝）与登出删除承接——tests/oauth-promotion.mjs B 组判别** | smoke oauth 域断言（M-3 复跑 exit 0——GATE-3）；门控前置链 `flag→ToS→starter→loopback` 严格前置经 EVO-005 R0 门控一致性裁决 | ✅ 已验证（断言在案 + 持续复跑机制） |
 | `router.enabled=false` | route_agent 拒绝调用 + 提示段清空 + 统计暂停；恢复即还原 | smoke 既有断言（v0.2.0 EV-013/EV-019 先例） | ✅ 已验证 |
-| 账号 `enabled=false` | 单账号停用（池选号跳过） | 账号池域断言 | ✅ 已验证（EVO-002 链） |
+| 账号 `enabled=false` | 单账号停用：**调用与发起授权均被拦截并明确提示**（②层直连 + 发起双侧判别——EVO-006 转正语义）+ 池选号跳过（既有语义） | oauth-promotion B 组判别（B1 直连拒绝零凭据副作用 / B2 发起拒绝并留痕 `account_disabled` telemetry）+ 账号池域断言 | ✅ 已验证（EVO-002 链 + EVO-006 oauth-promotion B 组） |
 | `stats.persist=false` | 回纯内存（v0.2.1 行为）；false 期间不读不写磁盘；往返不损已落盘数据（开→关先 flush；关→开全量恢复） | W-4 往返语义单测（stats 110 基线，M-3 复跑） | ✅ 已验证（EVO-003 R1/R2） |
 | 登出删除（W-5） | 删凭据文件 + 清 oauthAccounts 条目 + 清池引用；登出×兑换竞态窗口闭合（persist 前 cancelled 复查） | 登出后文件不存在断言 + 竞态判别测试（真实构造交错，三重判别） | ✅ 已验证（EVO-002 R7/R8 + REL-003 dcd44fa/R0 复核） |
+
+> 边界注记（EVO-006 R0 P3-f / REL-004 收尾）：**模型发现操作（oauthDiscover）不受 ② 层账号开关门控**——账号管理操作面（模型发现、登出删除等）与通道使用面（调用 / 发起授权）分属不同边界；停用账号仍可在账号卡片执行管理操作，使用面拦截语义以 ② 层「调用 + 发起授权」双侧判别为准（与 EVO-006 实现一致）。
 
 ## §5 Flag 变更流程与触发条件
 
