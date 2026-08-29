@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "task_id": "EVO-006",
+  "title": "GPT OAuth 实验通道转正式（用户裁决：验证证明可行——仅转正 GPT 通道，其余方向待后续需求）",
+  "priority": "P1",
+  "target_version": "未规划版本",
+  "depends_on": [],
+  "files": [
+    "lib/schemas.js",
+    "lib/service.js",
+    "lib/client.js"
+  ],
+  "reason": "用户裁决 2026-08-29（原话：「先仅将gpt实验通道转成正式的Oauth登陆逻辑，当前的验证证明OAuth登陆可行，其他的等后续的我的需求」）。范围 = 路由器中 GPT/ChatGPT OAuth 通道从「实验」（oauthExperimental 默认 false + ToS 风险确认弹窗 + 实验式 UI 标签/文案）转为正式登录通道；非实验的其它 OAuth 方向（Claude C-2/账号池 C-6）明确不做。转正风险接受 = 用户主权（DEC-019 Q1 ToS 合规面当时保留为风险接受决策，用户现以行为明确接受——DEC-026 入账）。实施面由 Developer RCA 盘点实验触点（schemas:223 oauthExperimental 语义与缺省 / client ToS 弹窗与实验区标签 / 服务端门控链 oauthExperimental→ToS→starter→loopback（DEC-021 纯粹性语义随转正重构）/ C-9 埋点实验标记 / README·CHANGELOG·feature-flags 转正口径 / kill-switch 三层语义（router.enabled/账号 enabled 保留——登出删除 W-5 不变）/ flag 债务清理（feature-flags §3 转正评估 ≥30 天——现恰满窗））。承载版本 = v0.3.1（v0.3.0 发布后自然载体——DEC-025 后 v0.3.1 范围清空重划）。",
+  "created_at": "2026-08-29",
+  "tool": "change-triage",
+  "tool_version": "0.77.0",
+  "analysis": {
+    "dependency": {
+      "unblocked": [],
+      "blocked": [
+        "REL-002"
+      ],
+      "blocked_by": [],
+      "unknown_deps": [],
+      "cycles": [],
+      "cycle_warning": false,
+      "new_task_cycle": false
+    },
+    "priority_context": {
+      "proposed": "P1",
+      "in_flight": {
+        "P0": 2,
+        "P1": 5,
+        "P2": 0
+      },
+      "version_chain": []
+    },
+    "conflicts": [
+      {
+        "task_id": "EVO-004",
+        "files": [
+          "lib/client.js",
+          "lib/service.js",
+          "lib/stats.js",
+          "tests/client-render.mjs",
+          "tests/smoke.mjs",
+          "tests/stats.mjs"
+        ],
+        "overlap": [
+          "lib/client.js",
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "EVO-005",
+        "files": [
+          "lib/client.js",
+          "lib/oauth-credentials.js",
+          "lib/schemas.js",
+          "lib/service.js",
+          "tests/oauth-credentials.mjs",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/client.js",
+          "lib/schemas.js",
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "FIX-004",
+        "files": [
+          "lib/index.js",
+          "lib/service.js"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "FIX-006",
+        "files": [
+          "lib/service.js",
+          "package.json",
+          "tests/adapter-parity.mjs",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "FIX-007",
+        "files": [
+          "lib/attachments.js",
+          "lib/index.js",
+          "lib/service.js",
+          "lib/tool.js"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "REL-003",
+        "files": [
+          "lib/oauth-credentials.js",
+          "lib/service.js",
+          "package.json",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      }
+    ],
+    "version": {
+      "target": "未规划版本",
+      "current": "",
+      "planned_next": null,
+      "issues": []
+    },
+    "side_effect": {
+      "detected": false,
+      "touches_real_env": false,
+      "requires_r1": false,
+      "declared": "无——纯仓内",
+      "blast_radius": [],
+      "review_conditions": [],
+      "issues": []
+    }
+  },
+  "snapshot": {
+    "tool": "task-priority-analysis",
+    "module_version": "0.71.0",
+    "report_json": {
+      "total": 8,
+      "completed": [
+        "OPS-001"
+      ],
+      "blocked": [
+        {
+          "task_id": "REL-002",
+          "blocking_dependencies": [
+            "FIX-006"
+          ]
+        }
+      ],
+      "unblocked": [],
+      "recommended_next": [],
+      "non_executable": [
+        "FIX-004",
+        "EVO-004",
+        "FIX-006",
+        "EVO-005",
+        "REL-003",
+        "FIX-007"
+      ],
+      "cycles": [],
+      "cycle_warning": false
+    },
+    "report_text": "# Task Priority Analysis\n\nTotal: **8** tasks — 1 completed, 0 unblocked, 1 blocked, 6 non-executable.\n\n## Recommended next\n\n_No unblocked tasks — REQ-110 fallback: blocked-chain unblock recommendation (FIX-254)._\n\n**Unblock pick: `FIX-006` [P0] (non_executable_status status='已完成')**\n\n- reason: status stop: `FIX-006` is dependency-satisfied but held by terminal status '已完成' — re-evaluate or resume `FIX-006` to reopen the chain\n- unlocks 1 downstream blocked task(s): `REL-002`\n- empty reason: all_blocked — no executable candidate: 1 active task(s) are all blocked by unresolved task-family dependencies; 6 dependency-satisfied row(s) additionally held by non-executable status markers\n- nearest action: unblock `FIX-006` (non_executable_status) — highest-value chain, 1 downstream blocked task(s)\n\n## Unblocked (ready to work)\n\n_None._\n\n## Excluded (non-executable status)\n\n_Dependency-satisfied rows excluded from Unblocked / Recommended next: their status leading marker is terminal / non-executable (⛔/⏸/🔴/🚧/🛑/📋/✅) or their wording is terminal without an emoji marker (FIX-237.2 / ADR-017 §4.4 P1-3 / FIX-288 ⑦) even though their dependencies are met._\n\n- `FIX-004` [P1] v=v0.3.x status=已完成 deps=[—]\n- `EVO-004` [P1] v=v0.3.1 status=已完成 deps=[—]\n- `FIX-006` [P0] v=v0.3.0 status=已完成 deps=[—]\n- `EVO-005` [P1] v=v0.3.0 status=已完成 deps=[—]  [refs: EVO-002]\n- `REL-003` [P1] v=v0.3.0 status=已完成 deps=[—]  [refs: EVO-005, DEC-025]\n- `FIX-007` [P0] v=v0.3.0（或热修） status=已完成 deps=[—]  [refs: RISK-003]\n\n## Blocked\n\n- `REL-002` [P1] v=v0.3.0 status=已完成 blocked_by=[FIX-006]\n\n## Completed\n\n- `OPS-001` [P9] v=— status=✅ 已完成 deps=[—]\n"
+  }
+}

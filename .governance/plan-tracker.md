@@ -31,7 +31,8 @@
 | P1 | EVO-005 | 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告） | EVO-002（1455 惰性启动 + 降级链） | v0.3.0 | 已完成（R0 APPROVED_WITH_NOTES/0——协议事实 13 项对照一手源码全相符；**P1×2 绑定 M-1 MUST 闭合**：F-1 登出×兑换 TOCTOU + F-2 传输错误终态化；EV-077） |
 | P1 | REL-003 | v0.3.0 M-1 候选打包（Developer 代码段）——EVO-005 P1×2 修复 + peerDeps rc.8 + version bump | EVO-005✅ DEC-025✅ | v0.3.0 | 已完成（M-1 全段：代码段 R0 APPROVED_WITH_NOTES/0 + 资产段 Release R1 APPROVED_WITH_NOTES/0 + Design R1 NEEDS_CHANGE→返工→R2 APPROVED_WITH_NOTES/0 T1 闭环；EV-078/079） |
 | P0 | FIX-007 | 宿主 0.1.1-rc.2 演进回归：route_agent 图片附件链 rejected「图片加载失败」+ 整链变慢/卡住（M-2 出口①失败回路受理——GATE-1 验证即失败） | RISK-003（活性） | v0.3.0（或热修） | 已完成（b816601 RCA 先行修复 + R0 APPROVED_WITH_NOTES/0 + 08accbd F-1 P8 增补；附件链 7 格式回归看护成立；FIX-008 候选已登记——R5 目录空根因 + 附件 parity 守卫 + F-6/F-10 加固） |
-| — | 下一轮 | v0.3.0 发布前提——FIX-007 修复后用户 M-2 复验（GATE-1 出口①）+ 出口③设备码流排期 + 发布时点（用户决策项）；插件仓申报已完成（FIX-281，2026-08-27） | — | v0.3.x | 待定 |
+| P1 | EVO-006 | GPT OAuth 实验通道转正式（DEC-026 用户裁决——仅 GPT 通道，其余方向待后续需求；v0.3.1 载体） | EVO-002✅ EVO-005✅ DEC-026✅ | v0.3.1 | 待实施（TRIAGE-EVO-006 机器入账 2026-08-29；RCA 触点盘点待派发——开关语义/ToS/UI 标签/文档口径/kill-switch 层次/C-9 标记） |
+| — | 下一轮 | **OAuth 登陆演进**——EVO-006 转正（下次 session 第一动作）；其余（C-4+C-5/C-6/C-2/FIX-008 残留）等用户后续需求；出口③设备码真机验证随时可做 | — | v0.3.1 | 待定 |
 
 ### 最近完成
 
