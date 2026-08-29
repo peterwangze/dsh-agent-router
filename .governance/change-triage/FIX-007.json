@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "task_id": "FIX-007",
+  "title": "宿主 0.1.1-rc.2 演进回归：route_agent 图片附件链被拒（图片加载失败 rejected）+ 整链变慢/卡住（M-2 出口①失败回路受理）",
+  "priority": "P0",
+  "target_version": "未规划版本",
+  "depends_on": [],
+  "files": [
+    "lib/service.js",
+    "lib/tool.js",
+    "lib/index.js",
+    "lib/attachments.js"
+  ],
+  "reason": "用户 2026-08-29 报障（GATE-1 验证即失败受理）：①图片识别返回极慢/卡住②返回后图片附件全部显示「图片加载失败，点击重试」+（client apc router/ImageData rejected）——附件链拒绝（FIX-003 同型症状簇）。Coordinator 诊察事实：宿主 npx 缓存今日 15:34:27 刷新；宿主运行时三包（dsh-agent/dsh-attachment/dsh-llm）全部 0.1.1-rc.2（高于插件对齐基线 0.1.0-rc.8；semver 满足 ^0.1.0-rc.8 但接口可能漂移——RISK-003/P9 域）；代理 7890 未运行（vision agent 走 provider=glm 非 OAuth——非本次主症状）；测试 mock 基线 = rc.8。RCA 方向：①rc.2 与 rc.8 附件/路由接口差异对照②rejected 抛出点全链定位③变慢根因定性④parity/能力自证守卫实证。注入目标版本 = 下个发布（v0.3.0 或热修——FIX-281⑨ 绕过惯例）。",
+  "created_at": "2026-08-29",
+  "tool": "change-triage",
+  "tool_version": "0.77.0",
+  "analysis": {
+    "dependency": {
+      "unblocked": [],
+      "blocked": [
+        "REL-002"
+      ],
+      "blocked_by": [],
+      "unknown_deps": [],
+      "cycles": [],
+      "cycle_warning": false,
+      "new_task_cycle": false
+    },
+    "priority_context": {
+      "proposed": "P0",
+      "in_flight": {
+        "P0": 1,
+        "P1": 5,
+        "P2": 0
+      },
+      "version_chain": []
+    },
+    "conflicts": [
+      {
+        "task_id": "EVO-004",
+        "files": [
+          "lib/client.js",
+          "lib/service.js",
+          "lib/stats.js",
+          "tests/client-render.mjs",
+          "tests/smoke.mjs",
+          "tests/stats.mjs"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "EVO-005",
+        "files": [
+          "lib/client.js",
+          "lib/oauth-credentials.js",
+          "lib/schemas.js",
+          "lib/service.js",
+          "tests/oauth-credentials.mjs",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "FIX-004",
+        "files": [
+          "lib/index.js",
+          "lib/service.js"
+        ],
+        "overlap": [
+          "lib/index.js",
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "FIX-006",
+        "files": [
+          "lib/service.js",
+          "package.json",
+          "tests/adapter-parity.mjs",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "REL-003",
+        "files": [
+          "lib/oauth-credentials.js",
+          "lib/service.js",
+          "package.json",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      }
+    ],
+    "version": {
+      "target": "未规划版本",
+      "current": "",
+      "planned_next": null,
+      "issues": []
+    },
+    "side_effect": {
+      "detected": false,
+      "touches_real_env": false,
+      "requires_r1": false,
+      "declared": "无——纯仓内诊断修复（宿主事实记录不动）",
+      "blast_radius": [],
+      "review_conditions": [],
+      "issues": []
+    }
+  },
+  "snapshot": {
+    "tool": "task-priority-analysis",
+    "module_version": "0.71.0",
+    "report_json": {
+      "total": 7,
+      "completed": [
+        "OPS-001"
+      ],
+      "blocked": [
+        {
+          "task_id": "REL-002",
+          "blocking_dependencies": [
+            "FIX-006"
+          ]
+        }
+      ],
+      "unblocked": [],
+      "recommended_next": [],
+      "non_executable": [
+        "FIX-004",
+        "EVO-004",
+        "FIX-006",
+        "EVO-005",
+        "REL-003"
+      ],
+      "cycles": [],
+      "cycle_warning": false
+    },
+    "report_text": "# Task Priority Analysis\n\nTotal: **7** tasks — 1 completed, 0 unblocked, 1 blocked, 5 non-executable.\n\n## Recommended next\n\n_No unblocked tasks — REQ-110 fallback: blocked-chain unblock recommendation (FIX-254)._\n\n**Unblock pick: `FIX-006` [P0] (non_executable_status status='已完成')**\n\n- reason: status stop: `FIX-006` is dependency-satisfied but held by terminal status '已完成' — re-evaluate or resume `FIX-006` to reopen the chain\n- unlocks 1 downstream blocked task(s): `REL-002`\n- empty reason: all_blocked — no executable candidate: 1 active task(s) are all blocked by unresolved task-family dependencies; 5 dependency-satisfied row(s) additionally held by non-executable status markers\n- nearest action: unblock `FIX-006` (non_executable_status) — highest-value chain, 1 downstream blocked task(s)\n\n## Unblocked (ready to work)\n\n_None._\n\n## Excluded (non-executable status)\n\n_Dependency-satisfied rows excluded from Unblocked / Recommended next: their status leading marker is terminal / non-executable (⛔/⏸/🔴/🚧/🛑/📋/✅) or their wording is terminal without an emoji marker (FIX-237.2 / ADR-017 §4.4 P1-3 / FIX-288 ⑦) even though their dependencies are met._\n\n- `FIX-004` [P1] v=v0.3.x status=已完成 deps=[—]\n- `EVO-004` [P1] v=v0.3.1 status=已完成 deps=[—]\n- `FIX-006` [P0] v=v0.3.0 status=已完成 deps=[—]\n- `EVO-005` [P1] v=v0.3.0 status=已完成 deps=[—]  [refs: EVO-002]\n- `REL-003` [P1] v=v0.3.0 status=已完成 deps=[—]  [refs: EVO-005, DEC-025]\n\n## Blocked\n\n- `REL-002` [P1] v=v0.3.0 status=已完成 blocked_by=[FIX-006]\n\n## Completed\n\n- `OPS-001` [P9] v=— status=✅ 已完成 deps=[—]\n"
+  }
+}

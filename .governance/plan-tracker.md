@@ -30,7 +30,8 @@
 | P1 | REL-002 | v0.3.0 发布规划先行（ChatGPT 订阅接入 C-1 承载）——版本范围/门禁/里程碑/风险回滚 + 发布时点建议 | EVO-001✅ EVO-002✅ FIX-006✅ DEC-020✅ | v0.3.0 | 已完成（规划段 + M-0 闭环）——version-plan 双审 APPROVED_WITH_NOTES×2/0 + DEC-025 四项裁决入账；EV-075/076 |
 | P1 | EVO-005 | 设备码授权流实现（device flow RPC）——v0.3.0 范围补齐（DEC-025 D-2a 兑现 v0.2.1 预告） | EVO-002（1455 惰性启动 + 降级链） | v0.3.0 | 已完成（R0 APPROVED_WITH_NOTES/0——协议事实 13 项对照一手源码全相符；**P1×2 绑定 M-1 MUST 闭合**：F-1 登出×兑换 TOCTOU + F-2 传输错误终态化；EV-077） |
 | P1 | REL-003 | v0.3.0 M-1 候选打包（Developer 代码段）——EVO-005 P1×2 修复 + peerDeps rc.8 + version bump | EVO-005✅ DEC-025✅ | v0.3.0 | 已完成（M-1 全段：代码段 R0 APPROVED_WITH_NOTES/0 + 资产段 Release R1 APPROVED_WITH_NOTES/0 + Design R1 NEEDS_CHANGE→返工→R2 APPROVED_WITH_NOTES/0 T1 闭环；EV-078/079） |
-| — | 下一轮 | 无未完成任务——出口①真机首联/出口③设备码流/v0.3.0 发布时点（用户决策项）；插件仓申报已完成（FIX-281，2026-08-27） | — | v0.3.x | 待定 |
+| P0 | FIX-007 | 宿主 0.1.1-rc.2 演进回归：route_agent 图片附件链 rejected「图片加载失败」+ 整链变慢/卡住（M-2 出口①失败回路受理——GATE-1 验证即失败） | RISK-003（活性） | v0.3.0（或热修） | 进行中（TRIAGE-FIX-007 机器入账 2026-08-29；Coordinator 诊察：宿主 npx 15:34 刷新 + 三包 0.1.1-rc.2 + 代理 7890 未运行；Developer RCA+修复执行中） |
+| — | 下一轮 | v0.3.0 发布前提——FIX-007 修复后用户 M-2 复验（GATE-1 出口①）+ 出口③设备码流排期 + 发布时点（用户决策项）；插件仓申报已完成（FIX-281，2026-08-27） | — | v0.3.x | 待定 |
 
 ### 最近完成
 
