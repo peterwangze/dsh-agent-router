@@ -1,46 +1,49 @@
-# 会话快照 — 2026-08-30（五任务闭环日：v0.3.1 发布 + FIX-009/010 复验过 + DEC-027 + EVO-007 R1 过——待 GUI 验证 + v0.3.2 裁决）
+# 会话快照 — 2026-08-30（六任务闭环日：v0.3.1 + v0.3.2 双发布 + 双 P0 修复 + DEC-027 + EVO-007 T1 闭环）
 
-- **session_id**: 20260830-V031-FIX009-FIX010-EVO007
+- **session_id**: 20260830-V031-V032-DOUBLE-RELEASE
 - **session_date**: 2026-08-30
 - **agent**: glm @ DeepSeek Harness + software-project-governance v0.78.0
 - **mode**: always-on × maximum-autonomy
 
 ## 当前状态
 
-- **current_stage**: development (6/11)；本地 ahead 10 未 push（8877365/d92dfba/ec94a6c/020909b/49ac8ab/0234a88/0c7f987/65226a3/3665d6a/b664f52）
-- **current_gate**: G4 待评（RISK-001）；门控新基线 **smoke 963**（12 套件全绿含 fix-009/010 判别）
-- **tracker**: 34 终态（33 已完成 + 1 关闭）| 0 阻塞 | 0 锁
-- **principles**: P-v2 + DEC-027 三不变量
+- **current_stage**: development (6/11)；**v0.3.2 已发布**（tag v0.3.2 = d63b368，GitHub Release + tarball 1,502,496B；远端 main = b796741 同步）
+- **current_gate**: G4 待评（RISK-001）；门控基线 **smoke 963**（12 套件 + fix-009 9/9 + fix-010 13/13）
+- **tracker**: 35 终态（34 已完成 + 1 关闭）| 0 阻塞 | 0 锁
+- **principles**: P-v2 + DEC-027 三不变量（模态保真直传/原始呈现不可侵犯/全链无感）
 
-## 本会话闭环（五任务）
+## 本会话闭环（六任务，跨 08-29~30）
 
-- ✅ EVO-006 转正 + REL-004 v0.3.1 发布（tag v0.3.1@5ca8b87 + GitHub Release；EV-085~087）
-- ✅ FIX-009 image-solo 400（8877365）——**用户复验过**（EV-088）
-- ✅ FIX-010 图片气泡回归（020909b header 优先）——**用户复验过**（「气泡显示已经正常」）+ DEC-027 三不变量立版（EV-089）
-- ✅ EVO-007 账号面板 UX（65226a3 + T1 返工 3665d6a——F-1 删除路径恢复双入口 + 凭据清理；R1 复审 APPROVED_WITH_NOTES/0 + Coordinator 12 套件实测 smoke 963；EV-090）
-- 📌 用户裁决：**先 GUI 验证 EVO-007 再裁决 v0.3.2**
+- ✅ EVO-006 转正 + REL-004 **v0.3.1 发布**（EV-085~087）
+- ✅ FIX-009 image-solo 400（8877365，用户复验过；EV-088）
+- ✅ FIX-010 图片气泡回归（020909b，用户复验过「气泡显示已经正常」）+ **DEC-027 立版**（EV-089）
+- ✅ EVO-007 账号面板 UX（65226a3 + T1 返工 3665d6a；R1 通过；GUI 2/3 验证 + 点③断言闭环；EV-090）
+- ✅ REL-005 **v0.3.2 发布**（收尾段 1d2bf36[ P1-1 live default 对齐 + P2-2 hygiene + README 收口] + 三产物 + R0/R1 双审 + M-4 Go + E-1~E-7 全链；EV-091/092）
+- 📌 **E-7 归档计数异常显性化**：dry-run「已发布版本 0<2」而 13 tags 实存——FIX-281 域新证据（evidence-log ~235KB 越 200KB 阈值，归档被解析缺陷阻断——插件仓修复后触发）
 
 ## 待办池
 
 | 候选 | 状态 | 说明 |
 |---|---|---|
-| **GUI 验证 EVO-007** | **下次会话第一动作（用户）** | 刷新设置页 → Agent 路由：①新布局（API Key → ChatGPT 订阅登录一级醒目 → 子代理 → 高级扩展[仅账号池]）②OAuth 官方登录区块消失 ③池行/孤儿删除入口（凭据+池引用清理） |
-| v0.3.2 发布链 | 待裁决（验证后） | FIX-009+010+EVO-007 + P1-1（prestep 回落层 live default）+ P2-2（测试目录 hygiene）+ P3 台账（i18n 口径/README 残留文案/N-1~N-4/stats UTC 键/settings 遗留键）；ahead 10 随发布 push |
-| deepseek-official 视觉端点 | 宿主域 | 挂起中——vision 用 glm/glm-5.3-flash（已验证可用） |
-| 插件仓 FIX-281 / C-4+C-5 / C-6 / C-2 / FIX-008 | 等需求/插件仓会话 | — |
+| v0.3.2 发布后验证 | 用户动作 | 面板 UX 已验 2/3（发布前）+ 版本号 0.3.2 确认（重启或刷新后设置页/CHANGELOG） |
+| 插件仓 FIX-281 | 插件仓会话（优先级提升） | 9 项 + 归档计数新证据（E-7）+ TPA 伪推荐/hooks 产品码路径/28s evidence 增长被阻断——修复后触发归档 |
+| C-4+C-5 成功率闭环 | v0.3.3 规划域 | 路线图行（原 v0.3.2 计划——REL-005 实际承载变更，M-7 已更新口径注记） |
+| FIX-008 / 出口③ / C-6 / C-2 | 等用户需求 | — |
+| deepseek-official 视觉端点 | 宿主域观察 | 挂起中——vision 用 glm/glm-5.3-flash |
 
 ## 重要事实存档
 
-- **门控权威基线（v0.3.2 候选态）**：smoke 963/0 · stats 110 · routing 114 · parity 14 · attachments 65（接线） · credentials 98 · loopback 20 · promotion 13 · metrics 31 · fix-009 9/9 · fix-010 9/9 · client-render 130（独立）
-- **EVO-007 布局决策**：ChatGPT 订阅登录一级醒目位（与子代理字面交换）；高级扩展折叠区仅留账号池；孤儿 OAuth 账号极简兜底列表（仅存在时渲染）；数据域（oauthAccounts/pools/凭据）零触碰
-- **evidence-log ~228KB**（28s 越过 200KB WARN 阈值——v0.3.2 发布后归档评估触发）
-- 宿主 rc.2 无漂移；junction → 开发树
+- **发布面**：v0.3.2 Release https://github.com/peterwangze/dsh-agent-router/releases/tag/v0.3.2（tarball 1,502,496B）；远端 main = b796741
+- **验证基线（v0.3.2 权威）**：smoke 963/0 · 12 套件全 exit0 · fix-009 9/9 · fix-010 13/13（E 组后）· 隔离冷装通过
+- **审查链**：本会话六条审查全部 APPROVED_WITH_NOTES/0（FIX-009 R0 / FIX-010 R0 / EVO-007 R0→R1 T1 / REL-005 R0 / REL-005 R1）
+- **归档风险**：evidence-log ~235KB（阈值 200KB WARN / 250KB ERROR）——FIX-281 修复前持续增长，250KB 前需插件仓修复触发归档
+- 宿主 rc.2 无漂移；junction → 开发树（v0.3.2 已含）
 
 ## 下次会话第一动作
 
 1. skill 加载 software-project-governance → resolve_entry.py --json
-2. 读本快照 + plan-tracker（34 终态）
-3. 按用户 GUI 验证结果分支：通过 → v0.3.2 发布链启动裁决（推荐依据：RECO-EVO-007 机写快照——全终态，发布承载为用户决策域）；异常 → 受理修复
-   - 推荐依据：RECO-EVO-007（task-priority-analysis 机写，2026-08-30）
+2. 读本快照 + plan-tracker（35 终态）
+3. 等用户方向：v0.3.3 规划（C-4+C-5）/ 插件仓 FIX-281 会话（归档风险）/ 其它需求
+   - 推荐依据：RECO-REL-005（task-priority-analysis 机写，2026-08-30——全终态，方向为用户决策域）
 
-> FIX-262/REQ-108：本节推荐引用 RECO-EVO-007 机器快照行（2026-08-30）。
+> FIX-262/REQ-108：本节推荐引用 RECO-REL-005 机器快照行（2026-08-30）。
