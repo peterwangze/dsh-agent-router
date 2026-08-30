@@ -1,15 +1,15 @@
 {
   "version": 1,
-  "generated_at": "2026-08-30T20:24:22",
+  "generated_at": "2026-08-30T21:27:09",
   "packets": {
-    "EVO-007": {
-      "task_id": "EVO-007",
+    "REL-005": {
+      "task_id": "REL-005",
       "priority": "P1",
-      "status": "进行中——TRIAGE-EVO-007 机录 2026-08-30（vision 识别确认需求；UI 呈现层最小改动，schemas/服务端不动）；Developer 派发中",
-      "goal": "EVO-007 账号面板 UX 调整（用户截图红字指认 sha256:75eea8e2）——A 移除「OAuth 账号（官方登录）」不可用入口区块 + B ChatGPT 订阅登录与子代理（无头 CLI）位置交换（正式通道上移醒目位）",
+      "status": "进行中——TRIAGE-REL-005 机录 2026-08-30（用户裁决启动）；收尾段（P1-1+P2-2+README）Developer 派发中 → Code Reviewer → Release 规划/审查 → M-4 授权（用户）→ 发布执行；ahead 11 随发布 push",
+      "goal": "REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
       "product_success_contract": {
-        "user": "TO_BE_DEFINED: impacted persona for EVO-007 账号面板 UX 调整（用户截图红字指认 sha256:75eea8e2）——A 移除「OAuth 账号（官方登录）」不可用入口区块 + B ChatGPT 订阅登录与子代理（无头 CLI）位置交换（正式通道上移醒目位）",
-        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for EVO-007 账号面板 UX 调整（用户截图红字指认 sha256:75eea8e2）——A 移除「OAuth 账号（官方登录）」不可用入口区块 + B ChatGPT 订阅登录与子代理（无头 CLI）位置交换（正式通道上移醒目位）",
+        "user": "TO_BE_DEFINED: impacted persona for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
         "non_goals": [
           "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
           "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
@@ -25,7 +25,7 @@
         ]
       },
       "acceptance_contract": {
-        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for EVO-007 账号面板 UX 调整（用户截图红字指认 sha256:75eea8e2）——A 移除「OAuth 账号（官方登录）」不可用入口区块 + B ChatGPT 订阅登录与子代理（无头 CLI）位置交换（正式通道上移醒目位）",
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
         "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
         "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
         "last_run": {
@@ -38,42 +38,42 @@
       "quality_budget": {
         "dimensions": {
           "performance": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for EVO-007 账号面板 UX 调整（用户截图红字指认 sha256:75eea8e2）——A 移除「OAuth 账号（官方登录）」不可用入口区块 + B ChatGPT 订阅登录与子代理（无头 CLI）位置交换（正式通道上移醒目位）",
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
             "exception": ""
           },
           "reliability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for EVO-007 账号面板 UX 调整（用户截图红字指认 sha256:75eea8e2）——A 移除「OAuth 账号（官方登录）」不可用入口区块 + B ChatGPT 订阅登录与子代理（无头 CLI）位置交换（正式通道上移醒目位）",
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
             "exception": ""
           },
           "security": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for EVO-007 账号面板 UX 调整（用户截图红字指认 sha256:75eea8e2）——A 移除「OAuth 账号（官方登录）」不可用入口区块 + B ChatGPT 订阅登录与子代理（无头 CLI）位置交换（正式通道上移醒目位）",
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
             "exception": ""
           },
           "accessibility": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for EVO-007 账号面板 UX 调整（用户截图红字指认 sha256:75eea8e2）——A 移除「OAuth 账号（官方登录）」不可用入口区块 + B ChatGPT 订阅登录与子代理（无头 CLI）位置交换（正式通道上移醒目位）",
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
             "exception": ""
           },
           "ux": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for EVO-007 账号面板 UX 调整（用户截图红字指认 sha256:75eea8e2）——A 移除「OAuth 账号（官方登录）」不可用入口区块 + B ChatGPT 订阅登录与子代理（无头 CLI）位置交换（正式通道上移醒目位）",
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
             "exception": ""
           },
           "maintainability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for EVO-007 账号面板 UX 调整（用户截图红字指认 sha256:75eea8e2）——A 移除「OAuth 账号（官方登录）」不可用入口区块 + B ChatGPT 订阅登录与子代理（无头 CLI）位置交换（正式通道上移醒目位）",
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
@@ -82,9 +82,9 @@
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for EVO-007 账号面板 UX 调整（用户截图红字指认 sha256:75eea8e2）——A 移除「OAuth 账号（官方登录）」不可用入口区块 + B ChatGPT 订阅登录与子代理（无头 CLI）位置交换（正式通道上移醒目位）",
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
         "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
-        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (进行中——TRIAGE-EVO-007 机录 2026-08-30（vision 识别确认需求；UI 呈现层最小改动，schemas/服务端不动）；Developer 派发中)",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (进行中——TRIAGE-REL-005 机录 2026-08-30（用户裁决启动）；收尾段（P1-1+P2-2+README）Developer 派发中 → Code Reviewer → Release 规划/审查 → M-4 授权（用户）→ 发布执行；ahead 11 随发布 push)",
         "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
         "status": "TO_BE_DEFINED",
         "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
@@ -110,7 +110,7 @@
         "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "Only change files required by this task row: 进行中——TRIAGE-EVO-007 机录 2026-08-30（vision 识别确认需求；UI 呈现层最小改动，schemas/服务端不动）；Developer 派发中",
+        "Only change files required by this task row: 进行中——TRIAGE-REL-005 机录 2026-08-30（用户裁决启动）；收尾段（P1-1+P2-2+README）Developer 派发中 → Code Reviewer → Release 规划/审查 → M-4 授权（用户）→ 发布执行；ahead 11 随发布 push",
         "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
       ],
       "required_evidence": [
@@ -123,7 +123,7 @@
         "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
       ],
       "done_definition": [
-        "进行中——TRIAGE-EVO-007 机录 2026-08-30（vision 识别确认需求；UI 呈现层最小改动，schemas/服务端不动）；Developer 派发中",
+        "进行中——TRIAGE-REL-005 机录 2026-08-30（用户裁决启动）；收尾段（P1-1+P2-2+README）Developer 派发中 → Code Reviewer → Release 规划/审查 → M-4 授权（用户）→ 发布执行；ahead 11 随发布 push",
         "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
         "Commit and push are completed for this single task."
       ],
