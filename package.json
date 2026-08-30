@@ -30,6 +30,7 @@
     "lib/index.js",
     "lib/memory.js",
     "lib/oauth-credentials.js",
+    "lib/oauth-llm.js",
     "lib/prestep.js",
     "lib/rpc.js",
     "lib/schemas.js",
