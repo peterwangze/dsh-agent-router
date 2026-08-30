@@ -1,15 +1,15 @@
 {
   "version": 1,
-  "generated_at": "2026-08-30T21:27:09",
+  "generated_at": "2026-08-30T23:04:19",
   "packets": {
-    "REL-005": {
-      "task_id": "REL-005",
-      "priority": "P1",
-      "status": "进行中——TRIAGE-REL-005 机录 2026-08-30（用户裁决启动）；收尾段（P1-1+P2-2+README）Developer 派发中 → Code Reviewer → Release 规划/审查 → M-4 授权（用户）→ 发布执行；ahead 11 随发布 push",
-      "goal": "REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
+    "FIX-011": {
+      "task_id": "FIX-011",
+      "priority": "P0",
+      "status": "进行中（Developer A）",
+      "goal": "FIX-011 统计读侧 RPC 断裂修复：RouterService 实例字段 `stats`（StatsStore）遮蔽同名 RPC 方法 → typert 网关 method-unavailable → 设置页统计面板恒 0（记录/持久化正常）",
       "product_success_contract": {
-        "user": "TO_BE_DEFINED: impacted persona for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
-        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
+        "user": "TO_BE_DEFINED: impacted persona for FIX-011 统计读侧 RPC 断裂修复：RouterService 实例字段 `stats`（StatsStore）遮蔽同名 RPC 方法 → typert 网关 method-unavailable → 设置页统计面板恒 0（记录/持久化正常）",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for FIX-011 统计读侧 RPC 断裂修复：RouterService 实例字段 `stats`（StatsStore）遮蔽同名 RPC 方法 → typert 网关 method-unavailable → 设置页统计面板恒 0（记录/持久化正常）",
         "non_goals": [
           "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
           "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
@@ -25,7 +25,7 @@
         ]
       },
       "acceptance_contract": {
-        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for FIX-011 统计读侧 RPC 断裂修复：RouterService 实例字段 `stats`（StatsStore）遮蔽同名 RPC 方法 → typert 网关 method-unavailable → 设置页统计面板恒 0（记录/持久化正常）",
         "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
         "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
         "last_run": {
@@ -38,42 +38,42 @@
       "quality_budget": {
         "dimensions": {
           "performance": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for FIX-011 统计读侧 RPC 断裂修复：RouterService 实例字段 `stats`（StatsStore）遮蔽同名 RPC 方法 → typert 网关 method-unavailable → 设置页统计面板恒 0（记录/持久化正常）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
             "exception": ""
           },
           "reliability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for FIX-011 统计读侧 RPC 断裂修复：RouterService 实例字段 `stats`（StatsStore）遮蔽同名 RPC 方法 → typert 网关 method-unavailable → 设置页统计面板恒 0（记录/持久化正常）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
             "exception": ""
           },
           "security": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for FIX-011 统计读侧 RPC 断裂修复：RouterService 实例字段 `stats`（StatsStore）遮蔽同名 RPC 方法 → typert 网关 method-unavailable → 设置页统计面板恒 0（记录/持久化正常）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
             "exception": ""
           },
           "accessibility": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for FIX-011 统计读侧 RPC 断裂修复：RouterService 实例字段 `stats`（StatsStore）遮蔽同名 RPC 方法 → typert 网关 method-unavailable → 设置页统计面板恒 0（记录/持久化正常）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
             "exception": ""
           },
           "ux": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for FIX-011 统计读侧 RPC 断裂修复：RouterService 实例字段 `stats`（StatsStore）遮蔽同名 RPC 方法 → typert 网关 method-unavailable → 设置页统计面板恒 0（记录/持久化正常）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
             "exception": ""
           },
           "maintainability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for FIX-011 统计读侧 RPC 断裂修复：RouterService 实例字段 `stats`（StatsStore）遮蔽同名 RPC 方法 → typert 网关 method-unavailable → 设置页统计面板恒 0（记录/持久化正常）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
@@ -82,9 +82,9 @@
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for REL-005 v0.3.2 发布链——FIX-009/010（多模态双修）+ EVO-007（账号面板 UX）承载 + P1-1 回落层对齐 + P2-2 测试 hygiene + README OAuth 口径收口",
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for FIX-011 统计读侧 RPC 断裂修复：RouterService 实例字段 `stats`（StatsStore）遮蔽同名 RPC 方法 → typert 网关 method-unavailable → 设置页统计面板恒 0（记录/持久化正常）",
         "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
-        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (进行中——TRIAGE-REL-005 机录 2026-08-30（用户裁决启动）；收尾段（P1-1+P2-2+README）Developer 派发中 → Code Reviewer → Release 规划/审查 → M-4 授权（用户）→ 发布执行；ahead 11 随发布 push)",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (进行中（Developer A）)",
         "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
         "status": "TO_BE_DEFINED",
         "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
@@ -110,7 +110,7 @@
         "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "Only change files required by this task row: 进行中——TRIAGE-REL-005 机录 2026-08-30（用户裁决启动）；收尾段（P1-1+P2-2+README）Developer 派发中 → Code Reviewer → Release 规划/审查 → M-4 授权（用户）→ 发布执行；ahead 11 随发布 push",
+        "Only change files required by this task row: 进行中（Developer A）",
         "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
       ],
       "required_evidence": [
@@ -123,7 +123,388 @@
         "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
       ],
       "done_definition": [
-        "进行中——TRIAGE-REL-005 机录 2026-08-30（用户裁决启动）；收尾段（P1-1+P2-2+README）Developer 派发中 → Code Reviewer → Release 规划/审查 → M-4 授权（用户）→ 发布执行；ahead 11 随发布 push",
+        "进行中（Developer A）",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
+    "FIX-012": {
+      "task_id": "FIX-012",
+      "priority": "P0",
+      "status": "进行中（Developer C）",
+      "goal": "FIX-012 文本模型发图自动多模态接管：ModelTakeover 图片条件化武装（用户裁决 2026-08-30：贴图即切、发送后保持）",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for FIX-012 文本模型发图自动多模态接管：ModelTakeover 图片条件化武装（用户裁决 2026-08-30：贴图即切、发送后保持）",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for FIX-012 文本模型发图自动多模态接管：ModelTakeover 图片条件化武装（用户裁决 2026-08-30：贴图即切、发送后保持）",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for FIX-012 文本模型发图自动多模态接管：ModelTakeover 图片条件化武装（用户裁决 2026-08-30：贴图即切、发送后保持）",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for FIX-012 文本模型发图自动多模态接管：ModelTakeover 图片条件化武装（用户裁决 2026-08-30：贴图即切、发送后保持）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for FIX-012 文本模型发图自动多模态接管：ModelTakeover 图片条件化武装（用户裁决 2026-08-30：贴图即切、发送后保持）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for FIX-012 文本模型发图自动多模态接管：ModelTakeover 图片条件化武装（用户裁决 2026-08-30：贴图即切、发送后保持）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for FIX-012 文本模型发图自动多模态接管：ModelTakeover 图片条件化武装（用户裁决 2026-08-30：贴图即切、发送后保持）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for FIX-012 文本模型发图自动多模态接管：ModelTakeover 图片条件化武装（用户裁决 2026-08-30：贴图即切、发送后保持）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for FIX-012 文本模型发图自动多模态接管：ModelTakeover 图片条件化武装（用户裁决 2026-08-30：贴图即切、发送后保持）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for FIX-012 文本模型发图自动多模态接管：ModelTakeover 图片条件化武装（用户裁决 2026-08-30：贴图即切、发送后保持）",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (进行中（Developer C）)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: 进行中（Developer C）",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "进行中（Developer C）",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
+    "FIX-013": {
+      "task_id": "FIX-013",
+      "priority": "P1",
+      "status": "进行中（Developer B）",
+      "goal": "FIX-013 测试按钮 OAuth 400 修复：codex-responses 分支移除 max_output_tokens",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for FIX-013 测试按钮 OAuth 400 修复：codex-responses 分支移除 max_output_tokens",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for FIX-013 测试按钮 OAuth 400 修复：codex-responses 分支移除 max_output_tokens",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for FIX-013 测试按钮 OAuth 400 修复：codex-responses 分支移除 max_output_tokens",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for FIX-013 测试按钮 OAuth 400 修复：codex-responses 分支移除 max_output_tokens",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for FIX-013 测试按钮 OAuth 400 修复：codex-responses 分支移除 max_output_tokens",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for FIX-013 测试按钮 OAuth 400 修复：codex-responses 分支移除 max_output_tokens",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for FIX-013 测试按钮 OAuth 400 修复：codex-responses 分支移除 max_output_tokens",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for FIX-013 测试按钮 OAuth 400 修复：codex-responses 分支移除 max_output_tokens",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for FIX-013 测试按钮 OAuth 400 修复：codex-responses 分支移除 max_output_tokens",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for FIX-013 测试按钮 OAuth 400 修复：codex-responses 分支移除 max_output_tokens",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (进行中（Developer B）)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: 进行中（Developer B）",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "进行中（Developer B）",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
+    "EVO-008": {
+      "task_id": "EVO-008",
+      "priority": "P1",
+      "status": "进行中（Developer C，FIX-012 后串行）",
+      "goal": "EVO-008 ChatGPT 预设默认模型 → gpt-5.6-sol/terra/luna（用户指令 2026-08-30）",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for EVO-008 ChatGPT 预设默认模型 → gpt-5.6-sol/terra/luna（用户指令 2026-08-30）",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for EVO-008 ChatGPT 预设默认模型 → gpt-5.6-sol/terra/luna（用户指令 2026-08-30）",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for EVO-008 ChatGPT 预设默认模型 → gpt-5.6-sol/terra/luna（用户指令 2026-08-30）",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for EVO-008 ChatGPT 预设默认模型 → gpt-5.6-sol/terra/luna（用户指令 2026-08-30）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for EVO-008 ChatGPT 预设默认模型 → gpt-5.6-sol/terra/luna（用户指令 2026-08-30）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for EVO-008 ChatGPT 预设默认模型 → gpt-5.6-sol/terra/luna（用户指令 2026-08-30）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for EVO-008 ChatGPT 预设默认模型 → gpt-5.6-sol/terra/luna（用户指令 2026-08-30）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for EVO-008 ChatGPT 预设默认模型 → gpt-5.6-sol/terra/luna（用户指令 2026-08-30）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for EVO-008 ChatGPT 预设默认模型 → gpt-5.6-sol/terra/luna（用户指令 2026-08-30）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for EVO-008 ChatGPT 预设默认模型 → gpt-5.6-sol/terra/luna（用户指令 2026-08-30）",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (进行中（Developer C，FIX-012 后串行）)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: 进行中（Developer C，FIX-012 后串行）",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "进行中（Developer C，FIX-012 后串行）",
         "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
         "Commit and push are completed for this single task."
       ],
