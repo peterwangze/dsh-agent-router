@@ -14,6 +14,7 @@
 - **统计面板恒 0（P0，FIX-011）**：v0.3.0 统计迁移引入实例字段遮蔽同名 RPC 方法（`stats` 字段遮蔽 `stats` 方法）→ 宿主网关 method-unavailable → 设置页统计轮询静默失败（**记录/持久化一直正常，磁盘数据完好**）。修复：stats RPC 描述符 implementation 显式指向 `statsSnapshot` + 17 描述符全量守卫测试（tests/rpc-shadow-guard.mjs 21 断言——未来任何 RPC 方法被字段遮蔽必败）。
 - **文本模型发图被拦（P0，FIX-012）**：宿主准入按当前选中模型的能力拒绝带图消息（「当前模型不支持图片，请切换支持图片的模型」Toast）；插件自动接管自 FIX-002 起默认关闭 → 文本主模型贴图即被拦。修复：**图片条件化武装——贴图即自动切「\<provider\> + 多模态」包装路由、发送后保持**（文本轮经包装路由零开销委托原生模型；带图轮放行准入并改写路由提示；判别测试 tests/fix-012-image-takeover.mjs 22 断言）；无图/纯文本轮永不自动切换、用户手动选择的模型始终尊重（FIX-002 用户主权语义完整）。行为说明：**移除未发送的图片不会自动切回原模型**（宿主无安全区分「发送」与「移除」的机制——selectModel 对会话图片零校验，还原会成功切回纯文本并让下一张图被拦），切回请在模型列表手动选择。
 - **ChatGPT 绑定测试按钮 HTTP 400（FIX-013）**：测试路径强制 maxTokens → codex-responses 分支发送 `max_output_tokens` → ChatGPT 后端拒绝该参数（实际调用因不带该参数一直正常）。修复：codex-responses 协议不再发送该参数（用户显式配置 maxTokens 的 OAuth agent 实际调用同样受益）。
+- **发布 tarball 缺运行时模块（P0，FIX-014）**：v0.3.0~v0.3.2 的发布 tarball `files` 列表仅打包 7/12 个 lib 模块——缺 `attachments.js` / `memory.js` / `prestep.js` / `stats.js` / `wrapper.js`（均被 index/service/tool 深度导入）→ 安装后插件无法加载（E-3 隔离冷装完整 import 冒烟实证 `Cannot find module ...\lib\memory.js imported from lib\service.js`）。修复：files 列表补齐 5 模块（lib 段全量 12 项按字母序；发布时点由完整 ESM import 冒烟看护——见「版本说明·验证基线」）。**勘误披露：v0.3.0~v0.3.2 的 tarball 安装用户请升级 0.3.3**（junction 开发树安装不受影响——全部文件在位，这就是真机一直正常的原因）。
 
 ### 变更
 
@@ -34,8 +35,8 @@
 ### 版本说明
 
 - **版本号**：0.3.2 → **v0.3.3**（PATCH）——三缺陷修复 + 一默认值调整，零新能力面，零 breaking（见「破坏性变更」四证）；MINOR 反论否弃：本版无新增功能面（默认模型列表调整属配置默认值更新而非新能力），v0.3.1/v0.3.2 PATCH 先例。
-- **发布范围**：v0.3.2（tag d63b368，2026-08-30）以来 main 提交 **9 个**（`git rev-list --count d63b368..HEAD` 实采 2026-08-30）。三分账：**产品提交 7 个**——FIX-013 `5e15c43`（codex-responses 移除 max_output_tokens）/ FIX-011 `52331a8`（stats RPC 描述符修复 + 守卫测试）/ FIX-012 `c3831b4`（图片条件化接管 + 判别测试）/ EVO-008 `922c74f`（预设默认模型 gpt-5.6 系）/ FIX-012 `4f26846`（served-client 镜像同步）/ FIX-012 `5f68c17`（R0 P2-1 deps 修复）/ EVO-008 `785dc1e`（R0 P2-1 正向断言）；**治理提交 2 个**——`b796741` / `3e878b9`（REL-005 E-8 治理收尾尾段，归属 v0.3.2 发布链尾账，不计入产品面）。**结论行：7 + 2 = 9，与实采一致**；产品提交经逐 commit 对照在本节语义全覆盖，治理提交不入用户面；本版治理提交（发布链）随发布入仓。
-- **验证基线**：门控 **15/15 套件 exit 0**（含新增 tests/rpc-shadow-guard.mjs 21 断言 / tests/fix-012-image-takeover.mjs 22 断言 / client-render 新增 gpt-5.6 正向断言）；**用户真机验证四项全过**（2026-08-30：统计面板恢复显示 / 文本模型贴图发送成功 / ChatGPT 测试按钮不再 400 / 新账号默认模型 gpt-5.6 系）。内部注解：发布执行段 bump 后全量门控复跑与 tarball 隔离环境安装冒烟（环境变量重定向至临时目录）随发布链执行，最终以复跑实测值为准。
+- **发布范围**：v0.3.2（tag d63b368，2026-08-30）以来 main 提交 **10 个**（`git rev-list --count d63b368..HEAD` 实采 2026-08-30）。三分账：**产品提交 8 个**——FIX-013 `5e15c43`（codex-responses 移除 max_output_tokens）/ FIX-011 `52331a8`（stats RPC 描述符修复 + 守卫测试）/ FIX-012 `c3831b4`（图片条件化接管 + 判别测试）/ EVO-008 `922c74f`（预设默认模型 gpt-5.6 系）/ FIX-012 `4f26846`（served-client 镜像同步）/ FIX-012 `5f68c17`（R0 P2-1 deps 修复）/ EVO-008 `785dc1e`（R0 P2-1 正向断言）/ **FIX-014（本提交——files 补齐 + 本段勘误，hash 见 git log）**；**治理提交 2 个**——`b796741` / `3e878b9`（REL-005 E-8 治理收尾尾段，归属 v0.3.2 发布链尾账，不计入产品面）。**结论行：8 + 2 = 10，与实采一致**；产品提交经逐 commit 对照在本节语义全覆盖，治理提交不入用户面；本版治理提交（发布链）随发布入仓。
+- **验证基线**：门控 **15/15 套件 exit 0**（含新增 tests/rpc-shadow-guard.mjs 21 断言 / tests/fix-012-image-takeover.mjs 22 断言 / client-render 新增 gpt-5.6 正向断言）；**用户真机验证四项全过**（2026-08-30：统计面板恢复显示 / 文本模型贴图发送成功 / ChatGPT 测试按钮不再 400 / 新账号默认模型 gpt-5.6 系）。内部注解：发布执行段 bump 后全量门控复跑与 tarball 隔离环境安装冒烟（环境变量重定向至临时目录）随发布链执行，最终以复跑实测值为准；**E-3 隔离冷装自本版起升级为完整 ESM import 冒烟**（`node -e "import('dsh-agent-router')"` 全链加载 + tarball 清单核验 lib 12 模块）——历史版本冷装只验版本号与清单、探测深度不足（REL-004/005 口径，FIX-014 即由升级后的 E-3 实证），如实勘误。
 
 ## v0.3.2 — 2026-08-30
 
