@@ -4,7 +4,7 @@
 >
 > DeepSeek Harness（DSH）多模型路由插件：为任意 DSH 主 agent 挂载专业 agent 目录，按任务自动路由到带独立模型的视觉、翻译、语音、子代理等专业 agent，扩展主 agent 的能力边界。
 
-[![version](https://img.shields.io/badge/version-v0.3.2-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
+[![version](https://img.shields.io/badge/version-v0.3.3-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## 项目目标
@@ -32,24 +32,24 @@
 
 安装脚本自动完成：克隆源码 → 链接到 `~/.dsh/profiles/node_modules/` → 在 `profiles/web/cordis.patch.yml` 写入宿主行（幂等，可重复执行）。完成后**重启 DSH** 即可。
 
-固定版本：把命令中的 `main` 换成版本号，如 `v0.3.2`。
+固定版本：把命令中的 `main` 换成版本号，如 `v0.3.3`。
 
 ### 离线安装
 
-1. 下载发行包：[dsh-agent-router-v0.3.2.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.3.2/dsh-agent-router-v0.3.2.tar.gz)
+1. 下载发行包：[dsh-agent-router-v0.3.3.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.3.3/dsh-agent-router-v0.3.3.tar.gz)
 2. 解压并进入包目录：
 
 ```powershell
 # Windows
-tar -xzf dsh-agent-router-v0.3.2.tar.gz
-cd dsh-agent-router-v0.3.2
+tar -xzf dsh-agent-router-v0.3.3.tar.gz
+cd dsh-agent-router-v0.3.3
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -LocalPath .
 ```
 
 ```sh
 # macOS / Linux
-tar -xzf dsh-agent-router-v0.3.2.tar.gz
-cd dsh-agent-router-v0.3.2
+tar -xzf dsh-agent-router-v0.3.3.tar.gz
+cd dsh-agent-router-v0.3.3
 ./install.sh --local .
 ```
 
@@ -128,7 +128,7 @@ cd dsh-agent-router-v0.3.2
 - **CLI 子代理任务一直转圈/卡住？** CLI 子代理是完整 LLM agent：遇到可重试的错误（网络 502、上游超时）会自行反复重试而不是立即失败，而插件只在总超时（默认 15 分钟/条目，工具级 20 分钟）后强杀，因此表现为长时间卡住。宿主已注入重试纪律（同一失败重试 ≤2 次即报告错误结束），失败时返回结果会带上子代理 stderr 关键行（工作区 `.router-files/cli-run-*-err.log` 也有完整日志）。常见根因：① 上游网络不可达——图片生成走子代理自身的上游服务（如 Codex 走 ChatGPT 图片接口），需保证本机可达（开启代理等）；② 沙箱配置不当——Codex 在 Windows 上用 `workspace-write` / `read-only` 时，OS 沙箱无法启动 shell（每条命令报 `CreateProcessAsUserW failed: 5/1920`），子代理会反复重试浪费 token；保持参数留空（平台自适应默认）或显式使用 `--sandbox danger-full-access`（Windows）/ `workspace-write`（macOS/Linux），`read-only` 还会让产物无法落盘。注意：自定义参数里的旧版 `--full-auto` 会让 `--sandbox danger-full-access` 失效（实测仍走 Windows 沙箱并报 5/1920），请一并移除；③ 并发与超时——同一子代理受「并发上限」约束，连点多次会各自排队或报「正忙」。
 - **ChatGPT / Claude 能 OAuth 登录吗？** ChatGPT **订阅**账号：设置 → Agent 路由 → 多模态账号 →「ChatGPT 订阅登录」一键登录（v0.3.1 起为正式通道，无需开启任何开关；v0.3.0 时期的实验开关已废弃）。曾在 v0.3.0 开启实验后又手动关闭开关的用户请注意：升级后通道恢复可用（旧的「关闭」偏好不迁移），暂不使用时可在该账号卡「登出并删除凭据」或删除账号。**官方 API 不提供 OAuth**（Claude 官方 API 亦无）：官方服务请用官方 API Key；v0.3.2 起已移除不可用的「OAuth 官方登录 / 粘贴 token」管理入口，历史 OAuth 账号仅保留在账号池与「未入池的 OAuth 账号」列表中（可在池行或列表行删除清理凭据），不再提供登录与维护表单。
 - **主 agent 怎么知道该调谁？** 安装后所有 agent 预设自动获得 `route_agent` 工具与路由提示段，按能力标签路由：带图片的任务路由给声明 `image` 能力的 agent，语音转写路由给 `audio` 能力 agent。
-- **纯文本主模型怎么发送对话框图片？** 主模型不支持图片输入时，harness 默认拒绝带图片的消息（且图片块进入历史会让纯文本模型的每次请求报 UNSUPPORTED_CONTENT）。启用带 `image` 能力的视觉类专业 agent 后，多模态接管生效：包装路由对带图消息放行准入，插件把模型输入中的图片块改写为路由提示（会话日志保留原件、界面原生显示，带图轮始终由主模型应答），主 agent 据此调用 route_agent（`includeImages` 转发图片并**自动附带主会话最近对话上下文**，视觉 agent 结合上下文与截图作答——截图真正参与上下文理解，而非孤立 OCR）。生成图片以文本标记渲染进工具结果，由浏览器侧工具卡片经插件接口取字节显示缩略图（点击查看原图）。主模型本身支持图片时，原生粘贴 / 拖拽发送仍照常可用。
+- **纯文本主模型怎么发送对话框图片？** 主模型不支持图片输入时，harness 默认拒绝带图片的消息（且图片块进入历史会让纯文本模型的每次请求报 UNSUPPORTED_CONTENT）。启用带 `image` 能力的视觉类专业 agent 后，多模态接管生效（**v0.3.3 起为图片条件化自动接管**）：输入框**贴图即自动**把会话模型切到「\<provider\> + 多模态」包装路由（无需手动开启接管开关；无图/纯文本轮永不自动切换、用户手动选择的模型始终尊重）；**发送后保持**该路由——包装路由对带图消息放行准入，插件把模型输入中的图片块改写为路由提示（会话日志保留原件、界面原生显示，带图轮始终由主模型应答），后续纯文本轮经包装路由零开销委托原生模型，主 agent 据此调用 route_agent（`includeImages` 转发图片并**自动附带主会话最近对话上下文**，视觉 agent 结合上下文与截图作答——截图真正参与上下文理解，而非孤立 OCR）。生成图片以文本标记渲染进工具结果，由浏览器侧工具卡片经插件接口取字节显示缩略图（点击查看原图）。行为说明：**移除未发送的图片不会自动切回原模型**（插件无法安全区分「发送后清空」与「移除」，切回请在模型列表手动选择）；主模型本身支持图片时，原生粘贴 / 拖拽发送仍照常可用。
 - **统计会丢吗？** 不会丢——v0.3.0 起用量统计默认写入磁盘（位置：DSH 数据目录 `$DSH_HOME`；按天 JSONL；默认保留 90 天），DSH 重启后统计仍在；不希望落盘可在设置中关闭 `router.stats.persist`（回纯内存行为，此前已落盘的数据不受影响，重新开启后自动恢复）。
 - **升级 / 重复安装？** 直接重跑安装命令即可（脚本幂等；在线模式自动 `git pull` 更新源码）。
 
