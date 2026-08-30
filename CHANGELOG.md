@@ -3,6 +3,40 @@
 > dsh-agent-router 的版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 > 内部注解（提交号 / EV 编号）供追溯，用户可忽略。
 
+## v0.3.2 — 2026-08-30
+
+### 摘要
+
+**多模态双修 + 账号面板 UX 版**。核心变化一句话：**纯图消息不再 400（FIX-009）、对话气泡恢复图片显示（FIX-010）、ChatGPT 订阅登录上移一级醒目位 + 移除不可用的 OAuth 官方登录入口（EVO-007）**。
+
+### 修复
+
+- **纯图消息 400/1213（P0，FIX-009）**：image-solo（用户只发图片无文本）经 wrapper 深改写后 user message content 变空 `[]` → 下游端点 400（GLM 1213「未正常接收到prompt参数」实测）。修复：wrapper 深改写后注入最小 text part（占位文案 `[图片已上传，请按系统提示操作]`）——委托请求恒含非空文本；4xx 快速失败（不重试不重发，错误带 provider/model 诊断）语义保持（判别测试 tests/fix-009-image-solo.mjs 9/9）。
+- **对话气泡图片显示回归（P0，FIX-010 + REL-005 P1-1）**：prestep 会话路由判定与宿主实际路由分裂（读 agent.options 创建快照，宿主 selectionFor 实为 picked → 日志 header → live default）——默认模型漂移后误判 onWrapperRoute=false → 逃生组改写把图片块替换为标记文本并持久化日志层 → GUI 显示标记而非图片（用户实证 + 会话实录 ec6b01b0 铁证）。修复：prestep 判定 header 优先（与宿主 selectionFor 同序）+ 回落链补 live default（`agentDefaultModel.currentSelection()`，漂移窗口对齐）+ options 终回退——wrapper 路由会话日志层不再被改写；模型面适配保留在 wrapper stream 输入层（判别测试 tests/fix-010-gui-fidelity.mjs 13/13，含 REL-005 E 组漂移窗口判别）。
+- **非 preset OAuth 账号删除路径恢复（EVO-007 R0→R1 返工）**：移除 OAuth 官方登录区块后，池内一键建号 / 历史自定义与粘贴 token / 未知 preset 值账号无删除入口、条目与凭据永久残留（P7 数据主权缺陷）。修复：账号池行「删除账号」按钮 + 高级扩展区「未入池的 OAuth 账号」列表行双入口——unset oauthAccounts 条目 + `credentials.unset(tokenRef)` 凭据清理 + 从全部账号池移除引用（preset 成员仍走 W-5 联动删除）。
+
+### 变更
+
+- **账号面板布局（EVO-007）**：多模态账号区新顺序 = API Key 账号 → **ChatGPT 订阅登录（一级醒目位，正式通道优先呈现）** → 子代理（无头 CLI）→ 高级扩展（仅账号池，折叠壳保留）。
+- **「OAuth 账号（官方登录）」管理入口移除（EVO-007）**：官方 API 不提供 OAuth、Gemini 内置公开 Client 已被 Google 禁用——该入口自述不可用，整块移除（含文案/添加按钮/未配置态）；**oauthAccounts 数据域零触碰**（仅呈现层，EV-090），历史账号经账号池 / 未入池列表管理（删除入口见「修复」节）。README「v0.3.2 起」三处披露呼应（特性 / 多模态账号配置 / FAQ）。
+
+### 破坏性变更
+
+**无。**论证（四证）：① **无公共 API/协议面变更，依赖面零变更**——除版本号外 package.json 与 v0.3.1 完全一致（undici ^7.18.0 / peerDependencies 8×^0.1.0-rc.8 / files 11 项维持；产品 commits 零触碰 package.json，review-REL-005-R0「无 bump」实证）；② **无配置面变更**——lib/schemas.js 零触碰（无键增删；settings 遗留键容忍语义与 v0.3.1 相同）；③ **数据面零变更**——oauthAccounts 数据域 / 凭据文件 / 统计 JSONL 结构不变（EV-090「数据域零触碰」）；④ **入口移除对象为从未可用的误导性入口**（官方 API 无 OAuth——移除非能力收窄），行为变化均有披露与官方替代路径（README「v0.3.2 起」三处 + 本版变更节；替代路径 = 官方 API Key / ChatGPT 订阅登录 / 账号池管理）。
+
+### 已知问题
+
+- **本项目暂无持续集成（CI）自动化**（v0.3.0/v0.3.1 披露延续）：回归保护依赖发布前本地全量测试网（十二面全绿复跑，见「版本说明·验证基线」）。CI 建设已列入后续排期。
+- **部分宿主下对话内图片附件可能显示「加载失败」**（v0.3.0/v0.3.1 已知问题延续，FIX-008 候选域）：附件识别功能已验通，服务端附件链已修复并验证 7 格式全绿；显示层残留属客户端渲染路径（与 FIX-010「气泡图片消失」为**不同缺陷面**）——本版不承载修复。
+- **deepseek-official 视觉端点挂起**（宿主/端点域，EV-088 披露）：227s/0token 挂起属上游端点现象，vision 旁路（glm 等可用服务商）可用——本仓不可修，不构成本版回滚触发条件。
+- **picked 层盲区**（宿主固有 P3）：selectModel 进程内选择不落 header/options 且插件无访问 API——selectModel 后首轮 prestep 与宿主判定可能短暂不一致，属宿主设计固有窗口（注释披露在案）。
+
+### 版本说明
+
+- **版本号**：0.3.1 → **v0.3.2**（PATCH）——零新能力语义（两处缺陷修复 + 一 UX 调整 + 收口），零 breaking（见「破坏性变更」四证）；MINOR 反论否弃：semver MINOR = 向后兼容的**新增功能**，本版无新增功能面（入口移除为清理**从未可用**的误导性入口，删除按钮双入口属缺陷补全而非新能力）；v0.2.1 PATCH 先例。
+- **发布范围**：v0.3.1（tag 5ca8b87，2026-08-30）以来 main 全部提交 **14 个**（`git rev-list --count origin/main..HEAD` 实采 2026-08-30）。三分账：**产品提交 5 个**——FIX-009 `8877365`（wrapper 占位注入）/ FIX-010 `020909b`（prestep 判定 header 优先）/ EVO-007 `65226a3`（账号面板 UX：入口移除 + 布局）/ EVO-007 R0 返工 `3665d6a`（F-1 删除路径恢复 + F-2 文案）/ REL-005 收尾 `1d2bf36`（P1-1 live default 对齐 + P2-2 hygiene + README 收口）；**治理提交 9 个**——`d92dfba` / `ec94a6c` / `49ac8ab` / `0234a88` / `0c7f987` / `b664f52` / `ed229db` / `6877389` / `18d5cf1`。**结论行：5 + 9 = 14，与实采一致**；产品提交经逐 commit 对照在本节语义全覆盖，治理提交不入用户面。口径注记：`v0.3.1..HEAD` 计数 15 差 1——`4ee80e9`（REL-004 E-8 治理收尾）归属 v0.3.1 发布链（tag 后 origin/main 侧补录），不在本版 14 个内。
+- **验证基线**（EV-090 Coordinator 实测 + 收尾段申报一致）：`tests/smoke.mjs` **963 ok / 1 skip / 0 FAIL / exit 0**；`tests/fix-009-image-solo.mjs` 9/9、`tests/fix-010-gui-fidelity.mjs` 13/13（含 REL-005 P1-1 漂移窗口判别 E 组）、`tests/routing-paths.mjs` 114/114、`tests/adapter-parity.mjs` 14/14、`tests/metrics.mjs` ALL PASSED、`tests/client-render.mjs` 130 断言。内部注解：发布执行段 E-2 全量门控复跑与 tarball 隔离环境安装冒烟（环境变量重定向至临时目录）随发布链执行，最终以复跑实测值为准。
+
 ## v0.3.1 — 2026-08-30
 
 ### 摘要
