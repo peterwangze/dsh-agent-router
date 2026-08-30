@@ -3220,26 +3220,45 @@ window.__ModuleLoader__.load({
     const takeoverMemory = new Map()
 
     /**
-     * 模型接管（无 UI）：多模态开启 → 当前会话切到包装路由（开启瞬间完成，
-     * 之后贴图零操作、零竞态）；关闭 → 仅还原本组件接管放上的会话选择
-     * （takeoverMemory 命中且仍停在我们的 twin 上），用户手动选的 twin 一律
-     * 尊重不撤销（FIX-002-R7 F1）；会话已含图时宿主拒绝切回纯文本 → 静默
-     * 保持。InputZone 快照随 input/session store 变化重渲染，草稿 imageIds
-     * 实时：视觉已开启而用户手动切回纯文本组后贴图，同样自动归位到包装组。
+     * 模型接管（无 UI）：武装时当前会话切到包装路由；解除武装时仅还原
+     * 本组件接管放上的会话选择（takeoverMemory 命中且仍停在我们的 twin 上），
+     * 用户手动选的 twin 一律尊重不撤销（FIX-002-R7 F1）。武装来源（FIX-012）
+     * 决定还原语义：
+     *  - takeoverDefaultModel 开关（FIX-002）：开启即接管（含纯文本轮），
+     *    关闭还原——既有语义不回退；
+     *  - 图片条件化（FIX-012，用户裁决 2026-08-30「贴图即切、发送后保持」）：
+     *    开关默认 false 时输入框存在待发送图片（imageCount>0）也接管，
+     *    否则带图消息被宿主 prompt 准入拦截（MODEL_DOES_NOT_SUPPORT_IMAGES）。
+     *    image 来源的接管**永不自动还原**（保持 twin 直到用户手动切换，或
+     *    开启 takeoverDefaultModel 后经 armed 分支升级 armedBy=switch 再走
+     *    既有还原）。原因（宿主核实 2026-08-30，dsh-host-apiproxy
+     *    lib/index.js:2596-2630）：session.selectModel 仅 resolveCallConfig +
+     *    写 selectionFor.current，对会话历史/草稿图片零校验——旧注释「会话已
+     *    含图时宿主拒绝切回纯文本」不成立（图片准入只在 prompt 时点
+     *    :2749-2760 与 pi-ai stream 时点 dsh-llm-pi-ai index.js:1721）。
+     *    发送后 imageCount 归零与移除未发送图片不可区分（组件无会话日志查询
+     *    面）；若还原会成功切回纯文本，下一张图 prompt 被拦（用户报障形态
+     *    复现）——故 image 来源一律不自动还原。InputZone 快照随 input/session
+     *    store 变化重渲染，草稿 imageIds 实时：视觉已开启而用户手动切回纯
+     *    文本组后贴图，同样自动归位到包装组。
      */
     function ModelTakeover(props) {
       const { sessionId, input, api } = props
       const catalog = useRouterCatalog()
-      // FIX-002（客户端层）：会话级接管同样受 router.takeoverDefaultModel 开关
-      // 约束（默认 false = 不接管——twin 路由在模型列表，用户手动选）。此前仅看
-      // "目录有多模态 agent"即在每个会话（含子代理会话，sessionId 变化触发
-      // effect）强制切 twin——覆盖用户手动选择（用户报障：起子代理时主代理
-      // 配置被切）。开关开启时保留既有"开启瞬间切换 + 贴图自动归位"语义。
+      // FIX-002（客户端层）：会话级接管受 router.takeoverDefaultModel 开关约束
+      // （默认 false = 不接管——twin 路由在模型列表，用户手动选）。此前仅看
+      // 开关即在每个会话（含子代理会话，sessionId 变化触发 effect）强制切
+      // twin——覆盖用户手动选择（用户报障：起子代理时主代理配置被切）。开关
+      // 开启时保留既有"开启瞬间切换 + 贴图自动归位"语义。
+      // FIX-012：武装条件纳入 imageCount——文本主模型（默认开关 false）贴图
+      // 时自动接管（用户裁决：贴图即切）；还原语义见组件头注释（armedBy
+      // 来源标记：'switch' 走既有还原，'image' 永不自动还原）。
       // FIX-002-R7 F1：解除武装的还原同样需要来源记忆（takeoverMemory）——
       // 此前 !armed && wrapped 分支在每次 effect 触发（贴图/会话切换/子代理
       // sessionId）都把用户手动选的 twin 静默剥回原生。
-      const takeoverArmed = multimodalAgentsOf(catalog).length > 0 && catalog.takeoverDefaultModel === true
       const imageCount = input && Array.isArray(input.imageIds) ? input.imageIds.length : 0
+      const takeoverArmed = multimodalAgentsOf(catalog).length > 0 && (catalog.takeoverDefaultModel === true || imageCount > 0)
+      const imageConditional = !catalog || catalog.takeoverDefaultModel !== true
       useEffect(() => {
         const sessions = api && api.sessions
         if (!sessionId || !sessions || typeof sessions.models !== 'function' || typeof sessions.selectModel !== 'function') return
@@ -3251,26 +3270,45 @@ window.__ModuleLoader__.load({
             const current = result.value.current
             if (typeof current.provider !== 'string' || typeof current.model !== 'string' || current.model === '') return
             const wrapped = current.provider.endsWith(WRAP_SUFFIX)
-            if (takeoverArmed && !wrapped) {
-              // 接管：切到当前 provider 的包装路由。宿主包装组注册先于客户端
-              // 感知（settings 事件本地先行、RPC 后至），开启瞬间完成切换；
-              // 失败静默，下次快照变化再试。成功后记忆来源（FIX-002-R7 F1：
-              // 与服务端 tookOverFrom 对等——只有本组件放上的 twin 才在解除
-              // 武装时还原）。
-              const taken = await sessions.selectModel({ sessionId, provider: `${current.provider}${WRAP_SUFFIX}`, model: current.model })
-              if (taken && taken.result && taken.result.ok) takeoverMemory.set(sessionId, current.provider)
-            } else if (!takeoverArmed && takeoverMemory.has(sessionId)) {
-              // 恢复（FIX-002-R7 F1）：仅当 twin 选择是本组件接管逻辑放上的
-              // （记忆命中且仍停在我们的 twin 上）才还原——用户手动选的 twin
-              // （无记忆）一律尊重不撤销；用户已手动改走（原生/别的 twin）=
-              // 尊重，静默清记忆不写设置。还原成功才清记忆（失败保留，下次
-              // 触发重试）；会话已含图时宿主拒绝切回纯文本 → 静默。
-              const native = takeoverMemory.get(sessionId)
-              if (wrapped && current.provider === `${native}${WRAP_SUFFIX}`) {
-                const restored = await sessions.selectModel({ sessionId, provider: native, model: current.model })
-                if (restored && restored.result && restored.result.ok) takeoverMemory.delete(sessionId)
+            if (takeoverArmed) {
+              if (!wrapped) {
+                // 接管：切到当前 provider 的包装路由。宿主包装组注册先于客户端
+                // 感知（settings 事件本地先行、RPC 后至），开启瞬间完成切换；
+                // 失败静默，下次快照变化再试。成功后记忆来源与武装类型
+                // （FIX-002-R7 F1 + FIX-012 armedBy：'switch' 开关驱动 /
+                // 'image' 图片条件化——只有本组件放上的 twin 才在解除武装时
+                // 还原，且 image 来源永不自动还原）。
+                const taken = await sessions.selectModel({ sessionId, provider: `${current.provider}${WRAP_SUFFIX}`, model: current.model })
+                if (taken && taken.result && taken.result.ok) takeoverMemory.set(sessionId, { native: current.provider, armedBy: imageConditional ? 'image' : 'switch' })
+              } else if (takeoverMemory.has(sessionId)) {
+                // armed 重跑（开关/图片条件变化）：已停在我们的 twin 上——
+                // 开关开启时把 image 来源记忆升级为 switch 来源（用户开启
+                // takeoverDefaultModel 后关闭 → 走既有还原，FIX-012 承诺）。
+                const entry = takeoverMemory.get(sessionId)
+                if (!imageConditional && entry.armedBy !== 'switch') takeoverMemory.set(sessionId, { ...entry, armedBy: 'switch' })
+              }
+            } else if (takeoverMemory.has(sessionId)) {
+              const entry = takeoverMemory.get(sessionId)
+              if (entry.armedBy === 'image') {
+                // FIX-012：image 条件化接管永不自动还原（宿主 selectModel 无
+                // 「会话已含图拒绝切回」校验——见组件头注释；还原会成功切回
+                // 纯文本，下一张图 prompt 被 MODEL_DOES_NOT_SUPPORT_IMAGES
+                // 拦截）。保持 twin；用户手动改走（原生/别的 twin）则清记忆
+                // 尊重，下次贴图重新接管。
+                if (!wrapped || current.provider !== `${entry.native}${WRAP_SUFFIX}`) takeoverMemory.delete(sessionId)
               } else {
-                takeoverMemory.delete(sessionId)
+                // 恢复（FIX-002-R7 F1）：仅当 twin 选择是本组件接管逻辑放上的
+                // （记忆命中且仍停在我们的 twin 上）才还原——用户手动选的 twin
+                // （无记忆）一律尊重不撤销；用户已手动改走（原生/别的 twin）=
+                // 尊重，静默清记忆不写设置。还原成功才清记忆（失败保留，下次
+                // 触发重试）。
+                const native = entry.native
+                if (wrapped && current.provider === `${native}${WRAP_SUFFIX}`) {
+                  const restored = await sessions.selectModel({ sessionId, provider: native, model: current.model })
+                  if (restored && restored.result && restored.result.ok) takeoverMemory.delete(sessionId)
+                } else {
+                  takeoverMemory.delete(sessionId)
+                }
               }
             }
           } catch { /* 接管失败容忍：准入是最终防线，用户仍可手动切组 */ }
@@ -3729,6 +3767,11 @@ window.__ModuleLoader__.load({
 
     exports.apply = apply
     exports.inject = inject
+    // FIX-012 判别测试钩子：ModelTakeover 组件与目录写入面直驱（宿主运行时
+    // 仅消费 apply/inject；tests/fix-012-image-takeover.mjs 经 setRouterCatalog
+    // 模拟 catalog 快照变化并渲染组件断言接管/还原行为）。
+    exports.ModelTakeover = ModelTakeover
+    exports.setRouterCatalog = setRouterCatalog
     return module.exports
   },
 })
