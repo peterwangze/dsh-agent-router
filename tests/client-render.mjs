@@ -171,7 +171,7 @@ export async function runClientRender(check) {
   }
 
   // ── 装配：评估浏览器包 → mock ctx → apply → 渲染 ─────────────────────
-  const captured = { registrations: [], listeners: [], uploadFileCalls: [], readWorkspaceFileCalls: [], saveOps: [], oauthLogoutCalls: [], beginCalls: [], openCalls: [], statsExportCalls: [] }
+  const captured = { registrations: [], listeners: [], uploadFileCalls: [], readWorkspaceFileCalls: [], saveOps: [], oauthLogoutCalls: [], beginCalls: [], openCalls: [], statsExportCalls: [], credUnsetCalls: [] }
   const fakeWindow = {
     __ModuleLoader__: { load: (payload) => { captured.bundle = payload } },
     location: { search: '', pathname: '/' },
@@ -251,11 +251,21 @@ export async function runClientRender(check) {
             ],
         oauthAccounts: presetMode === 'none' && !unknownPresetMode ? [] : [
           { id: 'chatgpt', name: 'ChatGPT', enabled: true, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', tokenRef: '', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.4-mini'], publicClient: false, preset: 'chatgpt-codex', presetLoggedIn: presetMode === 'logged-in' },
-          ...(unknownPresetMode ? [{ id: 'weird', name: '怪异账号', enabled: true, protocol: 'openai-completions', baseURL: '', tokenRef: 'ROUTER_OAUTH_WEIRD_TOKEN', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: [], publicClient: false, preset: 'zzz' }] : []),
+          // F-1（EVO-007 R0 返工）夹具：weird = 未知 preset 值账号（R8-F1 场景，
+          // 入池——验证池行删除）；stray = 无 preset 非 preset 孤儿账号（未入池——
+          // 验证高级扩展区孤儿列表删除兜底）。
+          ...(unknownPresetMode ? [
+            { id: 'weird', name: '怪异账号', enabled: true, protocol: 'openai-completions', baseURL: '', tokenRef: 'ROUTER_OAUTH_WEIRD_TOKEN', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: [], publicClient: false, preset: 'zzz' },
+            { id: 'stray', name: '散落账号', enabled: true, protocol: 'openai-completions', baseURL: '', tokenRef: 'ROUTER_OAUTH_STRAY_TOKEN', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: [], publicClient: false },
+          ] : []),
         ],
-        pools: presetMode === 'none' ? [] : [
-          { id: 'main', name: '主池', enabled: true, strategy: 'healthy', accounts: ['chatgpt'], accountHealth: [] },
-        ], cliAgents: [
+        pools: presetMode === 'none'
+          ? (unknownPresetMode ? [
+            { id: 'main', name: '主池', enabled: true, strategy: 'healthy', accounts: ['weird'], accountHealth: [] },
+          ] : [])
+          : [
+            { id: 'main', name: '主池', enabled: true, strategy: 'healthy', accounts: ['chatgpt'], accountHealth: [] },
+          ], cliAgents: [
           { id: 'codexentry', name: 'Codex 子代理', enabled: true, command: 'codex', args: '', timeoutMs: 0, maxConcurrent: 1 },
         ],
       },
@@ -350,7 +360,8 @@ export async function runClientRender(check) {
     credentials: {
       describe: async () => ({ result: { ok: true, value: { credentials: {} } } }),
       set: async (payload) => { credSetCalls.push(payload); return { result: { ok: true } } },
-      unset: async () => ({ result: { ok: true } }),
+      // F-1：记录删除账号时的凭据清理调用（assert tokenRef unset）。
+      unset: async (payload) => { captured.credUnsetCalls.push(payload); return { result: { ok: true } } },
     },
   }
   const zh = {}
@@ -1101,24 +1112,72 @@ export async function runClientRender(check) {
     check('tool card renders image gallery container', gallery.length === 1)
   }
 
-  // ── 断言：EVO-007 移除 OAuth 官方登录区后，任意 OAuth 账号（含未知
-  // preset 值账号）无独立管理 UI 面——数据域保留（oauthAccounts 配置不动，
-  // 仅呈现层移除；R8-F1 的"未知 preset 回落通用卡"判据随区块删除一并收束）。
+  // ── 断言：F-1（EVO-007 R0 返工）非 preset OAuth 账号删除路径恢复 ──────
+  // 旧实现（65226a3）：未知 preset 账号零渲染、无任何删除入口——R8-F1
+  // （EVO-004 "UI 黑箱 + 删除死锁"修复）的"可删"语义被区块删除反转，条目与
+  // tokenRef 凭据永久残留（P7 数据主权缺陷）。修复后：
+  // ① 池内账号行有「删除账号」入口（unset 条目 + credentials.unset(tokenRef)
+  //    + 从全部池移除引用）；② 未入池孤儿账号在高级扩展区有极简删除列表。
+  // 判别性：旧实现无删除按钮 → 点击分支跳过 → saveOps/credUnsetCalls 为空 →
+  // 断言必败；旧"零渲染"断言若保留则与可删语义冲突（语义反转见证）。
   // 独立渲染设置页（不扰动前面断言的展开态）。
   {
     unknownPresetMode = true
     presetMode = 'none'
     await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'settings-r8f1', 60)
     const acctHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.accountTitle))
-    check('R8-F1 accounts category head present', !!acctHead)
+    check('F-1 accounts category head present', !!acctHead)
     if (acctHead) {
       acctHead.props.onClick()
       currentTree = await settle()
       const advHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.advancedSection))
+      check('F-1 advanced section present', !!advHead)
       if (advHead) {
         advHead.props.onClick()
         currentTree = await settle()
-        check('EVO-007: no oauth account cards render (unknown-preset included)', !textOf(currentTree).includes('怪异账号') && !textOf(currentTree).includes('weird') && !textOf(currentTree).includes('官方登录，插件独立管理'))
+        // ① 孤儿账号（stray：无 preset、未入池）在高级扩展区有极简行 + 删除入口。
+        const orphanCard = () => findAll(currentTree, (node) => node && node.type === 'div' && hasClass(node, 'dshrouter-card') && textOf(node).includes('stray'))[0]
+        const orphanCardFound = !!orphanCard()
+        check('F-1: orphan oauth account row renders (stray)', orphanCardFound && textOf(currentTree).includes('散落账号') && textOf(currentTree).includes(zh.orphanOauthTitle))
+        const orphanDel = orphanCardFound ? findAll(orphanCard(), (node) => node && node.type === 'button' && textOf(node) === zh.poolDeleteAccount)[0] : null
+        check('F-1: orphan row carries delete button', !!orphanDel)
+        if (orphanDel) {
+          captured.saveOps.length = 0
+          captured.credUnsetCalls.length = 0
+          orphanDel.props.onClick()
+          await settle()
+          const strayUnset = captured.saveOps.filter((op) => op.op === 'unset' && op.path.join('/') === 'oauthAccounts/stray')
+          check('F-1: orphan delete unsets oauthAccounts entry', strayUnset.length === 1)
+          check('F-1: orphan delete clears tokenRef credential', captured.credUnsetCalls.some((call) => call.ref === 'ROUTER_OAUTH_STRAY_TOKEN'))
+          check('F-1: orphan delete touches no pool ops', captured.saveOps.filter((op) => op.path[0] === 'pools').length === 0)
+          check('F-1: orphan delete reports success notice', textOf(currentTree).includes(zh.oauthDeleted))
+        }
+        // ② 池内未知 preset 账号（weird ∈ pool main）：池行有删除入口；删除 =
+        // unset 条目 + 凭据清理 + 从全部池移除引用（含当前池）。
+        const poolCardHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-card-head')).find((node) => textOf(node).includes('main'))
+        check('F-1: pool card head found', !!poolCardHead)
+        if (poolCardHead) {
+          poolCardHead.props.onClick()
+          currentTree = await settle()
+          check('F-1: in-pool account row renders with delete entry', textOf(currentTree).includes('怪异账号') && textOf(currentTree).includes('weird'))
+          const poolCard = () => findAll(currentTree, (node) => node && node.type === 'div' && hasClass(node, 'dshrouter-card')).find((node) => {
+            const head = (node.children ?? []).find((child) => child && child.type === 'button' && hasClass(child, 'dshrouter-card-head'))
+            return !!head && textOf(head).includes('main')
+          })
+          const poolDel = poolCard() ? findAll(poolCard(), (node) => node && node.type === 'button' && textOf(node) === zh.poolDeleteAccount)[0] : null
+          check('F-1: in-pool row carries delete button', !!poolDel)
+          if (poolDel) {
+            captured.saveOps.length = 0
+            captured.credUnsetCalls.length = 0
+            poolDel.props.onClick()
+            await settle()
+            const weirdUnset = captured.saveOps.filter((op) => op.op === 'unset' && op.path.join('/') === 'oauthAccounts/weird')
+            const poolOps = captured.saveOps.filter((op) => op.path.join('/') === 'pools/main/accounts')
+            check('F-1: in-pool delete unsets oauthAccounts entry', weirdUnset.length === 1)
+            check('F-1: in-pool delete clears tokenRef credential', captured.credUnsetCalls.some((call) => call.ref === 'ROUTER_OAUTH_WEIRD_TOKEN'))
+            check('F-1: in-pool delete strips ref from all pools', poolOps.length === 1 && Array.isArray(poolOps[0].value) && poolOps[0].value.length === 0)
+          }
+        }
       }
     }
     unknownPresetMode = false
