@@ -17,7 +17,7 @@
 
 | 项目 | 当前阶段 | 总任务数 | 已完成 | 阻塞中 | 关键风险数 | 最近 Gate 结论 | 最近复盘日期 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| dsh-agent-router | development (6/11) | 35（35 终态——31 历史终态 + 4 本批 2026-08-30：FIX-011/012/013、EVO-008 全 R0 APPROVED_WITH_NOTES/0） | 35 终态（34 已完成 + 1 关闭 DEV-001）——**v0.3.1/v0.3.2 已发布；本批 5 commits 在 main 未发布（热修候选）** | 0 | 1（RISK-001 活跃——主轨道 = CI 面缺） | G4 待评（v0.3.0/0.3.1/v0.3.2 已发布；CI 面仍缺——RISK-001） | — |
+| dsh-agent-router | development (6/11) | 37（37 终态——31 历史终态 + FIX-011/012/013、EVO-008 + REL-006/FIX-014 2026-08-30 全闭环） | 37 终态（36 已完成 + 1 关闭 DEV-001）——**v0.3.3 已发布（2026-08-30，tag v0.3.3 = e818183，GitHub Release 带 tgz）** | 0 | 1（RISK-001 活跃——主轨道 = CI 面缺） | G4 待评（v0.3.0~v0.3.3 已发布；CI 面仍缺——RISK-001） | — |
 
 ## 当前活跃事项
 
@@ -41,8 +41,8 @@
 | P0 | FIX-012 | 文本模型发图自动多模态接管：ModelTakeover 图片条件化武装（用户裁决 2026-08-30：贴图即切、发送后保持） | — | 未规划版本（热修候选） | **已完成（终态）**——commits c3831b4 + 4f26846（镜像）+ 5f68c17（R0 P2-1 deps 修复，22 断言）+ R0/R1 双 APPROVED_WITH_NOTES/0（REVIEW-FIX-012-R0/R1 机录；P3×3 讨论级）；用户真机验证 = 重启 DSH 后文本模型贴图发送 |
 | P1 | FIX-013 | 测试按钮 OAuth 400 修复：codex-responses 分支移除 max_output_tokens | — | 未规划版本（热修候选） | **已完成（终态）**——commit 5e15c43 + TDD 红→绿（EV-093）+ R0 APPROVED_WITH_NOTES/0（REVIEW-FIX-013-R0 机录；P3×1 台账）；用户真机验证 = 重启 DSH 后点「测试」 |
 | P1 | EVO-008 | ChatGPT 预设默认模型 → gpt-5.6-sol/terra/luna（用户指令 2026-08-30） | FIX-012（同文件串行）✅ | 未规划版本 | **已完成（终态）**——commits 922c74f + 785dc1e（R0 P2-1 正向断言）+ R0/R1 双 APPROVED_WITH_NOTES/0（REVIEW-EVO-008-R0/R1 机录；P3×1 台账）；用户真机验证 = 重启 DSH 后新建账号默认填充 |
-| P1 | REL-006 | v0.3.3 发布链——用户报障三连热修（FIX-011/012/013）+ EVO-008 默认模型承载：M-1 bump/CHANGELOG/README → E-2 门控复跑 → E-3 隔离冷装 → E-4 治理入仓 + Release Reviewer 审查 → E-5 tag/push/GitHub Release → E-6 归档检测收尾 | FIX-011✅ FIX-012✅ FIX-013✅ EVO-008✅ + 用户真机验证四项全过（2026-08-30「都OK了」）+ 用户发布授权（先验证后发布裁决） | 0.3.3 | 进行中——E-1 commit 7fdab39 + E-2 门控 15/15 + **E-3 发现发布阻塞（tarball 缺 5 模块 → FIX-014）**；TRIAGE-REL-006 机录（EV-099） |
-| P0 | FIX-014 | 发布 tarball 缺 5 个运行时必需模块：files 列表仅 7/12 lib 模块（缺 attachments/memory/prestep/stats/wrapper）→ tarball 安装后 import 必败——v0.3.0~v0.3.2 tarball 全部不可用（历史冷装只验版本未验 import；junction 安装不受影响） | REL-006（发布阻塞） | 0.3.3 | 进行中——E-3 完整 import 冒烟实证（Cannot find module lib/memory.js）；修复 = files 补 5 模块 + CHANGELOG 勘误披露；TRIAGE-FIX-014 机录 |
+| P1 | REL-006 | v0.3.3 发布链——用户报障三连热修（FIX-011/012/013）+ EVO-008 默认模型承载 + FIX-014 发布 tarball 修复 | FIX-011✅ FIX-012✅ FIX-013✅ EVO-008✅ FIX-014✅ + 用户真机验证四项全过 + 发布授权 | 0.3.3 | **已完成（终态）**——E-1~E-6 全链：7fdab39 bump + e16d710 FIX-014 + 7119401 治理入仓 + e818183 F-1 修正 + 门控 15/15 + 冷装终版 IMPORT OK + R0 APPROVED_WITH_NOTES/0（机录）+ tag v0.3.3@e818183 + push main/tag + GitHub Release（tgz 1,544,611B）；归档跳过（0<2 计数异常 FIX-281 域延续）；EV-099~101 |
+| P0 | FIX-014 | 发布 tarball 缺 5 个运行时必需模块：files 列表仅 7/12 lib 模块（缺 attachments/memory/prestep/stats/wrapper）→ tarball 安装后 import 必败——v0.3.0~v0.3.2 tarball 全部不可用（历史冷装只验版本未验 import；junction 安装不受影响） | REL-006（发布阻塞）✅ | 0.3.3 | **已完成（终态）**——e16d710（files 7→12 + CHANGELOG 勘误披露）+ RED→GREEN 判别 + E-3 终版独立复验 IMPORT OK + R0 审查缺口裁定可接受（静态交叉核验替代覆盖）；随 v0.3.3 发布；EV-100 |
 | — | 下一轮 | v0.3.2 发布后用户验证（面板 UX 已验 2/3 + 发布版本号确认）→ 后续等用户需求（FIX-008 残留 / 出口③ / C-4+C-5 v0.3.3 / C-6 / C-2 / 插件仓 FIX-281[归档计数新证据]） | — | v0.3.3+ | 待定 |
 
 ### 最近完成
