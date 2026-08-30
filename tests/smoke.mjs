@@ -717,7 +717,7 @@ console.log('RouterService:')
       const codexHeaders = codexCall?.init?.headers ?? {}
       check('codex headers carry bearer/account-id/originator/SSE beta (H3-9/E5)', codexHeaders.Authorization === `Bearer ${accessJwt5}` && codexHeaders['chatgpt-account-id'] === 'acct-cgpt-5' && codexHeaders.originator === 'dsh-agent-router' && codexHeaders.accept === 'text/event-stream' && codexHeaders['OpenAI-Beta'] === 'responses=experimental' && codexHeaders['Content-Type'] === 'application/json')
       const codexBody = JSON.parse(codexCall?.init?.body ?? '{}')
-      check('codex body is Responses shape with stream:true (EV-028 P5)', codexBody.model === 'gpt-5.4-mini' && codexBody.store === false && codexBody.stream === true && codexBody.instructions === '你是测试助手' && Array.isArray(codexBody.include) && codexBody.include.includes('reasoning.encrypted_content') && codexBody.max_output_tokens === 1024 && codexBody.temperature === 0.2)
+      check('codex body is Responses shape with stream:true, no max_output_tokens despite maxTokens=1024 (FIX-013)', codexBody.model === 'gpt-5.4-mini' && codexBody.store === false && codexBody.stream === true && codexBody.instructions === '你是测试助手' && Array.isArray(codexBody.include) && codexBody.include.includes('reasoning.encrypted_content') && codexBody.max_output_tokens === undefined && codexBody.temperature === 0.2)
       check('codex input carries user input_text part', Array.isArray(codexBody.input) && codexBody.input[0]?.role === 'user' && codexBody.input[0]?.content?.[0]?.type === 'input_text' && codexBody.input[0]?.content?.[0]?.text?.includes('SSE-测试'))
       // 5. 图片输入 → input_image 内容块（E5 请求体形状，input_text 之后追加）。
       codexMode5 = { sse: chain5(['图'], '图') }
