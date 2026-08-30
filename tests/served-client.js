@@ -7,8 +7,10 @@
  *   · 专业 Agent（核心区，前置且默认展开）：每卡默认折叠摘要（名称/
  *     类型/生效模型/简要用量），点击展开配置与明细统计；末尾「+」添加
  *     （图片识别/图片生成/翻译/语音识别/视频生成/通用子 Agent 预设）；
- *   · 多模态账号（默认折叠）：API Key 登录 + OAuth 官方登录 + 账号池
- *     三个子区（展开显示模型列表 / Base URL / 一键授权与健康度）；
+ *   · 多模态账号（默认折叠）：API Key 登录 + ChatGPT 订阅登录 + 子代理 +
+ *     账号池四区（EVO-007：移除不可用的「OAuth 官方登录」入口——官方 API
+ *     无 OAuth / Gemini 内置 Client 被禁；ChatGPT 订阅登录上移为一级醒目位，
+ *     正式通道（DEC-026 C2 转正）优先呈现）；
  *   · 统计信息（默认折叠）：Agent 级与账号级（服务商）两级明细卡片
  *     （平均耗时、模型细分、分钟级 tokens 分布）+ 最近调用记录。
  *
@@ -74,6 +76,9 @@ window.__ModuleLoader__.load({
     }
     const wEmpty = wv.object({})
     const wAgentId = wv.object({ agentId: wv.string() })
+    // EVO-004 出口⑤导出按钮：statsExport RPC 请求/结果（与 lib/rpc.js 同构）。
+    const wStatsExportRequest = wv.object({ range: wv.string(), level: wv.string() })
+    const wStatsExportResult = wv.object({ ok: wv.boolean(), message: wv.string(), csv: wv.string(true) })
     const wCatalog = wv.object({
       ok: wv.boolean(), enabled: wv.boolean(),
       defaults: wv.object({ provider: wv.string(), model: wv.string(), reasoningEffort: wv.string(true) }),
@@ -90,6 +95,9 @@ window.__ModuleLoader__.load({
         clientId: wv.string(), authUrl: wv.string(), tokenUrl: wv.string(), scope: wv.string(),
         models: wv.array(wv.string()),
         publicClient: wv.boolean(true),
+        // EVO-002 Step 6：preset 镜像 + 登录态（可选——旧服务端缺省兼容）。
+        preset: wv.string(true),
+        presetLoggedIn: wv.boolean(true),
       })),
       pools: wv.array(wv.object({
         id: wv.string(), name: wv.string(), enabled: wv.boolean(), strategy: wv.string(),
@@ -157,7 +165,7 @@ window.__ModuleLoader__.load({
       user: wireNode({ kind: 'json', optional: true }),
     })
     const wOauthBeginRequest = wv.object({ accountId: wv.string(), redirectUri: wv.string() })
-    const wOauthBeginResult = wv.object({ ok: wv.boolean(), message: wv.string(), authUrl: wv.string(true), state: wv.string(true) })
+    const wOauthBeginResult = wv.object({ ok: wv.boolean(), message: wv.string(), authUrl: wv.string(true), state: wv.string(true), mode: wv.string(true), userCode: wv.string(true), verificationUrl: wv.string(true), intervalSeconds: wv.number(true), expiresIn: wv.number(true) })
     const wOauthExchangeRequest = wv.object({
       code: wv.string(), state: wv.string(true),
       accountId: wv.string(true), codeVerifier: wv.string(true), redirectUri: wv.string(true),
@@ -165,6 +173,9 @@ window.__ModuleLoader__.load({
     const wOauthExchangeResult = wv.object({ ok: wv.boolean(), message: wv.string(), expiresIn: wv.number(true) })
     const wOauthDiscoverRequest = wv.object({ accountId: wv.string() })
     const wOauthDiscoverResult = wv.object({ ok: wv.boolean(), message: wv.string(), models: wv.array(wv.string()) })
+    // EVO-002 Step 6：preset 账号登出（§3.6 凭据删除路径 / W-5）。
+    const wOauthLogoutRequest = wv.object({ accountId: wv.string() })
+    const wOauthLogoutResult = wv.object({ ok: wv.boolean(), message: wv.string() })
     const wCliStatusResult = wv.object({ ok: wv.boolean(), message: wv.string(), loggedIn: wv.boolean(true) })
     const wCliLoginResult = wv.object({ ok: wv.boolean(), message: wv.string() })
     const wCliModelsResult = wv.object({ ok: wv.boolean(), message: wv.string(), models: wv.array(wv.string()), source: wv.string(true) })
@@ -177,6 +188,16 @@ window.__ModuleLoader__.load({
     const wImageDataResult = wv.object({
       ok: wv.boolean(), message: wv.string(), code: wv.string(true),
       mediaType: wv.string(true), data: wv.string(true), width: wv.number(true), height: wv.number(true), name: wv.string(true),
+    })
+    const wUploadFileRequest = wv.object({ name: wv.string(), mediaType: wv.string(), dataBase64: wv.string() })
+    const wUploadFileResult = wv.object({
+      ok: wv.boolean(), path: wv.string(true), attachmentId: wv.string(true),
+      name: wv.string(true), message: wv.string(true), code: wv.string(true),
+    })
+    const wReadWorkspaceFileRequest = wv.object({ path: wv.string() })
+    const wReadWorkspaceFileResult = wv.object({
+      ok: wv.boolean(), dataBase64: wv.string(true), mediaType: wv.string(true),
+      name: wv.string(true), message: wv.string(true), code: wv.string(true),
     })
 
     // ── Remote 契约（与宿主 lib/rpc.js 一致）────────────────────────────────
@@ -191,6 +212,7 @@ window.__ModuleLoader__.load({
       descriptors: [
         { id: 'dsh-agent-router#router/catalog', service: 'router', namespace: 'router', method: 'catalog', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('CatalogResult', wCatalog) },
         { id: 'dsh-agent-router#router/stats', service: 'router', namespace: 'router', method: 'stats', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('StatsResult', wStats) },
+        { id: 'dsh-agent-router#router/statsExport', service: 'router', namespace: 'router', method: 'statsExport', invocation: { kind: 'direct' }, parameters: [parameter('request', wStatsExportRequest)], result: resultOf('StatsExportResult', wStatsExportResult) },
         { id: 'dsh-agent-router#router/test', service: 'router', namespace: 'router', method: 'test', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('TestResult', wTest) },
         { id: 'dsh-agent-router#router/reset', service: 'router', namespace: 'router', method: 'reset', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('ResetResult', wReset) },
         { id: 'dsh-agent-router#router/config', service: 'router', namespace: 'router', method: 'config', invocation: { kind: 'direct' }, parameters: [parameter('request', wEmpty)], result: resultOf('ConfigResult', wConfig) },
@@ -198,10 +220,13 @@ window.__ModuleLoader__.load({
         { id: 'dsh-agent-router#router/oauthTokenExchange', service: 'router', namespace: 'router', method: 'oauthTokenExchange', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthExchangeRequest)], result: resultOf('OauthTokenExchangeResult', wOauthExchangeResult) },
         { id: 'dsh-agent-router#router/oauthBegin', service: 'router', namespace: 'router', method: 'oauthBegin', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthBeginRequest)], result: resultOf('OauthBeginResult', wOauthBeginResult) },
         { id: 'dsh-agent-router#router/oauthDiscover', service: 'router', namespace: 'router', method: 'oauthDiscover', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthDiscoverRequest)], result: resultOf('OauthDiscoverResult', wOauthDiscoverResult) },
+        { id: 'dsh-agent-router#router/oauthLogout', service: 'router', namespace: 'router', method: 'oauthLogout', invocation: { kind: 'direct' }, parameters: [parameter('request', wOauthLogoutRequest)], result: resultOf('OauthLogoutResult', wOauthLogoutResult) },
         { id: 'dsh-agent-router#router/cliStatus', service: 'router', namespace: 'router', method: 'cliStatus', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('CliStatusResult', wCliStatusResult) },
         { id: 'dsh-agent-router#router/cliLogin', service: 'router', namespace: 'router', method: 'cliLogin', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('CliLoginResult', wCliLoginResult) },
         { id: 'dsh-agent-router#router/cliModels', service: 'router', namespace: 'router', method: 'cliModels', invocation: { kind: 'direct' }, parameters: [parameter('request', wAgentId)], result: resultOf('CliModelsResult', wCliModelsResult) },
         { id: 'dsh-agent-router#router/imageData', service: 'router', namespace: 'router', method: 'imageData', invocation: { kind: 'direct' }, parameters: [parameter('request', wImageDataRequest)], result: resultOf('ImageDataResult', wImageDataResult) },
+        { id: 'dsh-agent-router#router/uploadFile', service: 'router', namespace: 'router', method: 'uploadFile', invocation: { kind: 'direct' }, parameters: [parameter('request', wUploadFileRequest)], result: resultOf('UploadFileResult', wUploadFileResult) },
+        { id: 'dsh-agent-router#router/readWorkspaceFile', service: 'router', namespace: 'router', method: 'readWorkspaceFile', invocation: { kind: 'direct' }, parameters: [parameter('request', wReadWorkspaceFileRequest)], result: resultOf('ReadWorkspaceFileResult', wReadWorkspaceFileResult) },
       ],
     }
 
@@ -269,15 +294,20 @@ window.__ModuleLoader__.load({
 .dshrouter-attach{box-sizing:border-box;width:28px;height:28px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:15px;line-height:1}
 .dshrouter-attach:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dshrouter-attach:disabled{opacity:.5;cursor:not-allowed}
+.dshrouter-attachcard{box-sizing:border-box;display:inline-flex;align-items:center;gap:4px;max-width:240px;font-size:12px;line-height:16px;color:var(--dsw-alias-label-primary);border:1px solid var(--dsw-alias-border-l3);border-radius:8px;padding:2px 8px;background:var(--dsw-alias-bg-base,transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
 .dshrouter-toolcard{border:1px solid var(--dsw-alias-border-l2);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);min-width:0}
 .dshrouter-toolcard-head{display:flex;align-items:center;gap:8px}
 .dshrouter-toolcard-title{font-size:13px;font-weight:500}
 .dshrouter-toolimages{display:flex;flex-wrap:wrap;gap:8px}
+.dshrouter-toolgallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
 .dshrouter-toolimage{display:block;border:1px solid var(--dsw-alias-border-l3);border-radius:8px;background:var(--dsw-alias-bg-base,transparent);object-fit:cover;width:160px;height:160px;cursor:zoom-in}
 .dshrouter-toolimage:hover{opacity:.9}
 .dshrouter-tooltext{white-space:pre-wrap;word-break:break-word;color:var(--dsw-alias-label-primary)}
 .dshrouter-toolmeta{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
 .dshrouter-toolerror{color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px}
+.dshrouter-toolfile{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.dshrouter-toolpath{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:16px;color:var(--dsw-alias-label-secondary);word-break:break-all;white-space:pre-wrap}
+.dshrouter-toolmedia{max-width:100%;border-radius:8px;background:var(--dsw-alias-bg-base,transparent)}
 `
     const CSS_ID = 'dsh-agent-router'
     if (typeof document !== 'undefined' && document.querySelector('style[data-plugin-css=' + JSON.stringify(CSS_ID) + ']') === null) {
@@ -330,44 +360,12 @@ window.__ModuleLoader__.load({
       accountDiscoverEmpty: '端点未返回任何模型：请手工填写模型 id，或检查端点地址是否正确',
       accountModelsKept: '已保留现有模型列表：自定义服务商必须列出模型才能生效，如需清空请改为手工填写',
       accountDiscovered: (n) => `已从端点自动发现并保存 ${n} 个模型`,
-      oauthTitle: 'OAuth 账号（官方登录，插件独立管理）',
-      oauthSummary: (n) => `${n} 个 OAuth 账号`,
-      oauthIntro: 'OAuth 高级区（自建网关 / 账号池场景）。官方 API 现状：ChatGPT/Claude/Grok 官方 API 不提供 OAuth（仅支持粘贴 Web token 到自建兼容网关）；Gemini 支持 OAuth 但需自建 Google Cloud OAuth Client（内置公开 Client 已被 Google 禁用：授权页直接报 invalid_request / invalid_scope）。日常使用推荐上方 API Key 配置式添加。OAuth 账号只由本插件管理：不注册共享模型列表，调用经插件直连端点。',
-      oauthLoginMode: '登录方式',
-      oauthModeCode: '官方授权码登录（OAuth2 + PKCE）',
-      oauthModePaste: '粘贴 access token',
-      oauthToken: 'Access Token',
-      oauthPaste: '保存 Token',
-      oauthClientId: 'Client ID',
-      oauthClientSecret: 'Client Secret（只写，可选；公共客户端可留空）',
-      oauthAuthUrl: '官方授权端点',
-      oauthTokenUrl: '官方 Token 端点',
-      oauthScope: 'Scope',
-      oauthOpenUrl: '打开官方授权页',
-      oauthOpenHint: '将生成 PKCE 并打开官方授权 URL；完成后把浏览器跳转回来的完整地址粘贴到下方回调框。',
-      oauthCallbackUrl: '回调地址（粘贴浏览器返回的完整 URL）',
-      oauthExchange: '完成登录（交换 Token）',
-      oauthExchanging: '交换中…',
-      oauthOneClick: '一键授权登录',
-      oauthOneClickHint: '自动弹出官方授权页；完成授权后自动完成 code 交换与保存，无需手工复制回调地址。',
-      oauthRedirectUriLabel: '重定向地址（需在服务商控制台登记）',
       oauthPopupBlocked: '浏览器拦截了弹窗，请允许本页弹出窗口后重试。',
       oauthWaiting: '已打开授权页：请在弹窗中完成授权，登录状态将自动刷新。',
       oauthExpired: '等待授权超时，请重新发起。',
-      oauthDone: '授权成功，access token 已保存。',
       oauthAutoDiscovering: '授权成功：正在自动发现模型…',
-      oauthAfterLoginHint: '下一步：点「发现模型」从端点拉取模型（或手工填写模型 id）；然后把「专业 Agent」里某 agent 的「OAuth 账号」指向本账号即可开始使用。',
-      oauthPublicClientLimit: '注意：Google 已禁用内置公开 Client——授权页直接报 invalid_request / invalid_scope，此账号无法完成登录。实际使用二选一：① 取消勾选「内置公开 OAuth Client」，改用自建 Client（Google Cloud 控制台创建，回调填 http://127.0.0.1:3080/router-oauth/callback，scope 用 cloud-platform + generative-language.retriever）；② 在「添加账号」用 Gemini API Key 配置 provider=google。',
-      oauthFillScopes: '填入 Gemini 推荐 scope',
-      oauthNeedPasteHint: '如需粘贴 access token 或配置自建 OAuth Client，展开下方「账号与登录设置」。',
       advancedLogin: '账号与登录设置',
       oauthNeedRestart: '一键授权需要 DSH 重启后生效（宿主侧新增回调端点）。',
-      oauthOneClickAdd: '一键授权并添加',
-      oauthAddOnly: '仅添加（稍后登录）',
-      oauthNeedClientId: '需先填 Client ID',
-      oauthClientIdHint: '官方授权码流需要你自有的 OAuth Client（在服务商控制台创建；回调地址登记下方所示地址，其余端点/Scope 已由预设填好）。',
-      oauthPublicClientLabel: '使用内置公开 OAuth Client（已被 Google 禁用，不推荐）',
-      oauthPublicClientHint: '内置 Google Cloud SDK 公开 Client 已被 Google 拒绝（授权页报 invalid_request / invalid_scope），仅保留兼容。请取消勾选，改用自建 Client（回调 http://127.0.0.1:3080/router-oauth/callback），或直接使用 Gemini API Key。',
       poolTitle: '账号池',
       poolIntro: '把多个已授权账号组成池：调用时按策略自动选择账号（健康优先 / 用量最低 / 轮询），单个账号失败自动切换到下一个。agent 的「OAuth 账号」可指向池。',
       poolSummary: (n) => `${n} 个账号池`,
@@ -389,32 +387,31 @@ window.__ModuleLoader__.load({
       poolAccountSource: '账号池',
       oauthLoggedIn: '已登录',
       oauthNotLoggedIn: '未登录',
-      oauthProtocol: '协议',
-      oauthBaseUrl: 'Base URL',
       oauthModels: '模型（插件独立维护）',
       oauthDiscover: '发现模型',
       oauthDiscovering: '查询中…',
-      oauthDelete: '删除账号',
-      oauthConfirmDelete: '确认删除该 OAuth 账号？',
-      oauthAdd: '添加 OAuth 账号',
-      oauthCustomAdd: '＋ 自定义（自建 OAuth2 服务商）',
-      oauthCustomHint: '已创建空白账号：请在卡片中填写协议、Base URL、授权/Token 端点、Client ID 与 Scope 后保存，再执行登录。',
-      oauthQuickAddHint: '点击服务商即创建账号：Gemini 为自建 Client 形态（需在高级设置填 Client ID/Secret 后一键授权）；ChatGPT/Claude/Grok 仅适配自建网关——添加后把 Base URL 改为你的网关并粘贴 access token。',
-      oauthGeminiSelfHint: 'Gemini 账号已创建（自建 Client 形态）：① Google Cloud 控制台创建 OAuth Client（Web 类型），回调填 http://127.0.0.1:3080/router-oauth/callback；② 展开卡片 → 账号与登录设置 → 填 Client ID/Secret，scope 点「填入 Gemini 推荐 scope」；③ 保存后点「一键授权登录」。',
-      oauthAddedPasteHint: '账号已添加：官方 API 不提供 OAuth——把 Base URL 改为你的自建网关后，在此粘贴 access token 完成登录。',
-      oauthOpenSite: '打开官方站登录',
-      oauthBookmark: '获取 token 书签',
-      oauthDragBookmark: '拖到浏览器书签栏；之后在官方站页面点一下书签，token 自动回传保存。',
-      oauthCopyBookmark: '复制书签脚本',
-      oauthBookmarkCopied: '已复制：在官方站页面的地址栏粘贴并回车即可回填。',
-      oauthGetTokenHint: '登录官方站后，点书签栏的「获取 token」即自动回传保存到本账号。',
-      oauthManualTokenHint: '该服务商无公开稳定的 token 接口：请登录官方站后从浏览器开发者工具（Network / LocalStorage）提取。',
+      // ── ChatGPT 订阅登录（正式通道，EVO-006 / DEC-026 C2 转正；
+      //    EVO-007 上移为一级醒目位）──────────────────────────────────
+      presetTitle: 'ChatGPT 订阅登录',
+      presetSummary: (n) => `${n} 个 ChatGPT 账号`,
+      presetNotice: '使用 ChatGPT 订阅经官方 Codex OAuth 通路调用：请知悉并自行承担平台服务条款与账号风控方面的风险。',
+      presetIntro: '在这里添加 ChatGPT 预设账号：一键浏览器授权 → 凭据落盘 → 专业 agent 的「OAuth 账号」指向它即可调用。',
+      presetAdd: '＋ 添加 ChatGPT 账号',
+      presetLogin: '登录 ChatGPT',
+      presetLoggingIn: '等待授权…',
+      presetLoginWaiting: '已打开授权页：在弹窗中完成 ChatGPT 登录，登录状态将自动刷新。',
+      presetDeviceWaiting: (code, url) => `设备码登录进行中（回调端口被占用，已自动降级）：请打开 ${url} 并输入设备码 ${code} 完成授权`,
+      presetLoginDone: 'ChatGPT 登录完成，凭据已保存。',
+      presetLogout: '登出并删除凭据',
+      presetLogoutConfirm: '确认登出并删除本机 ChatGPT 凭据文件？（不影响账号本身，随时可重新登录）',
+      presetDelete: '删除账号',
+      presetDeleteConfirm: '确认删除该 ChatGPT 预设账号？将同时删除本机凭据文件，并从引用它的账号池中移除。',
+      presetDeleted: 'ChatGPT 账号已删除（凭据文件与池引用已清理）。',
+      presetLogoutFailed: '登出失败（删除凭据文件）：请重试',
+      presetPoolCleaned: (n) => `已从 ${n} 个账号池移除引用`,
+      presetModelsHint: '模型列表由插件独立维护（可编辑；ChatGPT 订阅端点不提供模型发现，常用值 gpt-5.4 / gpt-5.4-mini）。',
       oauthTokenBack: 'access token 已自动保存。',
-      oauthModelsCount: (n) => `${n} 个模型`,
       oauthNeedConfig: '请先完善账号配置（Base URL 等）再登录',
-      oauthCallbackInvalid: '回调地址中未找到 code 参数',
-      oauthTokenSaved: 'Token 已保存',
-      oauthTokenSaveFailed: '保存 Token 失败',
       fieldAccount: 'OAuth 账号（插件独立管理，覆盖服务商/模型）',
       oauthChatOnly: 'OAuth 账号仅支持 chat 类型',
       statsTitle: '统计信息',
@@ -439,6 +436,16 @@ window.__ModuleLoader__.load({
       statsAccountLevel: '账号级明细（服务商）',
       statsModelDetail: '模型细分',
       statsNoCalls: '暂无调用记录',
+      statsDayLevel: '按天聚合',
+      statsDate: '日期',
+      statsDayMs: '耗时',
+      statsCost: '成本（约）',
+      statsExport: '导出 CSV',
+      statsExportRange: '时间范围',
+      statsExportLevel: '分组粒度',
+      statsExportDone: '已导出：',
+      statsExportFailed: '导出失败',
+      statsExportMissing: '导出不可用（宿主行 dsh-agent-router 未挂载或 Remote 缺 statsExport）',
       agentsTitle: '专业 Agent',
       agentsSummary: (n) => `${n} 个专业 agent`,
       agentsIntro: '每个专业 Agent 用独立的服务商与模型处理特定能力（图片识别、生成、翻译、语音识别等）。卡片默认折叠，点击展开配置；服务商与模型留空时自动复用主 Agent 模型，点击末尾「+」添加。',
@@ -508,7 +515,7 @@ window.__ModuleLoader__.load({
       cliAgentNone: '— 未选择（使用本 agent 内嵌命令，建议迁移）—',
       cliManageHint: '登录、拉取模型与命令参数在 多模态账号 → 子代理 中维护；此处模型字段为 -m / --model 覆盖参数（空 = CLI 默认模型）。',
       cliRoutingHint: '能力标签才是调度依据：保留能力标签（如 image），主 agent 仍会按对应任务路由到此 agent，cli 只决定交给哪个子代理执行；生成图片等产物时让子代理把文件写入工作区并在结果中报告路径。宿主会向子代理注入重试纪律（同一失败最多重试 2 次即报告错误结束），避免任务长时间卡死；图片生成走子代理自身的上游服务（如 ChatGPT 图片接口）时，请保证本机网络可达（例如开启代理）。',
-      advancedSection: '高级扩展（OAuth 账号 / 账号池）',
+      advancedSection: '高级扩展（账号池）',
       cliLegacyHint: '旧配置：本 agent 直接内嵌命令（未引用子代理条目）。建议在 多模态账号 → 子代理 中创建条目并在此选择，便于统一登录、模型与统计。',
       fieldCliLoginArgs: '登录命令参数（空 = 该 CLI 预设）',
       fieldCliStatusArgs: '状态命令参数（空 = 该 CLI 预设）',
@@ -548,11 +555,16 @@ window.__ModuleLoader__.load({
       attach: '添加附件',
       attachUnavailable: '当前输入框不可用：无法添加附件',
       attachPickTitle: '选择附件',
+      attachUploadFailed: '附件上传失败',
       imageLoadFailed: '图片加载失败，点击重试',
       imagePreviewTitle: '原图预览',
       toolRouteTitle: 'route_agent · 多模型路由',
       toolRunning: '正在处理…',
       toolImageLabel: '图片',
+      openFile: '打开文件',
+      fileOpening: '正在读取…',
+      fileOpenFailed: '文件打开失败，点击重试',
+      download: '下载',
     }
     const en = {
       nav: 'Agent Routing',
@@ -595,44 +607,12 @@ window.__ModuleLoader__.load({
       accountDiscoverEmpty: 'The endpoint returned no models: type the model ids by hand, or check the endpoint URL',
       accountModelsKept: 'Kept the existing model list: a custom provider must list its models to serve; edit them by hand instead',
       accountDiscovered: (n) => `Auto-discovered ${n} models from the endpoint and saved`,
-      oauthTitle: 'OAuth Accounts (official sign-in, plugin-managed)',
-      oauthSummary: (n) => `${n} OAuth account(s)`,
-      oauthIntro: 'OAuth advanced area (self-hosted gateway / account pool scenarios). Official API reality: ChatGPT/Claude/Grok offer no OAuth on their official APIs (paste a web token into your own compatible gateway); Gemini supports OAuth but needs your own Google Cloud OAuth client (the built-in public client has been disabled by Google: the authorization page now fails with invalid_request / invalid_scope). For everyday use prefer the API-key configuration above. OAuth accounts are plugin-managed: they never register in the shared model lists and calls go through the plugin directly.',
-      oauthLoginMode: 'Sign-in method',
-      oauthModeCode: 'Official authorization code (OAuth2 + PKCE)',
-      oauthModePaste: 'Paste access token',
-      oauthToken: 'Access Token',
-      oauthPaste: 'Save Token',
-      oauthClientId: 'Client ID',
-      oauthClientSecret: 'Client Secret (write-only, optional; public clients may leave blank)',
-      oauthAuthUrl: 'Authorization endpoint',
-      oauthTokenUrl: 'Token endpoint',
-      oauthScope: 'Scope',
-      oauthOpenUrl: 'Open authorization page',
-      oauthOpenHint: 'Generates PKCE and opens the official authorization URL; afterwards paste the full redirect URL from the browser into the callback box below.',
-      oauthCallbackUrl: 'Callback URL (paste the full URL the browser returned)',
-      oauthExchange: 'Complete sign-in (exchange token)',
-      oauthExchanging: 'Exchanging…',
-      oauthOneClick: 'One-click sign-in',
-      oauthOneClickHint: 'Opens the official authorization page automatically and completes the code exchange and saving by itself — no copy-paste of the callback URL.',
-      oauthRedirectUriLabel: 'Redirect URI (register it in the provider console)',
       oauthPopupBlocked: 'The browser blocked the popup; allow popups for this page and retry.',
       oauthWaiting: 'Authorization page opened: complete it in the popup and the login state refreshes automatically.',
       oauthExpired: 'Authorization timed out; start again.',
-      oauthDone: 'Signed in; access token saved.',
       oauthAutoDiscovering: 'Signed in: discovering models automatically…',
-      oauthAfterLoginHint: 'Next step: click "Discover models" to fetch endpoint models (or type model ids by hand); then point an agent\'s "OAuth account" field at this account to start using it.',
-      oauthPublicClientLimit: 'Note: Google has disabled the built-in public client — the authorization page fails with invalid_request / invalid_scope and this account cannot sign in. To actually use it: ① uncheck "built-in public OAuth client" and use your own client (create one in the Google Cloud console, callback http://127.0.0.1:3080/router-oauth/callback, scope cloud-platform + generative-language.retriever); or ② configure a Gemini API Key for provider=google under "Add account".',
-      oauthFillScopes: 'Fill recommended Gemini scopes',
-      oauthNeedPasteHint: 'To paste an access token or configure your own OAuth client, expand "Account & sign-in settings" below.',
       advancedLogin: 'Account & sign-in settings',
       oauthNeedRestart: 'One-click sign-in requires a DSH restart (new host callback endpoint).',
-      oauthOneClickAdd: 'One-click sign-in & add',
-      oauthAddOnly: 'Add only (sign in later)',
-      oauthNeedClientId: 'Client ID required',
-      oauthClientIdHint: 'The authorization-code flow needs your own OAuth client (create it in the provider console; register the redirect URI shown below — endpoints and scope are pre-filled by the preset).',
-      oauthPublicClientLabel: 'Use built-in public OAuth client (disabled by Google, not recommended)',
-      oauthPublicClientHint: 'The built-in Google Cloud SDK public client has been rejected by Google (the authorization page fails with invalid_request / invalid_scope); it is kept for compatibility only. Uncheck it and use your own client (callback http://127.0.0.1:3080/router-oauth/callback), or use a Gemini API key instead.',
       poolTitle: 'Account Pools',
       poolIntro: 'Group authorized accounts into a pool: calls pick an account by strategy (healthy first / lowest usage / round robin) and fail over to the next one automatically. An agent\'s "OAuth account" can point at a pool.',
       poolSummary: (n) => `${n} account pool(s)`,
@@ -654,32 +634,31 @@ window.__ModuleLoader__.load({
       poolAccountSource: 'account pool',
       oauthLoggedIn: 'Signed in',
       oauthNotLoggedIn: 'Not signed in',
-      oauthProtocol: 'Protocol',
-      oauthBaseUrl: 'Base URL',
       oauthModels: 'Models (plugin-managed)',
       oauthDiscover: 'Discover models',
       oauthDiscovering: 'Querying…',
-      oauthDelete: 'Delete account',
-      oauthConfirmDelete: 'Delete this OAuth account?',
-      oauthAdd: 'Add OAuth Account',
-      oauthCustomAdd: '+ Custom (own OAuth2 provider)',
-      oauthCustomHint: 'Blank account created: fill in protocol, Base URL, auth/token endpoints, Client ID and Scope, then save and sign in.',
-      oauthQuickAddHint: 'Click a provider to create the account: Gemini is created in self-client mode (fill Client ID/Secret in advanced settings, then one-click sign-in); ChatGPT/Claude/Grok suit self-hosted gateways only — point Base URL at your gateway and paste the access token.',
-      oauthGeminiSelfHint: 'Gemini account created (self-client mode): ① create an OAuth client (Web) in the Google Cloud console with callback http://127.0.0.1:3080/router-oauth/callback; ② expand the card → Account & sign-in settings → fill Client ID/Secret and click "Fill recommended Gemini scopes"; ③ save, then click "One-click sign-in".',
-      oauthAddedPasteHint: 'Account created: official APIs offer no OAuth — point Base URL at your self-hosted gateway, then paste the access token here.',
-      oauthOpenSite: 'Open official site to sign in',
-      oauthBookmark: 'Get-token bookmark',
-      oauthDragBookmark: 'Drag to the bookmarks bar; afterwards one click on the official site sends the token back automatically.',
-      oauthCopyBookmark: 'Copy bookmark script',
-      oauthBookmarkCopied: 'Copied: paste it into the address bar on the official site and press Enter.',
-      oauthGetTokenHint: 'After signing in on the official site, click the bookmark to save the token back to this account automatically.',
-      oauthManualTokenHint: 'No stable public token endpoint: sign in on the official site and extract it from DevTools (Network / LocalStorage).',
+      // ── ChatGPT subscription sign-in (official channel, EVO-006 / DEC-026 C2;
+      //    promoted to first level by EVO-007) ──────────────────────────
+      presetTitle: 'ChatGPT Subscription Sign-in',
+      presetSummary: (n) => `${n} ChatGPT account(s)`,
+      presetNotice: 'Calling via a ChatGPT subscription through the official Codex OAuth path: please be aware of and accept the platform Terms of Service and account-risk considerations.',
+      presetIntro: 'Add a ChatGPT preset account here: one-click browser authorization → credential stored → point an agent\'s "OAuth account" at it to call.',
+      presetAdd: '+ Add ChatGPT Account',
+      presetLogin: 'Sign in with ChatGPT',
+      presetLoggingIn: 'Waiting for authorization…',
+      presetLoginWaiting: 'Authorization page opened: complete ChatGPT sign-in in the popup; the login state refreshes automatically.',
+      presetDeviceWaiting: (code, url) => `Device-code sign-in in progress (callback port occupied; degraded automatically): open ${url} and enter code ${code} to authorize`,
+      presetLoginDone: 'ChatGPT sign-in complete; credential saved.',
+      presetLogout: 'Sign out & delete credential',
+      presetLogoutConfirm: 'Sign out and delete the local ChatGPT credential file? (The account itself is unaffected; you can sign in again anytime.)',
+      presetDelete: 'Delete account',
+      presetDeleteConfirm: 'Delete this ChatGPT preset account? The local credential file will also be deleted, and references will be removed from account pools.',
+      presetDeleted: 'ChatGPT account deleted (credential file and pool references cleaned up).',
+      presetLogoutFailed: 'Sign-out failed (credential file deletion): please retry',
+      presetPoolCleaned: (n) => `Removed references from ${n} pool(s)`,
+      presetModelsHint: 'The model list is plugin-managed (editable; the ChatGPT subscription endpoint offers no model discovery — common values gpt-5.4 / gpt-5.4-mini).',
       oauthTokenBack: 'Access token saved automatically.',
-      oauthModelsCount: (n) => `${n} models`,
       oauthNeedConfig: 'Complete the account configuration first (Base URL, …)',
-      oauthCallbackInvalid: 'No code parameter found in the callback URL',
-      oauthTokenSaved: 'Token saved',
-      oauthTokenSaveFailed: 'Failed to save token',
       fieldAccount: 'OAuth account (plugin-managed, overrides provider/model)',
       oauthChatOnly: 'OAuth accounts support chat type only',
       statsTitle: 'Usage Statistics',
@@ -704,6 +683,16 @@ window.__ModuleLoader__.load({
       statsAccountLevel: 'Account level (provider)',
       statsModelDetail: 'Model breakdown',
       statsNoCalls: 'No calls recorded yet',
+      statsDayLevel: 'By-day aggregate',
+      statsDate: 'Date',
+      statsDayMs: 'Latency',
+      statsCost: 'Cost (est.)',
+      statsExport: 'Export CSV',
+      statsExportRange: 'Range',
+      statsExportLevel: 'Granularity',
+      statsExportDone: 'Exported: ',
+      statsExportFailed: 'Export failed',
+      statsExportMissing: 'Export unavailable (host dsh-agent-router not mounted or Remote lacks statsExport)',
       agentsTitle: 'Specialist Agents',
       agentsSummary: (n) => `${n} specialist agent(s)`,
       agentsIntro: 'Each specialist agent handles one capability (vision, image generation, translation, speech recognition, …) with its own provider and model. Cards are collapsed by default — click to expand and configure; unset provider/model inherits the main agent model; use "+" at the end to add one.',
@@ -773,7 +762,7 @@ window.__ModuleLoader__.load({
       cliAgentNone: '— None selected (uses this agent\'s embedded command; migrate recommended) —',
       cliManageHint: 'Sign-in, model fetching and command args live under Accounts → Subagents; the model field here is the -m / --model override (empty = CLI default model).',
       cliRoutingHint: 'Capability tags drive routing: keep tags like image and the main agent still routes matching tasks here — cli only picks which subagent executes them. For artifacts such as images, have the subagent write files into the workspace and report their paths in the result. The host injects a retry discipline (max 2 retries per failure, then report and exit) to prevent long hangs; when image generation goes through the subagent\'s own upstream (e.g. ChatGPT\'s image API), the machine must be able to reach it (e.g. with a proxy on).',
-      advancedSection: 'Advanced extensions (OAuth accounts / account pools)',
+      advancedSection: 'Advanced extensions (account pools)',
       cliLegacyHint: 'Legacy config: this agent embeds its own command (no subagent reference). Create an entry under Accounts → Subagents and select it here for unified sign-in, models and stats.',
       fieldCliLoginArgs: 'Login command args (empty = CLI preset)',
       fieldCliStatusArgs: 'Status command args (empty = CLI preset)',
@@ -813,11 +802,16 @@ window.__ModuleLoader__.load({
       attach: 'Add attachments',
       attachUnavailable: 'Cannot add attachments: the input is unavailable right now',
       attachPickTitle: 'Choose attachments',
+      attachUploadFailed: 'Attachment upload failed',
       imageLoadFailed: 'Image failed to load; click to retry',
       imagePreviewTitle: 'Original image preview',
       toolRouteTitle: 'route_agent · Multi-model routing',
       toolRunning: 'Processing…',
       toolImageLabel: 'Image',
+      openFile: 'Open file',
+      fileOpening: 'Opening…',
+      fileOpenFailed: 'Failed to open file; click to retry',
+      download: 'Download',
     }
 
     // ── 工具函数 ────────────────────────────────────────────────────────────
@@ -838,6 +832,28 @@ window.__ModuleLoader__.load({
       if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
       if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
       return String(n)
+    }
+    function fmtCost(value) {
+      const n = Number(value) || 0
+      if (n === 0) return '0'
+      return String(Math.round(n * 1e6) / 1e6)
+    }
+    /** EVO-004 出口⑤：CSV 下载——浏览器用 Blob + <a download>（不离开当前页）；
+     *  无 DOM 环境（宿主预渲染/测试）回落 data: URL 新标签页（用户可保存）。 */
+    function downloadCsv(csv, filename) {
+      if (typeof document !== 'undefined' && typeof document.createElement === 'function' && typeof window !== 'undefined' && window.URL && typeof window.URL.createObjectURL === 'function') {
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+        const url = window.URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = filename
+        document.body.appendChild(anchor)
+        anchor.click()
+        document.body.removeChild(anchor)
+        window.URL.revokeObjectURL(url)
+        return
+      }
+      window.open(`data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`, '_blank')
     }
 
     /** 从 describe 结果中取一个 namespace view。 */
@@ -911,8 +927,9 @@ window.__ModuleLoader__.load({
      *  用户需在 Google Cloud 控制台创建 OAuth Client（回调
      *  http://127.0.0.1:3080/router-oauth/callback）。内置公开 Client 仅能
      *  完成授权、其 token 被 Google 禁用于 API 调用（403 insufficient
-     *  scopes），故不再作为默认。 */
-    const GEMINI_OAUTH_SCOPES = 'https://www.googleapis.com/auth/cloud-platform'
+     *  scopes），故不再作为默认。
+     *  EVO-007：官方登录入口 UI 已移除（自述不可用），预设仍服务于账号池的
+     *  「一键授权并加入池」创建路径。 */
     const GEMINI_SELF_CLIENT_SCOPES = 'https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/generative-language.retriever'
     const OAUTH_PRESETS = [
       { id: 'gemini', label: 'Gemini · Google', draft: { name: 'Gemini', protocol: 'gemini', baseURL: 'https://generativelanguage.googleapis.com/v1beta', authUrl: 'https://accounts.google.com/o/oauth2/v2/auth', tokenUrl: 'https://oauth2.googleapis.com/token', scope: GEMINI_SELF_CLIENT_SCOPES, publicClient: false } },
@@ -921,32 +938,16 @@ window.__ModuleLoader__.load({
       { id: 'grok', label: 'Grok · xAI（自建网关）', draft: { name: 'Grok', protocol: 'openai-completions', baseURL: 'https://api.x.ai/v1' } },
     ]
 
+    /** 预设账号成员值集合（R8-F1 判据统一）：与 schemas.js OAUTH_PRESET_VALUES
+     *  对齐（客户端无法 import——本地镜像常量）。preset 存在且为成员值 = 预设
+     *  账号（专属账号卡 + W-5 联动删除）；非成员 preset 值（未知值）回落到
+     *  通用账号（可删——非成员账号无独立凭据文件，通用删除安全）。 */
+    const OAUTH_PRESET_MEMBER_VALUES = ['chatgpt-codex']
+    const isPresetAccount = (entry) => !!entry && typeof entry.preset === 'string' && OAUTH_PRESET_MEMBER_VALUES.includes(entry.preset)
+
     // ── OAuth2 PKCE 工具 ────────────────────────────────────────────────────
-    function pkceBase64Url(bytes) {
-      let text = ''
-      for (const byte of bytes) text += String.fromCharCode(byte)
-      return btoa(text).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-    }
-    function pkceVerifier() {
-      const bytes = new Uint8Array(32)
-      if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') globalThis.crypto.getRandomValues(bytes)
-      else for (let index = 0; index < bytes.length; index++) bytes[index] = Math.floor(Math.random() * 256)
-      return pkceBase64Url(bytes)
-    }
-    async function pkceChallenge(verifier) {
-      const data = new TextEncoder().encode(verifier)
-      const digest = await globalThis.crypto.subtle.digest('SHA-256', data)
-      return pkceBase64Url(new Uint8Array(digest))
-    }
-    /** 回调地址中的 code 参数。 */
-    function codeFromCallback(url) {
-      try {
-        const parsed = new URL(url)
-        return parsed.searchParams.get('code') ?? ''
-      } catch {
-        return ''
-      }
-    }
+    // （EVO-007 移除：官方登录 UI 与 openOauthAuthorize/exchangeOauthCode 一并
+    //  删除后无引用；账号池的一键授权走宿主 oauthBegin 服务端 PKCE，不经此。）
 
     /** 分钟级 tokens 柱状图。 */
     function BarChart(props) {
@@ -1151,179 +1152,31 @@ window.__ModuleLoader__.load({
         failure ? el('p', { className: 'dshrouter-error' }, failure) : null)
     }
 
-    /** 官方站与消费级 token 提取端点（token 面向 Web 后端，适用于自建网关/中转；官方 API 不认）。 */
-    function tokenSourceOf(baseURL) {
-      const base = typeof baseURL === 'string' ? baseURL.trim() : ''
-      if (base.includes('api.openai.com') || base.includes('chatgpt.com')) return { site: 'https://chatgpt.com', sessionUrl: 'https://chatgpt.com/api/auth/session', bookmark: true }
-      if (base.includes('api.anthropic.com') || base.includes('claude.ai')) return { site: 'https://claude.ai', sessionUrl: '', bookmark: false }
-      if (base.includes('api.x.ai') || base.includes('grok.com')) return { site: 'https://grok.com', sessionUrl: '', bookmark: false }
-      return null
-    }
-
-    /** 一键获取 access token 的书签脚本：在官方站页面点书签 → 自动回传 DSH 保存。 */
-    function tokenBookmarkletOf(accountId, sessionUrl) {
-      const origin = typeof window !== 'undefined' && window.location ? window.location.origin : 'http://127.0.0.1:3080'
-      return `javascript:(async()=>{try{const r=await fetch('${sessionUrl}',{credentials:'include'});const j=await r.json();if(!j||!j.accessToken){alert('未获取到 access token：请确认已登录官方站');return}location.href='${origin}/?dshrouter-account=${encodeURIComponent(accountId)}&dshrouter-token='+encodeURIComponent(j.accessToken)}catch(e){alert('提取失败：'+e.message)}})()`
-    }
-
-    /** OAuth 账号卡片（官方登录，插件独立管理；折叠摘要 + 展开配置/登录/模型）。 */
-    function OAuthAccountCard(props) {
-      const { id, entry, tokenState, total, buckets, expanded, draft, busy, notice, t, writable, onToggle, onDraftField, onSave, onPasteToken, onOneClick, onAuthorize, onExchange, onDiscover, onDelete } = props
-      const [loginMode, setLoginMode] = useState('paste')
-      const [tokenDraft, setTokenDraft] = useState('')
-      const [callbackUrl, setCallbackUrl] = useState('')
-      const [bookmarkCopied, setBookmarkCopied] = useState(false)
-      const tokenSource = tokenSourceOf(entry ? entry.baseURL : '')
-      const copyBookmark = async () => {
-        try {
-          await navigator.clipboard.writeText(tokenBookmarkletOf(id, tokenSource.sessionUrl))
-          setBookmarkCopied(true)
-          window.setTimeout(() => setBookmarkCopied(false), 3000)
-        } catch { /* 剪贴板不可用：忽略 */ }
-      }
-      const configured = tokenState && tokenState.configured === true
-      return el('div', { className: 'dshrouter-card' },
-        el('button', { type: 'button', className: 'dshrouter-card-head', onClick: onToggle, 'aria-expanded': expanded, title: expanded ? t('collapse') : t('expand') },
-          configured ? el('span', { className: 'dshrouter-dot ok', title: t('oauthLoggedIn') }) : el('span', { className: 'dshrouter-dot bad', title: t('oauthNotLoggedIn') }),
-          el('span', { className: 'dshrouter-name' }, entry.name || id),
-          el('span', { className: 'dshrouter-id' }, id),
-          el('span', { className: 'dshrouter-tag' }, entry.protocol),
-          el('span', { className: 'dshrouter-meta' }, t('oauthModelsCount')((entry.models ?? []).length) + ` · ${t('statsCalls')} ${total ? total.calls : 0} · ${total ? fmtTokens(total.inputTokens) : 0}/${total ? fmtTokens(total.outputTokens) : 0}`),
-          el('span', { className: 'dshrouter-spacer' }),
-          el('span', { className: 'dshrouter-chevron' }, expanded ? '▾' : '▸')),
-        expanded ? el('div', { className: 'dshrouter-stats' },
-          notice ? el('p', { className: 'dshrouter-hint' }, notice) : null,
-          // ── 主流程：已登录 = 维护模型列表；未登录 = 一键授权 ──────────
-          configured ? el('div', { className: 'dshrouter-stats' },
-            el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-subtitle' }, t('oauthModels'))),
-            el('div', { className: 'dshrouter-row' },
-              el('input', {
-                className: 'dshrouter-input', type: 'text',
-                placeholder: t('oauthModels'), 'aria-label': t('oauthModels'),
-                value: (draft.models ?? []).join(', '),
-                onChange: (event) => onDraftField('models', event.target.value.split(',').map((item) => item.trim()).filter(Boolean)),
-              }),
-              el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: busy || !writable, onClick: onDiscover }, busy ? t('oauthDiscovering') : t('oauthDiscover'))),
-            el('p', { className: 'dshrouter-hint' }, t('oauthAfterLoginHint')),
-            draft.publicClient === true ? el('p', { className: 'dshrouter-error' }, t('oauthPublicClientLimit')) : null) : el('div', { className: 'dshrouter-stats' },
-            el('div', { className: 'dshrouter-row', style: { alignItems: 'flex-end' } },
-              el('button', { type: 'button', className: 'dshrouter-button', disabled: busy || !writable, onClick: onOneClick }, busy ? t('oauthWaiting') : t('oauthOneClick')),
-              el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: busy || !writable, onClick: onAuthorize }, t('oauthOpenUrl'))),
-            el('p', { className: 'dshrouter-hint' }, t('oauthOneClickHint')),
-            el('p', { className: 'dshrouter-hint' }, t('oauthNeedPasteHint'))),
-          // ── 高级：账号信息与登录方式（含粘贴 token / 自建 Client）─────
-          el('details', null,
-            el('summary', { className: 'dshrouter-meta' }, t('advancedLogin')),
-            el('div', { className: 'dshrouter-stats', style: { marginTop: 8 } },
-              el('div', { className: 'dshrouter-row' },
-                el('div', { className: 'dshrouter-field' },
-                  el('span', { className: 'dshrouter-field-label' }, t('fieldName')),
-                  el('input', { className: 'dshrouter-input', value: draft.name ?? '', onChange: (event) => onDraftField('name', event.target.value) })),
-                el('div', { className: 'dshrouter-field', style: { flex: '0 0 200px' } },
-                  el('span', { className: 'dshrouter-field-label' }, t('oauthProtocol')),
-                  el('select', { className: 'dshrouter-select', value: draft.protocol ?? 'openai-completions', onChange: (event) => onDraftField('protocol', event.target.value) },
-                    el('option', { value: 'openai-completions' }, 'openai-completions'),
-                    el('option', { value: 'anthropic' }, 'anthropic'),
-                    el('option', { value: 'gemini' }, 'gemini')))),
-              el('div', { className: 'dshrouter-field' },
-                el('span', { className: 'dshrouter-field-label' }, t('oauthBaseUrl')),
-                el('input', { className: 'dshrouter-input', value: draft.baseURL ?? '', placeholder: 'https://api.openai.com/v1', onChange: (event) => onDraftField('baseURL', event.target.value) })),
-              el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-subtitle' }, t('oauthLoginMode'))),
-              el('div', { className: 'dshrouter-row' },
-                el('label', { className: 'dshrouter-switch' },
-                  el('input', { type: 'radio', checked: loginMode === 'paste', onChange: () => setLoginMode('paste') }),
-                  t('oauthModePaste')),
-                el('label', { className: 'dshrouter-switch' },
-                  el('input', { type: 'radio', checked: loginMode === 'code', onChange: () => setLoginMode('code') }),
-                  t('oauthModeCode'))),
-              loginMode === 'paste' ? el('div', { className: 'dshrouter-stats' },
-                el('div', { className: 'dshrouter-row' },
-                  el('input', {
-                    className: 'dshrouter-input', type: 'password', autoComplete: 'off',
-                    placeholder: t('oauthToken'), 'aria-label': t('oauthToken'),
-                    value: tokenDraft, onChange: (event) => setTokenDraft(event.target.value),
-                  }),
-                  el('button', {
-                    type: 'button', className: 'dshrouter-button',
-                    disabled: busy || !tokenDraft.trim() || !writable,
-                    onClick: () => { onPasteToken(tokenDraft.trim()); setTokenDraft('') },
-                  }, t('oauthPaste'))),
-                el('div', { className: 'dshrouter-row' },
-                  tokenSource ? el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: () => window.open(tokenSource.site, '_blank', 'noopener') }, t('oauthOpenSite')) : null,
-                  tokenSource && tokenSource.bookmark ? el('a', {
-                    className: 'dshrouter-chip', href: tokenBookmarkletOf(id, tokenSource.sessionUrl),
-                    draggable: true, title: t('oauthDragBookmark'), style: { textDecoration: 'none', userSelect: 'none' },
-                  }, '🔖 ' + t('oauthBookmark')) : null,
-                  tokenSource && tokenSource.bookmark ? el('button', {
-                    type: 'button', className: 'dshrouter-button ghost',
-                    onClick: copyBookmark,
-                  }, bookmarkCopied ? t('oauthBookmarkCopied') : t('oauthCopyBookmark')) : null),
-                el('p', { className: 'dshrouter-hint' }, tokenSource && tokenSource.bookmark ? t('oauthGetTokenHint') : t('oauthManualTokenHint'))) : el('div', { className: 'dshrouter-row', style: { alignItems: 'flex-end' } },
-                el('label', { className: 'dshrouter-switch' },
-                  el('input', { type: 'checkbox', checked: draft.publicClient === true, onChange: (event) => onDraftField('publicClient', event.target.checked) }),
-                  t('oauthPublicClientLabel')),
-                el('div', { className: 'dshrouter-field' },
-                  el('span', { className: 'dshrouter-field-label' }, t('oauthClientId')),
-                  el('input', { className: 'dshrouter-input', disabled: draft.publicClient === true, value: draft.clientId ?? '', onChange: (event) => onDraftField('clientId', event.target.value) })),
-                el('div', { className: 'dshrouter-field' },
-                  el('span', { className: 'dshrouter-field-label' }, t('oauthClientSecret')),
-                  el('input', { className: 'dshrouter-input', type: 'password', autoComplete: 'off', disabled: draft.publicClient === true, value: draft.clientSecret ?? '', onChange: (event) => onDraftField('clientSecret', event.target.value) })),
-                el('div', { className: 'dshrouter-field' },
-                  el('span', { className: 'dshrouter-field-label' }, t('oauthAuthUrl')),
-                  el('input', { className: 'dshrouter-input', value: draft.authUrl ?? '', placeholder: 'https://…/o/oauth2/v2/auth', onChange: (event) => onDraftField('authUrl', event.target.value) })),
-                el('div', { className: 'dshrouter-field' },
-                  el('span', { className: 'dshrouter-field-label' }, t('oauthTokenUrl')),
-                  el('input', { className: 'dshrouter-input', value: draft.tokenUrl ?? '', placeholder: 'https://…/token', onChange: (event) => onDraftField('tokenUrl', event.target.value) })),
-                el('div', { className: 'dshrouter-field' },
-                  el('span', { className: 'dshrouter-field-label' }, t('oauthScope')),
-                  el('input', { className: 'dshrouter-input', value: draft.scope ?? '', onChange: (event) => onDraftField('scope', event.target.value) }),
-                  draft.protocol === 'gemini' && draft.publicClient !== true ? el('button', {
-                    type: 'button', className: 'dshrouter-chip', style: { alignSelf: 'flex-start', marginTop: 2 },
-                    onClick: () => onDraftField('scope', GEMINI_SELF_CLIENT_SCOPES),
-                  }, t('oauthFillScopes')) : null),
-                el('button', { type: 'button', className: 'dshrouter-button', disabled: busy || !writable, onClick: onOneClick }, busy ? t('oauthWaiting') : t('oauthOneClick')),
-                el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: busy || !writable, onClick: onAuthorize }, t('oauthOpenUrl'))),
-              loginMode === 'code' ? el('p', { className: 'dshrouter-hint' }, t('oauthOneClickHint')) : null,
-              loginMode === 'code' && draft.publicClient === true ? el('p', { className: 'dshrouter-error' }, t('oauthPublicClientHint')) : null,
-              loginMode === 'code' ? el('p', { className: 'dshrouter-meta' }, `${t('oauthRedirectUriLabel')}: ${draft.publicClient === true ? 'http://localhost:8085/' : `${window.location.origin}/router-oauth/callback`}`) : null,
-              loginMode === 'code' ? el('div', { className: 'dshrouter-row', style: { alignItems: 'flex-end' } },
-                el('input', {
-                  className: 'dshrouter-input', type: 'text',
-                  placeholder: t('oauthCallbackUrl'), 'aria-label': t('oauthCallbackUrl'),
-                  value: callbackUrl, onChange: (event) => setCallbackUrl(event.target.value),
-                }),
-                el('button', {
-                  type: 'button', className: 'dshrouter-button',
-                  disabled: busy || !callbackUrl.trim() || !writable,
-                  onClick: () => onExchange(callbackUrl.trim()),
-                }, busy ? t('oauthExchanging') : t('oauthExchange'))) : null)),
-          (buckets ?? []).length > 0 ? el(BarChart, { buckets, title: t('statsSeries') }) : null,
-          el('div', { className: 'dshrouter-row' },
-            el('button', { type: 'button', className: 'dshrouter-button', disabled: busy || !writable, onClick: onSave }, busy ? t('saving') : t('save')),
-            el('span', { className: 'dshrouter-spacer' }),
-            el('button', { type: 'button', className: 'dshrouter-button danger', disabled: busy || !writable, onClick: onDelete }, t('oauthDelete')))) : null)
-    }
-
-    /** OAuth 账号列表末尾的「+」创建卡片（极简：选服务商即创建 + 一键授权）。 */
-    function AddOAuthCard(props) {
-      const { t, adding, setAdding, onQuickAdd } = props
-      if (!adding) {
-        return el('div', { className: 'dshrouter-add', role: 'button', tabIndex: 0, onClick: () => setAdding(true), onKeyDown: (event) => { if (event.key === 'Enter') setAdding(true) } },
-          el('span', { style: { fontSize: 18, lineHeight: 1 } }, '+'),
-          el('span', null, t('oauthAdd')))
-      }
+    /** ChatGPT preset 账号卡（订阅登录区专属，EVO-002 Step 6 / EVO-006 转正；
+     *  EVO-007 上移一级醒目位）：登录态圆点 + 登录/登出/删除 + 模型列表编辑
+     *  （§3.6 凭据删除路径 / W-5 联动入口）。 */
+    function PresetAccountCard(props) {
+      const { id, entry, busy, notice, t, writable, onLogin, onLogout, onDelete, modelsValue, onModelsChange, onSaveModels } = props
+      const loggedIn = entry.presetLoggedIn === true
       return el('div', { className: 'dshrouter-card' },
         el('div', { className: 'dshrouter-head' },
-          el('span', { className: 'dshrouter-name' }, t('oauthAdd')),
+          loggedIn ? el('span', { className: 'dshrouter-dot ok', title: t('oauthLoggedIn') }) : el('span', { className: 'dshrouter-dot bad', title: t('oauthNotLoggedIn') }),
+          el('span', { className: 'dshrouter-name' }, entry.name || id),
+          el('span', { className: 'dshrouter-id' }, id),
           el('span', { className: 'dshrouter-spacer' }),
-          el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: () => setAdding(false) }, t('cancel'))),
-        el('p', { className: 'dshrouter-hint' }, t('oauthQuickAddHint')),
+          el('button', { type: 'button', className: 'dshrouter-button', disabled: busy || !writable, onClick: onLogin }, busy ? t('presetLoggingIn') : t('presetLogin')),
+          el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: busy || !writable || !loggedIn, onClick: onLogout }, t('presetLogout')),
+          el('button', { type: 'button', className: 'dshrouter-button danger', disabled: busy || !writable, onClick: onDelete }, t('presetDelete'))),
         el('div', { className: 'dshrouter-row' },
-          ...OAUTH_PRESETS.map((preset) => el('button', {
-            type: 'button', key: preset.id, className: 'dshrouter-chip',
-            onClick: () => onQuickAdd(preset.id),
-          }, preset.label)),
-          el('button', { type: 'button', className: 'dshrouter-chip', onClick: () => onQuickAdd('custom') }, t('oauthCustomAdd'))))
+          el('div', { className: 'dshrouter-field', style: { flex: '1 1 320px' } },
+            el('span', { className: 'dshrouter-field-label' }, t('oauthModels')),
+            el('input', {
+              className: 'dshrouter-input', value: modelsValue, placeholder: 'gpt-5.4-mini, gpt-5.4',
+              'aria-label': t('oauthModels'), onChange: (event) => onModelsChange(event.target.value),
+            })),
+          el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: busy || !writable, onClick: onSaveModels }, t('save'))),
+        el('p', { className: 'dshrouter-hint' }, t('presetModelsHint')),
+        notice ? el('p', { className: 'dshrouter-hint' }, notice) : null)
     }
 
     /** 账号池卡片：折叠摘要 + 展开配置（策略 / 池内账号一键授权与健康度 / 增删）。 */
@@ -1464,6 +1317,11 @@ window.__ModuleLoader__.load({
       const [discover, setDiscover] = useState(null)
       const [account, setAccount] = useState({ provider: '', baseUrl: '', key: '', custom: false, api: 'openai-completions', models: '', busy: false, failure: null, state: null })
       const [stats, setStats] = useState(null)
+      // EVO-004 出口⑤导出按钮 UI 面：range/level 选择 + 导出状态/提示。
+      const [exportRange, setExportRange] = useState('7d')
+      const [exportLevel, setExportLevel] = useState('agent')
+      const [exportBusy, setExportBusy] = useState(false)
+      const [exportNotice, setExportNotice] = useState('')
       const [expandedAgents, setExpandedAgents] = useState({})
       const [expandedAccounts, setExpandedAccounts] = useState({})
       const [accountDrafts, setAccountDrafts] = useState({})
@@ -1471,13 +1329,14 @@ window.__ModuleLoader__.load({
       const [accountNotice, setAccountNotice] = useState({})
       const [addingAccount, setAddingAccount] = useState(false)
       const [expandedStats, setExpandedStats] = useState({})
-      const [expandedOauth, setExpandedOauth] = useState({})
-      const [addingOauth, setAddingOauth] = useState(false)
-      const [oauthDrafts, setOauthDrafts] = useState({})
+      // EVO-007：OAuth 官方登录区移除——expandedOauth/addingOauth/oauthDrafts/
+      // oauthFlow 状态随区块一并删除（账号池经 pool* 状态与 oauthTokenStates
+      // 维护；ChatGPT 预设账号经 oauthNotice/oauthBusy 维护）。
       const [oauthTokenStates, setOauthTokenStates] = useState({})
       const [oauthNotice, setOauthNotice] = useState({})
       const [oauthBusy, setOauthBusy] = useState({})
-      const [oauthFlow, setOauthFlow] = useState(null)
+      /** ChatGPT preset 模型列表草稿（id → 逗号分隔串；EVO-002 Step 6）。 */
+      const [presetModels, setPresetModels] = useState({})
       const [expandedPools, setExpandedPools] = useState({})
       const [addingPool, setAddingPool] = useState(false)
       const [newPoolId, setNewPoolId] = useState('')
@@ -1597,6 +1456,30 @@ window.__ModuleLoader__.load({
         await routerRemote.reset({})
         const response = await routerRemote.stats({})
         if (response.ok) setStats(response.value)
+      }
+
+      /** EVO-004 出口⑤导出按钮：调 statsExport RPC（range/level）→ CSV 文本 →
+       *  浏览器下载。宿主行缺 statsExport（未重启）显式报错，绝不静默失败。 */
+      const exportStats = async () => {
+        const routerRemote = remote()
+        if (!routerRemote || typeof routerRemote.statsExport !== 'function') {
+          setExportNotice(t('statsExportMissing'))
+          return
+        }
+        setExportBusy(true)
+        try {
+          const response = await routerRemote.statsExport({ range: exportRange, level: exportLevel })
+          if (response && response.ok && response.value && response.value.ok) {
+            downloadCsv(response.value.csv, 'dsh-agent-router-stats.csv')
+            setExportNotice(`${t('statsExportDone')}${response.value.message ?? ''}`)
+          } else {
+            setExportNotice(response && response.error && response.error.message ? response.error.message : (response && response.value && response.value.message ? response.value.message : t('statsExportFailed')))
+          }
+        } catch (error) {
+          setExportNotice(`${t('statsExportFailed')}：${messageOf(error)}`)
+        } finally {
+          setExportBusy(false)
+        }
       }
 
       // ── cli 子代理：登录状态 / 交互式登录 / 模型列表 ──────────────────
@@ -1884,6 +1767,7 @@ window.__ModuleLoader__.load({
       const accountTotalsById = stats ? new Map((stats.accountTotals ?? []).map((entry) => [entry.provider, entry])) : new Map()
       const accountSeriesById = stats ? new Map((stats.accountSeries ?? []).map((entry) => [entry.provider, entry.buckets ?? []])) : new Map()
       const recentCalls = stats ? stats.recent ?? [] : []
+      const statsDays = stats ? (stats.days ?? {}) : {}
       const sumAll = (stats ? stats.totals ?? [] : []).reduce(
         (acc, entry) => ({ calls: acc.calls + entry.calls, errors: acc.errors + entry.errors, inTokens: acc.inTokens + entry.inputTokens, outTokens: acc.outTokens + entry.outputTokens }),
         { calls: 0, errors: 0, inTokens: 0, outTokens: 0 })
@@ -2087,107 +1971,164 @@ window.__ModuleLoader__.load({
       statsAccountRows.sort((a, b) => (a.provider < b.provider ? -1 : 1))
 
       // ── OAuth 账号（插件独立管理）派生与操作 ──────────────────────────
+      // EVO-007：官方登录管理 UI（OAuthAccountCard/AddOAuthCard 及专属操作
+      // saveOauthAccount/deleteOauthAccount/quickAddOauthAccount/pasteOauthToken/
+      // openOauthAuthorize/exchangeOauthCode）已随区块移除；以下保留项仅服务
+      // 账号池（池内一键授权/发现模型/按预设建号入池）与 ChatGPT 预设账号。
       const oauthById = new Map(oauthEntries.map((entry) => [entry.id, entry]))
-      const oauthIds = oauthEntries.map((entry) => entry.id).sort()
       const defaultOauthDraft = () => ({
         name: '', enabled: true, protocol: 'openai-completions', baseURL: '',
         clientId: '', clientSecret: '', publicClient: false, authUrl: '', tokenUrl: '', scope: '', models: [],
       })
       const oauthDraftOf = (id) => {
         const entry = oauthById.get(id)
-        const base = entry ? { name: entry.name, enabled: entry.enabled, protocol: entry.protocol, baseURL: entry.baseURL, clientId: entry.clientId, publicClient: entry.publicClient === true, authUrl: entry.authUrl, tokenUrl: entry.tokenUrl, scope: entry.scope, models: entry.models ?? [] } : defaultOauthDraft()
-        return { ...base, clientSecret: '', ...(oauthDrafts[id] ?? {}) }
-      }
-      const setOauthDraft = (id, patch) => setOauthDrafts((current) => ({ ...current, [id]: { ...oauthDraftOf(id), ...patch } }))
-
-      const saveOauthAccount = async (id, isNew) => {
-        if (isNew && (!ID_PATTERN.test(id) || id === '')) return
-        if (isNew && oauthById.has(id)) return
-        setOauthBusy((current) => ({ ...current, [id]: true }))
-        const draft = oauthDraftOf(id)
-        let ops
-        if (isNew) {
-          ops = [{ op: 'set', path: ['oauthAccounts', id], value: { ...draft, clientSecret: undefined, tokenRef: `ROUTER_OAUTH_${id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_TOKEN` } }]
-        } else {
-          ops = ['name', 'enabled', 'protocol', 'baseURL', 'clientId', 'publicClient', 'authUrl', 'tokenUrl', 'scope'].map((field) => ({ op: 'set', path: ['oauthAccounts', id, field], value: draft[field] ?? '' }))
-          ops.push({ op: 'set', path: ['oauthAccounts', id, 'models'], value: draft.models ?? [] })
-          if (draft.clientSecret && draft.clientSecret.trim()) {
-            ops.push({ op: 'set', path: ['oauthAccounts', id, 'clientSecret'], value: draft.clientSecret.trim() })
-          }
-        }
-        const outcome = await mutate(ops)
-        setOauthBusy((current) => ({ ...current, [id]: false }))
-        setOauthNotice((current) => ({ ...current, [id]: outcome.ok ? t('saved') : outcome.message }))
-        if (outcome.ok && isNew) setAddingOauth(false)
-        if (outcome.ok) setOauthDrafts((current) => ({ ...current, [id]: { ...oauthDraftOf(id), clientSecret: '' } }))
+        return entry
+          ? { name: entry.name, enabled: entry.enabled, protocol: entry.protocol, baseURL: entry.baseURL, clientId: entry.clientId, publicClient: entry.publicClient === true, authUrl: entry.authUrl, tokenUrl: entry.tokenUrl, scope: entry.scope, models: entry.models ?? [] }
+          : defaultOauthDraft()
       }
 
-      const deleteOauthAccount = async (id) => {
-        if (!window.confirm(t('oauthConfirmDelete'))) return
-        const entry = oauthById.get(id)
-        if (entry && entry.tokenRef) await api.credentials.unset({ ref: entry.tokenRef }).catch(() => undefined)
-        await mutate([{ op: 'unset', path: ['oauthAccounts', id] }])
-      }
+      // ── ChatGPT 订阅登录（正式通道，EVO-006 / DEC-026 C2 转正）────────
+      const presetOauthEntries = oauthEntries.filter((entry) => isPresetAccount(entry))
 
-      /** 快速添加账号：点服务商预设即创建账号；Gemini 立即一键授权，其余提示粘贴 token。
-       *  'custom' 创建空白账号（自建 OAuth2 服务商：中转/自托管），展开卡片手动配置。 */
-      const quickAddOauthAccount = async (presetId) => {
-        if (presetId === 'custom') {
-          let accountId = 'custom'
-          let n = 2
-          while (oauthById.has(accountId)) { accountId = `custom-${n++}` }
-          const tokenRef = `ROUTER_OAUTH_${accountId.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_TOKEN`
-          const outcome = await mutate([{ op: 'set', path: ['oauthAccounts', accountId], value: {
-            name: '自定义',
-            enabled: true,
-            protocol: 'openai-completions',
-            baseURL: '',
-            clientId: '',
-            publicClient: false,
-            authUrl: '',
-            tokenUrl: '',
-            scope: '',
-            models: [],
-            tokenRef,
-          } }])
-          if (!outcome.ok) { setOauthNotice((current) => ({ ...current, [accountId]: outcome.message })); return }
-          setAddingOauth(false)
-          setExpandedOauth((current) => ({ ...current, [accountId]: true }))
-          setOauthNotice((current) => ({ ...current, [accountId]: t('oauthCustomHint') }))
-          return
-        }
-        const preset = OAUTH_PRESETS.find((entry) => entry.id === presetId)
-        if (!preset) return
-        let accountId = preset.id
+      /** 添加 ChatGPT preset 账号（零配置：端点常量由服务端 preset 分支预填）
+       *  并立即发起一键登录；模型预置 EV-028 实证可用的 gpt-5.4 系。 */
+      const addPresetAccount = async () => {
+        let accountId = 'chatgpt'
         let n = 2
-        while (oauthById.has(accountId)) { accountId = `${preset.id}-${n++}` }
-        const tokenRef = `ROUTER_OAUTH_${accountId.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_TOKEN`
+        while (oauthById.has(accountId)) { accountId = `chatgpt-${n++}` }
         const value = {
-          name: preset.draft.name ?? preset.id,
-          enabled: true,
-          protocol: preset.draft.protocol ?? 'openai-completions',
-          baseURL: preset.draft.baseURL ?? '',
-          clientId: '',
-          publicClient: preset.draft.publicClient === true,
-          authUrl: preset.draft.authUrl ?? '',
-          tokenUrl: preset.draft.tokenUrl ?? '',
-          scope: preset.draft.scope ?? '',
-          models: preset.draft.models ?? [],
-          tokenRef,
+          name: 'ChatGPT', enabled: true, preset: 'chatgpt-codex', protocol: 'codex-responses',
+          baseURL: 'https://chatgpt.com/backend-api', credentialFile: '', clientId: '', clientSecret: '',
+          publicClient: false, authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.4-mini', 'gpt-5.4'], tokenRef: '',
         }
         const outcome = await mutate([{ op: 'set', path: ['oauthAccounts', accountId], value }])
         if (!outcome.ok) { setOauthNotice((current) => ({ ...current, [accountId]: outcome.message })); return }
-        setAddingOauth(false)
-        if (preset.draft.authUrl && (preset.draft.publicClient === true || preset.draft.clientId)) {
-          await runOneClickOauth(accountId, tokenRef)
-        } else if (preset.draft.protocol === 'gemini') {
-          // 自建 Client 形态：引导用户填写 Client 配置后一键授权。
-          setOauthNotice((current) => ({ ...current, [accountId]: t('oauthGeminiSelfHint') }))
-          setExpandedOauth((current) => ({ ...current, [accountId]: true }))
-        } else {
-          setOauthNotice((current) => ({ ...current, [accountId]: t('oauthAddedPasteHint') }))
-          setExpandedOauth((current) => ({ ...current, [accountId]: true }))
+        await runPresetLogin(accountId)
+      }
+
+      /** preset 一键登录：oauthBegin（preset 分支）→ 弹窗授权 → 轮询 catalog
+       *  的 presetLoggedIn（1455 回调在宿主侧自动完成 code 交换与凭据落盘，
+       *  客户端只观察登录态翻转）。EVO-005：1455 被占时服务端自动降级设备码
+       *  流（mode:'device'）——展示验证页链接 + 设备码，宿主侧轮询兑换，
+       *  客户端同样观察 catalog 翻转（轮询不依赖弹窗存活）。 */
+      const runPresetLogin = async (id) => {
+        const routerRemote = remote()
+        if (!routerRemote || typeof routerRemote.oauthBegin !== 'function') {
+          setOauthNotice((current) => ({ ...current, [id]: t('oauthNeedRestart') }))
+          return
         }
+        setOauthBusy((current) => ({ ...current, [id]: true }))
+        const response = await routerRemote.oauthBegin({ accountId: id, redirectUri: window.location.origin + '/router-oauth/callback' })
+        if (!response.ok) {
+          setOauthBusy((current) => ({ ...current, [id]: false }))
+          setOauthNotice((current) => ({ ...current, [id]: response.error.message }))
+          return
+        }
+        // EVO-005 设备码降级分支：服务端已发起设备码会话并后台轮询——打开
+        // 验证页（失败不阻断：notice 内链接可手动打开）+ 常显设备码提示。
+        if (response.value.mode === 'device') {
+          try { window.open(response.value.authUrl, 'dsh-agent-router-device', 'popup,width=520,height=680') } catch { /* 弹窗拦截：notice 链接仍可用 */ }
+          setOauthNotice((current) => ({ ...current, [id]: t('presetDeviceWaiting')(response.value.userCode, response.value.authUrl) }))
+          const deadline = Date.now() + (response.value.expiresIn || 900) * 1000
+          const pollDevice = async () => {
+            if (Date.now() > deadline) {
+              setOauthNotice((current) => ({ ...current, [id]: t('oauthExpired') }))
+              setOauthBusy((current) => ({ ...current, [id]: false }))
+              return
+            }
+            let loggedIn = false
+            try {
+              const catalog = await routerRemote.catalog({})
+              const entry = ((catalog.value?.oauthAccounts) ?? []).find((candidate) => candidate.id === id)
+              loggedIn = entry?.presetLoggedIn === true
+            } catch { /* 网络瞬时失败：继续轮询 */ }
+            if (loggedIn) {
+              setOauthNotice((current) => ({ ...current, [id]: t('presetLoginDone') }))
+              setOauthBusy((current) => ({ ...current, [id]: false }))
+              await load()
+              return
+            }
+            window.setTimeout(pollDevice, 1200)
+          }
+          window.setTimeout(pollDevice, 1000)
+          return
+        }
+        let popup
+        try { popup = window.open(response.value.authUrl, 'dsh-agent-router-oauth', 'popup,width=520,height=680') } catch { popup = null }
+        if (!popup) {
+          setOauthBusy((current) => ({ ...current, [id]: false }))
+          setOauthNotice((current) => ({ ...current, [id]: t('oauthPopupBlocked') }))
+          return
+        }
+        setOauthNotice((current) => ({ ...current, [id]: t('presetLoginWaiting') }))
+        const deadline = Date.now() + 3 * 60 * 1000
+        const poll = async () => {
+          if (popup.closed || Date.now() > deadline) {
+            if (Date.now() > deadline) setOauthNotice((current) => ({ ...current, [id]: t('oauthExpired') }))
+            setOauthBusy((current) => ({ ...current, [id]: false }))
+            return
+          }
+          let loggedIn = false
+          try {
+            const catalog = await routerRemote.catalog({})
+            const entry = ((catalog.value?.oauthAccounts) ?? []).find((candidate) => candidate.id === id)
+            loggedIn = entry?.presetLoggedIn === true
+          } catch { /* 网络瞬时失败：继续轮询 */ }
+          if (loggedIn) {
+            setOauthNotice((current) => ({ ...current, [id]: t('presetLoginDone') }))
+            try { popup.close() } catch { /* 已由用户关闭 */ }
+            setOauthBusy((current) => ({ ...current, [id]: false }))
+            await load()
+            return
+          }
+          window.setTimeout(poll, 1200)
+        }
+        window.setTimeout(poll, 1000)
+      }
+
+      /** 登出并删除凭据（§3.6 凭据删除路径；服务端 store.delete 幂等，
+       *  合规删除路径恒可用——不受任何开关门控，W-5 三层联动不变）。 */
+      const logoutPresetAccount = async (id) => {
+        if (!window.confirm(t('presetLogoutConfirm'))) return
+        setOauthBusy((current) => ({ ...current, [id]: true }))
+        const response = await remote().oauthLogout({ accountId: id })
+        setOauthBusy((current) => ({ ...current, [id]: false }))
+        setOauthNotice((current) => ({ ...current, [id]: response.ok ? response.value.message : response.error.message }))
+        if (response.ok) await load()
+      }
+
+      /** 删除 preset 账号（W-5 联动）：先删本机凭据文件 → 清引用它的账号池
+       *  （联动提示）→ 删账号条目——三步一次完成（§3.6 合规删除路径）。
+       *  R7-F4：oauthLogout 响应语义为 value.ok（RPC 外层 ok 恒真）——删除
+       *  凭据失败（fs 级错误）时中止后续 ops（账号保留可重试）并展示失败
+       *  文案，避免"凭据残留 + 条目已删 + 成功提示"的失联状态。 */
+      const deletePresetAccount = async (id) => {
+        if (!window.confirm(t('presetDeleteConfirm'))) return
+        setOauthBusy((current) => ({ ...current, [id]: true }))
+        const logoutResponse = await remote().oauthLogout({ accountId: id }).catch(() => ({ ok: true, value: { ok: false, message: t('presetLogoutFailed') } }))
+        if (!logoutResponse?.value || logoutResponse.value.ok !== true) {
+          setOauthBusy((current) => ({ ...current, [id]: false }))
+          setOauthNotice((current) => ({ ...current, [id]: logoutResponse?.value?.message ?? t('presetLogoutFailed') }))
+          return
+        }
+        const poolsContaining = poolEntries.filter((pool) => (pool.accounts ?? []).includes(id))
+        const ops = []
+        for (const pool of poolsContaining) {
+          ops.push({ op: 'set', path: ['pools', pool.id, 'accounts'], value: (pool.accounts ?? []).filter((item) => item !== id) })
+        }
+        ops.push({ op: 'unset', path: ['oauthAccounts', id] })
+        const outcome = await mutate(ops)
+        setOauthBusy((current) => ({ ...current, [id]: false }))
+        const cleaned = poolsContaining.length
+        setOauthNotice((current) => ({ ...current, [id]: outcome.ok ? `${t('presetDeleted')}${cleaned > 0 ? ` ${t('presetPoolCleaned')(cleaned)}` : ''}` : outcome.message }))
+      }
+
+      /** preset 模型列表保存（逗号分隔编辑 → 数组落盘）。 */
+      const savePresetModels = async (id) => {
+        const raw = presetModels[id] ?? ''
+        const models = raw.split(/[,，]/).map((item) => item.trim()).filter(Boolean)
+        const outcome = await mutate([{ op: 'set', path: ['oauthAccounts', id, 'models'], value: models }])
+        setOauthNotice((current) => ({ ...current, [id]: outcome.ok ? t('saved') : outcome.message }))
       }
 
       // ── 子代理（无头 CLI 条目：账号区维护，专业 agent 经 cliAgent 引用）──
@@ -2244,20 +2185,11 @@ window.__ModuleLoader__.load({
         void runCliStatus(id)
       }
 
-      const pasteOauthToken = async (id, token) => {
-        const entry = oauthById.get(id)
-        if (!entry || !entry.tokenRef) { setOauthNotice((current) => ({ ...current, [id]: t('oauthNeedConfig') })); return }
-        setOauthBusy((current) => ({ ...current, [id]: true }))
-        const stored = await api.credentials.set({ ref: entry.tokenRef, value: token })
-        setOauthBusy((current) => ({ ...current, [id]: false }))
-        setOauthNotice((current) => ({ ...current, [id]: stored.result.ok ? t('oauthTokenSaved') : stored.result.error.message }))
-        refreshOauthTokens()
-      }
-
       /**
-       * 一键授权登录：宿主生成 PKCE+state 并返回授权 URL，弹窗完成授权后
-       * 服务商重定向到宿主回调页（/router-oauth/callback）自动交换 token；
-       * 本页轮询凭据状态，成功后自动关闭弹窗并刷新登录态。
+       * 一键授权登录（EVO-007 起仅供账号池「池内一键授权」与「按预设建号入池」
+       * 使用——官方登录管理 UI 已移除）：宿主生成 PKCE+state 并返回授权 URL，
+       * 弹窗完成授权后服务商重定向到宿主回调页（/router-oauth/callback）自动
+       * 交换 token；本页轮询凭据状态，成功后自动关闭弹窗并刷新登录态。
        * tokenRefOverride：刚创建/保存的账号尚未进入本渲染闭包的目录时，
        * 由调用方传入确定性构造的凭据引用（`ROUTER_OAUTH_<ID>_TOKEN`）。
        */
@@ -2319,41 +2251,6 @@ window.__ModuleLoader__.load({
           window.setTimeout(poll, 1200)
         }
         window.setTimeout(poll, 1000)
-      }
-
-      const openOauthAuthorize = async (id) => {
-        const draft = oauthDraftOf(id)
-        if (!draft.authUrl || !draft.clientId) { setOauthNotice((current) => ({ ...current, [id]: t('oauthNeedConfig') })); return }
-        const verifier = pkceVerifier()
-        const challenge = await pkceChallenge(verifier)
-        const redirectUri = window.location.origin + '/'
-        const params = new URLSearchParams({
-          response_type: 'code',
-          client_id: draft.clientId,
-          redirect_uri: redirectUri,
-          code_challenge: challenge,
-          code_challenge_method: 'S256',
-          state: `router-${id}`,
-        })
-        // 旧 Gemini scope 迁移：含旧名（且不含新名）时替换为现行组合。
-        const scopeText = typeof draft.scope === 'string' && draft.scope.trim() ? draft.scope.trim() : ''
-        if (scopeText) {
-          params.set('scope', scopeText.includes('generativelanguage') && !scopeText.includes('generative-language') ? GEMINI_SELF_CLIENT_SCOPES : scopeText)
-        }
-        setOauthFlow({ accountId: id, verifier, redirectUri })
-        window.open(`${draft.authUrl}?${params.toString()}`, '_blank', 'noopener')
-        setOauthNotice((current) => ({ ...current, [id]: t('oauthOpenHint') }))
-      }
-
-      const exchangeOauthCode = async (id, callbackUrl) => {
-        const code = codeFromCallback(callbackUrl)
-        if (!code) { setOauthNotice((current) => ({ ...current, [id]: t('oauthCallbackInvalid') })); return }
-        if (!oauthFlow || oauthFlow.accountId !== id) { setOauthNotice((current) => ({ ...current, [id]: t('oauthOpenHint') })); return }
-        setOauthBusy((current) => ({ ...current, [id]: true }))
-        const response = await remote().oauthTokenExchange({ accountId: id, code, codeVerifier: oauthFlow.verifier, redirectUri: oauthFlow.redirectUri })
-        setOauthBusy((current) => ({ ...current, [id]: false }))
-        setOauthNotice((current) => ({ ...current, [id]: response.ok ? response.value.message : response.error.message }))
-        if (response.ok) { setOauthFlow(null); refreshOauthTokens() }
       }
 
       const discoverOauth = async (id) => {
@@ -2461,7 +2358,7 @@ window.__ModuleLoader__.load({
           el('p', { className: 'dshrouter-hint' }, t('masterHint')),
           !enabled ? el('p', { className: 'dshrouter-error' }, t('routeDisabled')) : null),
       ]
-      // ── 多模态账号（API Key → 子代理 → 高级扩展[OAuth+账号池，默认折叠]）──
+      // ── 多模态账号（API Key → ChatGPT 订阅登录 → 子代理 → 高级扩展[账号池，默认折叠]）──
       const accountsBody = [
         el('p', { className: 'dshrouter-intro' }, t('accountIntro')),
         el('p', { className: 'dshrouter-hint' }, t('accountOAuth')),
@@ -2504,7 +2401,31 @@ window.__ModuleLoader__.load({
           failure: account.failure, accountProvider,
           onLogin: doLogin,
         }),
-        // ── 子代理（无头 CLI：codex/claude/gemini 等账号类条目，第二位）──
+        // ── ChatGPT 订阅登录（正式通道，EVO-006 / DEC-026 C2 转正；
+        //    EVO-007 与子代理交换位置上移为一级醒目位——正式通道优先呈现；
+        //    无开关无 ToS 门；平台 ToS/账号风控提示保留，不阻断）──
+        el('hr', { className: 'dshrouter-divider' }),
+        el('div', { className: 'dshrouter-head' },
+          el('span', { className: 'dshrouter-subtitle' }, t('presetTitle')),
+          el('span', { className: 'dshrouter-spacer' }),
+          el('span', { className: 'dshrouter-meta' }, t('presetSummary')(presetOauthEntries.length))),
+        el('div', { className: 'dshrouter-card' },
+          el('p', { className: 'dshrouter-hint' }, t('presetNotice')),
+          presetOauthEntries.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('presetIntro')) : null,
+          ...presetOauthEntries.map((entry) => el(PresetAccountCard, {
+            key: entry.id, id: entry.id, entry,
+            busy: !!oauthBusy[entry.id], notice: oauthNotice[entry.id],
+            t, writable: state.writable,
+            modelsValue: presetModels[entry.id] ?? (entry.models ?? []).join(', '),
+            onModelsChange: (value) => setPresetModels((current) => ({ ...current, [entry.id]: value })),
+            onSaveModels: () => savePresetModels(entry.id),
+            onLogin: () => runPresetLogin(entry.id),
+            onLogout: () => logoutPresetAccount(entry.id),
+            onDelete: () => deletePresetAccount(entry.id),
+          })),
+          el('div', { className: 'dshrouter-row' },
+            el('button', { type: 'button', className: 'dshrouter-button', disabled: !state.writable, onClick: addPresetAccount }, t('presetAdd')))),
+        // ── 子代理（无头 CLI：codex/claude/gemini 等账号类条目，ChatGPT 之后）──
         el('hr', { className: 'dshrouter-divider' }),
         el('div', { className: 'dshrouter-head' },
           el('span', { className: 'dshrouter-subtitle' }, t('cliTitle')),
@@ -2536,47 +2457,17 @@ window.__ModuleLoader__.load({
           t, adding: addingCli, setAdding: setAddingCli,
           onQuickAdd: (kind) => quickAddCli(kind),
         }),
-        // ── 高级扩展：OAuth 账号 + 账号池（收进折叠卡片，默认不展开）─────
+        // ── 高级扩展：账号池（收进折叠卡片，默认不展开。EVO-007：OAuth
+        //    官方登录区整块移除、ChatGPT 订阅登录上移后，折叠区仅余账号池
+        //    ——折叠壳保留给账号池场景，避免一级区空置噪音）──
         el(CategoryCard, {
           title: t('advancedSection'),
-          summary: `${t('oauthSummary')(oauthIds.length)} · ${t('poolSummary')(poolIds.length)}`,
+          summary: t('poolSummary')(poolIds.length),
           expanded: expandedAdvanced === true,
           t,
           onToggle: () => setExpandedAdvanced((current) => !current),
           children: [
-            // OAuth 账号子区（官方登录，插件独立管理）
-            el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-subtitle' }, t('oauthTitle'))),
-            el('p', { className: 'dshrouter-hint' }, t('oauthIntro')),
-            oauthIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('accountMissing')) : null,
-            ...oauthIds.map((id) => {
-              const entry = oauthById.get(id)
-              const total = accountTotalsById.get(`oauth:${id}`)
-              const tokenState = entry && entry.tokenRef ? oauthTokenStates[entry.tokenRef] : undefined
-              return el(OAuthAccountCard, {
-                key: id, id, entry, tokenState, total,
-                buckets: accountSeriesById.get(`oauth:${id}`) ?? [],
-                expanded: expandedOauth[id] === true,
-                draft: oauthDraftOf(id),
-                busy: !!oauthBusy[id],
-                notice: oauthNotice[id],
-                t, writable: state.writable,
-                onToggle: () => setExpandedOauth((current) => ({ ...current, [id]: !current[id] })),
-                onDraftField: (field, fieldValue) => setOauthDraft(id, { [field]: fieldValue }),
-                onSave: () => saveOauthAccount(id, false),
-                onPasteToken: (token) => pasteOauthToken(id, token),
-                onOneClick: () => runOneClickOauth(id),
-                onAuthorize: () => openOauthAuthorize(id),
-                onExchange: (callbackUrl) => exchangeOauthCode(id, callbackUrl),
-                onDiscover: () => discoverOauth(id),
-                onDelete: () => deleteOauthAccount(id),
-              })
-            }),
-            el(AddOAuthCard, {
-              t, adding: addingOauth, setAdding: setAddingOauth,
-              onQuickAdd: (presetId) => quickAddOauthAccount(presetId),
-            }),
             // 账号池（扩展功能；多账号健康路由 + 失败切换）
-            el('hr', { className: 'dshrouter-divider' }),
             el('div', { className: 'dshrouter-head' },
               el('span', { className: 'dshrouter-subtitle' }, t('poolTitle')),
               el('span', { className: 'dshrouter-spacer' }),
@@ -2626,6 +2517,19 @@ window.__ModuleLoader__.load({
           el('span', { className: 'dshrouter-meta' }, `${t('statsTokens')}: ${fmtTokens(sumAll.inTokens)} / ${fmtTokens(sumAll.outTokens)}`),
           el('span', { className: 'dshrouter-spacer' }),
           el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: clearStats }, t('statsReset'))),
+        // 出口⑤导出按钮：range/level 选择 + 触发 statsExport → CSV 下载。
+        el('div', { className: 'dshrouter-row' },
+          el('span', { className: 'dshrouter-meta' }, t('statsExportRange')),
+          el('select', { className: 'dshrouter-select', 'aria-label': t('statsExportRange'), value: exportRange, onChange: (event) => setExportRange(event.target.value) },
+            el('option', { value: '7d' }, '7d'),
+            el('option', { value: '30d' }, '30d'),
+            el('option', { value: '90d' }, '90d')),
+          el('span', { className: 'dshrouter-meta' }, t('statsExportLevel')),
+          el('select', { className: 'dshrouter-select', 'aria-label': t('statsExportLevel'), value: exportLevel, onChange: (event) => setExportLevel(event.target.value) },
+            el('option', { value: 'agent' }, 'agent'),
+            el('option', { value: 'account' }, 'account')),
+          el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: exportBusy, onClick: exportStats }, t('statsExport')),
+          exportNotice ? el('span', { className: 'dshrouter-meta' }, exportNotice) : null),
         // Agent 级明细卡片
         el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-subtitle' }, t('statsAgentLevel'))),
         agentIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')) : null,
@@ -2675,6 +2579,27 @@ window.__ModuleLoader__.load({
             onToggle: () => toggleStatCard(statKey),
           })
         }),
+        // 出口②按天视图：stats.days 按天聚合表（日期/调用/失败/tokens/耗时/成本）。
+        Object.keys(statsDays).length > 0 ? el('div', { className: 'dshrouter-head', style: { marginTop: 8 } },
+          el('span', { className: 'dshrouter-subtitle' }, t('statsDayLevel'))) : null,
+        Object.keys(statsDays).length > 0 ? el('table', { className: 'dshrouter-table' },
+          el('thead', null, el('tr', null,
+            el('th', null, t('statsDate')),
+            el('th', null, t('statsCalls')),
+            el('th', null, t('statsErrors')),
+            el('th', null, t('statsTokens')),
+            el('th', null, t('statsDayMs')),
+            el('th', null, t('statsCost')))),
+          el('tbody', null, ...Object.keys(statsDays).sort().reverse().map((date) => {
+            const day = statsDays[date]
+            return el('tr', { key: date },
+              el('td', null, date),
+              el('td', null, day.calls),
+              el('td', null, day.errors),
+              el('td', null, `${fmtTokens(day.inputTokens)} / ${fmtTokens(day.outputTokens)}`),
+              el('td', null, fmtMs(day.ms)),
+              el('td', null, fmtCost(day.cost)))
+          }))) : null,
         recentCalls.length > 0 ? el('details', null,
           el('summary', { className: 'dshrouter-meta' }, `${t('statsRecent')}（${recentCalls.length}）`),
           el('table', { className: 'dshrouter-table' },
@@ -2731,7 +2656,7 @@ window.__ModuleLoader__.load({
           children: agentsBody,
         }),
         el(CategoryCard, {
-          title: t('accountTitle'), summary: `${t('accountSummary')(addedAccounts.length)} · ${t('cliSummary')(cliEntryIds.length)} · ${t('oauthSummary')(oauthIds.length)}`,
+          title: t('accountTitle'), summary: `${t('accountSummary')(addedAccounts.length)} · ${t('cliSummary')(cliEntryIds.length)}`,
           expanded: expandedSection.accounts === true, t, onToggle: () => toggleSection('accounts'),
           children: accountsBody,
         }),
@@ -3117,8 +3042,11 @@ window.__ModuleLoader__.load({
     //
     // 发送与准入由宿主准入包装（twin 路由）接管：选「+ 自动识图」组后
     // 粘贴/拖拽 + 回车即原生可用，图片块留在日志、Web UI 原生显示。本区
-    // 保留两件展示辅助：
-    // - composer 附件按钮：把图片文件送进原生草稿栏（预览/移除原生机制）；
+    // 保留三件展示辅助：
+    // - composer 附件按钮：图片文件送进原生草稿栏（预览/移除原生机制）；
+    //   音频/视频/文档经 router/uploadFile 落盘（F11，v3 §4.4.2）→ 附件
+    //   卡片 + 结构化路径文本经 inputActions.setDraft 进 draft；
+    // - 模型接管（无 UI）：多模态开启 → 会话自动切包装路由；
     // - route_agent 工具卡片：生成图片以纯文本标记渲染进工具结果，卡片
     //   解析标记经 router/imageData 取字节渲染缩略图。
 
@@ -3178,17 +3106,33 @@ window.__ModuleLoader__.load({
     /** 包装路由后缀（与宿主 lib/wrapper.js 的 WRAP_SUFFIX 一致；双面各自定义）。 */
     const WRAP_SUFFIX = '-router'
 
+    /** 接管来源记忆（FIX-002-R7 F1）：sessionId → 本组件接管时切走的原生
+     *  provider——服务端 wrapper `tookOverFrom` 的客户端对等机制（"这个 twin
+     *  选择是谁放上的"）。仅当会话当前停在本组件接管放上的 twin 上时，解除
+     *  武装才还原；用户手动选的 twin（无记忆）一律尊重不撤销。接管/还原成功
+     *  才写入/清除记忆（失败保持原状，下次 effect 触发重试）。 */
+    const takeoverMemory = new Map()
+
     /**
      * 模型接管（无 UI）：多模态开启 → 当前会话切到包装路由（开启瞬间完成，
-     * 之后贴图零操作、零竞态）；关闭 → 切回原 provider（会话已含图时宿主
-     * 拒绝切回纯文本 → 静默保持）。InputZone 快照随 input/session store
-     * 变化重渲染，草稿 imageIds 实时：视觉已开启而用户手动切回纯文本组后
-     * 贴图，同样自动归位到包装组。
+     * 之后贴图零操作、零竞态）；关闭 → 仅还原本组件接管放上的会话选择
+     * （takeoverMemory 命中且仍停在我们的 twin 上），用户手动选的 twin 一律
+     * 尊重不撤销（FIX-002-R7 F1）；会话已含图时宿主拒绝切回纯文本 → 静默
+     * 保持。InputZone 快照随 input/session store 变化重渲染，草稿 imageIds
+     * 实时：视觉已开启而用户手动切回纯文本组后贴图，同样自动归位到包装组。
      */
     function ModelTakeover(props) {
       const { sessionId, input, api } = props
       const catalog = useRouterCatalog()
-      const takeoverArmed = multimodalAgentsOf(catalog).length > 0
+      // FIX-002（客户端层）：会话级接管同样受 router.takeoverDefaultModel 开关
+      // 约束（默认 false = 不接管——twin 路由在模型列表，用户手动选）。此前仅看
+      // "目录有多模态 agent"即在每个会话（含子代理会话，sessionId 变化触发
+      // effect）强制切 twin——覆盖用户手动选择（用户报障：起子代理时主代理
+      // 配置被切）。开关开启时保留既有"开启瞬间切换 + 贴图自动归位"语义。
+      // FIX-002-R7 F1：解除武装的还原同样需要来源记忆（takeoverMemory）——
+      // 此前 !armed && wrapped 分支在每次 effect 触发（贴图/会话切换/子代理
+      // sessionId）都把用户手动选的 twin 静默剥回原生。
+      const takeoverArmed = multimodalAgentsOf(catalog).length > 0 && catalog.takeoverDefaultModel === true
       const imageCount = input && Array.isArray(input.imageIds) ? input.imageIds.length : 0
       useEffect(() => {
         const sessions = api && api.sessions
@@ -3204,11 +3148,24 @@ window.__ModuleLoader__.load({
             if (takeoverArmed && !wrapped) {
               // 接管：切到当前 provider 的包装路由。宿主包装组注册先于客户端
               // 感知（settings 事件本地先行、RPC 后至），开启瞬间完成切换；
-              // 失败静默，下次快照变化再试。
-              await sessions.selectModel({ sessionId, provider: `${current.provider}${WRAP_SUFFIX}`, model: current.model })
-            } else if (!takeoverArmed && wrapped) {
-              // 恢复：切回原 provider；会话已含图时宿主拒绝切回纯文本 → 静默。
-              await sessions.selectModel({ sessionId, provider: current.provider.slice(0, -WRAP_SUFFIX.length), model: current.model })
+              // 失败静默，下次快照变化再试。成功后记忆来源（FIX-002-R7 F1：
+              // 与服务端 tookOverFrom 对等——只有本组件放上的 twin 才在解除
+              // 武装时还原）。
+              const taken = await sessions.selectModel({ sessionId, provider: `${current.provider}${WRAP_SUFFIX}`, model: current.model })
+              if (taken && taken.result && taken.result.ok) takeoverMemory.set(sessionId, current.provider)
+            } else if (!takeoverArmed && takeoverMemory.has(sessionId)) {
+              // 恢复（FIX-002-R7 F1）：仅当 twin 选择是本组件接管逻辑放上的
+              // （记忆命中且仍停在我们的 twin 上）才还原——用户手动选的 twin
+              // （无记忆）一律尊重不撤销；用户已手动改走（原生/别的 twin）=
+              // 尊重，静默清记忆不写设置。还原成功才清记忆（失败保留，下次
+              // 触发重试）；会话已含图时宿主拒绝切回纯文本 → 静默。
+              const native = takeoverMemory.get(sessionId)
+              if (wrapped && current.provider === `${native}${WRAP_SUFFIX}`) {
+                const restored = await sessions.selectModel({ sessionId, provider: native, model: current.model })
+                if (restored && restored.result && restored.result.ok) takeoverMemory.delete(sessionId)
+              } else {
+                takeoverMemory.delete(sessionId)
+              }
             }
           } catch { /* 接管失败容忍：准入是最终防线，用户仍可手动切组 */ }
         })()
@@ -3217,37 +3174,134 @@ window.__ModuleLoader__.load({
       return null
     }
 
+    /** 文件是否图片（type 前缀判定——与宿主导航栏 image 判定同口径）。 */
+    function isImageFile(file) {
+      return !!file && typeof file.type === 'string' && file.type.startsWith('image/')
+    }
+
+    /** 附件类型中文标签（结构化路径文本与卡片共用，§4.4.2 ③：音频/视频/文档）。 */
+    function attachKind(mediaType) {
+      return typeof mediaType === 'string' && mediaType.startsWith('audio/') ? '音频'
+        : typeof mediaType === 'string' && mediaType.startsWith('video/') ? '视频' : '文档'
+    }
+
+    /** 结构化路径文本（v3 §4.4.2 ③ / §5.5 输入段格式）：
+     *  [附件: 音频 xxx.wav 路径 .router-files/xxx.wav]——路径文本常驻模型输入，
+     *  主 agent 据此 route_agent(agent=speech, filePath=路径) / files=[路径]。 */
+    function attachPathText(mediaType, name, path) {
+      return `[附件: ${attachKind(mediaType)} ${name} 路径 ${path}]`
+    }
+
     /** composer 工具行附件按钮：多模态开启时出现（与模型接管共用同一目录
      *  信号——开启出现并接管、关闭消失并恢复，严格同步）。选文件按类型分流：
      *  图片进原生草稿图片栏（预览/移除都走原生机制，发送走原生回车，由准入
-     *  包装放行）；音频/视频等其余附件当前无 composer 通路（F8），后续模态
-     *  落地时在此分流到工作区文件通路。 */
+     *  包装放行）；音频/视频/文档经 router/uploadFile RPC 落盘到工作区
+     *  .router-files/（F11 输入入口，v3 §4.4.2 / §5.5——浏览器无法直写文件
+     *  系统，F8/F12 约束下唯一合规通路）→ 附件卡片渲染 + 结构化路径文本经
+     *  inputActions.setDraft 注入 draft（读最近渲染 draft 追加回写，V-DSH-2
+     *  结论：setDraft 是单一公共 draft 写通道，完全支持路径文本进 draft；
+     *  F-01：全部上传落定后累积一次回写，多选不丢路径文本）。 */
     function AttachButton(props) {
-      const { t, conversation, inputActions } = props
+      const { t, router, conversation, inputActions, useInput } = props
       const catalog = useRouterCatalog()
       const [error, setError] = useState('')
+      const [cards, setCards] = useState([])
       const inputRef = useRef(null)
+      // 当前 draft（渲染期快照，draftRef 每渲染刷新为最新值）：上传全部落定后
+      // 以最近一次渲染的 draft 为基一次性回写路径文本（宿主会话 slot 恒提供
+      // useInput，SessionStandardProps；缺失时仅跳过注入——上传与卡片不受影响）。
+      // 快照口径：V-DSH-2 无 draft 读取事件通道，上传窗口内的用户输入以最近
+      // 一次渲染为准（F-01 修复：多文件不再逐文件整体覆盖——累积全部路径文本
+      // 后仅一次 setDraft，读-改-写全程一次完成，不丢写）。
+      const currentDraft = typeof useInput === 'function'
+        ? String(useInput((s) => (s && typeof s.draft === 'string' ? s.draft : '')) ?? '')
+        : ''
+      const draftRef = useRef(currentDraft)
+      draftRef.current = currentDraft
       const agents = multimodalAgentsOf(catalog)
       if (agents.length === 0) return null
+      /** 单个非图片文件上传：FileReader 读字节 → base64 → router/uploadFile RPC。
+       *  成功返回该文件的结构化路径文本（由 intake 累积后一次 setDraft 注入），
+       *  失败返回 null（错误已渲染，不注入 draft）。 */
+      const uploadFile = (file) => {
+        const FR = typeof window !== 'undefined' ? window.FileReader : undefined
+        const remote = typeof router === 'function' ? router() : router
+        if (typeof FR !== 'function' || !remote || typeof remote.uploadFile !== 'function') {
+          setError(t('attachUnavailable'))
+          return Promise.resolve(null)
+        }
+        const name = typeof file.name === 'string' && file.name.trim() ? file.name.trim() : `upload-${Date.now().toString(36)}`
+        const mediaType = typeof file.type === 'string' && file.type ? file.type : 'application/octet-stream'
+        return new Promise((resolve) => {
+          const reader = new FR()
+          reader.onload = () => {
+            const dataBase64 = String(reader.result ?? '').split(',')[1] ?? ''
+            remote.uploadFile({ name, mediaType, dataBase64 }).then((response) => {
+              const value = response && response.ok && response.value ? response.value : null
+              if (!value || value.ok !== true || !value.path) {
+                const detail = value && typeof value.message === 'string'
+                  ? `${value.code || 'UPLOAD_FAILED'}: ${value.message}`
+                  : t('attachUploadFailed')
+                setError(detail)
+                resolve(null)
+                return
+              }
+              const path = String(value.path)
+              const cardName = typeof value.name === 'string' && value.name ? value.name : name
+              setCards((current) => [...current, { name: cardName, mediaType, path }])
+              resolve(attachPathText(mediaType, cardName, path))
+            }, (failure) => {
+              setError(failure && failure.message ? String(failure.message) : t('attachUploadFailed'))
+              resolve(null)
+            })
+          }
+          reader.onerror = () => { setError(t('attachUploadFailed')); resolve(null) }
+          reader.readAsDataURL(file)
+        })
+      }
       const intake = (list) => {
         setError('')
-        const conversationSvc = typeof conversation === 'function' ? conversation() : conversation
-        if (!conversationSvc || typeof conversationSvc.createDraftImages !== 'function' || !inputActions || typeof inputActions.addImages !== 'function') {
-          setError(t('attachUnavailable'))
-          return
+        const files = Array.from(list ?? []).filter((file) => file && typeof file.name === 'string')
+        const images = files.filter(isImageFile)
+        const others = files.filter((file) => !isImageFile(file))
+        if (images.length > 0) {
+          const conversationSvc = typeof conversation === 'function' ? conversation() : conversation
+          if (!conversationSvc || typeof conversationSvc.createDraftImages !== 'function' || !inputActions || typeof inputActions.addImages !== 'function') {
+            setError(t('attachUnavailable'))
+            return
+          }
+          try {
+            const created = conversationSvc.createDraftImages(images)
+            if (!inputActions.addImages(created.map((image) => image.id))) conversationSvc.releaseDraftImages(created)
+          } catch (failure) {
+            setError(messageOf(failure))
+          }
         }
-        try {
-          const images = conversationSvc.createDraftImages(list)
-          if (!inputActions.addImages(images.map((image) => image.id))) conversationSvc.releaseDraftImages(images)
-        } catch (failure) {
-          setError(messageOf(failure))
-        }
+        // F-01：多文件非图片并发上传（multiple:true）——各文件独立 RPC，全部
+        // 落定后把全部路径文本一次性 setDraft（以 draftRef 最新渲染值为基）；
+        // 绝不逐文件整体覆盖（旧实现后完成者覆盖前 N-1 项，路径文本丢失，且
+        // 上传窗口内用户输入被旧快照覆盖）。
+        if (others.length === 0) return
+        Promise.all(others.map(uploadFile)).then((texts) => {
+          const lines = texts.filter((text) => text !== null)
+          if (lines.length === 0) return
+          if (inputActions && typeof inputActions.setDraft === 'function') {
+            const base = draftRef.current.trim()
+            inputActions.setDraft(base ? `${base}\n${lines.join('\n')}` : lines.join('\n'))
+          }
+        })
       }
       return el('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 4 } },
+        ...cards.map((card) => el('span', {
+          className: 'dshrouter-attachcard',
+          key: card.path,
+          title: card.path,
+        }, `[${attachKind(card.mediaType)}] ${card.name} → ${card.path}`)),
+        error ? el('span', { className: 'dshrouter-error' }, error) : null,
         el('input', {
           ref: inputRef,
           type: 'file',
-          accept: 'image/png,image/jpeg,image/webp,image/gif',
+          accept: 'image/png,image/jpeg,image/webp,image/gif,audio/*,video/*,.pdf,.doc,.docx,.txt,.md,.csv,.json,.zip',
           multiple: true,
           style: { display: 'none' },
           'aria-label': t('attachPickTitle'),
@@ -3314,6 +3368,84 @@ window.__ModuleLoader__.load({
       return el('span', { className: 'dshrouter-toolmeta' }, t('toolRunning'))
     }
 
+    /** base64 → blob URL（L3 预览用；createObjectURL 不可用时回落 data: URL）。 */
+    function blobUrlOf(dataBase64, mediaType) {
+      try {
+        const binary = atob(dataBase64)
+        const bytes = new Uint8Array(binary.length)
+        for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index)
+        const blob = new Blob([bytes], { type: mediaType || 'application/octet-stream' })
+        const url = window.URL && typeof window.URL.createObjectURL === 'function' ? window.URL.createObjectURL(blob) : ''
+        if (url) return url
+      } catch { /* 解码失败：回落 data: URL */ }
+      return `data:${mediaType || 'application/octet-stream'};base64,${dataBase64}`
+    }
+
+    /**
+     * L3 文件行（v3 §5 展示段 L3 / N-7）：路径文本 + 「打开文件」动作。点击 →
+     * router/readWorkspaceFile 读字节 → blob 预览：audio/video 原生标签兜底
+     * （V-DSH-3：宿主无播放组件，降级路径即最终路径），其余类型下载链接；
+     * 失败显示错误码可重试（不静默）。
+     */
+    function RouteFileRow(props) {
+      const { t, router, file } = props
+      const [state, setState] = useState({ status: 'idle' })
+      const open = () => {
+        const remote = typeof router === 'function' ? router() : router
+        if (!remote || typeof remote.readWorkspaceFile !== 'function') {
+          setState({ status: 'error', detail: 'REMOTE_UNAVAILABLE' })
+          return
+        }
+        setState({ status: 'loading' })
+        remote.readWorkspaceFile({ path: file.path }).then((response) => {
+          if (response && response.ok && response.value && response.value.ok === true && response.value.dataBase64) {
+            const value = response.value
+            setState({
+              status: 'ready',
+              previewUrl: blobUrlOf(value.dataBase64, value.mediaType),
+              mediaType: typeof value.mediaType === 'string' ? value.mediaType : '',
+              name: typeof value.name === 'string' && value.name ? value.name : file.name,
+            })
+          } else {
+            const detail = response && response.value && typeof response.value.message === 'string'
+              ? `${response.value.code || 'FAILED'}: ${response.value.message}`
+              : (response && response.error && response.error.message ? String(response.error.message) : 'FAILED')
+            setState({ status: 'error', detail })
+          }
+        }, (failure) => setState({ status: 'error', detail: failure && failure.message ? String(failure.message) : 'RPC_FAILED' }))
+      }
+      // blob URL 生命周期（F-2 R12）：createObjectURL 产生的 URL 必须随组件
+      // 卸载 / previewUrl 变更释放（revokeObjectURL），否则长会话反复打开文件
+      // 会累积 blob URL 与底层 Blob（每份上限 25MB）。data: URL 回落非 object
+      // URL，无需（也无法）revoke——守卫跳过，失败回落路径不受影响。
+      const previewUrl = state.status === 'ready' && typeof state.previewUrl === 'string' ? state.previewUrl : ''
+      useEffect(() => {
+        return () => {
+          if (previewUrl && !previewUrl.startsWith('data:')) {
+            try { window.URL.revokeObjectURL(previewUrl) } catch { /* URL API 不可用时无需释放 */ }
+          }
+        }
+      }, [previewUrl])
+      const pathText = el('span', { className: 'dshrouter-toolpath', title: file.path }, file.path)
+      if (state.status === 'ready') {
+        // ready 三态共用容器（F-11 R12）：audio/video 原生标签兜底（V-DSH-3），
+        // 其余类型下载链接——提取共用避免重复。
+        const mediaType = String(state.mediaType || '')
+        const media = mediaType.startsWith('audio/')
+          ? el('audio', { className: 'dshrouter-toolmedia', controls: true, src: previewUrl })
+          : mediaType.startsWith('video/')
+            ? el('video', { className: 'dshrouter-toolmedia', controls: true, src: previewUrl })
+            : el('a', { className: 'dshrouter-button ghost', href: previewUrl, download: state.name || 'file' }, t('download'))
+        return el('div', { className: 'dshrouter-toolfile' }, pathText, media)
+      }
+      const action = state.status === 'loading'
+        ? el('span', { className: 'dshrouter-toolmeta' }, t('fileOpening'))
+        : state.status === 'error'
+          ? el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: open }, `${t('fileOpenFailed')}（${state.detail}）`)
+          : el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: open }, t('openFile'))
+      return el('div', { className: 'dshrouter-toolfile' }, pathText, action)
+    }
+
     /** route_agent 工具卡片：解析结果中的图片标记渲染缩略图（兼容旧会话的真实图片块）。 */
     function RouteAgentToolCard(props) {
       const { t, router, block } = props
@@ -3340,16 +3472,34 @@ window.__ModuleLoader__.load({
       }
       const name = block.call && typeof block.call.name === 'string' ? block.call.name : 'route_agent'
       const open = (target) => setLightbox(target)
+      // L3 文件引用（v3 §5 展示段 L3 / N-7）：从工具调用参数提取 filePath 与
+      // files 的非 URL 条目——「打开文件」预览的确定性来源（audio/video 原生
+      // 标签兜底 / 其他类型下载）；容错：argsRaw 非法时无 L3（不击穿渲染）。
+      const fileRefs = []
+      try {
+        const args = JSON.parse(block.call && typeof block.call.argsRaw === 'string' ? block.call.argsRaw : '{}')
+        const seenFiles = new Set()
+        const pushFile = (value) => {
+          const trimmed = typeof value === 'string' ? value.trim() : ''
+          if (!trimmed || /^https?:\/\//i.test(trimmed) || seenFiles.has(trimmed)) return
+          seenFiles.add(trimmed)
+          fileRefs.push({ path: trimmed, name: String(trimmed).split(/[\\/]/).pop() || trimmed })
+        }
+        if (typeof args.filePath === 'string') pushFile(args.filePath)
+        if (Array.isArray(args.files)) for (const item of args.files) pushFile(item)
+      } catch { /* 容错：非法 argsRaw 不产生 L3 行 */ }
       return el('div', { className: 'dshrouter-toolcard' },
         el('div', { className: 'dshrouter-toolcard-head' },
           el('span', { className: 'dshrouter-toolcard-title' }, t('toolRouteTitle')),
           el('span', { className: 'dshrouter-toolmeta' }, name)),
         block.isError === true ? el('span', { className: 'dshrouter-toolerror' }, block.error && block.error.message ? block.error.message : t('statsFail')) : null,
-        refs.length > 0 ? el('div', { className: 'dshrouter-toolimages' },
+        refs.length > 0 ? el('div', { className: 'dshrouter-toolimages dshrouter-toolgallery' },
           ...refs.map((ref, index) => el(RouteImage, {
             t, router, ref, onOpen: open,
             key: `${String(ref.attachmentId ?? '')}:${index}`,
           }))) : null,
+        fileRefs.length > 0 ? el('div', { className: 'dshrouter-toolfiles' },
+          ...fileRefs.map((file, index) => el(RouteFileRow, { t, router, file, key: `${file.path}:${index}` }))) : null,
         ...texts.map((text, index) => el('div', { className: 'dshrouter-tooltext', key: index }, text)),
         lightbox ? el('div', { className: 'dshrouter-modal', onClick: (event) => { if (event.target === event.currentTarget) setLightbox(null) } },
           el('div', { className: 'dshrouter-modal-body' },
@@ -3447,6 +3597,7 @@ window.__ModuleLoader__.load({
         router: props.router,
         conversation: props.conversation,
         inputActions: props.inputActions,
+        useInput: props.useInput,
       })))
       // 模型接管（无 UI）：与附件按钮同一槽位、独立条目，随 InputZone 快照驱动。
       ctx.slots.inject('conversation.input.right', () => safeRegister({

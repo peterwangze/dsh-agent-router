@@ -449,15 +449,27 @@ export async function runClientRender(check) {
     check('templates are capabilities, not cli categories', chipLabels.some((label) => label.includes(zh.presetVision)) && !chipLabels.some((label) => label.includes('Codex CLI 子代理') || label.includes('Claude Code 子代理') || label.includes('Gemini CLI 子代理')))
   }
 
-  // ── 断言：子代理条目归入多模态账号区（可展开，含登录维护入口）────────
+  // ── 断言：子代理条目归入多模态账号区（可展开，含登录维护入口）；
+  //    EVO-007 新布局：ChatGPT 订阅登录上移为一级醒目位（与子代理交换），
+  //    OAuth 官方登录（插件独立管理）区块整块移除 ─────────────────────
   const accountsHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.accountTitle))
   check('accounts category head found', !!accountsHead)
   if (accountsHead) {
     accountsHead.props.onClick()
     currentTree = await settle()
     check('subagents live under accounts', textOf(currentTree).includes(zh.cliTitle) && textOf(currentTree).includes('codexentry'))
-    // OAuth/账号池收进「高级扩展」折叠卡片：默认不可见。
-    check('oauth tucked into advanced section', !textOf(currentTree).includes(zh.oauthTitle))
+    // EVO-007-A：OAuth 官方登录区块（标题/文案/添加按钮/未配置态）零残留。
+    check('oauth official-login block removed (EVO-007-A)', !textOf(currentTree).includes('官方登录，插件独立管理') && !textOf(currentTree).includes('添加 OAuth 账号'))
+    // EVO-007-B：ChatGPT 订阅登录无需展开「高级扩展」即一级可见（标题/提示/
+    // 添加入口/计数徽标），正式通道优先呈现。
+    check('chatgpt section promoted to first level (EVO-007-B)', textOf(currentTree).includes(zh.presetTitle) && textOf(currentTree).includes(zh.presetNotice) && textOf(currentTree).includes(zh.presetAdd) && textOf(currentTree).includes(zh.presetSummary(0)))
+    // EVO-007-B：顺序断言——ChatGPT 订阅登录先于子代理（subtitle 按文档序）。
+    check('chatgpt section precedes subagents (EVO-007-B)', (() => {
+      const subtitles = findAll(currentTree, (node) => node && hasClass(node, 'dshrouter-subtitle')).map(textOf)
+      const presetIndex = subtitles.indexOf(zh.presetTitle)
+      const cliIndex = subtitles.indexOf(zh.cliTitle)
+      return presetIndex >= 0 && cliIndex > presetIndex
+    })())
     const cliCardHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-card-head')).find((node) => textOf(node).includes('codexentry'))
     check('subagent card rendered under accounts', !!cliCardHead)
     if (cliCardHead) {
@@ -469,9 +481,11 @@ export async function runClientRender(check) {
     const advancedHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.advancedSection))
     check('advanced section card present', !!advancedHead)
     if (advancedHead) {
+      // EVO-007：折叠壳保留给账号池——徽标仅余账号池计数（OAuth 计数随区块移除）。
+      check('advanced section badge drops oauth count (EVO-007)', textOf(advancedHead).includes(zh.poolSummary(0)) && !textOf(advancedHead).includes('OAuth'))
       advancedHead.props.onClick()
       currentTree = await settle()
-      check('advanced section reveals oauth & pools', textOf(currentTree).includes(zh.oauthTitle) && textOf(currentTree).includes(zh.poolIntro))
+      check('advanced section reveals pools only (EVO-007)', textOf(currentTree).includes(zh.poolIntro) && !textOf(currentTree).includes('官方登录，插件独立管理'))
     }
   }
 
@@ -936,13 +950,16 @@ export async function runClientRender(check) {
       const unsetOps6 = captured.saveOps.filter((op) => op.op === 'unset' && op.path.join('/') === 'oauthAccounts/chatgpt')
       check('step6: delete cleans credential + pool refs + entry (W-5)', captured.oauthLogoutCalls.length === 1 && poolOps6.length === 1 && Array.isArray(poolOps6[0].value) && poolOps6[0].value.length === 0 && unsetOps6.length === 1)
     }
-    // ── EVO-002 Step 7：R7 收尾（F1 渲染过滤 / F4 吞错 / F2 成功文案）──
-    // 判别性：F1 旧代码通用区 summary 含 preset 账号（计数 1）→ 断言 (0) 必败；
+    // ── EVO-002 Step 7：R7 收尾（F4 吞错 / F2 成功文案）──
+    // EVO-007：通用 OAuth 官方登录区整块移除——R7-F1 的"通用区排除 preset
+    // 账号"渲染过滤语义被区块删除吸收：preset 账号只经专职卡呈现，通用区
+    // 文案（oauthTitle/oauthIntro/oauthAdd）零残留（旧断言 oauthSummary(0)
+    // 随键删除失效，改判区块缺席）。
     // F4 旧代码忽略 ok:false 继续 unset + 弹成功提示 → 断言 unset 缺席 + 失败
     // 文案必败；F2 旧代码复用 oauthTokenBack → 断言 presetDeleted 必败。
     {
       const tree7 = await renderSettings6('step7-f1')
-      check('step7: generic oauth area excludes preset accounts (R7-F1)', textOf(tree7).includes(tOf('oauthSummary')(0)))
+      check('step7: generic oauth area removed, presets surface via dedicated card (EVO-007)', textOf(tree7).includes(tOf('presetTitle')) && !textOf(tree7).includes('官方登录，插件独立管理'))
       // F4：oauthLogout 返回 ok:false → 账号条目保留（可重试）+ 展示失败消息。
       logoutFailMode = true
       captured.oauthLogoutCalls.length = 0
@@ -1084,11 +1101,9 @@ export async function runClientRender(check) {
     check('tool card renders image gallery container', gallery.length === 1)
   }
 
-  // ── 断言：R8-F1（EVO-004）未知 preset 值账号判据统一 ────────────────────
-  // 旧代码：通用区宽判据（非空 preset 即排除）+ 预设卡严格成员
-  // （preset === 'chatgpt-codex'）→ 非成员 preset（'zzz'）账号无任何渲染
-  // 入口（UI 黑箱 + 删除死锁——服务端成员校验拒删）。修复后：非成员 preset
-  // 回落到通用 OAuth 卡（可删——非成员账号无独立凭据文件，通用删除安全）。
+  // ── 断言：EVO-007 移除 OAuth 官方登录区后，任意 OAuth 账号（含未知
+  // preset 值账号）无独立管理 UI 面——数据域保留（oauthAccounts 配置不动，
+  // 仅呈现层移除；R8-F1 的"未知 preset 回落通用卡"判据随区块删除一并收束）。
   // 独立渲染设置页（不扰动前面断言的展开态）。
   {
     unknownPresetMode = true
@@ -1103,7 +1118,7 @@ export async function runClientRender(check) {
       if (advHead) {
         advHead.props.onClick()
         currentTree = await settle()
-        check('unknown-preset account falls back to generic oauth card (R8-F1)', textOf(currentTree).includes('怪异账号') && textOf(currentTree).includes('weird'))
+        check('EVO-007: no oauth account cards render (unknown-preset included)', !textOf(currentTree).includes('怪异账号') && !textOf(currentTree).includes('weird') && !textOf(currentTree).includes('官方登录，插件独立管理'))
       }
     }
     unknownPresetMode = false
