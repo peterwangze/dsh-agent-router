@@ -921,6 +921,11 @@ export async function runClientRender(check) {
       const gateOps6 = captured.saveOps.filter((op) => op.path[0] === 'oauthExperimental' || op.path[0] === 'oauthTosAccepted')
       check('step6: add account proceeds without ToS confirm (DEC-026)', !!addBtn6 && accountOps6.length === 1 && captured.beginCalls.length === 1 && captured.beginCalls[0]?.accountId === 'chatgpt')
       check('step6: retired gate keys never written (DEC-026)', gateOps6.length === 0)
+      // EVO-008 R0 P2-1：正向锁定 preset 新增账号的默认 models（深等于 gpt-5.6
+      // 三件套）——旧默认（gpt-5.4 系）或任何错值必败；与五点负向残留守卫互补。
+      const accountValue6 = accountOps6.length === 1 && accountOps6[0].op === 'set' && accountOps6[0].value ? accountOps6[0].value : null
+      const defaultModels6 = accountValue6 && Array.isArray(accountValue6.models) ? accountValue6.models : null
+      check('step6: preset default models = gpt-5.6 trio (EVO-008 P2-1 正向锁定)', defaultModels6 !== null && defaultModels6.length === 3 && defaultModels6[0] === 'gpt-5.6-sol' && defaultModels6[1] === 'gpt-5.6-terra' && defaultModels6[2] === 'gpt-5.6-luna')
       confirmMode = true
       presetMode = 'logged-out'
       if (listener6) listener6.listener()
