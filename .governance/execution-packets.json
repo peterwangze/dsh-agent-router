@@ -1,94 +1,94 @@
 {
   "version": 1,
-  "generated_at": "2026-08-29T23:34:58",
+  "generated_at": "2026-08-30T11:36:05",
   "packets": {
-    "REL-004": {
-      "task_id": "REL-004",
-      "priority": "P1",
-      "status": "已完成（终态——M-4 用户授权 Go 2026-08-30 → E-1~E-7 全链闭环：tag v0.3.1@5ca8b87 + GitHub Release + GATE-8 归档跳过；审查链 Code R0 + Release R1 双 APPROVED_WITH_NOTES/0；EV-086/087）",
-      "goal": "REL-004 v0.3.1 发布链——EVO-006 转正承载 + R0 台账收尾（P2×3/P3×3）+ M-3 无沙箱复跑 + 版本规划/发布",
+    "FIX-009": {
+      "task_id": "FIX-009",
+      "priority": "P0",
+      "status": "已完成（代码/审查闭环——RCA 三案全破 + 扩界批准（EV-008 落盘）+ 修复 8877365 + R0 APPROVED_WITH_NOTES/0；十套件零回退 + 判别 9/9；用户重启复验待做）",
+      "goal": "FIX-009 多模态视觉链路 P0：image-solo 经 vision agent（deepseek-official/deepseek-v4-flash-vision-exp）上游 400/1213「未接收到prompt」整轮失败 + 4xx 重试链疑（227s/0token）+ 并案「实验界面残留」（GUI 层旧 client 疑载 + settings 遗留键在案）",
       "product_success_contract": {
-        "user": "DSH 主用户（ChatGPT 订阅者）与插件使用者——获得 v0.3.1 正式版：GPT OAuth 为正式登录通道（EVO-006 转正承载）+ R0 台账收尾",
-        "job_to_be_done": "把已闭环的 EVO-006 转正与 R0 P2×3/P3×3 收尾打包为 v0.3.1：版本 bump/CHANGELOG 收口/README 版本行/tag/tarball/GitHub Release；用户升级后 GPT OAuth 即正式通道、老用户行为有明确披露",
+        "user": "DSH 主用户——通过 router 插件把图片（含单独发图）交给 vision agent 识别，并把截图/界面问题反馈给主 agent",
+        "job_to_be_done": "用户单独发送一张图片（无 accompanying 文本）时，vision agent 调用成功返回识别结果（不再 400/1213「未接收到prompt」整轮失败）；用户场景：给主 agent 发截图反馈 UI 问题",
         "non_goals": [
-          "不做新功能开发（EVO-006 已闭环——本链仅台账收尾 + 发布执行）",
-          "不做 Claude C-2/账号池/成功率闭环等后续演进（等用户需求）；发布执行（push/tag/Release）以 M-4 用户授权为前置，不在授权前执行"
+          "不做 vision provider/model 的能力升级或账号池泛化（仅修请求构建兼容性与重试判别）",
+          "不迁移/清除用户 settings 遗留键（oauthExperimental 等——DEC-026/REL-004 P2-a 裁定披露方案不写用户 settings；实验界面残留若定位为加载链问题则修加载链，不动用户数据）"
         ],
         "success_metrics": [
-          "用户可见场景：升级 v0.3.1 后 GPT OAuth 为正式登录通道（无实验面），且「开过又关」老用户升级后行为（通道默认可用）已在 CHANGELOG 明确披露——无静默意外",
-          "可运行验收：八套件零回退（936/110/114/14/65/98/20/11 基线）+ M-3 无沙箱复跑（smoke 全量 946 投影 + hooks 双确认 + metrics ③确认）+ tarball 隔离环境安装冒烟（环境变量重定向至临时目录）通过"
+          "用户可见场景：单独发图片 → vision agent 返回识别文本（400 消失）——判别测试覆盖 image-solo 边界（空文本请求体形态）",
+          "可运行验收：十套件零回退（smoke 948 基线）+ 新增判别断言（4xx 快速失败不重发 + image-solo 请求体含合法 prompt/messages）"
         ],
-        "competitive_baseline": "对齐主流插件发布基线：tag + tarball + GitHub Release 三件套齐、CHANGELOG 逐版本收口、升级路径零手动清理（遗留配置键容忍已由 A2 断言看护）",
+        "competitive_baseline": "多模态请求构建对齐宿主 pi-ai 各端点契约（glm openai 兼容端点已可用为参照）；4xx 客户端错误不重试为业界标准重试语义",
         "done_definition": [
-          "P2×3/P3×3 收尾落地 + M-3 无沙箱复跑通过（smoke 全量 946 投影 + hooks 双确认 + metrics ③确认）——结构化事实入 evidence-log",
-          "v0.3.1 三件套（bump 0.3.1/CHANGELOG/README）+ tag + tarball + GitHub Release 发布完成（M-4 用户授权后执行）——结构化事实入 evidence-log",
-          "Code Reviewer（收尾段）+ Release Reviewer（发布段）独立审查通过（APPROVED / APPROVED_WITH_NOTES unresolved_blockers=0）——用户结果未被流程完成替代"
+          "RCA 事实链完整入 evidence-log（请求体实采/端点契约比对/重试链触发路径/GUI 加载链实证）",
+          "修复 + 判别测试 + 十套件零回退（948 基线）——结构化事实记录",
+          "Code Reviewer APPROVED 或 APPROVED_WITH_NOTES(unresolved_blockers=0)——独立审查确认用户结果未被流程完成替代"
         ]
       },
       "acceptance_contract": {
-        "scenario": "用户升级/安装 v0.3.1（tarball 或 Release）→ 配置 GPT OAuth preset → 登录（正式通道：无实验 UI/无 ToS 实验弹窗/账号名无实验标）→ 调用成功 → 登出删除凭据；曾显式关闭实验开关的老用户升级后行为已被 CHANGELOG 披露覆盖",
-        "command": "node tests/smoke.mjs; node tests/stats.mjs; node tests/routing-paths.mjs; node tests/adapter-parity.mjs; node tests/attachments.mjs; node tests/client-render.mjs; node tests/oauth-credentials.mjs; node tests/oauth-loopback.mjs; node tests/oauth-promotion.mjs（工作目录 D:/AI/agent/deepseek/plugins/router）+ tarball 隔离冷装冒烟（TEMP 环境变量重定向）+ git pre-commit/commit-msg hooks 复跑（M-3 无沙箱）",
-        "expected_output": "八套件全绿零回退（smoke ≥936 ok 可跑口径 / 946 全量投影）；隔离环境安装冒烟（环境变量重定向至临时目录）通过；hooks 双确认通过；tarball 内容白名单不变",
+        "scenario": "用户在 GUI 单独发送一张图片（无文本）→ router 预检/路由至 vision agent（deepseek-official/deepseek-v4-flash-vision-exp）→ 上游返回 200 与识别文本 → 主 agent 收到结果（截图反馈通路恢复）",
+        "command": "node tests/smoke.mjs; node tests/stats.mjs; node tests/routing-paths.mjs; node tests/adapter-parity.mjs; node tests/attachments.mjs; node tests/client-render.mjs; node tests/oauth-credentials.mjs; node tests/oauth-loopback.mjs; node tests/oauth-promotion.mjs; node tests/metrics.mjs（工作目录 D:/AI/agent/deepseek/plugins/router）",
+        "expected_output": "十套件全绿零回退（smoke ≥948 ok 基线）；新增判别断言：image-solo 请求体含非空 messages/prompt（或等价 text part）——旧实现在判别测试下必败；4xx 响应不进入重试链（快速失败）",
         "last_run": {
           "status": "PASS",
           "exit_code": 0,
-          "summary": "E-2 十面门控复跑全 exit 0（smoke 948 权威值 + 九套件零回退）+ E-3 隔离环境安装冒烟（TEMP 解包 + --omit=dev --legacy-peer-deps，环境变量重定向至临时目录）通过——EV-087"
+          "summary": "修复后门控：十套件零回退全 exit 0（smoke 948 持平等）+ fix-009 判别 9/9 绿（TDD 先红后绿）——EV-088；用户真机复验（重启后 image-solo）待做"
         },
-        "demo_evidence": "tarball 隔离冷装输出 + 八套件输出摘要 + tag/Release URL——发布段完成后入 evidence-log（EV-086+）"
+        "demo_evidence": "判别测试输出 + RCA 报告（请求体实采对比）——Developer 返回后入 evidence-log FIX-009 段"
       },
       "quality_budget": {
         "dimensions": {
           "performance": {
-            "threshold": "八套件与 M-3 复跑时长与 v0.3.0/EVO-006 基线同量级；发布链不引入运行时性能变化（纯文档 + telemetry 事件）",
-            "validation": "M-3 无沙箱复跑计时，对比 EV-085/EV-079 基线值",
+            "threshold": "4xx 客户端错误快速失败（sur faced 不再 227s 重试链）；正常路径时延与基线同量级",
+            "validation": "判别测试（4xx 注入桩 → 失败 surfaced 耗时）+ 十套件计时",
             "status": "PASS",
-            "evidence": "EV-086/087：smoke 全量 948 ok / 13s（与 v0.3.0 基线同量级）；E-2 十面复跑全 exit 0",
+            "evidence": "EV-088：4xx 本就快速失败（RCA 证伪重试假设——DEFAULT_RETRYABLE_CODES 不含 INVALID_REQUEST，判别 C1-C3 守护）；227s = 用户中止非重试",
             "exception": ""
           },
           "reliability": {
-            "threshold": "P2-b telemetry 事件不改变 oauthBegin 拒绝路径行为（仅可观测性增强，零实验 reason 断言保持）；P2-a 披露方案零行为迁移（老配置不动）",
-            "validation": "node tests/oauth-promotion.mjs + node tests/oauth-loopback.mjs + smoke OAuth 块断言",
+            "threshold": "image-solo 与 image+text 双路径请求体均合法（跨 provider：glm 参照已可用 + deepseek-official 修复目标）；重试链仅对可重试错误（5xx/网络）生效",
+            "validation": "node tests/smoke.mjs + node tests/routing-paths.mjs + 新增判别断言（双路径 × 重试判别）",
             "status": "PASS",
-            "evidence": "EV-086/087：十面复跑零回退（promotion 13 / loopback 20 / credentials 98）；P2-b telemetry 判别断言在案",
+            "evidence": "EV-088：十套件零回退 + fix-009 判别 9/9（B1/B2 image+text 零注入对照 + A1-A4 注入形态）",
             "exception": ""
           },
           "security": {
-            "threshold": "telemetry 事件不含凭据/token 明文；发布 tarball 内容白名单不变（无多余文件）；gh 发布鉴权仅 peterwangze",
-            "validation": "Code Reviewer 安全清单 + npm pack 内容清单核查",
+            "threshold": "请求体构建无凭据泄露面变化；错误消息不含敏感字段（对齐 P2-b 仅 accountId/reason 先例）",
+            "validation": "Code Reviewer 安全清单 + diff 审查",
             "status": "PASS",
-            "evidence": "R0/R1 审查（凭据路径未变 / P7 零 token 断言保留）+ E-3 清单核验（tarball files=11 白名单 / undici ^7.18.0 / peers 全 rc.8）",
+            "evidence": "review-FIX-009-R0.md：占位文案安全（T-1 复述防护 + 无注入面 + 固定常量）；P0/P1=0",
             "exception": ""
           },
           "accessibility": {
-            "threshold": "CHANGELOG/README 披露文案口径一致；如涉及 i18n 新键则中英字典同步（无未翻译键）",
-            "validation": "node tests/client-render.mjs + 文档 diff 审查",
+            "threshold": "错误 surfaced 文案可理解（用户能看懂失败原因——不再裸 400 JSON 或无限等待）",
+            "validation": "client-render + smoke UI 断言（如涉及 UI 面）",
             "status": "PASS",
-            "evidence": "EV-086/087：client-render exit 0 + CHANGELOG/README 披露口径一致（R0 核验；E-1 七处版本同步）",
+            "evidence": "EV-088：修复不涉 UI 面（wrapper 服务端层）；占位文案用户可理解（R0 核验）；错误 surfaced 面无变化",
             "exception": ""
           },
           "ux": {
-            "threshold": "用户升级 v0.3.1 后实验面零残留；「开过又关」行为披露可发现（CHANGELOG 未发布段→v0.3.1 发布段）",
-            "validation": "node tests/client-render.mjs + smoke UI 断言 + CHANGELOG 收口 diff 审查",
+            "threshold": "单独发图场景端到端可用（用户截图反馈通路恢复）；失败时明确诊断信息（P8 可观测）",
+            "validation": "用户真机复验（M-2 式）+ 判别测试",
             "status": "PASS",
-            "evidence": "EV-087：CHANGELOG v0.3.1 用户视角六节 + 「开过又关」披露子条保留 + 已知问题延续披露",
+            "evidence": "判别测试 9/9 绿（EV-088）；用户真机复验待做（重启后 image-solo——修复已闭环，复验项挂 tracker）",
             "exception": ""
           },
           "maintainability": {
-            "threshold": "P2-c/P3×3 文档口径与代码语义一致（feature-flags §4 行更新、promotion 注释归属、oauthDiscover 边界注记）",
-            "validation": "Code Reviewer + Release Reviewer 文档一致性检查",
+            "threshold": "请求体构建单点化（P5——按 provider 差异集中处理，禁散落 if）；RCA 结论入档（端点契约表）",
+            "validation": "Code Reviewer 设计一致性检查",
             "status": "PASS",
-            "evidence": "R1 发布审查 APPROVED_WITH_NOTES/0（三产物 + 6 项裁量复核过）+ Code R0（P2-c/P3×3 文档口径一致）",
+            "evidence": "review-FIX-009-R0.md：架构合理性成立（改写层出口就地修——pi-ai 层不可控/块级层污染语义）+ P5 单点确认（wrapper.js:365 唯一）",
             "exception": ""
           }
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "用户场景：升级 v0.3.1 后 GPT OAuth 即正式登录通道（登录入口恒可见、无实验开关与实验标签）；曾关闭实验开关的老用户升级后通道默认可用——该行为已在 CHANGELOG 披露，无静默意外",
-        "demo_path": "node tests/client-render.mjs（账号区正式渲染）+ node tests/smoke.mjs（OAuth 流程块）+ tarball 隔离冷装冒烟命令输出",
-        "scope_guard": "仅动：lib/service.js（P2-b telemetry + 相关注释）、CHANGELOG.md（P2-a 披露 + 发布段收口）、README.md（披露 + 版本行）、docs/release/feature-flags-v0.3.0.md（P2-c §4 行 + P3-f 注记）、tests/oauth-promotion.mjs（P3-d/e 注释与断言）、package.json（仅发布段 bump 0.3.1）——不做无关重构、不做新功能、不动其它套件既有断言（新增断言除外）",
-        "rollback_plan": "收尾段 commit 可逐个 git revert；发布段 tag/Release 可删除重打；v0.3.1 push 前 main 可整体回退（push 后走 revert commit）——rollback-plan-v0.3.1.md 三阶段在案",
+        "user_visible_slice": "用户场景：单独发一张图片给主 agent → vision agent 返回识别文本（此前 400 整轮失败）——用户截图反馈通路恢复可用",
+        "demo_path": "node tests/smoke.mjs（vision 请求构建块 + 新增 image-solo 判别断言）+ RCA 报告请求体实采对比",
+        "scope_guard": "仅动：lib/service.js（vision 请求构建 + 重试判别）/ lib/tool.js、lib/prestep.js（如 RCA 定位涉及）/ tests/smoke.mjs + 新增判别测试文件——不做 provider 能力升级、不动用户 settings 遗留键、不做无关重构；GUI 加载链实证为只读诊断（如需修复另立子任务呈报）",
+        "rollback_plan": "修复 commit 可 git revert；未发布前 main 可回退；用户可临时把 vision agent 配置切回 glm/glm-5.3-flash（今早已验证可用）作为旁路",
         "status": "PASS",
-        "evidence": "EV-087：tag v0.3.1@5ca8b87 + GitHub Release（tarball asset）+ 隔离环境安装冒烟通过；容忍迁移升级路径断言在案（promotion A 组）"
+        "evidence": "EV-088：8877365 修复 + 判别 9/9 + R0 APPROVED_WITH_NOTES/0——image-solo 请求体恒含合法 text part（历史轮同修）"
       },
       "interruption_policy": {
         "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
@@ -102,16 +102,16 @@
           "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
         ],
         "assumption_record": {
-          "assumption": "P2-a 采用 CHANGELOG/README 披露方案（不迁移老配置、不写用户 settings）——DEC-026 转正 = 用户主权已裁 + P7 最小侵入（loader 迁移写用户配置属高侵入备选，不默认实施）",
-          "basis": "review-EVO-006-R0.md P2-a 双方案建议 + DEC-026 裁决语义 + project-principles P7（数据删除/覆盖路径不可逆保护）",
-          "reversibility": "如后续用户要求自动迁移，可另行独立 commit 增加 loader 迁移段（含 P7 防护），不影响披露方案",
-          "validation": "CHANGELOG/README 披露文案存在性 + 老配置键容忍断言（oauth-promotion A2）保持绿",
-          "rollback": "git revert 对应披露 commit"
+          "assumption": "400/1213 根因 = image-solo（无文本）时对 deepseek-official 端点的请求体缺 prompt/messages 合法形态——RCA 实证后修正",
+          "basis": "错误原文「未正常接收到prompt参数」+ stats 失败记录 0 token + glm openai 兼容端点同场景可用（差异收敛于端点契约）",
+          "reversibility": "修复为独立 commit 可 revert",
+          "validation": "判别测试（旧实现必败）+ RCA 请求体实采",
+          "rollback": "git revert + 用户旁路（vision 切回 glm）"
         },
         "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "Only change files required by this task row: lib/service.js, CHANGELOG.md, README.md, docs/release/feature-flags-v0.3.0.md, tests/oauth-promotion.mjs, package.json（REL-004 收尾段 + 发布段；TRIAGE-REL-004 在案）",
+        "Only change files required by this task row: lib/service.js, lib/tool.js, lib/prestep.js, tests/smoke.mjs, 新增判别测试文件（tests/）（TRIAGE-FIX-009 在案；RCA 若指向其它文件须返回 Coordinator 扩界，不得静默）",
         "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
       ],
       "required_evidence": [
@@ -128,12 +128,13 @@
         "node tests/client-render.mjs",
         "node tests/oauth-credentials.mjs",
         "node tests/oauth-loopback.mjs",
-        "node tests/oauth-promotion.mjs"
+        "node tests/oauth-promotion.mjs",
+        "node tests/metrics.mjs"
       ],
       "done_definition": [
-        "P2×3/P3×3 收尾 + M-3 无沙箱复跑 + v0.3.1 三件套/tag/tarball/GitHub Release 全部完成（M-4 授权后执行 push/tag/Release）——结构化事实入 evidence-log",
+        "RCA 事实链完整（vision 400 主线 + 实验界面并案结论）+ 修复 + 判别测试 + 十套件零回退全绿——结构化事实入 evidence-log",
         "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
-        "Commits completed for this single task（push/tag/Release 随 M-4 授权执行——部署决策归用户）"
+        "Commits completed locally for this single task（发布承载与 push 归后续版本链——用户裁决）"
       ],
       "source": "plan-tracker.md##当前活跃事项"
     }
