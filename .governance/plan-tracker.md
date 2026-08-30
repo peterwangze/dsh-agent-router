@@ -35,7 +35,7 @@
 | P1 | REL-004 | v0.3.1 发布链——EVO-006 转正承载 + R0 台账收尾（P2×3/P3×3）+ M-3 无沙箱复跑 + 版本规划/发布 | EVO-006✅ DEC-026✅ | v0.3.1 | 已完成（终态）——M-4 用户授权 Go（2026-08-30）→ E-1~E-7 全链：f7dbf5c bump+CHANGELOG（三分账 12=7+5）+ 十面复跑全绿 + 隔离冷装通过 + tag v0.3.1@5ca8b87 + push main/tag + GitHub Release + GATE-8 归档跳过（0<2）；审查链 Code R0 + Release R1 双 APPROVED_WITH_NOTES/0；EV-086/087；**发布后用户重启验证待做** |
 | P0 | FIX-009 | 多模态视觉链路 P0：image-solo 经 vision agent（deepseek-official/deepseek-v4-flash-vision-exp）上游 400/1213「未接收到prompt」整轮失败 + 4xx 重试链疑（227s/0token）+ 并案「实验界面残留」（GUI 层旧 client 疑载 + settings 遗留键在案） | — | 未规划版本（热修候选） | 已完成（**全闭环含用户复验 2026-08-30**）——RCA 三案全破 + 修复 8877365 + R0 APPROVED_WITH_NOTES/0；**用户复验通过**（纯图占位接收成功）；EV-088 |
 | P0 | FIX-010 | GUI 显示层 P0 回归：用户消息图片气泡不渲染——用户实证同主模型 glm-5.3 之前可显示（v0.3.0）→ v0.3.1+ 后图片消失仅剩文本标记 | — | 未规划版本 | 已完成（**全闭环含用户复验 2026-08-30**）——RCA 全实证（prestep options 快照误判，GUI 写回默认模型+重启引爆）+ 修复 020909b + R0 APPROVED_WITH_NOTES/0（P1-1 入 v0.3.2 台账）+ **DEC-027 立版**；**用户复验通过**（「气泡显示已经正常」）；EV-089 |
-| P1 | EVO-007 | 账号面板 UX 调整（用户截图红字指认 sha256:75eea8e2）——A 移除「OAuth 账号（官方登录）」不可用入口区块 + B ChatGPT 订阅登录与子代理（无头 CLI）位置交换（正式通道上移醒目位） | — | 0.3.2 | 进行中——TRIAGE-EVO-007 机录 2026-08-30（vision 识别确认需求）；Developer 实现中（a7cbd3d1） |
+| P1 | EVO-007 | 账号面板 UX 调整（用户截图红字指认 sha256:75eea8e2）——A 移除「OAuth 账号（官方登录）」不可用入口区块 + B ChatGPT 订阅登录与子代理（无头 CLI）位置交换（正式通道上移醒目位） | — | 0.3.2 | 已完成（代码/审查闭环）——65226a3（A+B 落地 + 21 死符号清理 + i18n 53×2）→ R0 NEEDS_CHANGE（F-1 删除路径消失 P7）→ T1 返工 3665d6a（双入口 + 凭据清理 + R8-F1 断言反转回可删语义）→ **R1 复审 APPROVED_WITH_NOTES/0**（findings 闭环 + 4 风险点核验）+ Coordinator 12 套件实测全绿（smoke 963）；EV-090；**用户 GUI 验证待做** |
 | — | 下一轮 | **v0.3.1 发布后验证**（用户重启宿主→验证正式通道 UI + 0.3.1）→ 后续等用户需求（FIX-008 残留 / 出口③真机验证 / C-4+C-5 成功率闭环 v0.3.2 候选 / C-6 账号池 / C-2 Claude / 插件仓 FIX-281） | — | v0.3.2+ | 待定 |
 
 ### 最近完成
