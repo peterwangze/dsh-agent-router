@@ -302,6 +302,35 @@ console.log('fix-012 switch-on then off restores (FIX-012 commitment):')
   check('SW6: 开启后关闭 → 走既有还原（FIX-012 承诺兑现）', nativeSelect(h.calls))
 }
 
+console.log('fix-012 R0 P2-1 deps completeness (switch toggles while image pending):')
+{
+  // R0 P2-1：effect deps 缺 imageConditional →「图片在途时 takeoverDefaultModel
+  // 开→关」不改变 takeoverArmed → effect 不重跑 → armedBy 不升级为 switch →
+  // 移除图片后记忆滞留 'image' → 不还原——与组件头承诺「开启 takeoverDefaultModel
+  // 后走既有还原」存在未声明边界。修复后 deps 含 imageConditional → 在途开启时
+  // 重跑升级分支（armedBy→switch）→ 在途关闭 + 移除图片 → 走既有还原。
+  // 判别：旧 deps（缺 imageConditional）下 P2-1d 必败（armedBy 滞留 image）。
+  const h = makeApi()
+  bundleExports.setRouterCatalog(catalogOf(false))
+  await takeover(h.api, 'p21', ['img-1'], 'takeover-p21')
+  check('P2-1a: 贴图接管（armedBy=image）', twinSelect(h.calls))
+  h.calls.length = 0
+  // 在途开启开关：armed 不变（imageCount 仍在）→ 仅 imageConditional 变化 →
+  // deps 含 imageConditional 才重跑升级分支（旧 deps 不重跑 → armedBy 滞留 image）。
+  bundleExports.setRouterCatalog(catalogOf(true))
+  await takeover(h.api, 'p21', ['img-1'], 'takeover-p21')
+  check('P2-1b: 在途开启开关 → twin 保持（无重复接管/还原）', h.calls.length === 0)
+  // 在途关闭开关：armed 仍 true（image 在途）→ imageConditional 变回 true。
+  bundleExports.setRouterCatalog(catalogOf(false))
+  await takeover(h.api, 'p21', ['img-1'], 'takeover-p21')
+  check('P2-1c: 在途关闭开关 → twin 保持', h.calls.length === 0)
+  // 移除图片：armed false → armedBy 已升级 switch → 走既有还原。
+  // 旧 deps：armedBy 滞留 'image' → 不还原 → 必败（判别）。
+  h.calls.length = 0
+  await takeover(h.api, 'p21', [], 'takeover-p21')
+  check('P2-1d: 移除图片 → 既有还原（在途交错升级链成立——旧 deps 必败）', nativeSelect(h.calls))
+}
+
 if (renderErrors.length > 0) {
   failures += renderErrors.length
   console.error(`FAIL  render errors: ${renderErrors.map((error) => String(error)).join(' | ')}`)
