@@ -18,6 +18,9 @@ node_modules/
 # CLI 冒烟测试临时目录
 .tmp-cli-smoke-*/
 
+# 判别测试残留 DSH_HOME（P2-2：已改 mkdtemp 临时目录 + finally 清理；本条为残留防御）
+.tmp-fix0*-home/
+
 # 检查工具目录
 .inspect-vision-router/
 

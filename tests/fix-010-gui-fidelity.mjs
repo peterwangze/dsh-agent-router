@@ -21,6 +21,10 @@
 //   C. 控制组：wrapper 分支纯文本（G4 同型）→ 不改写（防双改写）+ reminder 注入；
 //   D. 模型侧适配仍发生：prestep 保留的原始消息流经 wrapper stream →
 //      委托请求无裸 image 块（wrapper 输入层改写，F3 日志/模型面解耦成立）。
+//   E. REL-005 P1-1 漂移窗口判别：无 header + options 过时但宿主 live default
+//      （agentDefaultModel.currentSelection）指向 wrapper → onWrapperRoute=true
+//      （不改写，image 保留——旧实现读 options 快照必败）；反向控制：live
+//      default 缺失/空值 → options 终回退 → 逃生组改写保持。
 //
 // 门控：独立运行（node tests/fix-010-gui-fidelity.mjs），exit 0 全绿；
 // 修复 prestep.js sessionProvider/sessionModel 后 A 转绿。
@@ -61,11 +65,13 @@ function makeTextAdapter(delegateCalls) {
   }
 }
 
-/** prestep handler 直驱：返回 handler 引用（ctx.on 捕获）+ 驱动函数。 */
-function installPrestepHarness(service) {
+/** prestep handler 直驱：返回 handler 引用（ctx.on 捕获）+ 驱动函数。
+ *  agentDefaultModel：宿主 live default mock（REL-005 P1-1 漂移窗口判别用；
+ *  缺省 undefined = 服务缺失 → 回落链走 options 终回退）。 */
+function installPrestepHarness(service, agentDefaultModel) {
   let handler
   const ctx = {
-    get: (key) => (key === 'llm' ? undefined : undefined),
+    get: (key) => (key === 'llm' ? undefined : key === 'agentDefaultModel' ? agentDefaultModel : undefined),
     on: (_event, fn) => { handler = fn; return () => undefined },
     logger: { warn: () => undefined, info: () => undefined },
   }
@@ -138,6 +144,45 @@ console.log('fix-010 GUI fidelity (RED on current code):')
   )
   check('C1: wrapper 分支纯文本：image 块保留（无消息层改写）', hasImageBlock(outC))
   check('C2: wrapper 分支纯文本：reminder 注入保持', hasReminder(outC))
+}
+
+// E. REL-005 P1-1（review-FIX-010-R0 F-1）漂移窗口判别：新会话无 header +
+//    agent.options 为创建时快照（漂移前非 wrapper），但宿主 live default
+//    （agentDefaultModel.currentSelection，每次读取）已指向 wrapper → prestep
+//    必须判 onWrapperRoute=true（不改写，image 保留）。旧实现回落链仅
+//    header→options → 读 options 快照 → onWrapperRoute=false → 逃生组改写
+//    替换 image 块 → hasImageBlock 必败（红）。宿主契约：api-proxy
+//    selectionFor.current = picked → 日志 header → live default（host:1697-1705，
+//    defaultModelSelection = ctx.agentDefaultModel.currentSelection，host:5532）；
+//    options 仅 buildRequest seedConfig 且被 agent/request 瀑布覆盖（dsh-agent
+//    lib:287-298），不作为路由判定层。
+console.log('fix-010 drift-window live default (REL-005 P1-1):')
+{
+  // E1/E2：漂移窗口——options 过时（非 wrapper）但 live default 指向 wrapper。
+  const runLive = installPrestepHarness(fakeService, {
+    currentSelection: () => ({ provider: `text-provider${WRAP_SUFFIX}`, model: 'brain-1' }),
+  })
+  const outE = await runLive(
+    { options: { provider: 'deepseek-official', model: 'deepseek-v4-flash' }, session: { requestHeader: () => undefined } },
+    imgPlusText(),
+  )
+  check('E1: 无 header + options 过时但 live default 指向 wrapper → 保留原始 image 块（旧实现必败：读 options 逃生组改写）', hasImageBlock(outE) && !hasMarkerText(outE))
+  check('E2: 同场景 reminder 注入保持（wrapper 分支纯文本判定链不回退）', hasReminder(outE))
+  // E3：反向控制——live default 服务缺失 → options 终回退 → 逃生组改写保持
+  // （B1 语义不回退；旧实现同路径，非判别，控制组）。
+  const runNoDefault = installPrestepHarness(fakeService)
+  const outE3 = await runNoDefault(
+    { options: { provider: 'text-only-prov', model: 't1' }, session: { requestHeader: () => undefined } },
+    imgPlusText(),
+  )
+  check('E3: live default 缺失 → options 终回退：非 wrapper 纯文本逃生组改写保持', !hasImageBlock(outE3) && hasMarkerText(outE3))
+  // E4：live default 空值（服务在位但读不出有效选择）→ 同回落 options。
+  const runEmpty = installPrestepHarness(fakeService, { currentSelection: () => ({ provider: '', model: '' }) })
+  const outE4 = await runEmpty(
+    { options: { provider: 'text-only-prov', model: 't1' }, session: { requestHeader: () => undefined } },
+    imgPlusText(),
+  )
+  check('E4: live default 空值 → 回落 options：逃生组改写保持', !hasImageBlock(outE4) && hasMarkerText(outE4))
 }
 
 // D. 模型侧适配仍发生：prestep 保留的原始消息流经 wrapper stream →

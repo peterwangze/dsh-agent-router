@@ -21,6 +21,9 @@ import { Context } from '@deepseek-ai/cordis'
 import { LlmRuntime, contentHasImage } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm/message'
 import { installAdmissionWrapper, WRAP_SUFFIX, IMAGE_SOLO_PLACEHOLDER } from '../lib/wrapper.js'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 let failures = 0
 function check(label, condition) {
@@ -28,7 +31,11 @@ function check(label, condition) {
   else { failures++; console.error(`FAIL  ${label}`) }
 }
 
-process.env.DSH_HOME = '.tmp-fix009-home'
+// P2-2（REL-005，review-FIX-009-R0）：DSH_HOME 用系统临时目录 mkdtemp 隔离
+// （原固定相对路径 `.tmp-fix009-home` 无清理、.gitignore 未覆盖），结束经
+// finally 兜底删除；.gitignore 补 `.tmp-fix0*-home/` 作残留防御。
+const fix009Home = mkdtempSync(join(tmpdir(), 'dsh-router-fix009-'))
+process.env.DSH_HOME = fix009Home
 
 // ── 夹具：纯文本原适配器（见图片块即拒，复刻 UNSUPPORTED_CONTENT 语义）──
 function makeTextAdapter(delegateCalls) {
@@ -53,6 +60,7 @@ function makeTextAdapter(delegateCalls) {
   }
 }
 
+try {
 console.log('fix-009 image-solo request body (RED on current code):')
 {
   const root = new Context()
@@ -132,4 +140,8 @@ console.log('fix-009 4xx fast-fail (no retry):')
 }
 
 console.log(failures === 0 ? '\nALL FIX-009 DISCRIMINANT TESTS PASSED' : `\n${failures} FIX-009 ASSERTION(S) FAILED (RED — fix pending)`)
+} finally {
+  // P2-2（REL-005）：临时 DSH_HOME 兜底清理（正常/异常退出均执行）。
+  try { rmSync(process.env.DSH_HOME, { recursive: true, force: true }) } catch { /* 清理失败忽略：.gitignore 兜底 */ }
+}
 process.exit(failures === 0 ? 0 : 1)
