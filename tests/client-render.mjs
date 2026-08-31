@@ -224,6 +224,13 @@ export async function runClientRender(check) {
   // 必须回落到通用 OAuth 卡（旧：宽判据排除 + 预设卡严格成员 → UI 黑箱 +
   // 删除死锁）。true 时 catalog 注入一个 preset:'zzz' 的散账号。
   let unknownPresetMode = false
+  // FIX-015：统计聚合键幽灵卡判别——true 时 stats.accountTotals 注入
+  // oauth:chatgpt（服务端 OAuth 调用统计 provider 键）；旧代码将其并入
+  // addedAccounts/statsAccountRows 渲染出通用 API Key 假编辑器（用户实证）。
+  let oauthGhostMode = false
+  // FIX-015 修 3：true 时 logged-in 的 ChatGPT 账号模型列表为空（主 agent 选择器
+  // 不会出现该账号——订阅卡须明示，旧代码无提示必败）。
+  let presetEmptyModelsMode = false
   // EVO-002 Step 7（R7-F4 判别）：true 时 remoteMock.oauthLogout 返回
   // ok:false（store.delete 失败形态——凭据文件残留 + 无重试入口的旧行为判别）。
   let logoutFailMode = false
@@ -250,7 +257,7 @@ export async function runClientRender(check) {
               { id: 'vision', name: '视觉', type: 'chat', enabled: true, description: 'd', capabilities: ['image'], provider: '', model: '', account: '', effectiveProvider: 'deepseek-official', effectiveModel: 'deepseek-v4-pro', source: 'main' },
             ],
         oauthAccounts: presetMode === 'none' && !unknownPresetMode ? [] : [
-          { id: 'chatgpt', name: 'ChatGPT', enabled: true, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', tokenRef: '', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.4-mini'], publicClient: false, preset: 'chatgpt-codex', presetLoggedIn: presetMode === 'logged-in' },
+          { id: 'chatgpt', name: 'ChatGPT', enabled: true, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', tokenRef: '', clientId: '', authUrl: '', tokenUrl: '', scope: '', models: presetEmptyModelsMode ? [] : ['gpt-5.4-mini'], publicClient: false, preset: 'chatgpt-codex', presetLoggedIn: presetMode === 'logged-in' },
           // F-1（EVO-007 R0 返工）夹具：weird = 未知 preset 值账号（R8-F1 场景，
           // 入池——验证池行删除）；stray = 无 preset 非 preset 孤儿账号（未入池——
           // 验证高级扩展区孤儿列表删除兜底）。
@@ -282,7 +289,7 @@ export async function runClientRender(check) {
         codexentry: { name: 'Codex 子代理', enabled: true, command: 'codex', args: '', timeoutMs: 0, maxConcurrent: 1, loginArgs: '', statusArgs: '', modelsArgs: '' },
       },
     }, user: null } }),
-    stats: async () => ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [], days: {
+    stats: async () => ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: oauthGhostMode ? [{ provider: 'oauth:chatgpt', name: 'ChatGPT 订阅', calls: 3, errors: 0, inputTokens: 13200, outputTokens: 4800, totalMs: 0, lastAt: undefined }] : [], accountSeries: [], days: {
       '2026-01-15': { calls: 3, errors: 1, inputTokens: 110, outputTokens: 50, tokens: 160, ms: 180, cost: 0.5 },
       '2026-01-16': { calls: 2, errors: 0, inputTokens: 20, outputTokens: 0, tokens: 20, ms: 60, cost: 0 },
     } } }),
@@ -1186,6 +1193,35 @@ export async function runClientRender(check) {
       }
     }
     unknownPresetMode = false
+    presetMode = 'none'
+  }
+
+  // ── FIX-015：统计聚合键幽灵卡判别——oauth:chatgpt 不得渲染为账号卡 ────
+  // 旧代码把 stats.accountTotals 里 `oauth:` 前缀键并入 addedAccounts（→
+  // AccountCard 通用 API Key 假编辑器）与 statsAccountRows（账号级统计卡）。
+  // 判别：账号分类展开后整树文本不含 oauth:chatgpt（旧代码必含 → 必败）。
+  {
+    oauthGhostMode = true
+    presetMode = 'none'
+    await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'fix015-ghost', 60)
+    const acctHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.accountTitle))
+    if (acctHead) {
+      acctHead.props.onClick()
+      currentTree = await settle()
+    }
+    check('FIX-015: oauth: 前缀统计键不渲染为账号卡（旧代码幽灵卡必含）', !!acctHead && !textOf(currentTree).includes('oauth:chatgpt'))
+    oauthGhostMode = false
+    // 修 3：已登录但模型列表为空的订阅卡明示「选择器不会出现该账号」。
+    presetMode = 'logged-in'
+    presetEmptyModelsMode = true
+    await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'fix015-empty-models', 60)
+    const presetHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.accountTitle))
+    if (presetHead) {
+      presetHead.props.onClick()
+      currentTree = await settle()
+    }
+    check('FIX-015: 已登录+空模型订阅卡显示选择器提示（旧代码无提示必败）', !!presetHead && textOf(currentTree).includes(zh.presetModelsEmpty))
+    presetEmptyModelsMode = false
     presetMode = 'none'
   }
 
