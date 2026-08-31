@@ -322,3 +322,11 @@
 | REVIEW-EVO-010-R1 | EVO-010 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 1） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-report-EVO-010-R1.md; review-EVO-010-R1.md | Code Reviewer | 2026-08-31 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
 
 | EV-108 | EVO-010 | 迁移终态 | ChatGPT 主模型宿主官方路由迁移全链闭环（R0 NEEDS_CHANGE → 返工 → R1 APPROVED_WITH_NOTES/0） | 4 commits：30dd55e（lib/host-route.js 路由维护+凭据桥+parity 守卫）/82ae39a（订阅卡通路开关+状态行）/3ead43f（卫生）/31ab145（R0 返工：F-1 parity 持败自激回环双 gate——trigger 分流+失败态 gateWrites，RED=旧代码 240s 挂死活体实证 + 夹具补 emitEvents 盲区；F-2 tick 入队串行；F-3 登出/切 plugin credentials.unset 数据主权；F-4 transport 过滤插件组消双组重名；F-7 mutate 拒绝可观测）。判别 ~56 断言（ROUTE/INJ/TRA/PAR/STA 全矩阵）；门控 16/16 两轮（~1490 断言）；REVIEW-EVO-010-R0（NEEDS_CHANGE 机录 next_round=R1）+ R1（APPROVED_WITH_NOTES/0——F1~F4/F7 判已修复、环断裂推演成立、无新引入阻塞）双机录；P3×4 台账随发布前小修批。transport 不静默自动降级裁决（用户主权+宿主瞬时故障不自愈掩盖）入设计。用户待重启验收：openai-codex 组自动出现+PoC ref 接管+通路开关+token 注入状态行 | 31ab145（链尾） | Developer C + Code Reviewer（R0/R1 同人）+ Coordinator | 2026-08-31 | G4 | 终态（待用户重启验收） |
+
+| TRIAGE-FIX-019 | FIX-019 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/FIX-019.json） | FIX-019.json | change-triage | 2026-08-31 | G11 | TRIAGED |
+
+| REVIEW-FIX-019-R0 | FIX-019 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-report-FIX-019-R0.md; review-FIX-019-R0.md | Code Reviewer | 2026-08-31 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| REVIEW-FIX-019-R1 | FIX-019 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 1） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-report-FIX-019-R0.md; review-FIX-019-R1.md | Code Reviewer | 2026-08-31 | G11 | APPROVED |
+
+| EV-109 | FIX-019 | 幽灵卡三形态终态 | 三幽灵卡判据（chatgpt-oauth 统计键 / openai-codex 宿主路由真条目 / oauth: 旧键）+ 语义拆分组合单点 | 3 commits：6e456ce（chatgpt-oauth 过滤）+ 961aa13（openai-codex providers 目录来源显式排除 + 三判据 + 4 消费点）+ 321a5ef（语义拆分：isPluginRouteProvider oauth 面 / isHostManagedRoute 宿主路由面 / isPluginSelfRegisteredProvider 组合单点——行为等价纯重构）；判别 6 断言 RED 两轮实测；门控 16/16 三轮；R0 APPROVED_WITH_NOTES/0 + 321a5ef 增量 APPROVED（等价性真值表逐项验证，追加节入 R0 报告）双机录；twin 第四形态推演排除（P3-1 推演边界 + P3-2 镜像相等机械守卫入台账）。用户验收背景：⑤ 控件在位（sha256:9fa0908e）+ 幽灵卡待重启后目验消失 | 321a5ef（链尾） | Developer + Code Reviewer + Coordinator | 2026-08-31 | G4 | 终态 |
