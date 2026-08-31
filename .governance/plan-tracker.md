@@ -45,7 +45,7 @@
 | P0 | FIX-014 | 发布 tarball 缺 5 个运行时必需模块：files 列表仅 7/12 lib 模块（缺 attachments/memory/prestep/stats/wrapper）→ tarball 安装后 import 必败——v0.3.0~v0.3.2 tarball 全部不可用（历史冷装只验版本未验 import；junction 安装不受影响） | REL-006（发布阻塞）✅ | 0.3.3 | **已完成（终态）**——e16d710（files 7→12 + CHANGELOG 勘误披露）+ RED→GREEN 判别 + E-3 终版独立复验 IMPORT OK + R0 审查缺口裁定可接受（静态交叉核验替代覆盖）；随 v0.3.3 发布；EV-100 |
 | P1 | EVO-009 | ChatGPT OAuth 账号注册为宿主 llm 适配器——主 agent 模型选择器直接可选（用户指令 2026-08-30） | —（复用既有 OAuth 凭据链/codex-responses/代理 dispatcher + wrapper 适配器注册先例） | 0.4.0 | **开发+审查完成；真机验证受阻→FIX-015 承载修复**——RCA 实锤（catalog 探活 2026-08-31）：oauthAccounts.chatgpt models=[]（订阅登录卡模型输入框未保存）→ modelsOf=0 → 适配器静默不注册（与重启无关）；用户侧动作 = 订阅登录卡保存模型列表（settings/updated 热同步立即注册，无需重启）；EV-103 |
 | P1 | FIX-015 | EVO-009 真机验证失败防御链：静默不注册可观测 + 幽灵卡过滤 + 实预填（placeholder 幻觉根治）+ 保存读写对称（数据丢失根因修）+ models 写路径防缩小全覆盖 | EVO-009（验证失败 RCA）✅ | 0.4.0 | **已完成（终态）**——5 commits（e170cf2 warn 去重/fef785b 幽灵卡+空提示+c9a8deb 实预填+防呆/86fb209 读写对称根因修/af6a1f8 防御盘点 6 路径+取证留档）；门控 16/16（smoke 8 条 FIX-015 断言）；R0 APPROVED_WITH_NOTES/0（机录；7 关注点全核验 + 独立 grep 复核盘点一致；P3×4 台账）；**用户元批评采纳留档：RCA 归因纪律——先证据后结论，用户操作假设必须显式标注（取证注释在 client-render FIX-015 块头）**；用户已重存三件套 + /model 验证两组出现（EVO-009 功能面最终确认） |
-| — | 下一轮 | v0.4.0 发布裁决（EVO-009 + FIX-015 承载；真机已验证：/model 两组出现 + 热同步生效）→ 后续待用户需求（FIX-008 残留 / C-4+C-5 / CI 面 RISK-001 / 插件仓 FIX-281） | — | 0.4.0 | 待用户裁决 |
+| — | 下一轮 | **暂停（用户裁决 2026-08-31）**——v0.4.0 发布链待用户下次指令接续（EVO-009 + FIX-015 已在 main 未发布，真机已验证）；后续待用户需求（FIX-008 残留 / C-4+C-5 / CI 面 RISK-001 / 插件仓 FIX-281） | — | 0.4.0 | 暂停待指令 |
 
 ### 最近完成
 
