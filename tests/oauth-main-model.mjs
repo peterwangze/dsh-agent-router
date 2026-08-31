@@ -286,5 +286,32 @@ console.log('fix-015 empty-models observability (P8 warn, deduped):')
   h2.cleanup()
 }
 
+console.log('fix-016 tools shape (host-real shape; old code Missing tools[0].name):')
+{
+  // 用户实证（2026-08-31）：选 gpt-5.6-luna 为主模型发图对话 → HTTP 400
+  // "Missing required parameter: 'tools[0].name'"。根因：mapTools 错误嵌套
+  // {type:'function', function:{name,…}}，而 codex/responses 契约
+  // （OpenAI Responses API）要求 name/description/parameters 顶层。
+  // 宿主真实 tool 形状（取证：dsh-system-prompt lib/index.js:254-258 +
+  // dsh-llm-pi-ai lib/index.js:1123-1128 双向印证）：{name, description,
+  // parameters}——name 必填字符串。夹具精确复刻该形状。
+  const h = makeHarness({ chatgpt: ACCOUNT_A })
+  const off = installOauthLlmAdapters(h.ctx, h.service)
+  const hostTools = [
+    { name: 'web_search', description: '搜索网络', parameters: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] } },
+    { name: 'route_agent', description: '路由专业 agent', parameters: { type: 'object', properties: {} } },
+  ]
+  const chunks = await callStream(h.llm, { messages: [userMsg('用工具查一下')], tools: hostTools })
+  const body = JSON.parse(h.fetchCalls[0].init.body)
+  const tools = body.tools
+  check('F16-1: 请求携带 tools（2 项透传）', Array.isArray(tools) && tools.length === 2)
+  check('F16-2: tools[0].name 顶层存在（旧代码 function 嵌套 → 端点 400 必败）', typeof tools[0].name === 'string' && tools[0].name === 'web_search')
+  check('F16-3: type=function 且无 function 嵌套残留', tools[0].type === 'function' && !('function' in tools[0]))
+  check('F16-4: description/parameters 顶层透传（宿主形状同构）', tools[0].description === '搜索网络' && tools[0].parameters && tools[0].parameters.type === 'object' && tools[1].name === 'route_agent')
+  check('F16-5: 工具调用仍经 function_call 往返（SSE 聚合不受影响）', finishOf(chunks).reason.kind === 'stop')
+  off()
+  h.cleanup()
+}
+
 console.log(failures === 0 ? '\nALL EVO-009 DISCRIMINANT TESTS PASSED' : `\n${failures} EVO-009 ASSERTION(S) FAILED (RED — fix pending)`)
 process.exit(failures === 0 ? 0 : 1)
