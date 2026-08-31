@@ -341,6 +341,16 @@ window.__ModuleLoader__.load({
 .dshrouter-attach:disabled{opacity:.5;cursor:not-allowed}
 .dshrouter-attachcard{box-sizing:border-box;display:inline-flex;align-items:center;gap:4px;max-width:240px;font-size:12px;line-height:16px;color:var(--dsw-alias-label-primary);border:1px solid var(--dsw-alias-border-l3);border-radius:8px;padding:2px 8px;background:var(--dsw-alias-bg-base,transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
 .dshrouter-toolcard{border:1px solid var(--dsw-alias-border-l2);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);min-width:0}
+/* EVO-012：route_agent 卡片默认折叠——摘要行（标题+状态+耗时+展开箭头，参考
+宿主 Think 条目交互）与折叠态缩略图（url 直达）。 */
+.dshrouter-toolcard-summary{display:flex;align-items:center;gap:8px;width:100%;min-width:0;background:none;border:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left}
+.dshrouter-toolcard-summary:hover{opacity:.85}
+.dshrouter-toolcard-chevron{flex:none;font-size:12px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
+.dshrouter-toolcard-thumbs{display:flex;flex-wrap:wrap;gap:8px}
+.dshrouter-toolthumb{display:block;width:48px;height:48px;border:1px solid var(--dsw-alias-border-l3);border-radius:6px;background:var(--dsw-alias-bg-base,transparent);object-fit:cover;cursor:zoom-in}
+.dshrouter-toolthumb:hover{opacity:.9}
+/* EVO-012：展开态正文容器（内部分组与卡片 gap 语义一致）。 */
+.dshrouter-toolcard-body{display:flex;flex-direction:column;gap:8px}
 .dshrouter-toolcard-head{display:flex;align-items:center;gap:8px}
 .dshrouter-toolcard-title{font-size:13px;font-weight:500}
 .dshrouter-toolimages{display:flex;flex-wrap:wrap;gap:8px}
@@ -3718,10 +3728,15 @@ window.__ModuleLoader__.load({
         }, error ? '⚠' : '📎'))
     }
 
-    /** 单张图片缩略图：经 router/imageData 取字节渲染，失败可点击重试（具体错误码透传，便于诊断）。 */
+    /** 单张图片缩略图：marker 携带同源 url（EVO-012）→ <img src> 直达——绕开
+     *  被宿主网关 rejected 的 imageData RPC；加载失败（Electron file:// 面 /
+     *  宿主网关回归边界）回落 RPC。无 url（旧产物兼容）→ 经 router/imageData
+     *  取字节渲染，失败可点击重试（具体错误码透传，便于诊断）。thumb 态用
+     *  小尺寸类（卡片折叠态）。 */
     function RouteImage(props) {
       const { t, router, ref, onOpen } = props
       const [state, setState] = useState({ status: 'loading' })
+      const directUrl = typeof ref?.url === 'string' && ref.url ? ref.url : ''
       const load = () => {
         const remote = typeof router === 'function' ? router() : router
         if (!remote || typeof remote.imageData !== 'function') {
@@ -3744,7 +3759,17 @@ window.__ModuleLoader__.load({
           }
         }, (failure) => setState({ status: 'error', detail: failure && failure.message ? String(failure.message) : 'RPC_FAILED' }))
       }
-      useEffect(() => { load() }, [])
+      useEffect(() => { if (!directUrl) load() }, [])
+      if (directUrl) {
+        const alt = (typeof ref.name === 'string' && ref.name) || t('toolImageLabel')
+        return el('img', {
+          className: props.thumb ? 'dshrouter-toolthumb' : 'dshrouter-toolimage',
+          src: directUrl,
+          alt,
+          onClick: () => onOpen({ src: directUrl, alt }),
+          onError: () => load(),
+        })
+      }
       if (state.status === 'error') {
         return el('button', {
           type: 'button',
@@ -3762,6 +3787,16 @@ window.__ModuleLoader__.load({
         })
       }
       return el('span', { className: 'dshrouter-toolmeta' }, t('toolRunning'))
+    }
+
+    /** EVO-012：工具耗时格式化（<1s → ms；<60s → x.xs；其余 → mmss）。 */
+    function formatToolDuration(ms) {
+      if (!Number.isFinite(ms) || ms < 0) return ''
+      if (ms < 1000) return `${Math.round(ms)}ms`
+      if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+      const minutes = Math.floor(ms / 60000)
+      const seconds = Math.floor((ms % 60000) / 1000)
+      return `${minutes}m${seconds}s`
     }
 
     /** base64 → blob URL（L3 预览用；createObjectURL 不可用时回落 data: URL）。 */
@@ -3842,13 +3877,18 @@ window.__ModuleLoader__.load({
       return el('div', { className: 'dshrouter-toolfile' }, pathText, action)
     }
 
-    /** route_agent 工具卡片：解析结果中的图片标记渲染缩略图（兼容旧会话的真实图片块）。 */
+    /** route_agent 工具卡片：默认折叠（EVO-012）——摘要行（route_agent ·
+     * 多模型路由 · 成功/失败/处理中 · 耗时 + 展开箭头，参考宿主 Think 条目
+     * 交互）+ 折叠态产物缩略图（url 直达；无 url 旧产物不占折叠面）；点击
+     * 展开完整结果（现有渲染：错误行 / 图片 gallery / L3 文件行 / 文本）。
+     * 旧无 url 标记展开后经 imageData RPC 回退（行为兼容）。 */
     function RouteAgentToolCard(props) {
       const { t, router, block } = props
       const [lightbox, setLightbox] = useState(null)
+      const [expanded, setExpanded] = useState(false)
       if (!block || block.kind !== 'tool-result') {
         return el('div', { className: 'dshrouter-toolcard' },
-          el('div', { className: 'dshrouter-toolcard-head' },
+          el('div', { className: 'dshrouter-toolcard-summary' },
             el('span', { className: 'dshrouter-toolcard-title' }, t('toolRouteTitle')),
             el('span', { className: 'dshrouter-toolmeta' }, t('toolRunning'))))
       }
@@ -3866,7 +3906,6 @@ window.__ModuleLoader__.load({
           if (cleaned) texts.push(cleaned)
         }
       }
-      const name = block.call && typeof block.call.name === 'string' ? block.call.name : 'route_agent'
       const open = (target) => setLightbox(target)
       // L3 文件引用（v3 §5 展示段 L3 / N-7）：从工具调用参数提取 filePath 与
       // files 的非 URL 条目——「打开文件」预览的确定性来源（audio/video 原生
@@ -3884,19 +3923,41 @@ window.__ModuleLoader__.load({
         if (typeof args.filePath === 'string') pushFile(args.filePath)
         if (Array.isArray(args.files)) for (const item of args.files) pushFile(item)
       } catch { /* 容错：非法 argsRaw 不产生 L3 行 */ }
+      // 摘要状态与耗时：成功/失败（错误终态展开行在 body），处理中由运行态分支承担。
+      const statusText = block.isError === true ? t('statsFail') : t('statsOk')
+      const duration = typeof block.callTime === 'number' && typeof block.time === 'number'
+        ? formatToolDuration(Math.max(0, block.time - block.callTime))
+        : ''
+      // 折叠态缩略图：仅 url 直达产物（渲染零 RPC、零等待）。
+      const directRefs = refs.filter((ref) => typeof ref?.url === 'string' && ref.url)
       return el('div', { className: 'dshrouter-toolcard' },
-        el('div', { className: 'dshrouter-toolcard-head' },
+        el('button', {
+          type: 'button',
+          className: 'dshrouter-toolcard-summary',
+          'aria-expanded': expanded ? 'true' : 'false',
+          onClick: () => setExpanded(!expanded),
+        },
           el('span', { className: 'dshrouter-toolcard-title' }, t('toolRouteTitle')),
-          el('span', { className: 'dshrouter-toolmeta' }, name)),
-        block.isError === true ? el('span', { className: 'dshrouter-toolerror' }, block.error && block.error.message ? block.error.message : t('statsFail')) : null,
-        refs.length > 0 ? el('div', { className: 'dshrouter-toolimages dshrouter-toolgallery' },
-          ...refs.map((ref, index) => el(RouteImage, {
-            t, router, ref, onOpen: open,
+          el('span', { className: 'dshrouter-toolmeta' }, `${statusText}${duration ? ` · ${duration}` : ''}`),
+          block.isError === true && block.error && typeof block.error.message === 'string' && block.error.message
+            ? el('span', { className: 'dshrouter-toolerror' }, block.error.message)
+            : null,
+          el('span', { className: 'dshrouter-toolcard-chevron' }, expanded ? '▾' : '▸')),
+        !expanded && directRefs.length > 0 ? el('div', { className: 'dshrouter-toolcard-thumbs' },
+          ...directRefs.map((ref, index) => el(RouteImage, {
+            t, router, ref, onOpen: open, thumb: true,
             key: `${String(ref.attachmentId ?? '')}:${index}`,
           }))) : null,
-        fileRefs.length > 0 ? el('div', { className: 'dshrouter-toolfiles' },
-          ...fileRefs.map((file, index) => el(RouteFileRow, { t, router, file, key: `${file.path}:${index}` }))) : null,
-        ...texts.map((text, index) => el('div', { className: 'dshrouter-tooltext', key: index }, text)),
+        expanded ? el('div', { className: 'dshrouter-toolcard-body' },
+          block.isError === true ? el('span', { className: 'dshrouter-toolerror' }, block.error && block.error.message ? block.error.message : t('statsFail')) : null,
+          refs.length > 0 ? el('div', { className: 'dshrouter-toolimages dshrouter-toolgallery' },
+            ...refs.map((ref, index) => el(RouteImage, {
+              t, router, ref, onOpen: open,
+              key: `${String(ref.attachmentId ?? '')}:${index}`,
+            }))) : null,
+          fileRefs.length > 0 ? el('div', { className: 'dshrouter-toolfiles' },
+            ...fileRefs.map((file, index) => el(RouteFileRow, { t, router, file, key: `${file.path}:${index}` }))) : null,
+          ...texts.map((text, index) => el('div', { className: 'dshrouter-tooltext', key: index }, text))) : null,
         lightbox ? el('div', { className: 'dshrouter-modal', onClick: (event) => { if (event.target === event.currentTarget) setLightbox(null) } },
           el('div', { className: 'dshrouter-modal-body' },
             el('h4', { className: 'dshrouter-modal-title' }, t('imagePreviewTitle')),

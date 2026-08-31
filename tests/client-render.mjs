@@ -1031,15 +1031,24 @@ export async function runClientRender(check) {
     await new Promise((resolve) => setImmediate(resolve))
   }
 
-  // route_agent 工具卡片：解析标记渲染缩略图；兼容旧会话真实图片块；运行态显示处理中。
+  // route_agent 工具卡片：默认折叠（EVO-012）——摘要行（route_agent · 多模型
+  // 路由 · 成功/失败 · 耗时 + 展开箭头）+ 折叠态产物缩略图（url 直达）；点击
+  // 展开完整结果（标记缩略图 / 旧会话真实图片块 / 文本）。运行态显示处理中。
+  // 展开助手（本区各块共用）：点击卡片摘要行 → 返回展开后的最新树。
+  const expandCard = async (tree) => {
+    const summary = findAll(tree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-toolcard-summary'))[0]
+    if (!summary) return currentTree
+    summary.props.onClick()
+    return settle()
+  }
   {
     const settledBlock = {
       kind: 'tool-result',
       seq: 1,
-      time: 1,
+      time: 48000,
       callId: 'c1',
       call: { name: 'route_agent', argsRaw: '{"agent":"draw"}' },
-      callTime: 1,
+      callTime: 5000,
       content: [
         { type: 'text', text: '已生成图片（1024x1024）\n[router:image:{"attachmentId":"sha256:tv","mediaType":"image/png","bytes":4,"width":2,"height":2,"name":"router-draw.png"}]' },
         { type: 'text', text: '[openai/dall-e-3 · 输入 0 / 输出 0 tokens]' },
@@ -1048,18 +1057,54 @@ export async function runClientRender(check) {
       isError: false,
       subCalls: [],
     }
+    captured.imageDataCalls = []
     const tree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: settledBlock }), 'toolcard')
-    const imgs = findAll(tree, (node) => node && node.type === 'img')
-    check('tool card renders marker images', imgs.length === 2 && imgs.some((img) => img.props && img.props.src === 'data:image/png;base64,aGk='))
-    check('tool card hides marker text', !textOf(tree).includes('[router:image:') && textOf(tree).includes('已生成图片'))
-    check('tool card loads legacy image blocks', captured.imageDataCalls.some((call) => call.ref && call.ref.attachmentId === 'sha256:old') && captured.imageDataCalls.some((call) => call.ref && call.ref.attachmentId === 'sha256:tv'))
+    const summaries = findAll(tree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-toolcard-summary'))
+    check('tool card collapsed by default with summary row (EVO-012)', summaries.length === 1 && textOf(summaries[0]).includes(tOf('toolRouteTitle')) && textOf(summaries[0]).includes(tOf('statsOk')) && textOf(summaries[0]).includes('43.0s') && textOf(summaries[0]).includes('▸'))
+    check('tool card collapsed hides full result content (EVO-012)', !textOf(tree).includes('已生成图片') && !textOf(tree).includes('[openai/dall-e-3'))
+    check('tool card collapsed issues no imageData RPC (old markers stay off-line)', captured.imageDataCalls.length === 0)
+    const expandedTree = await expandCard(tree)
+    const imgs = findAll(expandedTree, (node) => node && node.type === 'img')
+    check('tool card renders marker images after expand', imgs.length === 2 && imgs.some((img) => img.props && img.props.src === 'data:image/png;base64,aGk='))
+    check('tool card hides marker text after expand', !textOf(expandedTree).includes('[router:image:') && textOf(expandedTree).includes('已生成图片'))
+    check('tool card loads legacy image blocks after expand', captured.imageDataCalls.some((call) => call.ref && call.ref.attachmentId === 'sha256:old') && captured.imageDataCalls.some((call) => call.ref && call.ref.attachmentId === 'sha256:tv'))
     const runningBlock = { callId: 'c2', name: 'route_agent', argsRaw: '{}', turn: 1, step: 1, time: 1, callView: null, subCalls: [] }
     const running = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: runningBlock }), 'toolcard-running')
     check('tool card running state', textOf(running).includes(tOf('toolRunning')))
-    // 错误结果：展示错误文案，不渲染图片。
-    const failedBlock = { ...settledBlock, isError: true, error: { name: 'Error', code: 'X' } }
+    // 错误结果：摘要行显示失败状态与错误消息（可观测——折叠不吞错），展开行
+    // 展示错误文案，不渲染图片。
+    const failedBlock = { ...settledBlock, isError: true, error: { name: 'Error', code: 'X', message: '端点拒绝（无额度）' } }
     const failed = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: failedBlock }), 'toolcard-failed')
-    check('tool card error state', textOf(failed).includes(tOf('statsFail')))
+    check('tool card error state visible in collapsed summary (EVO-012)', textOf(failed).includes(tOf('statsFail')) && textOf(failed).includes('端点拒绝（无额度）'))
+    const failedExpanded = await expandCard(failed)
+    check('tool card error state expanded body', textOf(failedExpanded).includes('端点拒绝（无额度）'))
+
+    // EVO-012：url 直达——生图标记带同源 url → 折叠态缩略图 <img src> 直达
+    //（零 RPC、零等待）；展开态 gallery 仍直达；无 url 旧图片块展开后经 RPC。
+    captured.imageDataCalls = []
+    const urlId = `sha256:${'e'.repeat(64)}`
+    const urlRef = { attachmentId: urlId, mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'router-draw.png', url: `/router-assets/${urlId}` }
+    const urlBlock = {
+      kind: 'tool-result',
+      seq: 5,
+      time: 48000,
+      callId: 'c5',
+      call: { name: 'route_agent', argsRaw: '{"agent":"draw"}' },
+      callTime: 5000,
+      content: [
+        { type: 'text', text: `已生成图片（1024x1024）\n[router:image:${JSON.stringify(urlRef)}]` },
+        { type: 'image', attachment: { attachmentId: 'sha256:old', mediaType: 'image/png', bytes: 4, width: 2, height: 2 } },
+      ],
+      isError: false,
+      subCalls: [],
+    }
+    const urlTree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: urlBlock }), 'toolcard-url')
+    const thumbs = findAll(urlTree, (node) => node && node.type === 'img' && hasClass(node, 'dshrouter-toolthumb'))
+    check('tool card collapsed thumbnail renders via url direct (EVO-012)', thumbs.length === 1 && thumbs[0].props.src === `/router-assets/${urlId}`)
+    check('tool card collapsed url thumbnail issues no imageData RPC (EVO-012)', captured.imageDataCalls.length === 0)
+    const urlExpanded = await expandCard(urlTree)
+    const expandedUrlImgs = findAll(urlExpanded, (node) => node && node.type === 'img')
+    check('tool card expanded keeps url direct + RPC fallback only for legacy (EVO-012)', expandedUrlImgs.length === 2 && expandedUrlImgs.some((img) => img.props && img.props.src === `/router-assets/${urlId}`) && captured.imageDataCalls.some((call) => call.ref && call.ref.attachmentId === 'sha256:old') && !captured.imageDataCalls.some((call) => call.ref && call.ref.attachmentId === urlId))
   }
 
   // v3 Step 9（三级展示 L3 / N-7）：route_agent 工具卡片 L3——调用参数 filePath /
@@ -1083,9 +1128,11 @@ export async function runClientRender(check) {
     captured.readWorkspaceFileCalls = []
     readFileFailMode = false
     const l3Tree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: l3Block }), 'toolcard-l3')
-    const pathRows = findAll(l3Tree, (node) => hasClass(node, 'dshrouter-toolpath'))
+    check('tool card L3 collapsed by default (EVO-012)', !textOf(l3Tree).includes('.router-files/voice.wav'))
+    const l3Expanded = await expandCard(l3Tree)
+    const pathRows = findAll(l3Expanded, (node) => hasClass(node, 'dshrouter-toolpath'))
     check('tool card renders L3 path text', pathRows.length === 1 && textOf(pathRows[0]).includes('.router-files/voice.wav'))
-    const openButtons = openButtonsOf(l3Tree)
+    const openButtons = openButtonsOf(l3Expanded)
     check('tool card renders open-file button', openButtons.length === 1)
     if (openButtons.length === 1) {
       openButtons[0].props.onClick()
@@ -1098,7 +1145,8 @@ export async function runClientRender(check) {
     readFileFailMode = true
     captured.readWorkspaceFileCalls = []
     const failTree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: l3Block }), 'toolcard-l3-fail')
-    const failButtons = openButtonsOf(failTree)
+    const failExpanded = await expandCard(failTree)
+    const failButtons = openButtonsOf(failExpanded)
     if (failButtons.length === 1) {
       failButtons[0].props.onClick()
       currentTree = await settle()
@@ -1109,9 +1157,10 @@ export async function runClientRender(check) {
     const mixedBlock = { ...l3Block, call: { name: 'route_agent', argsRaw: '{"agent":"vision","task":"处理文件","files":[".router-files/clip.mp4",".router-files/notes.doc","https://example.com/x.png"]}' } }
     captured.readWorkspaceFileCalls = []
     const mixedTree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: mixedBlock }), 'toolcard-l3-mixed')
-    const mixedPaths = findAll(mixedTree, (node) => hasClass(node, 'dshrouter-toolpath'))
+    const mixedExpanded = await expandCard(mixedTree)
+    const mixedPaths = findAll(mixedExpanded, (node) => hasClass(node, 'dshrouter-toolpath'))
     check('L3 files list skips URL entries', mixedPaths.length === 2)
-    const mixedButtons = openButtonsOf(mixedTree)
+    const mixedButtons = openButtonsOf(mixedExpanded)
     check('L3 renders open-file per file', mixedButtons.length === 2)
     if (mixedButtons.length === 2) {
       mixedButtons[0].props.onClick()
@@ -1142,7 +1191,8 @@ export async function runClientRender(check) {
       subCalls: [],
     }
     const galleryTree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: galleryBlock }), 'toolcard-gallery')
-    const gallery = findAll(galleryTree, (node) => hasClass(node, 'dshrouter-toolgallery'))
+    const galleryExpanded = await expandCard(galleryTree)
+    const gallery = findAll(galleryExpanded, (node) => hasClass(node, 'dshrouter-toolgallery'))
     check('tool card renders image gallery container', gallery.length === 1)
   }
 
