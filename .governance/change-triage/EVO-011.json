@@ -1,0 +1,411 @@
+{
+  "schema_version": 1,
+  "task_id": "EVO-011",
+  "title": "ChatGPT 订阅生图——codex images 专用端点直连（draw agent 绑 OAuth 生成图片，gpt-image-2）",
+  "priority": "P1",
+  "target_version": "0.4.1",
+  "depends_on": [],
+  "files": [
+    "lib/service.js",
+    "lib/client.js",
+    "tests/smoke.mjs",
+    "tests/served-client.js"
+  ],
+  "reason": "用户裁决立即实施（RES-004 判定绿：三层证据交叉）；改造面源码级核实（能力矩阵一行 + runCodexResponsesImage 直连分支复用 90% 现成链路 + UI 类型化）；含必做实测（真实 token+插件头部集+代理链）",
+  "created_at": "2026-08-31",
+  "tool": "change-triage",
+  "tool_version": "0.77.0",
+  "analysis": {
+    "dependency": {
+      "unblocked": [
+        "EVO-010"
+      ],
+      "blocked": [
+        "REL-002",
+        "REL-005",
+        "EVO-008",
+        "REL-006",
+        "FIX-014",
+        "FIX-017",
+        "FIX-018",
+        "FIX-019"
+      ],
+      "blocked_by": [],
+      "unknown_deps": [],
+      "cycles": [
+        [
+          "FIX-014",
+          "REL-006",
+          "FIX-014"
+        ]
+      ],
+      "cycle_warning": true,
+      "new_task_cycle": false
+    },
+    "priority_context": {
+      "proposed": "P1",
+      "in_flight": {
+        "P0": 9,
+        "P1": 17,
+        "P2": 1
+      },
+      "version_chain": []
+    },
+    "conflicts": [
+      {
+        "task_id": "EVO-004",
+        "files": [
+          "lib/client.js",
+          "lib/service.js",
+          "lib/stats.js",
+          "tests/client-render.mjs",
+          "tests/smoke.mjs",
+          "tests/stats.mjs"
+        ],
+        "overlap": [
+          "lib/client.js",
+          "lib/service.js",
+          "tests/smoke.mjs"
+        ]
+      },
+      {
+        "task_id": "EVO-005",
+        "files": [
+          "lib/client.js",
+          "lib/oauth-credentials.js",
+          "lib/schemas.js",
+          "lib/service.js",
+          "tests/oauth-credentials.mjs",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/client.js",
+          "lib/service.js",
+          "tests/smoke.mjs"
+        ]
+      },
+      {
+        "task_id": "EVO-006",
+        "files": [
+          "lib/client.js",
+          "lib/schemas.js",
+          "lib/service.js"
+        ],
+        "overlap": [
+          "lib/client.js",
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "EVO-007",
+        "files": [
+          "lib/client.js",
+          "tests/client-render.mjs"
+        ],
+        "overlap": [
+          "lib/client.js"
+        ]
+      },
+      {
+        "task_id": "EVO-008",
+        "files": [
+          "lib/client.js",
+          "tests/served-client.js"
+        ],
+        "overlap": [
+          "lib/client.js",
+          "tests/served-client.js"
+        ]
+      },
+      {
+        "task_id": "EVO-009",
+        "files": [
+          "lib/index.js",
+          "lib/oauth-llm.js",
+          "lib/service.js",
+          "tests/oauth-main-model.mjs"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "EVO-010",
+        "files": [
+          "lib/client.js",
+          "lib/index.js",
+          "lib/oauth-credentials.js",
+          "lib/schemas.js",
+          "lib/service.js",
+          "tests/oauth-main-model.mjs",
+          "tests/served-client.js"
+        ],
+        "overlap": [
+          "lib/client.js",
+          "lib/service.js",
+          "tests/served-client.js"
+        ]
+      },
+      {
+        "task_id": "FIX-004",
+        "files": [
+          "lib/index.js",
+          "lib/service.js"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "FIX-006",
+        "files": [
+          "lib/service.js",
+          "package.json",
+          "tests/adapter-parity.mjs",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/service.js",
+          "tests/smoke.mjs"
+        ]
+      },
+      {
+        "task_id": "FIX-007",
+        "files": [
+          "lib/attachments.js",
+          "lib/index.js",
+          "lib/service.js",
+          "lib/tool.js"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "FIX-009",
+        "files": [
+          "lib/prestep.js",
+          "lib/service.js",
+          "lib/tool.js",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/service.js",
+          "tests/smoke.mjs"
+        ]
+      },
+      {
+        "task_id": "FIX-010",
+        "files": [
+          "lib/attachments.js",
+          "lib/client.js",
+          "lib/prestep.js",
+          "lib/service.js",
+          "tests/attachments.mjs"
+        ],
+        "overlap": [
+          "lib/client.js",
+          "lib/service.js"
+        ]
+      },
+      {
+        "task_id": "FIX-012",
+        "files": [
+          "lib/client.js",
+          "tests/fix-012-image-takeover.mjs"
+        ],
+        "overlap": [
+          "lib/client.js"
+        ]
+      },
+      {
+        "task_id": "FIX-013",
+        "files": [
+          "lib/service.js",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/service.js",
+          "tests/smoke.mjs"
+        ]
+      },
+      {
+        "task_id": "FIX-015",
+        "files": [
+          "lib/client.js",
+          "lib/oauth-llm.js",
+          "tests/oauth-main-model.mjs",
+          "tests/served-client.js"
+        ],
+        "overlap": [
+          "lib/client.js",
+          "tests/served-client.js"
+        ]
+      },
+      {
+        "task_id": "FIX-018",
+        "files": [
+          "lib/client.js",
+          "lib/wrapper.js",
+          "tests/fix-012-image-takeover.mjs"
+        ],
+        "overlap": [
+          "lib/client.js"
+        ]
+      },
+      {
+        "task_id": "FIX-019",
+        "files": [
+          "lib/client.js",
+          "tests/client-render.mjs",
+          "tests/served-client.js"
+        ],
+        "overlap": [
+          "lib/client.js",
+          "tests/served-client.js"
+        ]
+      },
+      {
+        "task_id": "REL-003",
+        "files": [
+          "lib/oauth-credentials.js",
+          "lib/service.js",
+          "package.json",
+          "tests/smoke.mjs"
+        ],
+        "overlap": [
+          "lib/service.js",
+          "tests/smoke.mjs"
+        ]
+      },
+      {
+        "task_id": "REL-004",
+        "files": [
+          "changelog.md",
+          "docs/release/feature-flags-v0.3.0.md",
+          "lib/service.js",
+          "package.json",
+          "readme.md",
+          "tests/oauth-promotion.mjs"
+        ],
+        "overlap": [
+          "lib/service.js"
+        ]
+      }
+    ],
+    "version": {
+      "target": "0.4.1",
+      "current": "",
+      "planned_next": null,
+      "issues": []
+    },
+    "side_effect": {
+      "detected": false,
+      "touches_real_env": false,
+      "requires_r1": false,
+      "declared": "",
+      "blast_radius": [],
+      "review_conditions": [],
+      "issues": []
+    }
+  },
+  "snapshot": {
+    "tool": "task-priority-analysis",
+    "module_version": "0.71.0",
+    "report_json": {
+      "total": 28,
+      "completed": [
+        "OPS-001"
+      ],
+      "blocked": [
+        {
+          "task_id": "REL-002",
+          "blocking_dependencies": [
+            "FIX-006"
+          ]
+        },
+        {
+          "task_id": "REL-005",
+          "blocking_dependencies": [
+            "FIX-009",
+            "FIX-010"
+          ]
+        },
+        {
+          "task_id": "EVO-008",
+          "blocking_dependencies": [
+            "FIX-012"
+          ]
+        },
+        {
+          "task_id": "REL-006",
+          "blocking_dependencies": [
+            "FIX-011",
+            "FIX-012",
+            "FIX-013",
+            "FIX-014"
+          ]
+        },
+        {
+          "task_id": "FIX-014",
+          "blocking_dependencies": [
+            "REL-006"
+          ]
+        },
+        {
+          "task_id": "FIX-017",
+          "blocking_dependencies": [
+            "FIX-016"
+          ]
+        },
+        {
+          "task_id": "FIX-018",
+          "blocking_dependencies": [
+            "FIX-017"
+          ]
+        },
+        {
+          "task_id": "FIX-019",
+          "blocking_dependencies": [
+            "FIX-015"
+          ]
+        }
+      ],
+      "unblocked": [
+        "EVO-010"
+      ],
+      "recommended_next": [
+        "EVO-010"
+      ],
+      "non_executable": [
+        "FIX-004",
+        "EVO-004",
+        "FIX-006",
+        "EVO-005",
+        "REL-003",
+        "FIX-007",
+        "EVO-006",
+        "REL-004",
+        "FIX-009",
+        "FIX-010",
+        "EVO-007",
+        "FIX-011",
+        "FIX-012",
+        "FIX-013",
+        "EVO-009",
+        "FIX-015",
+        "FIX-016",
+        "ARCH-003"
+      ],
+      "cycles": [
+        [
+          "FIX-014",
+          "REL-006",
+          "FIX-014"
+        ]
+      ],
+      "cycle_warning": true
+    },
+    "report_text": "# Task Priority Analysis\n\nTotal: **28** tasks — 1 completed, 1 unblocked, 8 blocked, 18 non-executable.\n\n## ⚠️ CYCLE DETECTED (WARNING)\n\nThe dependency graph contains a cycle. The analysis below is best-effort; the cycle should be resolved (a task should not depend, directly or transitively, on itself). This is a WARNING and does not block the analysis output (FIX-237.2 cycle tolerance).\n\n- FIX-014 → REL-006 → FIX-014\n\n## Recommended next\n\n**Top pick: `EVO-010` [P1]**\n\n- `EVO-010` [P1] v=0.4.0 status=**开发+审查终态 deps=[—]  [refs: ARCH-003]\n\n## Unblocked (ready to work)\n\n- `EVO-010` [P1] v=0.4.0 status=**开发+审查终态 deps=[—]  [refs: ARCH-003]\n\n## Excluded (non-executable status)\n\n_Dependency-satisfied rows excluded from Unblocked / Recommended next: their status leading marker is terminal / non-executable (⛔/⏸/🔴/🚧/🛑/📋/✅) or their wording is terminal without an emoji marker (FIX-237.2 / ADR-017 §4.4 P1-3 / FIX-288 ⑦) even though their dependencies are met._\n\n- `FIX-004` [P1] v=v0.3.x status=已完成 deps=[—]\n- `EVO-004` [P1] v=v0.3.1 status=已完成 deps=[—]\n- `FIX-006` [P0] v=v0.3.0 status=已完成 deps=[—]\n- `EVO-005` [P1] v=v0.3.0 status=已完成 deps=[—]  [refs: EVO-002]\n- `REL-003` [P1] v=v0.3.0 status=已完成 deps=[—]  [refs: EVO-005, DEC-025]\n- `FIX-007` [P0] v=v0.3.0（或热修） status=已完成 deps=[—]  [refs: RISK-003]\n- `EVO-006` [P1] v=v0.3.1 status=已完成 deps=[—]  [refs: EVO-002, EVO-005, DEC-026]\n- `REL-004` [P1] v=v0.3.1 status=已完成 deps=[—]  [refs: EVO-006, DEC-026]\n- `FIX-009` [P0] v=未规划版本（热修候选） status=已完成 deps=[—]\n- `FIX-010` [P0] v=未规划版本 status=已完成 deps=[—]\n- `EVO-007` [P1] v=0.3.2 status=已完成 deps=[—]\n- `FIX-011` [P0] v=未规划版本（热修候选） status=**已完成 deps=[—]\n- `FIX-012` [P0] v=未规划版本（热修候选） status=**已完成 deps=[—]\n- `FIX-013` [P1] v=未规划版本（热修候选） status=**已完成 deps=[—]\n- `EVO-009` [P1] v=0.4.0 status=**开发+审查完成 deps=[—]\n- `FIX-015` [P1] v=0.4.0 status=**已完成 deps=[—]  [refs: EVO-009]\n- `FIX-016` [P0] v=0.4.0 status=**已完成 deps=[—]  [refs: EVO-009]\n- `ARCH-003` [P1] v=0.4.0（EVO-010 输入） status=**已完成 deps=[—]\n\n## Blocked\n\n- `REL-002` [P1] v=v0.3.0 status=已完成 blocked_by=[FIX-006]\n- `REL-005` [P1] v=0.3.2 status=已完成 blocked_by=[FIX-009, FIX-010]\n- `EVO-008` [P1] v=未规划版本 status=**已完成 blocked_by=[FIX-012]\n- `REL-006` [P1] v=0.3.3 status=**已完成 blocked_by=[FIX-011, FIX-012, FIX-013, FIX-014]\n- `FIX-014` [P0] v=0.3.3 status=**已完成 blocked_by=[REL-006]\n- `FIX-017` [P0] v=0.4.0 status=**已完成 blocked_by=[FIX-016]\n- `FIX-018` [P1] v=0.4.0 status=**开发+审查终态 blocked_by=[FIX-017]\n- `FIX-019` [P2] v=0.4.0 status=**已完成 blocked_by=[FIX-015]\n\n## Completed\n\n- `OPS-001` [P9] v=— status=✅ 已完成 deps=[—]\n"
+  }
+}
