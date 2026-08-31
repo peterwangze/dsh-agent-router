@@ -42,7 +42,7 @@ import {
 import { RouterService } from '../lib/service.js'
 import { OauthCredentialStore } from '../lib/oauth-credentials.js'
 import { oauthAccountSchema, OAUTH_TRANSPORT_VALUES, normalizeTransport } from '../lib/schemas.js'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -53,20 +53,24 @@ function check(label, condition) {
 }
 
 // ── 夹具 ──────────────────────────────────────────────────────────────────
+// EVO-010 返工（F-4）：插件组（chatgpt-oauth）只列 transport='plugin' 账号——
+// 默认 transport='host' 账号的模型由宿主官方 openai-codex 组承载。EVO-009
+// 判别块夹具显式 transport:'plugin'（验证插件通路）；EVO-010 路由块用
+// routeAccount（默认 host）。
 const ACCOUNT_A = {
   name: 'ChatGPT 订阅', enabled: true, preset: 'chatgpt-codex', protocol: 'codex-responses',
   baseURL: '', credentialFile: '', clientId: '', clientSecret: '', publicClient: false,
-  authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.6-sol', 'gpt-5.6-terra'], tokenRef: '',
+  authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.6-sol', 'gpt-5.6-terra'], tokenRef: '', transport: 'plugin',
 }
 const ACCOUNT_B = {
   name: '二号订阅', enabled: true, preset: 'chatgpt-codex', protocol: 'codex-responses',
   baseURL: '', credentialFile: '', clientId: '', clientSecret: '', publicClient: false,
-  authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.6-terra', 'gpt-5.6-luna'], tokenRef: '',
+  authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.6-terra', 'gpt-5.6-luna'], tokenRef: '', transport: 'plugin',
 }
 const ACCOUNT_OFF = {
   name: '停用订阅', enabled: false, preset: 'chatgpt-codex', protocol: 'codex-responses',
   baseURL: '', credentialFile: '', clientId: '', clientSecret: '', publicClient: false,
-  authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.6-off'], tokenRef: '',
+  authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.6-off'], tokenRef: '', transport: 'plugin',
 }
 const NON_PRESET = {
   name: '通用账号', enabled: true, preset: '', protocol: 'openai-completions',
@@ -373,6 +377,10 @@ console.log('fix-017 responses contract (top-level items; function_call never in
 
 // ── EVO-010：宿主官方 openai-codex 路由迁移（凭据桥 + 路由维护者）────────
 //
+// 断言计数口径（F-5 对齐）：本文件全部 check() 计数 = 实测为准（R0 申报
+// 「evo-010 块 31 断言」vs 实测 27——偏差已核准：口径 = 顶层 check() 数，
+// 非叶子条件数；返工后含 rework 块计数随运行输出标注）。
+//
 // 判别面（实施依据 .governance/arch-003-bridge-poc.md 实施要点五条）：
 //   ROUTE-* 路由自动维护：settings.mutate('llm-pi-ai') 写
 //     providers['openai-codex'] = { apiKeyEnv: 'DSH_ROUTER_OPENAI_CODEX' }；
@@ -404,8 +412,12 @@ function seedCredentialFile(dir, overrides = {}) {
   return file
 }
 
-/** EVO-010 路由夹具：settings/credentials/llm 三 seam mock + 真 RouterService。 */
-function makeRouteHarness({ accounts, enabled = true, entry, parity = 'ok', tokenInRef, setFails = false } = {}) {
+/** EVO-010 路由夹具：settings/credentials/llm 三 seam mock + 真 RouterService。
+ *  emitEvents=true：settings.mutate 后发射 settings/updated(llm-pi-ai) 事件
+ *  （模拟宿主 diff-gated commit 事件——F-1 回环判别所需；reviewer 指出的
+ *  既有夹具盲区）；settingsMutateFails=true：mutate 抛错（F-7 mutate 拒绝
+ *  判别）。 */
+function makeRouteHarness({ accounts, enabled = true, entry, parity = 'ok', tokenInRef, setFails = false, emitEvents = false, settingsMutateFails = false } = {}) {
   const calls = []
   const warns = []
   const providers = entry === undefined ? {} : { [HOST_ROUTE_PROVIDER]: entry }
@@ -414,12 +426,14 @@ function makeRouteHarness({ accounts, enabled = true, entry, parity = 'ok', toke
     mutate: async (ns, ops) => {
       calls.push({ kind: 'settings.mutate', ns, ops })
       if (ns !== HOST_ROUTE_NS) throw new Error(`unexpected ns ${ns}`)
+      if (settingsMutateFails) throw new Error('settings mutate 被拒（assertServiceable）')
       for (const op of ops) {
         if (op.path[0] === 'providers' && op.path[1] === HOST_ROUTE_PROVIDER) {
           if (op.op === 'unset') delete providers[HOST_ROUTE_PROVIDER]
           else providers[HOST_ROUTE_PROVIDER] = op.value
         }
       }
+      if (emitEvents) root.emit('settings/updated', HOST_ROUTE_NS)
       return true
     },
   }
@@ -449,7 +463,7 @@ function makeRouteHarness({ accounts, enabled = true, entry, parity = 'ok', toke
   root.reflect.provide('llm', llm)
   root.logger = { warn: (message) => warns.push(String(message)) }
   const service = new RouterService(root, { enabled, oauthAccounts: accounts })
-  return { service, ctx: root, calls, warns, providers, settings, credentials }
+  return { service, ctx: root, calls, warns, providers, settings, credentials, emit: (ns) => root.emit('settings/updated', ns) }
 }
 
 /** 带临时凭据文件的启用账号（transport 可覆写）。 */
@@ -558,6 +572,66 @@ console.log('evo-010 host route maintenance (settings llm-pi-ai providers entry)
   const catalog15 = await h15.service.catalog()
   check('STA-1: hostRouteStatus 形状（maintained/ref/accountId/tokenInjected/degraded）', status15.maintained === true && status15.ref === HOST_ROUTE_REF && status15.accountId === 'chatgpt' && status15.tokenInjected === 'ok' && status15.degraded === false)
   check('STA-2: catalog 下发 openaiCodexRoute + oauthAccounts.transport 镜像', catalog15.openaiCodexRoute?.ref === HOST_ROUTE_REF && catalog15.openaiCodexRoute?.maintained === true && catalog15.oauthAccounts[0].transport === 'host')
+}
+
+console.log('evo-010 R0 rework (F-1 loop gate / F-2 queue tick / F-3 ref cleanup / F-4 transport filter / F-7 mutate rejection):')
+{
+  const dir = mkdtempSync(join(tmpdir(), 'evo010-rework-'))
+  // F-1（P1 必修）：parity 持败 + 宿主 diff-gated commit 事件发射（夹具
+  // emitEvents——R0 指出的既有夹具盲区）→ llm 事件 pass 在失败态 gate 写入：
+  // mutate 次数有界（boot 首跑写+回滚 = 2；此后每事件 pass 零写入）。
+  // 旧代码：每事件 pass 又写+回滚（+2）→ 事件→写入→事件 指数增长 → 必败。
+  const h21 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) }, parity: 'fail', emitEvents: true })
+  h21.service.hostRouteTickMs = 60_000 // 测试窗口内不触发 tick——纯事件驱动面
+  const off21 = h21.service.startHostRouteMaintenance()
+  await new Promise((resolve) => setTimeout(resolve, 40))
+  for (let i = 0; i < 5; i++) { h21.emit(HOST_ROUTE_NS); await new Promise((resolve) => setTimeout(resolve, 25)) }
+  const mut21 = h21.calls.filter((call) => call.kind === 'settings.mutate').length
+  check('F1-1: parity 持败事件流 → mutate 次数有界（≤2——旧代码指数增长必败）', mut21 <= 2 && h21.providers[HOST_ROUTE_PROVIDER] === undefined)
+  check('F1-2: 事件 pass 失败态 gate（lastAction=gated，零写入收敛）', h21.service.hostRouteState.lastAction === 'gated')
+  off21()
+  // F-1 恢复面：tick（'tick' 触发不 gate）在失败态仍重试写入——改成功后
+  // 自愈（失败清零 → 事件恢复响应）。parity 无法在 harness 中切换，以
+  // 「tick pass 不受 gate」行为断言（hostRouteTickMs 注入驱动）。
+  const h21b = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) }, parity: 'ok' })
+  h21b.service.hostRouteTickMs = 25
+  const off21b = h21b.service.startHostRouteMaintenance()
+  await new Promise((resolve) => setTimeout(resolve, 120))
+  check('F1-3: tick 驱动维护自愈生效（条目在 + 写收敛幂等）', h21b.providers[HOST_ROUTE_PROVIDER]?.apiKeyEnv === HOST_ROUTE_REF && h21b.calls.filter((call) => call.kind === 'settings.mutate').length <= 2)
+  off21b()
+  // F-2（tick 旁路串行队列）：tick 回调改走 queueHostRouteSync（runHostRouteTick
+  // 已移除——静态核验：host-route.js 不再导出）；行为保持断言：短 tick 注入下
+  // 维护照常（F1-3 已覆盖 tick 生效面）——并发交错判别在 mock 下不可构造
+  // （宿主事件真实时序），以代码审查面 + 行为保持闭环，如实标注。
+  // F-3（HOST_ROUTE_REF 凭据残留）：maintain=false（停用）→ 条目 unset +
+  // ref 凭据 unset（数据主权——旧代码凭据滞留必败）。
+  const h23 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) }, entry: { apiKeyEnv: HOST_ROUTE_REF }, tokenInRef: 'STALE-TOKEN' })
+  await syncHostRoute(h23.ctx, h23.service, 'user')
+  h23.calls.length = 0
+  h23.service.getState().oauthAccounts.chatgpt.enabled = false
+  await syncHostRoute(h23.ctx, h23.service, 'user')
+  check('F3-1: 停用后条目 unset + HOST_ROUTE_REF 凭据清理（数据主权）', h23.providers[HOST_ROUTE_PROVIDER] === undefined && h23.calls.some((call) => call.kind === 'credentials.unset' && call.ref === HOST_ROUTE_REF))
+  // F-4（transport 过滤插件组）：host 账号不注册 chatgpt-oauth；plugin 账号注册。
+  const h24 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) } }) // 默认 host
+  const runtimeRoot24 = new Context()
+  const runtimeLlm24 = new LlmRuntime(runtimeRoot24)
+  const runtimeCtx24 = { get: (key) => (key === 'llm' ? runtimeLlm24 : undefined), on: () => () => {}, logger: { warn: () => {} } }
+  const off24 = installOauthLlmAdapters(runtimeCtx24, h24.service)
+  check('F4-1: transport=host 账号 → 插件组不注册（旧代码必注册必败）', !runtimeLlm24.listProviders().some((entry) => entry.id === OAUTH_PROVIDER))
+  off24()
+  const h24b = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir, { transport: 'plugin' }) } })
+  const runtimeRoot24b = new Context()
+  const runtimeLlm24b = new LlmRuntime(runtimeRoot24b)
+  const runtimeCtx24b = { get: (key) => (key === 'llm' ? runtimeLlm24b : undefined), on: () => () => {}, logger: { warn: () => {} } }
+  const off24b = installOauthLlmAdapters(runtimeCtx24b, h24b.service)
+  check('F4-2: transport=plugin 账号 → 插件组注册（降级通路可用）', runtimeLlm24b.listProviders().some((entry) => entry.id === OAUTH_PROVIDER))
+  off24b()
+  // F-7（mutate 拒绝可观测，P8 口径统一）：settings.mutate 被拒 → 失败计数 +
+  // 事件 + warn（旧代码异常外溢 → 直驱调用 throw 崩溃 → 必败）。
+  const h25 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) }, settingsMutateFails: true })
+  await syncHostRoute(h25.ctx, h25.service)
+  check('F7-1: mutate 拒绝 → 失败计数 + 事件 + warn（P8 统一链路）', hostRouteStatusOf(h25.service).failures === 1 && h25.service.hostRouteEvents.some((event) => event.kind === 'host_route_maintain_fail') && h25.warns.some((message) => message.includes('openai-codex')))
+  rmSync(dir, { recursive: true, force: true })
 }
 
 console.log(failures === 0 ? '\nALL EVO-009/EVO-010 DISCRIMINANT TESTS PASSED' : `\n${failures} ASSERTION(S) FAILED (RED — fix pending)`)
