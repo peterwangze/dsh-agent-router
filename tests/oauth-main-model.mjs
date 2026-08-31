@@ -203,9 +203,10 @@ console.log('oauth-main-model stream mapping (host messages → responses reques
   const input = body.input
   check('STR-4: user 文本 → input_text', input[0].role === 'user' && input[0].content[0].type === 'input_text' && input[0].content[0].text === '第一轮你好')
   check('STR-5: assistant 文本 → output_text 回填', input[1].role === 'assistant' && input[1].content[0].type === 'output_text' && input[1].content[0].text === '你好！')
-  check('STR-6: assistant tool-call → function_call 回填', input[2].role === 'assistant' && input[2].content[1].type === 'function_call' && input[2].content[1].call_id === 'call-1' && input[2].content[1].name === 'web_search' && input[2].content[1].arguments === '{"q":"x"}')
-  check('STR-7: tool-result → 独立 function_call_output item', input[3].type === 'function_call_output' && input[3].call_id === 'call-1' && input[3].output === '结果文本')
-  check('STR-8: 带图 user → input_text + input_image（附件经 readImagesAsDataUrls）', input[4].role === 'user' && input[4].content[0].type === 'input_text' && input[4].content[1].type === 'input_image' && input[4].content[1].image_url.startsWith('data:image/png;base64,'))
+  // FIX-017 后结构：混合轮拆为 message(output_text) + 顶层 function_call item。
+  check('STR-6: assistant 文本+tool-call 混合轮 → message 文本 + 顶层 function_call（不在 content）', input[2].role === 'assistant' && input[2].content.length === 1 && input[2].content[0].type === 'output_text' && input[2].content[0].text === '查一下' && input[3].type === 'function_call' && input[3].call_id === 'call-1' && input[3].name === 'web_search' && input[3].arguments === '{"q":"x"}')
+  check('STR-7: tool-result → 顶层 function_call_output item', input[4].type === 'function_call_output' && input[4].call_id === 'call-1' && input[4].output === '结果文本')
+  check('STR-8: 带图 user → input_text + input_image（附件经 readImagesAsDataUrls）', input[5].role === 'user' && input[5].content[0].type === 'input_text' && input[5].content[1].type === 'input_image' && input[5].content[1].image_url.startsWith('data:image/png;base64,'))
   check('STR-9: 认证头（Bearer + chatgpt-account-id + originator 诚实自标识）', h.fetchCalls[0].init.headers.Authorization === 'Bearer ACCESS-TOKEN' && h.fetchCalls[0].init.headers['chatgpt-account-id'] === 'acct-1' && h.fetchCalls[0].init.headers.originator === 'dsh-agent-router')
   // ⑤ 宿主 chunk 序列。
   const types = chunks.map((chunk) => chunk.type)
@@ -309,6 +310,50 @@ console.log('fix-016 tools shape (host-real shape; old code Missing tools[0].nam
   check('F16-3: type=function 且无 function 嵌套残留', tools[0].type === 'function' && !('function' in tools[0]))
   check('F16-4: description/parameters 顶层透传（宿主形状同构）', tools[0].description === '搜索网络' && tools[0].parameters && tools[0].parameters.type === 'object' && tools[1].name === 'route_agent')
   check('F16-5: 工具调用仍经 function_call 往返（SSE 聚合不受影响）', finishOf(chunks).reason.kind === 'stop')
+  off()
+  h.cleanup()
+}
+
+console.log('fix-017 responses contract (top-level items; function_call never in content):')
+{
+  // 用户复验（2026-08-31 09:37，重启后）：tools[0].name 已过（FIX-016），但
+  // 第二步回传历史时 HTTP 400 "Invalid value: 'function_call'. Supported
+  // values are: 'input_text', …, 'encrypted_content'."——旧映射把 function_call
+  // 塞进 message content（端点 content 枚举不含）。契约取证：端点报错原文 +
+  // openai-ruby 官方 SDK（beta_response_input_item.rb——FunctionCall/
+  // FunctionCallOutput 顶层 item）+ openai_responses crate Item 枚举。
+  // 两轮场景：user → assistant(text+tool-call 混合) → tool result → user 追问。
+  const h = makeHarness({ chatgpt: ACCOUNT_A })
+  const off = installOauthLlmAdapters(h.ctx, h.service)
+  const chunks = await callStream(h.llm, {
+    messages: [
+      userMsg('第一轮：查天气'),
+      assistantMsg([{ type: 'text', text: '好的，我来查' }, { type: 'tool-call', id: 'call-1', name: 'web_search', arguments: '{"q":"weather"}' }]),
+      { role: 'user', content: [{ type: 'tool-result', toolCallId: 'call-1', content: [{ type: 'text', text: '晴 25°C' }], isError: false }] },
+      userMsg('好的，第二轮继续'),
+    ],
+  })
+  const body = JSON.parse(h.fetchCalls[0].init.body)
+  const input = body.input
+  check('F17-1: input 顶层 5 个 item（user/assistant/function_call/function_call_output/user）', Array.isArray(input) && input.length === 5)
+  check('F17-2: assistant 文本 → message item content=[output_text]', input[1].role === 'assistant' && Array.isArray(input[1].content) && input[1].content.length === 1 && input[1].content[0].type === 'output_text' && input[1].content[0].text === '好的，我来查')
+  check('F17-3: tool-call → 顶层 function_call item（绝不在 content）', input[2].type === 'function_call' && input[2].call_id === 'call-1' && input[2].name === 'web_search' && input[2].arguments === '{"q":"weather"}')
+  check('F17-4: tool result → 顶层 function_call_output item（call_id 对应）', input[3].type === 'function_call_output' && input[3].call_id === 'call-1' && input[3].output === '晴 25°C')
+  check('F17-5: 追问 user → message item（顺序保持）', input[4].role === 'user' && input[4].content[0].type === 'input_text' && input[4].content[0].text === '好的，第二轮继续')
+  // 契约快照（端点报错原文枚举）：所有 content 块 type ∈ 合法集合，且
+  // function_call item 无 content 数组——旧代码（function_call 在 content）必败。
+  const legalContent = ['input_text', 'input_image', 'input_audio', 'output_text', 'refusal', 'input_file', 'computer_screenshot', 'summary_text', 'encrypted_content']
+  let allLegal = true
+  for (const item of input) {
+    if (item && typeof item === 'object' && Array.isArray(item.content)) {
+      for (const part of item.content) {
+        if (!legalContent.includes(part.type)) allLegal = false
+      }
+    }
+    if (item && item.type === 'function_call' && Array.isArray(item.content)) allLegal = false
+  }
+  check('F17-6: 契约快照——所有 content 块 type ∈ 端点枚举且 function_call 无 content（旧代码必败）', allLegal)
+  check('F17-7: 流式调用不受影响（SSE 聚合 + finish stop）', finishOf(chunks).reason.kind === 'stop')
   off()
   h.cleanup()
 }
