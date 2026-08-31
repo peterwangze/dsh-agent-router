@@ -228,6 +228,13 @@ export async function runClientRender(check) {
   // oauth:chatgpt（服务端 OAuth 调用统计 provider 键）；旧代码将其并入
   // addedAccounts/statsAccountRows 渲染出通用 API Key 假编辑器（用户实证）。
   let oauthGhostMode = false
+  // FIX-019：换马甲幽灵卡判别（用户实证 2026-08-31 红字「又出现了」）——
+  // EVO-010 起主模型经插件路由（lib/oauth-llm.js OAUTH_PROVIDER）的调用统计
+  // provider 键为无冒号路由 id 'chatgpt-oauth'，FIX-015 的 `oauth:` 前缀判据
+  // 不覆盖 → 旧代码仍并入账号卡（实测形态：已激活 · 0 个模型 · 调用 18 ·
+  // 119.1K/1.0K · 展开 = 通用 API Key 假编辑器）。true 时 stats.accountTotals
+  // 额外注入 chatgpt-oauth（与 oauthGhostMode 并存 = 两种键同时存在）。
+  let oauthRouteGhostMode = false
   // FIX-015 修 3：true 时 logged-in 的 ChatGPT 账号模型列表为空（主 agent 选择器
   // 不会出现该账号——订阅卡须明示，旧代码无提示必败）。
   let presetEmptyModelsMode = false
@@ -289,7 +296,10 @@ export async function runClientRender(check) {
         codexentry: { name: 'Codex 子代理', enabled: true, command: 'codex', args: '', timeoutMs: 0, maxConcurrent: 1, loginArgs: '', statusArgs: '', modelsArgs: '' },
       },
     }, user: null } }),
-    stats: async () => ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: oauthGhostMode ? [{ provider: 'oauth:chatgpt', name: 'ChatGPT 订阅', calls: 3, errors: 0, inputTokens: 13200, outputTokens: 4800, totalMs: 0, lastAt: undefined }] : [], accountSeries: [], days: {
+    stats: async () => ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [
+      ...(oauthGhostMode ? [{ provider: 'oauth:chatgpt', name: 'ChatGPT 订阅', calls: 3, errors: 0, inputTokens: 13200, outputTokens: 4800, totalMs: 0, lastAt: undefined }] : []),
+      ...(oauthRouteGhostMode ? [{ provider: 'chatgpt-oauth', name: 'ChatGPT 订阅', calls: 18, errors: 0, inputTokens: 119100, outputTokens: 1000, totalMs: 0, lastAt: undefined }] : []),
+    ], accountSeries: [], days: {
       '2026-01-15': { calls: 3, errors: 1, inputTokens: 110, outputTokens: 50, tokens: 160, ms: 180, cost: 0.5 },
       '2026-01-16': { calls: 2, errors: 0, inputTokens: 20, outputTokens: 0, tokens: 20, ms: 60, cost: 0 },
     } } }),
@@ -1277,6 +1287,38 @@ export async function runClientRender(check) {
     // 不可缩小；本断言锁定 mergePresetModels 单点语义，防未来回归为覆盖写）。
     const mergeFn = bundleExports.mergePresetModels
     check('FIX-015: 发现合并并集语义——空发现不缩小已存列表（回归锁定）', typeof mergeFn === 'function' && mergeFn(['a', 'b'], []).join(',') === 'a,b' && mergeFn(['a'], ['b', 'a']).join(',') === 'a,b' && mergeFn([], []).length === 0)
+    presetMode = 'none'
+  }
+
+  // ── FIX-019：换马甲幽灵卡判别——chatgpt-oauth（无冒号路由 id）─────────
+  // 旧代码只按 `oauth:` 前缀过滤（FIX-015 判据）；EVO-010 起主模型经插件路由
+  // 的调用统计 provider 键为无冒号路由 id 'chatgpt-oauth'（lib/oauth-llm.js
+  // OAUTH_PROVIDER 常量），前缀判据失效 → addedAccounts/statsAccountRows 均
+  // 并入（用户实证 2026-08-31 红字「又出现了」：已激活 · 0 个模型 · 调用 18 ·
+  // 119.1K/1.0K · 展开 = 通用 API Key 假编辑器）。判别：两种统计键并存时账号
+  // 卡与统计卡均不渲染二者（FIX-015 断言只覆盖 oauth: 键——chatgpt-oauth
+  // 必败于旧代码）。
+  {
+    oauthGhostMode = true
+    oauthRouteGhostMode = true
+    presetMode = 'none'
+    await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'fix019-ghost', 60)
+    const fix019AcctHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.accountTitle))
+    if (fix019AcctHead) {
+      fix019AcctHead.props.onClick()
+      currentTree = await settle()
+    }
+    check('FIX-019: chatgpt-oauth 路由统计键不渲染为账号卡（旧代码幽灵卡必含）', !!fix019AcctHead && !textOf(currentTree).includes('chatgpt-oauth'))
+    check('FIX-019: oauth: 前缀统计键同判不回归（单点化后 FIX-015 判据仍有效）', !textOf(currentTree).includes('oauth:chatgpt'))
+    // 统计分区消费同一判据（statsAccountRows 第二过滤点）：展开后不得出现两类行。
+    const fix019StatsHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.statsTitle))
+    if (fix019StatsHead) {
+      fix019StatsHead.props.onClick()
+      currentTree = await settle()
+    }
+    check('FIX-019: 统计账号级卡片不含 chatgpt-oauth 行（第二过滤点同判据）', !!fix019StatsHead && !textOf(currentTree).includes('chatgpt-oauth'))
+    oauthRouteGhostMode = false
+    oauthGhostMode = false
     presetMode = 'none'
   }
 
