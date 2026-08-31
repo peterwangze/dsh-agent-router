@@ -1242,7 +1242,26 @@ export async function runClientRender(check) {
     if (saveBtn2) saveBtn2.props.onClick()
     await settle()
     check('FIX-015: 清空后保存 → 防呆 notice（旧代码「已保存」必败）', textOf(currentTree).includes(zh.presetModelsEmptyNotice))
+    // FIX-015 根因判别（用户数据丢失铁证：settings.yaml models:[] + 用户时间线
+    // 确认保存过三件套）：账号已存 models=['gpt-5.4-mini'] + 编辑态无 draft 键
+    // （重启后 presetModels state 重置）→ 点「保存」→ mutate 收到**原值**
+    // ['gpt-5.4-mini']（旧代码 raw = presetModels[id] ?? '' 无回退 → 存 [] 覆盖
+    // 已存值 → 必败）。读写对称：显示回退与保存回退同源。fixture 需非空
+    // models——presetEmptyModelsMode 须先复位。
     presetEmptyModelsMode = false
+    presetMode = 'logged-in'
+    await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'fix015-rootcause', 60)
+    const rootHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.accountTitle))
+    if (rootHead) {
+      rootHead.props.onClick()
+      currentTree = await settle()
+    }
+    captured.saveOps.length = 0
+    const rootSaveBtn = buttonsOf(currentTree).find((node) => textOf(node) === zh.save)
+    if (rootSaveBtn) rootSaveBtn.props.onClick()
+    await settle()
+    const rootSavedOp = captured.saveOps.find((op) => op.op === 'set' && op.path.join('/') === 'oauthAccounts/chatgpt/models')
+    check('FIX-015: 未编辑保存不覆盖已存 models（旧代码空数组覆盖必败）', !!rootSavedOp && Array.isArray(rootSavedOp.value) && rootSavedOp.value.length === 1 && rootSavedOp.value[0] === 'gpt-5.4-mini')
     presetMode = 'none'
   }
 
