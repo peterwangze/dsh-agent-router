@@ -795,6 +795,9 @@ console.log('RouterService:')
       const credFile6 = join(step6Work, 'step6-auth.json')
       const root6 = new Context()
       root6.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
+      root6.provide('attachments', {
+        saveImage: async (input) => ({ attachmentId: `att-img-6-${input.name}`, mediaType: input.mediaType, bytes: input.data.length, width: 1, height: 1, name: input.name }),
+      })
       const state6 = {
         enabled: true,
         oauthProxyUrl: '',
@@ -806,6 +809,7 @@ console.log('RouterService:')
         agents: {
           cgptchat: { name: 'CGPT', type: 'chat', enabled: true, account: 'cgpt' },
           cgptimg: { name: 'CGPT生图', type: 'image', enabled: true, account: 'cgpt', provider: 'openai', model: 'gpt-image-1' },
+          plainimg: { name: '通用生图', type: 'image', enabled: true, account: 'plain', provider: 'openai', model: 'dall-e-3' },
           poolchat: { name: '池chat', type: 'chat', enabled: true, account: 'pool:main' },
           poolimg: { name: '池image', type: 'image', enabled: true, account: 'pool:main', provider: 'openai', model: 'gpt-image-1' },
         },
@@ -830,6 +834,8 @@ console.log('RouterService:')
           },
         }),
       })
+      // EVO-011：1x1 透明 PNG（b64_json 夹具——decodeBase64→sniffMediaType→png）。
+      const PNG_1X1_6 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
       const fetches6 = []
       const realFetch6 = globalThis.fetch
       // R7-F5：隔离进程代理 env（resolveOauthProxy 运行时读真实 process.env——
@@ -843,18 +849,27 @@ console.log('RouterService:')
           return { ok: true, json: async () => ({ access_token: accessJwt6, refresh_token: 'REFRESH-STEP6', expires_in: 3600, token_type: 'bearer' }) }
         }
         if (String(url).endsWith('/codex/responses')) return sse6('OK-6')
+        if (String(url).endsWith('/codex/images/generations')) {
+          return { ok: true, status: 200, json: async () => ({ data: [{ b64_json: PNG_1X1_6 }] }) }
+        }
         return { ok: false, status: 404, text: async () => 'not found' }
       }
       try {
-        // A. §3.5 oauthCapabilities：v0.3.0 全协议（含未知协议）返回 ['chat']
-        //    ——接口形状就位，后续版本按协议扩展返回值即解开限制（P5 单点）。
+        // A. §3.5 oauthCapabilities：v0.3.0 全协议（含未知协议）返回 ['chat']；
+        //    EVO-011（RES-004）起 codex-responses 扩展 ['chat','image']，其余
+        //    协议保持 chat-only（P5 能力矩阵单点——调用点零改动）。
         const caps6 = ['openai-completions', 'anthropic', 'gemini', 'codex-responses', 'mystery'].map((protocol) => oauthCapabilities(protocol))
-        check('oauthCapabilities returns [chat] for every protocol (§3.5)', caps6.every((caps) => Array.isArray(caps) && caps.length === 1 && caps[0] === 'chat'))
-        // B. runOauthDispatch per-protocol 类型拒绝（替代全局一刀切）+ chat 放行。
+        check('oauthCapabilities matrix: codex-responses adds image, others chat-only (EVO-011)', caps6[0].join(',') === 'chat' && caps6[1].join(',') === 'chat' && caps6[2].join(',') === 'chat' && caps6[3].join(',') === 'chat,image' && caps6[4].join(',') === 'chat')
+        // B. runOauthDispatch per-protocol 类型判定：codex-responses + image 放行
+        //    （EVO-011——旧代码必败：报"暂不支持 image 类型"=用户报错复现）；
+        //    非 codex 协议 + image 仍拒绝（openai-completions 保持 chat-only）；
+        //    池 image 拒绝；chat 放行。
         await seed6()
+        const imgRun6 = await svc6.run({ agentId: 'cgptimg', task: '画一张图' })
+        check('oauth dispatch passes codex image through (EVO-011, old code rejects)', imgRun6.kind === 'image' && imgRun6.image?.mediaType === 'image/png' && fetches6[fetches6.length - 1]?.url === 'https://chatgpt.com/backend-api/codex/images/generations')
         let imgErr6 = null
-        try { await svc6.run({ agentId: 'cgptimg', task: '画一张图' }) } catch (error) { imgErr6 = error }
-        check('oauth dispatch rejects image type with per-protocol wording (§3.5)', !!imgErr6 && imgErr6.message.includes('暂不支持') && imgErr6.message.includes('codex-responses') && imgErr6.message.includes('image'))
+        try { await svc6.run({ agentId: 'plainimg', task: '画一张图' }) } catch (error) { imgErr6 = error }
+        check('oauth dispatch rejects image on non-codex protocol with per-protocol wording (§3.5)', !!imgErr6 && imgErr6.message.includes('暂不支持') && imgErr6.message.includes('openai-completions') && imgErr6.message.includes('image'))
         check('oauth dispatch retires old global wording', !!imgErr6 && !imgErr6.message.includes('目前仅支持 chat 类型'))
         let poolImgErr6 = null
         try { await svc6.run({ agentId: 'poolimg', task: 'x' }) } catch (error) { poolImgErr6 = error }
@@ -982,6 +997,108 @@ console.log('RouterService:')
     }
     check('step6 block completes without unexpected throw', step6Crash === null)
     if (step6Crash) console.error('      step6 crash:', step6Crash && step6Crash.message)
+  }
+
+  // ── EVO-011（RES-004）：codex images 端点直连——ChatGPT 订阅账号的 image
+  // 类型调用（draw agent 绑 OAuth）经 chatgpt.com/backend-api/codex/images/
+  // generations 出图（OpenAI Images API 兼容 JSON，非 SSE；dsh-codex-connect
+  // transport.ts:22 + codex 官方 endpoint/images.rs 实证）。判别测试：旧代码
+  // （oauthCapabilities 全协议 ['chat']）对 codex-responses + image 必败（=
+  // 用户报错复现）；新代码放行。fetch stub 口径同 FIX-016/017 模式——真机
+  // 端点验证属实测项（本块只证请求形状/响应形状/错误文案契约，不连真网）。
+  console.log('EVO-011 codex images endpoint (RES-004):')
+  {
+    const evo11Work = mkdtempSync(join(tmpdir(), 'router-evo11-'))
+    const fakeJwt11 = (accountId) => {
+      const b64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
+      return `${b64url({ alg: 'RS256', typ: 'JWT' })}.${b64url({ 'https://api.openai.com/auth': { chatgpt_account_id: accountId } })}.sig-evo11`
+    }
+    const accessJwt11 = fakeJwt11('acct-evo-11')
+    const credFile11 = join(evo11Work, 'evo11-auth.json')
+    const root11 = new Context()
+    root11.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
+    root11.provide('attachments', {
+      saveImage: async (input) => ({ attachmentId: `att-evo11-${input.name}`, mediaType: input.mediaType, bytes: input.data.length, width: 1, height: 1, name: input.name }),
+    })
+    const service11 = new RouterService(root11)
+    service11.attach({ get: () => ({
+      enabled: true,
+      oauthProxyUrl: '',
+      oauthAccounts: {
+        cgpt: { name: 'ChatGPT订阅', enabled: true, preset: 'chatgpt-codex', credentialFile: credFile11, protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', models: ['gpt-5.4-mini'] },
+        bare: { name: '零配置订阅', enabled: true, preset: 'chatgpt-codex', credentialFile: credFile11, protocol: 'codex-responses', models: ['gpt-5.4'] },
+      },
+      agents: {
+        drawg: { name: '订阅生图', type: 'image', enabled: true, account: 'cgpt', model: 'gpt-image-2' },
+        drawd: { name: '旧默认生图', type: 'image', enabled: true, account: 'cgpt', model: 'dall-e-3' },
+        draws: { name: '非法尺寸生图', type: 'image', enabled: true, account: 'cgpt', model: 'gpt-image-2', imageSize: '1792x1024' },
+        drawb: { name: '零配置生图', type: 'image', enabled: true, account: 'bare', model: 'gpt-image-2' },
+      },
+    })})
+    const seed11 = new OauthCredentialStore(credFile11)
+    await seed11.write({ type: 'oauth', access: accessJwt11, refresh: 'REFRESH-11', expires: Date.now() + 3_600_000, accountId: 'acct-evo-11' })
+    const PNG_1X1_11 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+    let mode11 = {}
+    const fetches11 = []
+    const realFetch11 = globalThis.fetch
+    globalThis.fetch = async (url, options) => {
+      fetches11.push({ url: String(url), init: options })
+      if (String(url) === CHATGPT_PRESET.tokenUrl) return { ok: true, json: async () => ({ access_token: accessJwt11, refresh_token: 'REFRESH-11', expires_in: 3600 }) }
+      if (String(url).endsWith('/codex/images/generations')) {
+        if (mode11.http) return mode11.http
+        return { ok: true, status: 200, json: async () => ({ data: [{ b64_json: PNG_1X1_11 }] }) }
+      }
+      return { ok: false, status: 404, text: async () => 'not found' }
+    }
+    const run11 = async (agentId, task) => {
+      try { return { result: await service11.run({ agentId, task }) } } catch (error) { return { error } }
+    }
+    try {
+      // ① 能力矩阵：codex-responses 含 image；image 类型调用放行（旧代码此处
+      //    报"暂不支持 image 类型" = 用户报错复现）。
+      const caps11 = oauthCapabilities('codex-responses')
+      check('EVO-011 capabilities: codex-responses includes image', Array.isArray(caps11) && caps11.includes('chat') && caps11.includes('image'))
+      const okRun11 = await run11('drawg', '画的圆')
+      check('EVO-011 dispatch runs codex image to completion (old code rejects)', okRun11.result?.kind === 'image' && okRun11.result?.image?.mediaType === 'image/png')
+      // ② 请求形状：URL + 四元组头 + redirect:manual + body {model,prompt,n:1,size}。
+      const call11 = fetches11[fetches11.length - 1]
+      const h11 = call11?.init?.headers ?? {}
+      check('EVO-011 posts to /codex/images/generations', call11?.url === 'https://chatgpt.com/backend-api/codex/images/generations')
+      check('EVO-011 headers carry bearer/account-id/originator + manual redirect', h11.Authorization === `Bearer ${accessJwt11}` && h11['chatgpt-account-id'] === 'acct-evo-11' && h11.originator === 'dsh-agent-router' && call11?.init?.redirect === 'manual')
+      const body11 = JSON.parse(call11?.init?.body ?? '{}')
+      check('EVO-011 body shape {model,prompt,n:1} with size passthrough', body11.model === 'gpt-image-2' && body11.n === 1 && body11.size === '1024x1024' && body11.stream === undefined && body11.instructions === undefined && body11.prompt?.includes('画的圆'))
+      // ③ 模型策略：gpt-image-* 透传；非 gpt-image（dall-e-3 旧默认）→ 默认
+      //    gpt-image-2 + 换型指引（不静默替换）+ 能力事件可观测（P8）。
+      const drawd11 = await run11('drawd', 'x')
+      const bodyd11 = JSON.parse(fetches11[fetches11.length - 1]?.init?.body ?? '{}')
+      check('EVO-011 non-gpt-image model falls back to gpt-image-2 with guidance', drawd11.result?.kind === 'image' && bodyd11.model === 'gpt-image-2' && drawd11.result?.text?.includes('gpt-image-2') && drawd11.result?.text?.includes('dall-e-3'))
+      check('EVO-011 fallback observable via capability event (P8)', service11.capabilityEvents.some((event) => event.kind === 'codex_image_model_fallback' && event.model === 'dall-e-3'))
+      // 非法 size（1792x1024 非 gpt-image 合法值）→ 省略 + 提示。
+      const draws11 = await run11('draws', 'x')
+      const bodys11 = JSON.parse(fetches11[fetches11.length - 1]?.init?.body ?? '{}')
+      check('EVO-011 illegal size omitted with hint', draws11.result?.kind === 'image' && bodys11.size === undefined && draws11.result?.text?.includes('1792x1024'))
+      // 零配置（无 baseURL）→ 默认端点（账号 baseURL 覆盖语义保持）。
+      const drawb11 = await run11('drawb', 'x')
+      check('EVO-011 zero-config image uses default codex images endpoint', drawb11.result?.kind === 'image' && fetches11[fetches11.length - 1]?.url === 'https://chatgpt.com/backend-api/codex/images/generations')
+      // ③' 响应形状：data[0].b64_json 缺失 → 明确错误（端点形状校验，P-v2-8/9）。
+      mode11 = { http: { ok: true, status: 200, json: async () => ({ data: [{}] }) } }
+      const missing11 = await run11('drawg', 'x')
+      check('EVO-011 missing b64_json errors clearly', !!missing11.error && missing11.error.message.includes('未返回'))
+      // ④ 401/403 重登 + 429 usage_limit_* 分钟数（H3-14 同款解析）。
+      mode11 = { http: { ok: false, status: 401, text: async () => JSON.stringify({ error: { message: 'could-not-parse-token' } }) } }
+      const auth11 = await run11('drawg', 'x')
+      check('EVO-011 HTTP 401 aligns re-login wording', !!auth11.error && auth11.error.message.includes('重新登录'))
+      mode11 = { http: { ok: false, status: 429, text: async () => JSON.stringify({ error: { code: 'usage_limit_reached', plan_type: 'plus', resets_at: Math.floor(Date.now() / 1000) + 120 } }) } }
+      const limit11 = await run11('drawg', 'x')
+      check('EVO-011 HTTP 429 parses resets_at minutes (H3-14)', !!limit11.error && limit11.error.message.includes('分钟后重置') && limit11.error.message.includes('plus'))
+      // 301/302 拒绝（redirect:manual 先例——不跟随重定向）。
+      mode11 = { http: { ok: false, status: 302, text: async () => 'redirecting' } }
+      const redirect11 = await run11('drawg', 'x')
+      check('EVO-011 301/302 rejected without following redirect', !!redirect11.error && redirect11.error.message.includes('重定向'))
+    } finally {
+      globalThis.fetch = realFetch11
+      try { rmSync(evo11Work, { recursive: true, force: true }) } catch { /* 清理尽力而为 */ }
+    }
   }
 
   // ── EVO-005：设备码流 RPC（DEC-025 D-2a / roadmap §3.4 条目 4 / E4 降级链
