@@ -76,6 +76,7 @@ function makeHarness(accounts, options = {}) {
   const listeners = []
   const proxyCalls = []
   const records = []
+  const warns = []
   const fetchCalls = []
   let fetchMode = options.fetchMode ?? 'ok'
   let accountsRef = accounts
@@ -84,6 +85,7 @@ function makeHarness(accounts, options = {}) {
     isEnabled: () => enabled,
     getState: () => ({ oauthAccounts: accountsRef, oauthProxyUrl: options.proxyUrl ?? '' }),
     async resolvePresetCredential(account) {
+      if (options.loginFailMode) throw new Error('未登录（无凭据文件）')
       return { access: 'ACCESS-TOKEN', accountId: account === ACCOUNT_B ? 'acct-2' : 'acct-1' }
     },
     async loadOauthProxyDispatcher(proxy) { proxyCalls.push(proxy); return undefined },
@@ -101,7 +103,7 @@ function makeHarness(accounts, options = {}) {
   const ctx = {
     get: (key) => (key === 'llm' ? llm : undefined),
     on: (event, fn) => { listeners.push({ event, fn }); return () => {} },
-    logger: { warn: () => {} },
+    logger: { warn: (message) => warns.push(String(message)) },
   }
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (url, init) => {
@@ -121,6 +123,7 @@ function makeHarness(accounts, options = {}) {
     listeners,
     fetchCalls,
     records: () => records,
+    warns: () => warns,
     proxyCalls,
     setFetchMode: (mode) => { fetchMode = mode },
     cleanup() {
@@ -244,6 +247,43 @@ console.log('oauth-main-model error paths and kill-switch:')
   check('KILL-2: 总开关关闭 → stream finish(error)', finishOf(killChunks).reason.kind === 'error')
   off()
   h.cleanup()
+}
+
+console.log('fix-015 empty-models observability (P8 warn, deduped):')
+{
+  // RCA（2026-08-31 catalog 探活）：oauthAccounts.chatgpt 已登录但 models=[]
+  // → modelsOf=0 → sync inactive 分支静默不注册（零观测）——主 agent 选择器
+  // 不出现 ChatGPT 无任何诊断。修 1：存在启用+已登录 preset 账号但 models
+  // 并集为空 → 发 warn（状态签名去重；未登录不告警——新建未登录账号属正常态）。
+  const EMPTY = { ...ACCOUNT_A, models: [] }
+  const h = makeHarness({ chatgpt: EMPTY })
+  const off = installOauthLlmAdapters(h.ctx, h.service)
+  check('F15-1: 启用+已登录+models 空 → provider 不注册', !h.llm.listProviders().some((entry) => entry.id === OAUTH_PROVIDER))
+  await new Promise((resolve) => setImmediate(resolve))
+  check('F15-2: 同场景发 warn（旧代码无 warn 必败）', h.warns().some((m) => m.includes('chatgpt-oauth provider not registered') && m.includes('empty model lists')))
+  // 去重：再次触发 settings/updated → 仍仅一条 warn。
+  const settingsListener = h.listeners.find((entry) => entry.event === 'settings/updated')
+  settingsListener.fn('router')
+  await new Promise((resolve) => setImmediate(resolve))
+  check('F15-3: warn 去重（状态未变不刷屏）', h.warns().filter((m) => m.includes('empty model lists')).length === 1)
+  // 保存模型 → 注册 + warn 复位（下次空态重新告警）。
+  h.service.setAccounts({ chatgpt: ACCOUNT_A })
+  settingsListener.fn('router')
+  await new Promise((resolve) => setImmediate(resolve))
+  check('F15-4: 保存模型后注册 + 空态签名复位', h.llm.listProviders().some((entry) => entry.id === OAUTH_PROVIDER) && h.warns().filter((m) => m.includes('empty model lists')).length === 1)
+  h.service.setAccounts({ chatgpt: EMPTY })
+  settingsListener.fn('router')
+  await new Promise((resolve) => setImmediate(resolve))
+  check('F15-5: 空态复发 → 新告警（签名变化重新触发）', h.warns().filter((m) => m.includes('empty model lists')).length === 2)
+  off()
+  h.cleanup()
+  // 未登录 + models 空：不告警（新建未登录账号模型空属正常态）。
+  const h2 = makeHarness({ chatgpt: EMPTY }, { loginFailMode: true })
+  const off2 = installOauthLlmAdapters(h2.ctx, h2.service)
+  await new Promise((resolve) => setImmediate(resolve))
+  check('F15-6: 未登录 + models 空 → 不告警', h2.warns().length === 0)
+  off2()
+  h2.cleanup()
 }
 
 console.log(failures === 0 ? '\nALL EVO-009 DISCRIMINANT TESTS PASSED' : `\n${failures} EVO-009 ASSERTION(S) FAILED (RED — fix pending)`)
