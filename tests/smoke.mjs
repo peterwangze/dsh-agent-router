@@ -11,7 +11,7 @@ import { runOauthPromotionTests } from './oauth-promotion.mjs'
 import { runLoopbackTests } from './oauth-loopback.mjs'
 import { runStatsTests } from './stats.mjs'
 import { OauthCredentialStore, CHATGPT_PRESET } from '../lib/oauth-credentials.js'
-import { isAttachmentId } from '../lib/attachments.js'
+import { isAttachmentId, contentHashId } from '../lib/attachments.js'
 import { BlockAssembler, LlmRuntime, contentHasImage } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -23,6 +23,9 @@ import { fileURLToPath } from 'node:url'
 
 const LIB_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'lib')
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+/** EVO-012：/router-assets/ handler 判别用 1×1 PNG 字节（内容寻址 id 由 bytes 派生）。 */
+const EVO12_PNG_BYTES = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
 
 let failures = 0
 function check(label, condition) {
@@ -2169,17 +2172,63 @@ console.log('apply wiring:')
     await root.plugin({ name: 'stub-typert', apply: (ctx) => ctx.provide('typert', {
       register: (contribution) => { registeredContribution = contribution; return () => {} },
     }) })
-    let webRoute = null
+    const webRoutes = []
     await root.plugin({ name: 'stub-webserver', apply: (ctx) => ctx.provide('webServer', {
-      register: (route) => { webRoute = route; return () => {} },
+      register: (route) => { webRoutes.push(route); return () => {} },
     }) })
+    // EVO-012（FIX-020 承载）：/router-assets/ handler 读字节的宿主附件后端桩
+    //（readImage 返回与 ref 一致的字节——readStoredImage 的完整 ref 校验路径）。
+    root.provide('attachments', {
+      saveImage: async (input) => ({ attachmentId: contentHashId(input.data), mediaType: input.mediaType, bytes: input.data.length, width: 1, height: 1, name: input.name }),
+      readImage: async (ref) => ({ ref, data: new Uint8Array(EVO12_PNG_BYTES) }),
+    })
     check('index module declares inject', Array.isArray(indexModule.inject) && indexModule.inject.includes('settings') && indexModule.inject.includes('typert') && indexModule.inject.includes('webServer'))
     const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
     await app
     check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
     check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 17 && registeredContribution.package === 'dsh-agent-router')
     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
-    check('oauth callback route registered', webRoute && webRoute.kind === 'exact' && webRoute.path === '/router-oauth/callback' && typeof webRoute.handler === 'function')
+    check('oauth callback route registered', webRoutes.some((route) => route && route.kind === 'exact' && route.path === '/router-oauth/callback' && typeof route.handler === 'function'))
+
+    // ── EVO-012（批一）：/router-assets/ 同源 HTTP 图片路由——绕开宿主
+    // imageData RPC 通道（FIX-020 承载）。判别性：旧代码无前缀路由注册（RED
+    // = webRoutes 无 prefix 条目）；handler 读附件字节、404 语义与穿越拒绝为新
+    // 行为面。宿主路由匹配器能力结论见任务返回报告（dsh-host-webserver 支持
+    // kind:'prefix'，最长前缀优先，index.js:128-135 register / 269-279 match）。
+    const assetsRoute = webRoutes.find((route) => route && route.kind === 'prefix' && route.path === '/router-assets')
+    check('EVO-012 router-assets prefix route registered (old code: no registration)', !!assetsRoute && typeof assetsRoute?.handler === 'function')
+    const evoSvc = root.get('router')
+    const evo12Id = `sha256:${'c'.repeat(64)}`
+    evoSvc.registry.registerEntry({ id: evo12Id, mediaType: 'image/png', bytes: EVO12_PNG_BYTES.length, width: 1, height: 1, name: 'router-draw.png', source: 'image-block' })
+    const respOf = async (url) => {
+      const calls = []
+      const res = {
+        writeHead: (status, headers) => calls.push({ kind: 'head', status, headers }),
+        end: (body) => calls.push({ kind: 'end', body }),
+      }
+      await assetsRoute.handler({ url }, res)
+      return calls
+    }
+    const okCalls = await respOf(`/router-assets/${evo12Id}`)
+    check('EVO-012 assets route serves saved image bytes with media type', okCalls.length === 2 && okCalls[0].kind === 'head' && okCalls[0].status === 200 && okCalls[0].headers['content-type'] === 'image/png' && okCalls[1].kind === 'end' && okCalls[1].body && okCalls[1].body.length === EVO12_PNG_BYTES.length)
+    const missCalls = await respOf(`/router-assets/sha256:${'d'.repeat(64)}`)
+    check('EVO-012 assets route 404 for unknown id', missCalls.length === 2 && missCalls[0].kind === 'head' && missCalls[0].status === 404)
+    const travCalls = await respOf('/router-assets/../etc/passwd')
+    check('EVO-012 assets route rejects traversal (../)', travCalls.length === 2 && travCalls[0].kind === 'head' && travCalls[0].status === 404)
+    const trav2Calls = await respOf(`/router-assets/${evo12Id}/../../secret`)
+    check('EVO-012 assets route rejects embedded traversal', trav2Calls.length === 2 && trav2Calls[0].kind === 'head' && trav2Calls[0].status === 404)
+    const badCalls = await respOf('/router-assets/att-not-hash')
+    check('EVO-012 assets route rejects non content-addressed id', badCalls.length === 2 && badCalls[0].kind === 'head' && badCalls[0].status === 404)
+    // marker 扩展：内容寻址 id → 携带 /router-assets/<id> url（跨轮指代仍用
+    // attachmentId，url 仅是渲染直达字段）；非内容寻址 id（旧产物/测试桩）不产
+    // url——客户端无 url 时回退 imageData RPC（旧产物兼容，行为零变化）。
+    const markerText12 = evoSvc.imageMarkerOf({ attachmentId: evo12Id, mediaType: 'image/png', bytes: 4, width: 1, height: 1, name: 'router-draw.png' })
+    const parsed12 = evoSvc.parseImageMarkers(markerText12)
+    check('EVO-012 marker carries url for content-addressed id', parsed12.length === 1 && parsed12[0].attachmentId === evo12Id && parsed12[0].url === `/router-assets/${evo12Id}`)
+    const legacyMarker12 = evoSvc.imageMarkerOf({ attachmentId: 'att-not-hash', mediaType: 'image/png', bytes: 4, width: 1, height: 1, name: 'old.png' })
+    const parsedLegacy12 = evoSvc.parseImageMarkers(legacyMarker12)
+    check('EVO-012 marker keeps no url for non content-addressed id (legacy compat)', parsedLegacy12.length === 1 && parsedLegacy12[0].attachmentId === 'att-not-hash' && parsedLegacy12[0].url === undefined)
+
     // R3 F-3：真实 service 上断言惰性注入点——apply 后 starter 可用但 1455
     // 未监听（替代 oauth-loopback.mjs 对测试自建 fixture 的同义反复断言）。
     const wiredService = root.get('router')
