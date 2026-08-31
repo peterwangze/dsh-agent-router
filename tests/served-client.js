@@ -485,6 +485,11 @@ window.__ModuleLoader__.load({
       orphanOauthIntro: '历史配置中未加入任何账号池的 OAuth 账号（含未知预设值账号）：此处仅提供删除入口，确保本机凭据可清理。',
       fieldAccount: 'OAuth 账号（插件独立管理，覆盖服务商/模型）',
       oauthChatOnly: 'OAuth 账号仅支持 chat 类型',
+      // EVO-011（RES-004）：codex-responses（ChatGPT 订阅）账号 + image 类型
+      // = 订阅生图直连（服务端 runCodexResponsesImage）——提示与字段可见性
+      // 按此区分；endpoint / API Key 由账号凭据直连自取。
+      oauthImageHint: '经 ChatGPT 订阅出图（gpt-image 系）——账号凭据直连 codex images 端点，无需配置 endpoint / API Key（尺寸仅支持 1024x1024 / 1024x1536 / 1536x1024 / auto）',
+      oauthImageModelHint: '订阅出图建议在「模型」使用 gpt-image 系（如 gpt-image-2；draw 预设默认 dall-e-3 为平台 API 模型，经订阅账号调用时服务端自动换用 gpt-image-2 并提示）',
       statsTitle: '统计信息',
       statsIntro: '实时用量（每 2 秒刷新）：Agent 级与账号级（服务商）两级明细卡片，默认折叠，点击展开查看平均耗时、模型细分与分钟级 tokens 分布；统计保存在内存中，重启后清零。',
       statsSummary: (calls, errors) => `累计 ${calls} 次调用 / ${errors} 次失败`,
@@ -755,6 +760,8 @@ window.__ModuleLoader__.load({
       orphanOauthIntro: 'OAuth accounts from older configurations that belong to no account pool (including unknown preset values): delete-only management here so their local credentials can still be cleaned up.',
       fieldAccount: 'OAuth account (plugin-managed, overrides provider/model)',
       oauthChatOnly: 'OAuth accounts support chat type only',
+      oauthImageHint: 'Generates via ChatGPT subscription (gpt-image family) — account credentials connect directly to the codex images endpoint; endpoint / API Key fields are not used (sizes: 1024x1024 / 1024x1536 / 1536x1024 / auto)',
+      oauthImageModelHint: 'Use a gpt-image model for subscription generation (e.g. gpt-image-2; the draw preset defaults to dall-e-3 for platform API — the server switches to gpt-image-2 with a hint when an OAuth account is bound)',
       statsTitle: 'Usage Statistics',
       statsIntro: 'Realtime usage (refreshed every 2s) at agent level and account (provider) level. Cards are collapsed by default — expand for average latency, model breakdown and per-minute token distribution; stats live in memory and reset on restart.',
       statsSummary: (calls, errors) => `${calls} calls / ${errors} errors`,
@@ -3076,6 +3083,10 @@ window.__ModuleLoader__.load({
         ? (oauthAccounts ?? []).find((entry) => entry.id === poolEntry.accounts[0])
         : undefined
       const oauthEntry = poolRef ? poolFirstAccount : (oauthAccounts ?? []).find((entry) => entry.id === (draft.account || ''))
+      // EVO-011（RES-004）：codex-responses（ChatGPT 订阅）账号 + image 类型
+      // = 订阅生图直连（服务端 runCodexResponsesImage）——提示文本与
+      // endpoint/API Key 字段可见性按此区分（非 codex 协议 + image 仍拒绝）。
+      const oauthImageDirect = draft.type === 'image' && !poolRef && oauthEntry?.protocol === 'codex-responses'
       const modelOptions = oauthEntry
         ? (oauthEntry.models ?? []).map((modelId) => ({ id: modelId, name: modelId }))
         : group ? group.models ?? [] : []
@@ -3138,7 +3149,8 @@ window.__ModuleLoader__.load({
             el('option', { value: '' }, `— ${t('inherit')} —`),
             ...(pools ?? []).map((entry) => el('option', { value: `pool:${entry.id}`, key: `pool:${entry.id}` }, `${t('poolTitle')} · ${entry.name || entry.id} (${entry.id})`)),
             ...(oauthAccounts ?? []).map((entry) => el('option', { value: entry.id, key: entry.id }, `${entry.name || entry.id} (${entry.id})`))),
-          draft.account ? el('p', { className: 'dshrouter-hint' }, t('oauthChatOnly')) : null) : null,
+          draft.account ? el('p', { className: 'dshrouter-hint' }, oauthImageDirect ? t('oauthImageHint') : t('oauthChatOnly')) : null) : null,
+        oauthImageDirect ? el('p', { className: 'dshrouter-hint' }, t('oauthImageModelHint')) : null,
         draft.type === 'cli' ? el('div', { className: 'dshrouter-stats' },
           el('div', { className: 'dshrouter-row', style: { alignItems: 'flex-end' } },
             el('div', { className: 'dshrouter-field' },
@@ -3175,22 +3187,22 @@ window.__ModuleLoader__.load({
             type: 'button', className: 'dshrouter-button ghost',
             style: { flex: 'none' },
             disabled: !draft.provider || !!draft.account,
-            title: draft.account ? t('oauthChatOnly') : draft.provider ? undefined : t('fieldProvider'),
+            title: draft.account ? (oauthImageDirect ? t('oauthImageHint') : t('oauthChatOnly')) : draft.provider ? undefined : t('fieldProvider'),
             onClick: () => onDiscover(draft.provider),
           }, t('fieldDiscover'))),
         draft.type === 'image' || draft.type === 'speech' ? el('div', { className: 'dshrouter-row' },
-          el('div', { className: 'dshrouter-field' },
+          (draft.type === 'speech' || !oauthImageDirect) ? el('div', { className: 'dshrouter-field' },
             el('span', { className: 'dshrouter-field-label' }, t('fieldEndpoint')),
-            el('input', { className: 'dshrouter-input', value: draft.endpoint ?? '', placeholder: 'https://api.openai.com/v1/images/generations', onChange: (event) => onField('endpoint', event.target.value) })),
+            el('input', { className: 'dshrouter-input', value: draft.endpoint ?? '', placeholder: 'https://api.openai.com/v1/images/generations', onChange: (event) => onField('endpoint', event.target.value) })) : null,
           draft.type === 'image' ? el('div', { className: 'dshrouter-field', style: { flex: '0 0 180px' } },
             el('span', { className: 'dshrouter-field-label' }, t('fieldImageSize')),
             el('select', { className: 'dshrouter-select', value: draft.imageSize ?? '1024x1024', onChange: (event) => onField('imageSize', event.target.value) },
               el('option', { value: '1024x1024' }, '1024x1024'),
               el('option', { value: '1792x1024' }, '1792x1024'),
               el('option', { value: '1024x1792' }, '1024x1792'))) : null,
-          el('div', { className: 'dshrouter-field' },
+          (draft.type === 'speech' || !oauthImageDirect) ? el('div', { className: 'dshrouter-field' },
             el('span', { className: 'dshrouter-field-label' }, t('fieldApiKeyEnv')),
-            el('input', { className: 'dshrouter-input', value: draft.apiKeyEnv ?? '', placeholder: 'OPENAI_API_KEY', onChange: (event) => onField('apiKeyEnv', event.target.value) }))) : null,
+            el('input', { className: 'dshrouter-input', value: draft.apiKeyEnv ?? '', placeholder: 'OPENAI_API_KEY', onChange: (event) => onField('apiKeyEnv', event.target.value) })) : null) : null,
         draft.type === 'agent' ? el('div', { className: 'dshrouter-field' },
           el('span', { className: 'dshrouter-field-label' }, t('fieldTools')),
           el('input', { className: 'dshrouter-input', value: (draft.tools ?? []).join(', '), onChange: (event) => onField('tools', event.target.value.split(',').map((item) => item.trim()).filter(Boolean)) })) : null,
