@@ -1200,6 +1200,17 @@ export async function runClientRender(check) {
   // 旧代码把 stats.accountTotals 里 `oauth:` 前缀键并入 addedAccounts（→
   // AccountCard 通用 API Key 假编辑器）与 statsAccountRows（账号级统计卡）。
   // 判别：账号分类展开后整树文本不含 oauth:chatgpt（旧代码必含 → 必败）。
+  // ── FIX-015：用户数据丢失 RCA 取证留档（2026-08-31，根因未定）──────────
+  // 已证事实链：① 磁盘 settings.yaml models:[]；② 代码存在读写不对称缺陷
+  // （显示回退已存值 vs 保存无回退 → 能造成空覆盖，但需保存点击触发）；
+  // ③ 用户唯一保存点击发生在丢值之后（不构成本案因果）；④ persistPresetLogin
+  // 只写凭据文件不写 settings（排除）。真凶未明——不默认归因用户操作
+  // （元批评：「怀疑要有实际证据」）。防御面覆盖（本组断言 + 代码注释）：
+  //   · savePresetModels 读写对称（无 draft 回退已存值）——旧代码必败判别
+  //   · discoverOauth 并集合并（mergePresetModels 单点，不可缩小）——回归锁定
+  //   · oauthAddToPool / addPresetAccount 新建语义（accountId 去重不覆盖）
+  //     ——注释证明（静态核验：写路径全量盘点 6 条 client + 1 透传，见
+  //     lib/client.js 各路径注释）
   {
     oauthGhostMode = true
     presetMode = 'none'
@@ -1262,6 +1273,10 @@ export async function runClientRender(check) {
     await settle()
     const rootSavedOp = captured.saveOps.find((op) => op.op === 'set' && op.path.join('/') === 'oauthAccounts/chatgpt/models')
     check('FIX-015: 未编辑保存不覆盖已存 models（旧代码空数组覆盖必败）', !!rootSavedOp && Array.isArray(rootSavedOp.value) && rootSavedOp.value.length === 1 && rootSavedOp.value[0] === 'gpt-5.4-mini')
+    // FIX-015 防御面回归锁定（非判别——旧代码 discoverOauth 同为并集语义天然
+    // 不可缩小；本断言锁定 mergePresetModels 单点语义，防未来回归为覆盖写）。
+    const mergeFn = bundleExports.mergePresetModels
+    check('FIX-015: 发现合并并集语义——空发现不缩小已存列表（回归锁定）', typeof mergeFn === 'function' && mergeFn(['a', 'b'], []).join(',') === 'a,b' && mergeFn(['a'], ['b', 'a']).join(',') === 'a,b' && mergeFn([], []).length === 0)
     presetMode = 'none'
   }
 
