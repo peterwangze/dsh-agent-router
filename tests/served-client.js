@@ -36,19 +36,28 @@ window.__ModuleLoader__.load({
     // FIX-019：宿主官方路由 provider id 单点镜像——lib/host-route.js:55
     // `export const HOST_ROUTE_PROVIDER = 'openai-codex'` 是权威单点；EVO-010
     // 起插件把该条目维护进 llm-pi-ai settings → 宿主 llm 目录暴露为**真
-    // provider**（7 个模型来自宿主官方目录）——配置归「设置 → 模型」，不得在
-    // Agent 路由账号管理区渲染（用户 ⑤ 确认截图 sha256:9fa0908e 实证第三幽灵
-    // 卡：已激活 · 7 个模型 · 调用 0 · 0/0）。两镜像值变更必须跟随权威单点。
+    // provider**（7 个模型来自宿主官方目录；调用随宿主路由走，账号管理区不
+    // 计）——配置归「设置 → 模型」，不得在 Agent 路由账号管理区渲染（用户 ⑤
+    // 确认截图 sha256:9fa0908e 实证第三幽灵卡：已激活 · 7 个模型 · 调用 0）。
+    // 两镜像值变更必须跟随权威单点。
     const HOST_ROUTE_ID = 'openai-codex'
-    // FIX-015 + FIX-019：插件自注册 provider 键判据单点化——非可配置账号，不得
-    // 渲染为账号卡（幽灵卡）：① 旧统计聚合键 `oauth:` 前缀（服务端 record
-    // provider 形态，如 oauth:chatgpt，FIX-015）；② 无冒号插件路由 id
-    // （OAUTH_PROVIDER，FIX-019——前缀判据失效，用户实证「又出现了」红字假
-    // 编辑器）；③ 插件维护的宿主官方路由 id（HOST_ROUTE_PROVIDER，FIX-019
-    // 追加——真 provider 形态，出现在 llm-pi-ai providers 目录，须显式排除）。
-    // addedAccounts 与 statsAccountRows 的全部来源（llm-pi-ai providers 目录
-    // + 统计 accountTotals）共用此判据（P5 单点化，勿复制条件）。
-    const isPluginRouteProvider = (id) => typeof id === 'string' && (id.startsWith('oauth:') || id === OAUTH_ROUTE_PROVIDER || id === HOST_ROUTE_ID)
+    // FIX-015 + FIX-019：插件自注册 provider 判据——两语义面分开（host 路由
+    // 不是 oauth 账号，各自独立演进）：
+    //  · oauth 面（isPluginRouteProvider）：旧统计聚合键 `oauth:` 前缀（服务端
+    //    record provider 形态，如 oauth:chatgpt，FIX-015）+ EVO-010 起无冒号
+    //    插件路由 id（OAUTH_PROVIDER，前缀判据失效，用户实证「又出现了」红字
+    //    假编辑器）；
+    //  · 宿主路由面（isHostManagedRoute）：插件自动维护进 llm-pi-ai settings
+    //    的 HOST_ROUTE_PROVIDER 条目（真 provider 形态，出现在 llm-pi-ai
+    //    providers 目录，无法靠「不在 providers 里」过滤，须显式排除）。
+    // isPluginSelfRegisteredProvider 组合谓词 = 渲染过滤**单点**：addedAccounts
+    // 与 statsAccountRows 的全部来源（llm-pi-ai providers 目录 + 统计
+    // accountTotals）只经它判定；新增路由形态仅改此地，禁止在过滤点重复
+    // 展开条件（P5 单点化）。订阅登录真卡的「路由已维护」状态行（EVO-010
+    // openaiCodexRoute）已承载宿主路由可见性——账号管理区零重复。
+    const isPluginRouteProvider = (id) => typeof id === 'string' && (id.startsWith('oauth:') || id === OAUTH_ROUTE_PROVIDER)
+    const isHostManagedRoute = (id) => typeof id === 'string' && id === HOST_ROUTE_ID
+    const isPluginSelfRegisteredProvider = (id) => isPluginRouteProvider(id) || isHostManagedRoute(id)
 
     // ── wire codecs（与宿主 lib/schemas.js 同形状的轻量校验器）──────────────
     function wireCheck(spec, value, path) {
@@ -1935,19 +1944,21 @@ window.__ModuleLoader__.load({
       const toggleSection = (key) => setExpandedSection((current) => ({ ...current, [key]: !current[key] }))
 
       // 已添加的账号（llm-pi-ai 目录中已激活的路由 = 已配置 profile）。
-      // FIX-015 + FIX-019：插件自注册 provider 键（统计键 + 插件/宿主路由 id）
-      // 不得渲染成通用 API Key 编辑器（幽灵卡）——目录来源同样过滤，判据经
-      // isPluginRouteProvider 单点化（与统计 accountTotals 来源同判据）。
+      // FIX-015 + FIX-019：插件侧 provider（oauth 面统计键 + 宿主路由面真目录
+      // 条目）不得渲染成通用 API Key 编辑器（幽灵卡）——目录来源同样过滤，
+      // 判据经 isPluginSelfRegisteredProvider 单点（与统计 accountTotals 来源
+      // 同判）。
       const addedAccounts = providers
         .filter((entry) => entry.settingsNs === 'llm-pi-ai' && entry.active === true)
         .map((entry) => entry.provider)
-        .filter((provider) => !isPluginRouteProvider(provider))
+        .filter((provider) => !isPluginSelfRegisteredProvider(provider))
       for (const total of stats ? stats.accountTotals ?? [] : []) {
-        // FIX-015 + FIX-019：插件自注册 provider 键（`oauth:` 前缀旧聚合键或
-        // 无冒号路由 id）而非可配置账号——由「ChatGPT 订阅登录」卡自管，不得
-        // 并入配置区渲染成通用 API Key 编辑器（幽灵卡；用户实证指认）；判据
-        // 经 isPluginRouteProvider 单点化（与 statsAccountRows 同判据）。
-        if (isPluginRouteProvider(total.provider)) continue
+        // FIX-015 + FIX-019：插件自注册 provider 键（oauth 面 `oauth:` 前缀旧
+        // 聚合键 / 无冒号路由 id；宿主路由面 openai-codex）而非可配置账号——
+        // 由「ChatGPT 订阅登录」卡自管 / 归「设置 → 模型」，不得并入配置区渲染
+        // 成通用 API Key 编辑器（幽灵卡；用户实证指认）；判据经
+        // isPluginSelfRegisteredProvider 单点化（与 statsAccountRows 同判据）。
+        if (isPluginSelfRegisteredProvider(total.provider)) continue
         if (!addedAccounts.includes(total.provider)) addedAccounts.push(total.provider)
       }
       addedAccounts.sort()
@@ -2099,10 +2110,11 @@ window.__ModuleLoader__.load({
       const statsAccountRows = []
       for (const entry of providers) {
         if (entry.settingsNs !== 'llm-pi-ai') continue
-        // FIX-019：llm-pi-ai 目录里的插件/宿主路由 provider（openai-codex）是
-        // 插件自注册条目而非可配置账号——与统计键同判据（isPluginRouteProvider
-        // 单点），不得以账号行形态出现在统计账号级卡片（用户实证幽灵卡）。
-        if (isPluginRouteProvider(entry.provider)) continue
+        // FIX-019：llm-pi-ai 目录里的插件侧 provider（oauth 面统计键 + 宿主
+        // 路由面 openai-codex 真目录条目）是插件自注册条目而非可配置账号——
+        // 与统计键同判据（isPluginSelfRegisteredProvider 单点），不得以账号行
+        // 形态出现在统计账号级卡片（用户实证幽灵卡）。
+        if (isPluginSelfRegisteredProvider(entry.provider)) continue
         const total = accountTotalsById.get(entry.provider)
         if (entry.active !== true && !total) continue
         statsAccountRows.push({
@@ -2118,10 +2130,10 @@ window.__ModuleLoader__.load({
         })
       }
       for (const total of stats ? stats.accountTotals ?? [] : []) {
-        // FIX-015 + FIX-019：与 addedAccounts 同判据（isPluginRouteProvider
+        // FIX-015 + FIX-019：与 addedAccounts 同判据（isPluginSelfRegisteredProvider
         // 单点）——插件自注册 provider 键不得以账号行形态出现在统计账号级
         // 卡片（用户实证幽灵卡：假编辑器 + 统计行双重出现）。
-        if (isPluginRouteProvider(total.provider)) continue
+        if (isPluginSelfRegisteredProvider(total.provider)) continue
         if (statsAccountRows.some((row) => row.provider === total.provider)) continue
         statsAccountRows.push({
           provider: total.provider,
