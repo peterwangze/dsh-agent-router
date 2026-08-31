@@ -103,7 +103,15 @@ window.__ModuleLoader__.load({
         // EVO-002 Step 6：preset 镜像 + 登录态（可选——旧服务端缺省兼容）。
         preset: wv.string(true),
         presetLoggedIn: wv.boolean(true),
+        // EVO-010：调用通路镜像（'host'|'plugin'，可选——旧服务端缺省兼容）。
+        transport: wv.string(true),
       })),
+      // EVO-010：宿主官方 openai-codex 路由维护状态（可选——旧服务端缺省兼容）。
+      openaiCodexRoute: wv.object({
+        maintained: wv.boolean(), ref: wv.string(), accountId: wv.string(),
+        tokenInjected: wv.string(), degraded: wv.boolean(), failures: wv.number(),
+        notice: wv.string(true),
+      }, true),
       pools: wv.array(wv.object({
         id: wv.string(), name: wv.string(), enabled: wv.boolean(), strategy: wv.string(),
         accounts: wv.array(wv.string()),
@@ -420,6 +428,16 @@ window.__ModuleLoader__.load({
       presetModelsHint: '模型列表由插件独立维护（可编辑；ChatGPT 订阅端点不提供模型发现，常用值 gpt-5.6-sol / gpt-5.6-terra / gpt-5.6-luna）。',
       presetModelsEmpty: '模型列表为空——主 agent 模型选择器不会出现该账号（保存模型列表后自动注册）。',
       presetModelsEmptyNotice: '已保存，但模型列表为空——主 agent 模型选择器不会出现该账号。',
+      // EVO-010：调用通路开关 + 宿主官方 openai-codex 路由状态行。
+      presetTransportLabel: '调用通路',
+      presetTransportHost: '宿主官方（推荐）',
+      presetTransportPlugin: '插件内置（降级）',
+      presetRouteOk: 'openai-codex 路由已维护 · token 注入正常',
+      presetRouteDegraded: 'openai-codex 路由已维护 · 此前连续失败（降级告警中）',
+      presetRouteTokenFailed: 'openai-codex 路由已维护 · token 注入异常（插件内置通路不受影响）',
+      presetRouteOff: 'openai-codex 路由未维护（无启用账号 / 未登录 / 已切插件内置 / 宿主路由异常）',
+      presetRouteDegradedNotice: '官方路由连续失败已达 3 次：建议把「调用通路」切换为插件内置（不会自动改你的配置）。',
+      presetTransportSaved: '调用通路已保存。',
       oauthTokenBack: 'access token 已自动保存。',
       oauthNeedConfig: '请先完善账号配置（Base URL 等）再登录',
       // F-1（EVO-007 R0 返工）：非 preset OAuth 账号删除路径恢复——
@@ -679,6 +697,16 @@ window.__ModuleLoader__.load({
       presetModelsHint: 'The model list is plugin-managed (editable; the ChatGPT subscription endpoint offers no model discovery — common values gpt-5.6-sol / gpt-5.6-terra / gpt-5.6-luna).',
       presetModelsEmpty: 'Empty model list — this account will not appear in the main-agent model selector (it registers automatically once a model list is saved).',
       presetModelsEmptyNotice: 'Saved, but the model list is empty — this account will not appear in the main-agent model selector.',
+      // EVO-010：调用通路开关 + 宿主官方 openai-codex 路由状态行。
+      presetTransportLabel: 'Transport',
+      presetTransportHost: 'Host official (recommended)',
+      presetTransportPlugin: 'Plugin built-in (fallback)',
+      presetRouteOk: 'openai-codex route maintained · token injection OK',
+      presetRouteDegraded: 'openai-codex route maintained · earlier consecutive failures (degraded warning active)',
+      presetRouteTokenFailed: 'openai-codex route maintained · token injection failing (plugin transport unaffected)',
+      presetRouteOff: 'openai-codex route not maintained (no enabled account / not signed in / plugin transport / host route unhealthy)',
+      presetRouteDegradedNotice: 'The official route failed 3 times in a row: consider switching Transport to the plugin built-in (your config is never changed automatically).',
+      presetTransportSaved: 'Transport saved.',
       oauthTokenBack: 'Access token saved automatically.',
       oauthNeedConfig: 'Complete the account configuration first (Base URL, …)',
       // F-1 (EVO-007 R0 rework): delete confirm/success copy + minimal orphan
@@ -1201,9 +1229,22 @@ window.__ModuleLoader__.load({
       return [...new Set([...base, ...extra])]
     }
 
+    /** EVO-010：订阅卡路由状态行文案（transport 归一 + 路由状态面判别——
+     *  单一事实源，渲染与判别共用）。 */
+    function presetRouteLine(t, entry, route) {
+      const transport = entry && entry.transport === 'plugin' ? 'plugin' : 'host'
+      if (transport === 'plugin') return t('presetRouteOff')
+      if (!route || route.maintained !== true) return t('presetRouteOff')
+      if (route.tokenInjected === 'failed') return t('presetRouteTokenFailed')
+      if (route.degraded === true) return t('presetRouteDegraded')
+      return t('presetRouteOk')
+    }
+
     function PresetAccountCard(props) {
-      const { id, entry, busy, notice, t, writable, onLogin, onLogout, onDelete, modelsValue, onModelsChange, onSaveModels } = props
+      const { id, entry, busy, notice, t, writable, onLogin, onLogout, onDelete, modelsValue, onModelsChange, onSaveModels, routeStatus, onTransportChange } = props
       const loggedIn = entry.presetLoggedIn === true
+      const transport = entry.transport === 'plugin' ? 'plugin' : 'host'
+      const routeLine = presetRouteLine(t, entry, routeStatus)
       return el('div', { className: 'dshrouter-card' },
         el('div', { className: 'dshrouter-head' },
           loggedIn ? el('span', { className: 'dshrouter-dot ok', title: t('oauthLoggedIn') }) : el('span', { className: 'dshrouter-dot bad', title: t('oauthNotLoggedIn') }),
@@ -1213,6 +1254,21 @@ window.__ModuleLoader__.load({
           el('button', { type: 'button', className: 'dshrouter-button', disabled: busy || !writable, onClick: onLogin }, busy ? t('presetLoggingIn') : t('presetLogin')),
           el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: busy || !writable || !loggedIn, onClick: onLogout }, t('presetLogout')),
           el('button', { type: 'button', className: 'dshrouter-button danger', disabled: busy || !writable, onClick: onDelete }, t('presetDelete'))),
+        // EVO-010：调用通路开关（宿主官方 openai-codex 路由 = 推荐；插件内置
+        // = 降级手切，零重启）+ 官方路由状态行（维护/token 注入/降级）。
+        el('div', { className: 'dshrouter-row' },
+          el('div', { className: 'dshrouter-field', style: { flex: '0 0 220px' } },
+            el('span', { className: 'dshrouter-field-label' }, t('presetTransportLabel')),
+            el('select', {
+              className: 'dshrouter-select', value: transport, disabled: busy || !writable,
+              'aria-label': t('presetTransportLabel'),
+              onChange: (event) => onTransportChange(event.target.value),
+            },
+              el('option', { value: 'host' }, t('presetTransportHost')),
+              el('option', { value: 'plugin' }, t('presetTransportPlugin')))),
+          el('div', { className: 'dshrouter-field', style: { flex: '1 1 260px' } },
+            el('span', { className: 'dshrouter-field-label' }, 'openai-codex'),
+            el('span', { className: 'dshrouter-meta' }, routeLine))),
         el('div', { className: 'dshrouter-row' },
           el('div', { className: 'dshrouter-field', style: { flex: '1 1 320px' } },
             el('span', { className: 'dshrouter-field-label' }, t('oauthModels')),
@@ -1225,6 +1281,10 @@ window.__ModuleLoader__.load({
         // FIX-015：已登录但模型列表为空 → 明示「选择器不会出现该账号」（用户
         // 实证被幽灵卡误导配置位置的根因——空模型 = 主 agent 侧零注册零观测）。
         loggedIn && (modelsValue ?? '').trim() === '' ? el('p', { className: 'dshrouter-error' }, t('presetModelsEmpty')) : null,
+        // EVO-010：降级告警（服务端 notice 数据源——只提示，不改用户配置）。
+        routeStatus && routeStatus.degraded === true && transport === 'host'
+          ? el('p', { className: 'dshrouter-error' }, routeStatus.notice || t('presetRouteDegradedNotice'))
+          : null,
         notice ? el('p', { className: 'dshrouter-hint' }, notice) : null)
     }
 
@@ -2263,6 +2323,13 @@ window.__ModuleLoader__.load({
         setOauthNotice((current) => ({ ...current, [id]: outcome.ok ? t('saved') : outcome.message }))
       }
 
+      /** EVO-010：调用通路保存（'host' | 'plugin'）——写 oauthAccounts.<id>.
+       *  transport；服务端 settings/updated 联动路由维护热增删（零重启）。 */
+      const savePresetTransport = async (id, value) => {
+        const outcome = await mutate([{ op: 'set', path: ['oauthAccounts', id, 'transport'], value: value === 'plugin' ? 'plugin' : 'host' }])
+        setOauthNotice((current) => ({ ...current, [id]: outcome.ok ? t('presetTransportSaved') : outcome.message }))
+      }
+
       // ── 子代理（无头 CLI 条目：账号区维护，专业 agent 经 cliAgent 引用）──
       const cliEntries = state.catalog?.cliAgents ?? []
       const cliEntriesById = new Map(cliEntries.map((entry) => [entry.id, entry]))
@@ -2565,6 +2632,9 @@ window.__ModuleLoader__.load({
             onLogin: () => runPresetLogin(entry.id),
             onLogout: () => logoutPresetAccount(entry.id),
             onDelete: () => deletePresetAccount(entry.id),
+            // EVO-010：调用通路开关 + 官方路由状态行数据源。
+            routeStatus: state.catalog?.openaiCodexRoute,
+            onTransportChange: (value) => savePresetTransport(entry.id, value),
           })),
           el('div', { className: 'dshrouter-row' },
             el('button', { type: 'button', className: 'dshrouter-button', disabled: !state.writable, onClick: addPresetAccount }, t('presetAdd')))),
