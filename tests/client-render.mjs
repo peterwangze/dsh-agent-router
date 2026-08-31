@@ -235,6 +235,12 @@ export async function runClientRender(check) {
   // 119.1K/1.0K · 展开 = 通用 API Key 假编辑器）。true 时 stats.accountTotals
   // 额外注入 chatgpt-oauth（与 oauthGhostMode 并存 = 两种键同时存在）。
   let oauthRouteGhostMode = false
+  // FIX-019 追加（用户 ⑤ 确认截图 sha256:9fa0908e）：宿主官方 openai-codex
+  // 路由条目（EVO-010 由插件维护进 llm-pi-ai settings，lib/host-route.js
+  // HOST_ROUTE_PROVIDER）在宿主 llm 目录暴露为**真 provider**（active、7 个
+  // 模型来自宿主官方目录、调用 0）——不是统计键，无法靠「不在 providers 里」
+  // 过滤，须显式排除。true 时 apiMock 注入该 provider 条目 + 同名 models 组。
+  let hostRouteGhostMode = false
   // FIX-015 修 3：true 时 logged-in 的 ChatGPT 账号模型列表为空（主 agent 选择器
   // 不会出现该账号——订阅卡须明示，旧代码无提示必败）。
   let presetEmptyModelsMode = false
@@ -359,8 +365,14 @@ export async function runClientRender(check) {
       providers: async () => ({ result: { ok: true, value: { providers: [
         { provider: 'openai', displayName: 'OpenAI', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], active: false, declared: false },
         { provider: 'gateway', displayName: 'Gateway', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'gateway'], active: true, declared: true },
+        // FIX-019 追加：宿主官方 openai-codex 路由 = llm-pi-ai 真 provider（EVO-010
+        // 插件维护进 settings；7 个模型来自宿主官方目录）。
+        ...(hostRouteGhostMode ? [{ provider: 'openai-codex', displayName: 'OpenAI Codex 官方', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai-codex'], active: true, declared: false }] : []),
       ] } } }),
-      models: async () => ({ result: { ok: true, value: { groups: [{ id: 'gateway', models: [{ id: 'old-m', name: 'Old M' }] }], failures: [] } } }),
+      models: async () => ({ result: { ok: true, value: { groups: [
+        ...(hostRouteGhostMode ? [{ id: 'openai-codex', models: [1, 2, 3, 4, 5, 6, 7].map((index) => ({ id: `codex-m-${index}`, name: `Codex M${index}` })) }] : []),
+        { id: 'gateway', models: [{ id: 'old-m', name: 'Old M' }] },
+      ], failures: [] } } }),
       discoverModels: async (request) => {
         discoverCalls.push(request)
         if (discoverMode === 'fail') return { result: { ok: false, error: { message: 'could not reach https://gateway.example/v1/models' } } }
@@ -1317,6 +1329,40 @@ export async function runClientRender(check) {
       currentTree = await settle()
     }
     check('FIX-019: 统计账号级卡片不含 chatgpt-oauth 行（第二过滤点同判据）', !!fix019StatsHead && !textOf(currentTree).includes('chatgpt-oauth'))
+    oauthRouteGhostMode = false
+    oauthGhostMode = false
+    presetMode = 'none'
+  }
+
+  // ── FIX-019 追加：宿主路由 openai-codex 显式排除（真 provider 形态）────
+  // EVO-010 起插件把 openai-codex 目录路由维护进 llm-pi-ai settings（
+  // lib/host-route.js HOST_ROUTE_PROVIDER）→ 宿主 llm 目录暴露为**真 provider**
+  // （active、7 个模型来自宿主官方目录、调用 0）；旧代码 addedAccounts 与
+  // statsAccountRows 的 llm-pi-ai providers 来源不带任何过滤 → 渲染为假账号卡
+  // （用户 ⑤ 确认截图 sha256:9fa0908e：已激活 · 7 个模型 · 调用 0 · 0/0）。
+  // 判据：与统计键同点（isPluginRouteProvider 显式排除）；配置归「设置 → 模型」。
+  // 判别：providers 含 openai-codex + 统计含 chatgpt-oauth/oauth:chatgpt 三种
+  // 键并存 → 账号卡与统计卡均不渲染三者（旧代码必含 openai-codex 必败）。
+  {
+    oauthGhostMode = true
+    oauthRouteGhostMode = true
+    hostRouteGhostMode = true
+    presetMode = 'none'
+    await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'fix019-host-route', 60)
+    const hostAcctHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.accountTitle))
+    if (hostAcctHead) {
+      hostAcctHead.props.onClick()
+      currentTree = await settle()
+    }
+    check('FIX-019: openai-codex 宿主路由不渲染为账号卡（旧代码必含）', !!hostAcctHead && !textOf(currentTree).includes('openai-codex'))
+    check('FIX-019: 三键并存账号卡零幽灵（chatgpt-oauth/oauth:chatgpt 同判不回归）', !textOf(currentTree).includes('chatgpt-oauth') && !textOf(currentTree).includes('oauth:chatgpt'))
+    const hostStatsHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.statsTitle))
+    if (hostStatsHead) {
+      hostStatsHead.props.onClick()
+      currentTree = await settle()
+    }
+    check('FIX-019: 统计账号级卡片不含 openai-codex 行（providers 来源第二过滤点）', !!hostStatsHead && !textOf(currentTree).includes('openai-codex'))
+    hostRouteGhostMode = false
     oauthRouteGhostMode = false
     oauthGhostMode = false
     presetMode = 'none'
