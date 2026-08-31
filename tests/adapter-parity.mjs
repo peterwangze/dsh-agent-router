@@ -148,6 +148,43 @@ export async function runAdapterParityTests(check) {
     const sawImage = seen.some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === 'image'))
     check('prepared dispatch preserves image blocks when source model is multimodal', sawImage === true)
   }
+
+  // 5. FIX-018 缺陷 2 证明（EVO-009 chatgpt-oauth 实案形状）：「原模型已多模态
+  //    时 twin 直传图片」判定链锁定。适配器形状 = EVO-009 createOauthAdapter
+  //    的 resolveModel 返回形状（{provider, id, name, inputModalities}，声明
+  //    ['text','image']）；twin stream 对含图请求先经 sourceAcceptsModality →
+  //    registration('fake-oauth').adapter.resolveModel 直调可达 → accepts=true
+  //    → 直传分支：委托 provider = 原 provider、图片块保真、零 system 标记
+  //    （主模型自己看图，不进 route_agent 改写面）。判别：探测不可达（如误经
+  //    宿主二次路由/形状不兼容读不到 inputModalities）→ accepts=false → 改写
+  //    分支 → 图片块消失 + MARKER 注入 → 三断言必败。
+  //    （provider 'fake-oauth' + model 'gpt-x'：独立缓存键，避免与 test 3/4 的
+  //    模块级 60s 探测缓存互相污染。）
+  {
+    const oauthAdapter = {
+      providerInfo: (route) => ({ id: route, name: 'ChatGPT 订阅' }),
+      // EVO-009 形状：route 参数弃用（目录咨询性），恒返回账号级能力声明。
+      resolveModel: async (_route, model) => ({ provider: 'fake-oauth', id: model, name: model, inputModalities: ['text', 'image'] }),
+    }
+    const delegations = []
+    const llm = {
+      registration: (provider) => {
+        if (provider !== 'fake-oauth') throw new Error(`no adapter registered for provider "${provider}"`)
+        return { adapter: oauthAdapter }
+      },
+      stream: async function* (options) {
+        delegations.push(options)
+        yield { type: 'text', text: 'ok' }
+      },
+    }
+    const active = [{ modality: 'image', stateOf: null, marker: () => 'MARKER', rewrite: () => null }]
+    const twin = createWrapAdapter(llm, 'fake-oauth', active)
+    const imageMessage = { role: 'user', content: [{ type: 'text', text: '看图' }, { type: 'image', source: { kind: 'base64', mediaType: 'image/png', data: 'aGk=' } }] }
+    for await (const chunk of twin.stream({ provider: 'fake-oauth' + WRAP_SUFFIX, model: 'gpt-x', messages: [imageMessage] })) { void chunk }
+    check('EVO-009 形状：twin 探测可达插件注册适配器并直传（委托=原 provider）', delegations.length === 1 && delegations[0].provider === 'fake-oauth')
+    check('EVO-009 形状：图片块保真（零改写直传）', Array.isArray(delegations[0].messages[0].content) && delegations[0].messages[0].content.some((b) => b.type === 'image'))
+    check('EVO-009 形状：零 system 标记注入（不进 route_agent 改写面）', delegations[0].system === undefined)
+  }
 }
 
 // FIX-001b F1：pathToFileURL 可移植比较（Windows 下 argv[1] 反斜杠路径 vs

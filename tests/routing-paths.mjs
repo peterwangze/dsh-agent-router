@@ -1082,6 +1082,25 @@ console.log('F. takeover 客户端会话级:')
     const out = await runPreStep({ llm: mkStubLlm(), provider: 'text-only-prov-router', model: 't1', messages: imgMessages() })
     check('[G4] wrapper 分支纯文本：reminder 保持注入', hasReminder(out))
   }
+  // G7（FIX-018 缺陷 2 证明）：chatgpt-oauth twin 会话——prestep 能力判定经
+  // registration(<剥 -router>).adapter.resolveModel 直调（EVO-009 适配器形状
+  // {provider,id,name,inputModalities:['text','image']}，lib/oauth-llm.js）→
+  // accepts=true → 不注入 reminder（FIX-005「主模型原生多模态不引导路由」对
+  // chatgpt-oauth 生效，用户实证的 route_agent 中转非 reminder 所致）。判别：
+  // 探测不可达（registration 断链/形状读不到 inputModalities）→ accepts=false
+  // → 注入 → 必败。
+  {
+    const out = await runPreStep({
+      llm: {
+        registration: (provider) => {
+          if (provider !== 'chatgpt-oauth') throw new Error(`no adapter registered for provider "${provider}"`)
+          return { adapter: { resolveModel: async (_route, model) => ({ provider: 'chatgpt-oauth', id: model, name: model, inputModalities: ['text', 'image'] }) } }
+        },
+      },
+      provider: 'chatgpt-oauth-router', model: 'gpt-5.6-terra', messages: imgMessages(),
+    })
+    check('[G7] chatgpt-oauth twin（EVO-009 形状）：不注入 reminder（直传判定可达）', !hasReminder(out))
+  }
   // G5 tool.js route_agent 描述含中性句（静态断言：读源码文本——判别性：句中词"已由
   // 主模型原生查看"仅在描述追加后出现）+ 既有指导保留（不得删改）。
   {
