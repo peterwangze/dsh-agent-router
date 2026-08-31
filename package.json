@@ -27,6 +27,7 @@
   "files": [
     "lib/attachments.js",
     "lib/client.js",
+    "lib/host-route.js",
     "lib/index.js",
     "lib/memory.js",
     "lib/oauth-credentials.js",

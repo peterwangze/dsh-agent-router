@@ -32,6 +32,19 @@
 import { Context } from '@deepseek-ai/cordis'
 import { LlmRuntime } from '@deepseek-ai/dsh-llm'
 import { installOauthLlmAdapters, OAUTH_PROVIDER, OAUTH_PROVIDER_NAME } from '../lib/oauth-llm.js'
+// EVO-010（宿主官方 openai-codex 路由迁移）：路由维护/PoC 迁移/注入链/
+// transport/parity 判别断言见文件末尾 evo-010 块。
+import {
+  HOST_ROUTE_NS, HOST_ROUTE_PROVIDER, HOST_ROUTE_REF, HOST_ROUTE_POC_REF,
+  HOST_TOKEN_REFRESH_MARGIN_MS, HOST_ROUTE_FAILURE_THRESHOLD,
+  planHostRouteMutation, syncHostRoute, hostRouteStatusOf,
+} from '../lib/host-route.js'
+import { RouterService } from '../lib/service.js'
+import { OauthCredentialStore } from '../lib/oauth-credentials.js'
+import { oauthAccountSchema, OAUTH_TRANSPORT_VALUES, normalizeTransport } from '../lib/schemas.js'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 let failures = 0
 function check(label, condition) {
@@ -358,5 +371,194 @@ console.log('fix-017 responses contract (top-level items; function_call never in
   h.cleanup()
 }
 
-console.log(failures === 0 ? '\nALL EVO-009 DISCRIMINANT TESTS PASSED' : `\n${failures} EVO-009 ASSERTION(S) FAILED (RED — fix pending)`)
+// ── EVO-010：宿主官方 openai-codex 路由迁移（凭据桥 + 路由维护者）────────
+//
+// 判别面（实施依据 .governance/arch-003-bridge-poc.md 实施要点五条）：
+//   ROUTE-* 路由自动维护：settings.mutate('llm-pi-ai') 写
+//     providers['openai-codex'] = { apiKeyEnv: 'DSH_ROUTER_OPENAI_CODEX' }；
+//     无启用账号/总开关关 → unset；用户手改 → 不覆盖 + 诊断事件；
+//     PoC ref 接管迁移（DSH_ROUTER_POC_OPENAI_CODEX → 正式 ref + 清理）。
+//   INJ-* token 热注入（唯一刷新者）：刷新回调 → credentials.set(ref, token)；
+//     值不同才写（diff-only）；注入失败 → warn + 事件 + 不写条目（fail-closed）。
+//   TRA-* transport 字段：'host'|'plugin'（默认 host）；plugin 账号排除出路由
+//     维护；host/plugin 切换不改 OAUTH_PROVIDER 注册；连续 3 次失败 → 降级
+//     事件 + 提示但不静默改用户配置字段（用户主权，FIX-002 教训）。
+//   PAR-* parity 守卫（P9）：探活 resolveModelInfo 必须含目录事实
+//     （context.contextWindow 正整数 = pi-ai 内置 codex 目录形状——手写适配器
+//     resolveModel 无 context 字段，构成判别面）；探活失败 → 回滚条目 + warn。
+// 事件面注记：host_route_* 断言读 service.hostRouteEvents 独立环（C-9 的
+// oauthEvents 登录旅程环保持专用语义——smoke 既有 journey-order 契约不受
+// 维护事件污染，EVO-010 实测教训）。
+
+/** 写一个合法凭据文档到临时目录（presetLoggedInOf/resolvePresetCredential 读面）。 */
+function seedCredentialFile(dir, overrides = {}) {
+  const file = join(dir, `cred-${Math.random().toString(36).slice(2)}.json`)
+  const doc = {
+    version: 1,
+    credential: {
+      type: 'oauth', access: 'ACCESS-TOKEN', refresh: 'REFRESH-TOKEN',
+      expires: Date.now() + 3600_000, accountId: 'acct-1', ...overrides,
+    },
+  }
+  writeFileSync(file, JSON.stringify(doc))
+  return file
+}
+
+/** EVO-010 路由夹具：settings/credentials/llm 三 seam mock + 真 RouterService。 */
+function makeRouteHarness({ accounts, enabled = true, entry, parity = 'ok', tokenInRef, setFails = false } = {}) {
+  const calls = []
+  const warns = []
+  const providers = entry === undefined ? {} : { [HOST_ROUTE_PROVIDER]: entry }
+  const settings = {
+    get: (ns) => (ns === HOST_ROUTE_NS ? { providers } : undefined),
+    mutate: async (ns, ops) => {
+      calls.push({ kind: 'settings.mutate', ns, ops })
+      if (ns !== HOST_ROUTE_NS) throw new Error(`unexpected ns ${ns}`)
+      for (const op of ops) {
+        if (op.path[0] === 'providers' && op.path[1] === HOST_ROUTE_PROVIDER) {
+          if (op.op === 'unset') delete providers[HOST_ROUTE_PROVIDER]
+          else providers[HOST_ROUTE_PROVIDER] = op.value
+        }
+      }
+      return true
+    },
+  }
+  const credentials = {
+    resolve: async (ref) => (tokenInRef === undefined ? undefined : { value: tokenInRef }),
+    set: async (ref, value) => {
+      calls.push({ kind: 'credentials.set', ref, value })
+      if (setFails) throw new Error('credentials store 写入失败')
+      tokenInRef = value
+    },
+    unset: async (ref) => { calls.push({ kind: 'credentials.unset', ref }) },
+  }
+  const llm = parity === 'ok'
+    ? {
+        listModels: async (provider) => [{ provider, id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol', inputModalities: ['text', 'image'] }],
+        resolveModelInfo: async (provider, id) => ({ provider, id, name: 'GPT-5.6 Sol', inputModalities: ['text', 'image'], context: { contextWindow: 272000 }, reasoning: { efforts: [{ id: 'high', name: 'High' }] } }),
+      }
+    : {
+        listModels: async () => [],
+        resolveModelInfo: async (provider, id) => ({ provider, id, name: 'GPT-5.6 Sol' }),
+      }
+  // 真 RouterService 需要 cordis Context（TypertRemoteService 构造契约，
+  // rpc-shadow-guard 先例）——三个 seam 以 reflect.provide 注入 mock。
+  const root = new Context()
+  root.reflect.provide('settings', settings)
+  root.reflect.provide('credentials', credentials)
+  root.reflect.provide('llm', llm)
+  root.logger = { warn: (message) => warns.push(String(message)) }
+  const service = new RouterService(root, { enabled, oauthAccounts: accounts })
+  return { service, ctx: root, calls, warns, providers, settings, credentials }
+}
+
+/** 带临时凭据文件的启用账号（transport 可覆写）。 */
+function routeAccount(dir, overrides = {}) {
+  return {
+    name: 'ChatGPT 订阅', enabled: true, preset: 'chatgpt-codex', protocol: 'codex-responses',
+    baseURL: 'https://chatgpt.com/backend-api', credentialFile: seedCredentialFile(dir),
+    clientId: '', clientSecret: '', publicClient: false, authUrl: '', tokenUrl: '', scope: '',
+    models: ['gpt-5.6-sol', 'gpt-5.6-terra'], tokenRef: '', ...overrides,
+  }
+}
+
+console.log('evo-010 host route maintenance (settings llm-pi-ai providers entry):')
+{
+  const dir = mkdtempSync(join(tmpdir(), 'evo010-route-'))
+  // ROUTE-0：ref 命名规范（与 PoC 衔接）+ 任务常量。
+  check('ROUTE-0: 正式 ref 命名规范 DSH_ROUTER_OPENAI_CODEX（PoC ref 接管前提）', HOST_ROUTE_REF === 'DSH_ROUTER_OPENAI_CODEX' && HOST_ROUTE_POC_REF === 'DSH_ROUTER_POC_OPENAI_CODEX' && HOST_ROUTE_NS === 'llm-pi-ai' && HOST_ROUTE_PROVIDER === 'openai-codex')
+  check('ROUTE-0b: 刷新 margin 60s + 降级阈值 3（任务常量）', HOST_TOKEN_REFRESH_MARGIN_MS === 60_000 && HOST_ROUTE_FAILURE_THRESHOLD === 3)
+  // 纯计划函数矩阵。
+  const set = (value) => [{ op: 'set', path: ['providers', HOST_ROUTE_PROVIDER], value }]
+  const unset = [{ op: 'unset', path: ['providers', HOST_ROUTE_PROVIDER] }]
+  check('ROUTE-P1: 无条目+maintain → create', planHostRouteMutation(undefined, { maintain: true, ref: HOST_ROUTE_REF }).action === 'create' && JSON.stringify(planHostRouteMutation(undefined, { maintain: true, ref: HOST_ROUTE_REF }).ops) === JSON.stringify(set({ apiKeyEnv: HOST_ROUTE_REF })))
+  check('ROUTE-P2: 恰为自有条目 → idle（幂等零写入）', planHostRouteMutation({ apiKeyEnv: HOST_ROUTE_REF }, { maintain: true, ref: HOST_ROUTE_REF }).action === 'idle' && planHostRouteMutation({ apiKeyEnv: HOST_ROUTE_REF }, { maintain: true, ref: HOST_ROUTE_REF }).ops.length === 0)
+  check('ROUTE-P3: PoC 条目 → migrate（接管，避免双条目）', planHostRouteMutation({ apiKeyEnv: HOST_ROUTE_POC_REF }, { maintain: true, ref: HOST_ROUTE_REF }).action === 'migrate' && JSON.stringify(planHostRouteMutation({ apiKeyEnv: HOST_ROUTE_POC_REF }, { maintain: true, ref: HOST_ROUTE_REF }).ops) === JSON.stringify(set({ apiKeyEnv: HOST_ROUTE_REF })))
+  check('ROUTE-P4: 用户手改（额外字段/外来 ref）→ user-modified 零 ops', planHostRouteMutation({ apiKeyEnv: HOST_ROUTE_REF, models: ['x'] }, { maintain: true, ref: HOST_ROUTE_REF }).action === 'user-modified' && planHostRouteMutation({ apiKeyEnv: 'USER_OWN_REF' }, { maintain: true, ref: HOST_ROUTE_REF }).action === 'user-modified' && planHostRouteMutation({ apiKeyEnv: 'USER_OWN_REF' }, { maintain: true, ref: HOST_ROUTE_REF }).ops.length === 0)
+  check('ROUTE-P5: 停用 → unset 自有/PoC 条目；无条目 → idle', planHostRouteMutation({ apiKeyEnv: HOST_ROUTE_REF }, { maintain: false, ref: HOST_ROUTE_REF }).action === 'unset' && JSON.stringify(planHostRouteMutation({ apiKeyEnv: HOST_ROUTE_REF }, { maintain: false, ref: HOST_ROUTE_REF }).ops) === JSON.stringify(unset) && planHostRouteMutation(undefined, { maintain: false, ref: HOST_ROUTE_REF }).action === 'idle')
+  // ROUTE-1（RED on old code）：有启用账号 → mutate 收到 openai-codex 条目。
+  const h1 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) } })
+  await syncHostRoute(h1.ctx, h1.service)
+  const mut1 = h1.calls.filter((call) => call.kind === 'settings.mutate')
+  check('ROUTE-1: 有启用账号 → llm-pi-ai ns 收到 providers/openai-codex set（ref 正确）', mut1.length === 1 && mut1[0].ns === HOST_ROUTE_NS && mut1[0].ops[0].op === 'set' && mut1[0].ops[0].path.join('.') === `providers.${HOST_ROUTE_PROVIDER}` && mut1[0].ops[0].value.apiKeyEnv === HOST_ROUTE_REF)
+  check('ROUTE-1b: 注入先行（token 先于条目落位——PoC 教训：条目不得指向空 ref）', h1.calls.findIndex((call) => call.kind === 'credentials.set') < h1.calls.findIndex((call) => call.kind === 'settings.mutate') && h1.calls.some((call) => call.kind === 'credentials.set' && call.ref === HOST_ROUTE_REF && call.value === 'ACCESS-TOKEN'))
+  // ROUTE-2：幂等——二连跑零 mutate。
+  await syncHostRoute(h1.ctx, h1.service)
+  check('ROUTE-2: 二连跑幂等（条目恰为自有 → 零 mutate）', h1.calls.filter((call) => call.kind === 'settings.mutate').length === 1)
+  // ROUTE-3：无启用账号 → unset。
+  const h3 = makeRouteHarness({ accounts: {}, entry: { apiKeyEnv: HOST_ROUTE_REF } })
+  await syncHostRoute(h3.ctx, h3.service)
+  check('ROUTE-3: 无启用账号 → unset 条目', h3.providers[HOST_ROUTE_PROVIDER] === undefined && h3.calls.some((call) => call.kind === 'settings.mutate' && call.ops[0].op === 'unset'))
+  // ROUTE-4：总开关关 → unset。
+  const h4 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) }, enabled: false, entry: { apiKeyEnv: HOST_ROUTE_REF } })
+  await syncHostRoute(h4.ctx, h4.service)
+  check('ROUTE-4: 总开关关 → unset 条目', h4.providers[HOST_ROUTE_PROVIDER] === undefined)
+  // ROUTE-5：用户手改 → 不覆盖 + 诊断事件。
+  const h5 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) }, entry: { apiKeyEnv: 'USER_OWN_REF', models: ['my-model'] } })
+  await syncHostRoute(h5.ctx, h5.service)
+  check('ROUTE-5: 用户手改条目 → 不覆盖（mutate 零调用）+ 事件 + warn', h5.calls.filter((call) => call.kind === 'settings.mutate').length === 0 && h5.providers[HOST_ROUTE_PROVIDER].apiKeyEnv === 'USER_OWN_REF' && h5.service.hostRouteEvents.some((event) => event.kind === 'host_route_user_modified') && h5.warns.some((message) => message.includes('openai-codex')))
+  // ROUTE-6：PoC 条目接管迁移 + PoC ref 凭据清理。
+  const h6 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) }, entry: { apiKeyEnv: HOST_ROUTE_POC_REF }, tokenInRef: 'POC-TOKEN' })
+  await syncHostRoute(h6.ctx, h6.service)
+  check('ROUTE-6: PoC 条目接管 → 正式 ref 落位 + credentials.unset(POC ref) + 事件', h6.providers[HOST_ROUTE_PROVIDER]?.apiKeyEnv === HOST_ROUTE_REF && h6.calls.some((call) => call.kind === 'credentials.unset' && call.ref === HOST_ROUTE_POC_REF) && h6.service.hostRouteEvents.some((event) => event.kind === 'host_route_poc_migrated'))
+  console.log('evo-010 token injection chain (single-writer discipline):')
+  // INJ-2：注入失败 → warn + 事件 + 不写条目（fail-closed）。
+  const h8 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) }, setFails: true })
+  await syncHostRoute(h8.ctx, h8.service)
+  check('INJ-2: 注入失败 → warn + 事件 + 条目不落位（fail-closed）', h8.providers[HOST_ROUTE_PROVIDER] === undefined && h8.warns.some((message) => message.includes('openai-codex')) && h8.service.hostRouteEvents.some((event) => event.kind === 'host_route_token_inject_fail'))
+  // INJ-3：ref 值已相同 → diff-only 不重复写。
+  const h9 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) }, tokenInRef: 'ACCESS-TOKEN', entry: { apiKeyEnv: HOST_ROUTE_REF } })
+  await syncHostRoute(h9.ctx, h9.service)
+  check('INJ-3: ref 值相同 → 零 credentials.set（diff-only）', !h9.calls.some((call) => call.kind === 'credentials.set'))
+  // INJ-1：刷新回调 → credentials.set(ref, 新 token)（唯一刷新者同步宿主 ref）。
+  const h10 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir, { credentialFile: seedCredentialFile(dir, { expires: Date.now() + 10_000 }) }) } })
+  h10.service.oauthCredentialStores.set(h10.service.getState().oauthAccounts.chatgpt.credentialFile, new OauthCredentialStore(h10.service.getState().oauthAccounts.chatgpt.credentialFile, {
+    fetchImpl: async () => new Response(JSON.stringify({ access_token: 'NEW-ACCESS', refresh_token: 'NEW-REFRESH', expires_in: 3600 }), { status: 200, headers: { 'content-type': 'application/json' } }),
+  }))
+  await h10.service.resolvePresetCredential(h10.service.getState().oauthAccounts.chatgpt)
+  check('INJ-1: 刷新回调 → credentials.set(DSH_ROUTER_OPENAI_CODEX, 新 access)', h10.calls.some((call) => call.kind === 'credentials.set' && call.ref === HOST_ROUTE_REF && call.value === 'NEW-ACCESS'))
+  // TRA-5：plugin 通路账号刷新 → 不写宿主 ref（排除出路由维护）。
+  const h11 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir, { transport: 'plugin', credentialFile: seedCredentialFile(dir, { expires: Date.now() + 10_000 }) }) } })
+  h11.service.oauthCredentialStores.set(h11.service.getState().oauthAccounts.chatgpt.credentialFile, new OauthCredentialStore(h11.service.getState().oauthAccounts.chatgpt.credentialFile, {
+    fetchImpl: async () => new Response(JSON.stringify({ access_token: 'NEW-ACCESS-2', refresh_token: 'NEW-REFRESH-2', expires_in: 3600 }), { status: 200, headers: { 'content-type': 'application/json' } }),
+  }))
+  await h11.service.resolvePresetCredential(h11.service.getState().oauthAccounts.chatgpt)
+  check('TRA-5: transport=plugin 账号刷新 → 不写宿主 ref', !h11.calls.some((call) => call.kind === 'credentials.set'))
+  console.log('evo-010 transport field and degradation chain:')
+  // TRA-1：schema 默认值 + 枚举。
+  check('TRA-1: transport schema 默认 host，枚举 host|plugin，normalize 未知值归 host', oauthAccountSchema({}).transport === 'host' && JSON.stringify(OAUTH_TRANSPORT_VALUES) === JSON.stringify(['host', 'plugin']) && normalizeTransport('plugin') === 'plugin' && normalizeTransport('host') === 'host' && normalizeTransport('zzz') === 'host' && normalizeTransport(undefined) === 'host')
+  // TRA-2：唯一账号 plugin → unset 条目；OAUTH_PROVIDER 注册不变。
+  const h12 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir, { transport: 'plugin' }) }, entry: { apiKeyEnv: HOST_ROUTE_REF } })
+  const runtimeRoot = new Context()
+  const runtimeLlm = new LlmRuntime(runtimeRoot)
+  const runtimeCtx = { get: (key) => (key === 'llm' ? runtimeLlm : undefined), on: () => () => {}, logger: { warn: () => {} } }
+  const off12 = installOauthLlmAdapters(runtimeCtx, h12.service)
+  check('TRA-2a: OAUTH_PROVIDER 适配器已注册（并存前提）', runtimeLlm.listProviders().some((entry) => entry.id === OAUTH_PROVIDER))
+  await syncHostRoute(h12.ctx, h12.service)
+  check('TRA-2b: 唯一账号 transport=plugin → 官方条目 unset（排除出维护）', h12.providers[HOST_ROUTE_PROVIDER] === undefined)
+  check('TRA-2c: transport 切换不改 OAUTH_PROVIDER 注册（降级随时可切，零重启）', runtimeLlm.listProviders().some((entry) => entry.id === OAUTH_PROVIDER))
+  off12()
+  // PAR-1：parity 探活失败 → 回滚条目 + warn + 事件 + 计数。
+  const h13 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) }, parity: 'fail' })
+  await syncHostRoute(h13.ctx, h13.service)
+  check('PAR-1: parity 探活失败 → 条目回滚（不写）+ warn + 事件', h13.providers[HOST_ROUTE_PROVIDER] === undefined && h13.warns.some((message) => message.includes('openai-codex')) && h13.service.hostRouteEvents.some((event) => event.kind === 'host_route_parity_fail') && hostRouteStatusOf(h13.service).failures === 1)
+  // TRA-3：连续 3 次失败 → 降级事件 + 提示，但用户配置字段不被静默改写。
+  const h14 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) }, parity: 'fail' })
+  await syncHostRoute(h14.ctx, h14.service)
+  await syncHostRoute(h14.ctx, h14.service)
+  await syncHostRoute(h14.ctx, h14.service)
+  const status14 = hostRouteStatusOf(h14.service)
+  const touchedAccounts = h14.calls.some((call) => call.kind === 'settings.mutate' && call.ops.some((op) => op.path[0] === 'oauthAccounts'))
+  check('TRA-3: 连续 3 次失败 → host_route_degraded 事件 + degraded 状态 + 提示', h14.service.hostRouteEvents.some((event) => event.kind === 'host_route_degraded') && status14.degraded === true && typeof status14.notice === 'string' && status14.notice.length > 0)
+  check('TRA-3b: 自动降级只报警不静默改配置（零 oauthAccounts mutate——用户主权）', touchedAccounts === false && h14.service.getState().oauthAccounts.chatgpt.transport !== 'plugin')
+  // STA-1：状态面（catalog 消费）。
+  const h15 = makeRouteHarness({ accounts: { chatgpt: routeAccount(dir) } })
+  await syncHostRoute(h15.ctx, h15.service)
+  const status15 = hostRouteStatusOf(h15.service)
+  const catalog15 = await h15.service.catalog()
+  check('STA-1: hostRouteStatus 形状（maintained/ref/accountId/tokenInjected/degraded）', status15.maintained === true && status15.ref === HOST_ROUTE_REF && status15.accountId === 'chatgpt' && status15.tokenInjected === 'ok' && status15.degraded === false)
+  check('STA-2: catalog 下发 openaiCodexRoute + oauthAccounts.transport 镜像', catalog15.openaiCodexRoute?.ref === HOST_ROUTE_REF && catalog15.openaiCodexRoute?.maintained === true && catalog15.oauthAccounts[0].transport === 'host')
+}
+
+console.log(failures === 0 ? '\nALL EVO-009/EVO-010 DISCRIMINANT TESTS PASSED' : `\n${failures} ASSERTION(S) FAILED (RED — fix pending)`)
 process.exit(failures === 0 ? 0 : 1)
