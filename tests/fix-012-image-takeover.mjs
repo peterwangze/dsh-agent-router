@@ -187,8 +187,8 @@ const visionAgents = [
 function catalogOf(takeoverDefaultModel, agents = visionAgents) {
   return { ok: true, enabled: true, takeoverDefaultModel, defaults: { ...NATIVE }, agents, oauthAccounts: [], pools: [], cliAgents: [] }
 }
-function makeApi() {
-  let current = { ...NATIVE }
+function makeApi(initial = NATIVE) {
+  let current = { ...initial }
   const calls = []
   return {
     api: {
@@ -329,6 +329,61 @@ console.log('fix-012 R0 P2-1 deps completeness (switch toggles while image pendi
   h.calls.length = 0
   await takeover(h.api, 'p21', [], 'takeover-p21')
   check('P2-1d: 移除图片 → 既有还原（在途交错升级链成立——旧 deps 必败）', nativeSelect(h.calls))
+}
+
+console.log('fix-018 capability-gated takeover (RED on old code — armed ignores model capability):')
+{
+  // FIX-018 缺陷 1：ModelTakeover 武装条件缺「当前模型不支持 image」判定——
+  // 已多模态 provider（chatgpt-oauth 等原生多模态）贴图也被切 twin，图被拖进
+  // wrapper 路由面（用户实证 2026-08-31）。修复：image 来源接管仅在「当前模型
+  // 不支持 image」时武装切换；能力判定服务端单点（router/catalog 的
+  // mainModelImage——服务端 decideImagePrecheck 复用 wrapper sourceAcceptsModality），
+  // 客户端消费（宿主 RPC 不暴露模态信息：buildModelCatalog 剥离
+  // inputModalities、session.models current 仅 {provider,model}——2026-08-31 取证）。
+  // 判别：F18-1/F18-5a 旧代码必败（旧武装条件对多模态主模型同样切 twin）。
+  const MM = { provider: 'chatgpt-oauth', model: 'gpt-5.6-terra' }
+  const mmAccepts = () => ({ acceptsImage: true, source: 'host-declared', provider: MM.provider, model: MM.model })
+  // MM 会话的 twin（chatgpt-oauth-router）断言——twinSelect 只认 deepseek-official-router。
+  const mmTwinSelect = (calls) => calls.some((call) => call.provider === 'chatgpt-oauth-router' && call.model === MM.model)
+
+  // F18-1 核心判别：当前模型已多模态 + 贴图 → 不切 twin（图直传主模型）。
+  const f1 = makeApi(MM)
+  bundleExports.setRouterCatalog({ ...catalogOf(false), defaults: { ...MM }, mainModelImage: mmAccepts() })
+  await takeover(f1.api, 'f1', ['img-1'], 'takeover-f1')
+  check('F18-1: 多模态主模型 + 贴图 → 不切 twin（旧代码必败）', f1.calls.length === 0)
+
+  // F18-2 判别另一侧：当前模型纯文本（能力判定 acceptsImage=false）→ 既有贴图
+  // 接管保持（FIX-012 语义零回退）。
+  const f2 = makeApi(NATIVE)
+  bundleExports.setRouterCatalog({ ...catalogOf(false), mainModelImage: { acceptsImage: false, source: 'probe-failed', provider: NATIVE.provider, model: NATIVE.model } })
+  await takeover(f2.api, 'f2', ['img-1'], 'takeover-f2')
+  check('F18-2: 纯文本主模型 + 贴图 → 仍切 twin（FIX-012 语义保持）', twinSelect(f2.calls))
+
+  // F18-3 判定对象一致性：能力快照（基于默认选择）与会话当前选择 provider/model
+  // 不一致（默认漂移窗口）→ 不认定 → 保守回落既有接管（图经 twin 必可达，
+  // 宁多切不漏图）。旧代码亦接管（回归护栏，非 RED 判别）。
+  const f3 = makeApi(NATIVE)
+  bundleExports.setRouterCatalog({ ...catalogOf(false), defaults: { ...MM }, mainModelImage: mmAccepts() })
+  await takeover(f3.api, 'f3', ['img-1'], 'takeover-f3')
+  check('F18-3: 能力快照与当前模型不一致 → 保守回落接管', twinSelect(f3.calls))
+
+  // F18-4 开关路径不经门控：takeoverDefaultModel=true + 当前模型已多模态 → 仍
+  // 接管（开关开启 = 用户显式要 twin 路由面，FIX-002 语义保持）。
+  const f4 = makeApi(MM)
+  bundleExports.setRouterCatalog({ ...catalogOf(true), defaults: { ...MM }, mainModelImage: mmAccepts() })
+  await takeover(f4.api, 'f4', ['img-1'], 'takeover-f4')
+  check('F18-4: 开关 true 不经门控 → 仍接管（FIX-002 语义保持）', mmTwinSelect(f4.calls))
+
+  // F18-5 能力快照变化重评：门控抑制后目录轮询带来能力反转（accepts→不支持，
+  // 如适配器注销/模型列表清空）→ effect 重跑补接管。判别依赖 deps 含能力快照
+  // 签名——缺该 deps 时 F18-5b 必败（抑制后永不重评）。
+  const f5 = makeApi(MM)
+  bundleExports.setRouterCatalog({ ...catalogOf(false), defaults: { ...MM }, mainModelImage: mmAccepts() })
+  await takeover(f5.api, 'f5', ['img-1'], 'takeover-f5')
+  check('F18-5a: 多模态主模型 + 贴图 → 不切 twin（旧代码必败）', f5.calls.length === 0)
+  bundleExports.setRouterCatalog({ ...catalogOf(false), defaults: { ...MM }, mainModelImage: { acceptsImage: false, source: 'probe-failed', provider: MM.provider, model: MM.model } })
+  await takeover(f5.api, 'f5', ['img-1'], 'takeover-f5')
+  check('F18-5b: 能力快照反转为不支持 → effect 重跑补接管（deps 看护）', mmTwinSelect(f5.calls))
 }
 
 if (renderErrors.length > 0) {
