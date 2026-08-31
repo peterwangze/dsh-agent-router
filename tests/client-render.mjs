@@ -1211,7 +1211,9 @@ export async function runClientRender(check) {
     }
     check('FIX-015: oauth: 前缀统计键不渲染为账号卡（旧代码幽灵卡必含）', !!acctHead && !textOf(currentTree).includes('oauth:chatgpt'))
     oauthGhostMode = false
-    // 修 3：已登录但模型列表为空的订阅卡明示「选择器不会出现该账号」。
+    // FIX-015 c/d + 修 3：已登录空 models 账号——编辑态实预填三件套（非
+    // placeholder 幻觉）、保存写入真实值、清空后保存触发防呆 notice、
+    // 清空态红字提示（修 3 原语义随预填转移为「清空后」出现）。
     presetMode = 'logged-in'
     presetEmptyModelsMode = true
     await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), 'fix015-empty-models', 60)
@@ -1220,7 +1222,26 @@ export async function runClientRender(check) {
       presetHead.props.onClick()
       currentTree = await settle()
     }
-    check('FIX-015: 已登录+空模型订阅卡显示选择器提示（旧代码无提示必败）', !!presetHead && textOf(currentTree).includes(zh.presetModelsEmpty))
+    const modelsInput = findAll(currentTree, (node) => node && node.type === 'input' && node.props['aria-label'] === zh.oauthModels)
+    check('FIX-015: 已登录+空 models 编辑态实预填三件套（旧代码空值必败）', !!presetHead && !!modelsInput && modelsInput.length > 0 && modelsInput[0].props.value === 'gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna')
+    check('FIX-015: 初始态无幻觉提示（预填后提示让位于实值——旧代码空值必显示必败）', !textOf(currentTree).includes(zh.presetModelsEmpty))
+    // 保存 → settings 写入真实三件套（旧代码存空 [] 必败）。
+    captured.saveOps.length = 0
+    const saveBtn = buttonsOf(currentTree).find((node) => textOf(node) === zh.save)
+    if (saveBtn) saveBtn.props.onClick()
+    await settle()
+    const savedModelsOp = captured.saveOps.find((op) => op.op === 'set' && op.path.join('/') === 'oauthAccounts/chatgpt/models')
+    check('FIX-015: 保存写入真实三件套（旧代码存空必败）', !!savedModelsOp && Array.isArray(savedModelsOp.value) && savedModelsOp.value.length === 3 && savedModelsOp.value[0] === 'gpt-5.6-sol' && savedModelsOp.value[1] === 'gpt-5.6-terra' && savedModelsOp.value[2] === 'gpt-5.6-luna')
+    // 用户清空输入框 → 修 3 红字提示出现（预填让位后的提示语义）。
+    if (modelsInput && modelsInput[0]) modelsInput[0].props.onChange({ target: { value: '' } })
+    await settle()
+    check('FIX-015: 清空后显示选择器提示（修 3 语义随预填转移）', textOf(currentTree).includes(zh.presetModelsEmpty))
+    // 清空态保存 → 空值落盘 + 防呆 notice（旧代码「已保存」必败）。
+    captured.saveOps.length = 0
+    const saveBtn2 = buttonsOf(currentTree).find((node) => textOf(node) === zh.save)
+    if (saveBtn2) saveBtn2.props.onClick()
+    await settle()
+    check('FIX-015: 清空后保存 → 防呆 notice（旧代码「已保存」必败）', textOf(currentTree).includes(zh.presetModelsEmptyNotice))
     presetEmptyModelsMode = false
     presetMode = 'none'
   }
