@@ -487,6 +487,7 @@ export async function runAttachmentTests(check) {
   // ── Step 5b 迁移后断言：三调用点寻址经 M2（RouterService 接线）────────
   console.log('step 5b addressing via M2:')
   {
+    let lastStreamOptions = null
     const MIG_PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01])
     // 最小 RouterService 测试基建（与 smoke.mjs root.provide 同构；附件/文件
     // 服务用本文件的契约一致 mock——saveImage 返回内容寻址 sha256 id）。
@@ -498,7 +499,8 @@ export async function runAttachmentTests(check) {
       root.provide('fs', fs)
       root.provide('llm', {
         resolveModelInfo: async () => ({ inputModalities: ['text', 'image'] }),
-        stream: async function* () {
+        stream: async function* (options) {
+          lastStreamOptions = options
           yield { type: 'block-start', index: 0, blockType: 'text' }
           yield { type: 'text-delta', index: 0, text: 'ok' }
           yield { type: 'block-end', index: 0, block: { type: 'text', text: 'ok' } }
@@ -522,7 +524,10 @@ export async function runAttachmentTests(check) {
       })
       const expectedId = contentHashId(MIG_PNG_BYTES)
       check('chat files injection registers M2 entry', run.kind === 'chat' && (await service.registry.byId(expectedId))?.id === expectedId)
-      check('chat files image ref carries registry id', Array.isArray(run.images) && run.images.length === 1 && run.images[0].attachmentId === expectedId && run.images[0].name === 'shot.png' && run.images[0].mediaType === 'image/png')
+      // EVO-012 批二 B：files 图片经 M2 寻址后不再回显进结果（旧契约 run.images
+      // 已废弃——卡片不复读输入图）；"ref 携带正确元数据"语义改由请求侧验证：
+      // runChat 的 messages 内容块承载同 ref（attachmentId/name/mediaType）。
+      check('chat files image ref lands in request with registry metadata (B: no echo)', !('images' in run) && lastStreamOptions?.messages?.[0]?.content?.some((block) => block.type === 'image' && block.attachment.attachmentId === expectedId && block.attachment.name === 'shot.png' && block.attachment.mediaType === 'image/png'))
     }
 
     // CLI 物化经 M2：materializeCliImages 对内容寻址附件经注册表物化

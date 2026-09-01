@@ -1764,7 +1764,7 @@ console.log('RouterService:')
     const withContext = await service.run({ agentId: 'vision', task: '识别这张截图', images: [{ id: 'att-1', kind: 'image' }], exec: { agent: contextAgent } })
     check('vision call carries conversation context', withContext.kind === 'chat' && lastChatRequest && lastChatRequest.messages[0].content.some((block) => block.type === 'text' && block.text.includes('[会话上下文（主会话最近对话）]') && block.text.includes('我在做一个登录页') && block.text.includes('把报错信息发我看下') && block.text.includes('[user]') && block.text.includes('[assistant]')))
     check('vision context skips marker messages', lastChatRequest && lastChatRequest.messages[0].content.some((block) => block.type === 'text' && !block.text.includes('[router:image:')))
-    check('vision call returns injected images', withContext.images && withContext.images.length === 1 && withContext.images[0].id === 'att-1')
+    check('vision call returns text without echoing injected images (B)', withContext.kind === 'chat' && !('images' in withContext) && lastChatRequest && lastChatRequest.messages[0].content.some((block) => block.type === 'image' && block.attachment.id === 'att-1'))
     lastChatRequest = null
     const withoutImages = await service.run({ agentId: 'vision', task: '纯文本任务', images: [], exec: { agent: contextAgent } })
     check('text-only call carries no context section', withoutImages.kind === 'chat' && lastChatRequest && lastChatRequest.messages[0].content.some((block) => block.type === 'text' && block.text.includes('纯文本任务') && !block.text.includes('[会话上下文')))
@@ -2235,6 +2235,53 @@ console.log('apply wiring:')
     check('codex loopback starter injected by apply (lazy seam)', typeof wiredService?.codexLoopbackStarter === 'function')
     check('codex loopback stays unstarted after apply (lazy)', wiredService?.codexLoopbackReady !== true)
     await app.dispose()
+  }
+
+  // ── EVO-012 批二（B）：输入转发图不回显——识别场景卡片不复读用户发的图
+  //（用户反馈 EV-114）。判别：批一代码 runOauthChat 返回 `images: imageRefs`
+  //（转发 ref 被工具结果以标记渲染 → 卡片复读 + 无 url 走 imageData RPC）；
+  // 本版结果无 `images` 键——图片仍在请求中转发了（body 校验），跨轮记忆由
+  // rememberDispatchedImages/imageMemory 承担（M6 回写不变）。──
+  console.log('EVO-012 batch2 no input echo (B):')
+  {
+    const root = new Context()
+    root.provide('credentials', { resolve: async (ref) => ({ value: `token-${ref}` }), set: async () => undefined, unset: async () => undefined })
+    root.provide('attachments', {
+      saveImage: async (input) => ({ attachmentId: contentHashId(input.data), mediaType: input.mediaType, bytes: input.data.length, width: 1, height: 1, name: input.name }),
+      readImage: async (ref) => ({ ref, data: new Uint8Array(EVO12_PNG_BYTES) }),
+    })
+    const svc = new RouterService(root)
+    svc.attach({ get: () => ({
+      enabled: true,
+      oauthProxyUrl: '',
+      oauthAccounts: {
+        oc: { name: 'OAuth 直连', enabled: true, preset: '', protocol: 'openai-completions', baseURL: 'https://oauth.example/v1', tokenRef: 'ROUTER_B_TEST', models: ['gpt-4o'] },
+      },
+      agents: {
+        ocv: { name: 'OAuth 视觉', type: 'chat', enabled: true, account: 'oc', model: 'gpt-4o', capabilities: ['image'] },
+      },
+    })})
+    const fetches = []
+    const realFetch = globalThis.fetch
+    globalThis.fetch = async (url, options) => {
+      fetches.push({ url: String(url), init: options })
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '识别完成：图中是一只猫' } }], usage: { prompt_tokens: 5, completion_tokens: 3 } }) }
+    }
+    try {
+      const inputId = `sha256:${'1'.repeat(64)}`
+      const result = await svc.run({
+        agentId: 'ocv',
+        task: '识别',
+        images: [{ attachmentId: inputId, mediaType: 'image/png', bytes: EVO12_PNG_BYTES.length, width: 1, height: 1, name: 'user-shot.png' }],
+      })
+      check('B: oauth chat result keeps text', result.kind === 'chat' && result.text.includes('一只猫'))
+      check('B: oauth chat result has no input images echo (old code: images present)', !('images' in result) && !Array.isArray(result.images))
+      const body = JSON.parse(fetches[fetches.length - 1]?.init?.body ?? '{}')
+      check('B: input image still forwarded in request body', Array.isArray(body.messages) && body.messages.some((message) => Array.isArray(message.content) && message.content.some((part) => part.type === 'image_url' && typeof part.image_url?.url === 'string' && part.image_url.url.startsWith('data:image/png;base64,'))))
+      check('B: no product image key on chat result', result.image === undefined && result.text === '识别完成：图中是一只猫')
+    } finally {
+      globalThis.fetch = realFetch
+    }
   }
 
   // 客户端 UI 真实渲染（迷你 React 驱动整页，结构断言见 client-render.mjs）。
