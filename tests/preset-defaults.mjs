@@ -178,6 +178,23 @@ console.log('EVO-013 preset default model (RED until lib/preset-defaults.js exis
     const out = await drive(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), { agent, proposed: { provider: 'anthropic', model: 'claude-x', reasoningEffort: '' } })
     return out.provider === 'anthropic' && out.model === 'claude-x'
   })
+  // P4b/P4c（R0 F-2，P2）：主权条件③ fail-closed——live 全局默认不可读（服务
+  // 缺失/空值）= 无法证明「当前是默认层」⇒ 不换入（宁可不接管，不可误覆盖）。
+  // 旧实现 `if (live && (...))` 在 live=null 时跳过校验直接换入（fail-open）
+  // → 本组断言必败（RED）；fail-closed 修复后直通（GREEN）。
+  await dcheck('P4b live 默认服务缺失 → 不换入（fail-closed，R0 F-2）', async () => {
+    const ctx = makeCtx({ agentPresets: { composedPreset: () => PRESET_ID } })
+    ctx.get = () => undefined // agentDefaultModel 服务整体缺失
+    const agent = makeAgent({ header: { origin: 'main' }, requestHeader: () => null })
+    const out = await drive(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), { agent })
+    return out.provider === NATIVE.provider && out.model === NATIVE.model
+  })
+  await dcheck('P4c live 默认返回空值 → 不换入（fail-closed 同判，R0 F-2）', async () => {
+    const ctx = makeCtx({ live: null, agentPresets: { composedPreset: () => PRESET_ID } })
+    const agent = makeAgent({ header: { origin: 'main' }, requestHeader: () => null })
+    const out = await drive(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), { agent })
+    return out.provider === NATIVE.provider && out.model === NATIVE.model
+  })
 }
 
 {

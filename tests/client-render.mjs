@@ -394,12 +394,17 @@ export async function runClientRender(check) {
     // EVO-013：宿主预设罗盘 RPC（roster 数据源；'fail' = 网关失败形态——
     // 客户端按可观测降级处理：错误提示 + 空列表，不阻塞整页）。
     agentPreset: {
+      // R0 F-1：broken 用宿主真实形状——非空原因字符串（dsh-agent-presets
+      // `AgentPreset.broken?: string`，zod min(1)；宿主不发 boolean false，健康
+      // 条目直接省略该字段）。legacy-broken 条目保留 boolean true 历史形态，
+      // 验证归一真值判定的双形态兼容。
       list: async () => presetRosterMode === 'fail'
         ? { result: { ok: false, error: { message: 'agentPreset gateway rejected' } } }
         : { result: { ok: true, value: { presets: [
-          { id: 'governance', name: 'Governance 预设', trust: 'system', broken: false },
-          { id: 'novel', name: '小说写作', trust: 'user', broken: false },
-          { id: 'broken-one', name: '坏预设', trust: 'user', broken: true },
+          { id: 'governance', name: 'Governance 预设', trust: 'system' },
+          { id: 'novel', name: '小说写作', trust: 'user' },
+          { id: 'broken-one', name: '坏预设', trust: 'user', broken: 'composition missing' },
+          { id: 'legacy-broken', name: '旧形态坏预设', trust: 'user', broken: true },
         ] } } },
     },
     credentials: {
@@ -1594,7 +1599,14 @@ export async function runClientRender(check) {
         const presetSelect = findAll(currentTree, (node) => node && node.type === 'select').find((node) => textOf(node).includes('governance'))
         check('EVO-013: 添加模板预设下拉列出宿主预设（roster 数据源）', !!presetSelect)
         const brokenOption = presetSelect ? findAll(presetSelect, (node) => node && node.type === 'option' && node.props.value === 'broken-one')[0] : null
-        check('EVO-013: broken 预设带标记且不可选（disabled）', !!brokenOption && brokenOption.props.disabled === true)
+        // R0 F-1 判别：broken-one 为宿主真实形状（非空原因字符串）——旧实现
+        // 归一 `entry.broken === true` 恒 false → 不 disabled 且无标记，两条
+        // 断言必败（RED）；真值归一修复后通过（GREEN）。
+        check('EVO-013: string 形态 broken（宿主真实形状）不可选（disabled，R0 F-1）', !!brokenOption && brokenOption.props.disabled === true)
+        check('EVO-013: string 形态 broken 带已损坏标记文案（R0 F-1）', !!brokenOption && textOf(brokenOption).includes(zh.presetsBroken))
+        // 双形态判别：历史 boolean true 形态仍被真值判定兼容（不可选）。
+        const legacyBrokenOption = presetSelect ? findAll(presetSelect, (node) => node && node.type === 'option' && node.props.value === 'legacy-broken')[0] : null
+        check('EVO-013: boolean true 形态 broken 仍兼容（双形态判别，R0 F-1）', !!legacyBrokenOption && legacyBrokenOption.props.disabled === true)
         check('EVO-013: 展开模板含预设下拉 + 主/subagent 服务商下拉', findAll(currentTree, (node) => node && node.type === 'select').length >= 3)
         if (presetSelect) {
           presetSelect.props.onChange({ target: { value: 'governance' } })
