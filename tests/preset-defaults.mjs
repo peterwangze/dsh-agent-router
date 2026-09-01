@@ -24,6 +24,12 @@
 //     options 突变即首请求路由，与 picked 显示层一致。
 //
 // 判别断言（旧 request 层实现无事件监听 → 事件断言全败 = RED；重构后全绿）。
+//
+// Rework（R0 findings）：
+//   - E 节 = F-1（P1）播种串行化判别——复刻宿主 fire-and-forget 并发交错
+//     （S4：announce/cordis emit 均不 await 监听器），旧实现（无队列）必败；
+//   - F 节 = F-2（P2）reasoningEffort 路径断言——对现有实现应全绿
+//     （透传 / effort 漂移判据 / 重置路径透传）。
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -496,6 +502,96 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     await fireCreated(ctx, service, agent)
     const infos = ctx.logger.infoCalls.filter((line) => line.includes(PRESET_ID))
     return infos.length === 1 && infos[0].includes(MAIN_MODEL.provider) && ctx.logger.warnCalls.length === 0
+  })
+}
+
+// ── E. 播种串行化（R0 F-1：并发事件交错不得污染全局默认） ─────────────────
+{
+  // 复刻宿主 fire-and-forget（不 await 第一个 handler 就触发第二个）——
+  // 旧实现（无串行化队列）交错终态 = 预设模型（h2 把全局默认恢复到 h1 的
+  // 瞬态中间值，且无告警）→ 本断言必败（RED 判别）；串行化后 h2 的
+  // globalBefore 读到的是 h1 完成恢复后的稳定值 G，全局终态 = G。
+  await dcheck('E1 并发播种串行化（agent/created ×2 交错）→ h2 读到恢复后的稳定全局值，终态=G 非中间值', async () => {
+    const defaults = makeDefaults()
+    const apiProxy = makeApiProxy({ defaults })
+    const ctx = makeCtx({ defaults, apiProxy })
+    setup(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }))
+    const handler = (ctx.listeners['agent/created'] ?? [])[0]
+    const agent1 = mainBlankAgent({ id: 'sess-e1a' })
+    const agent2 = mainBlankAgent({ id: 'sess-e1b' })
+    const first = handler({ agent: agent1 }) // 不 await——并发时序复刻
+    const second = handler({ agent: agent2 })
+    await Promise.all([first, second])
+    return apiProxy.calls.length === 2
+      && agent1.options.provider === MAIN_MODEL.provider && agent1.options.model === MAIN_MODEL.model
+      && agent2.options.provider === MAIN_MODEL.provider && agent2.options.model === MAIN_MODEL.model
+      && defaults.state.current.provider === NATIVE.provider
+      && defaults.state.current.model === NATIVE.model
+      && defaults.state.current.reasoningEffort === undefined
+  })
+  await dcheck('E2 跨事件面并发（agent/created + agent-preset/selected 同窗）→ 同一队列串行化，终态=G', async () => {
+    const defaults = makeDefaults()
+    const apiProxy = makeApiProxy({ defaults })
+    const agent1 = mainBlankAgent({ id: 'sess-e2a' })
+    const agent2 = mainBlankAgent({ id: 'sess-e2b', header: { origin: 'main' } })
+    const ctx = makeCtx({ defaults, apiProxy, agents: { get: (id) => (id === 'sess-e2b' ? agent2 : undefined) } })
+    setup(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }))
+    const created = (ctx.listeners['agent/created'] ?? [])[0]
+    const selected = (ctx.listeners['agent-preset/selected'] ?? [])[0]
+    const first = created({ agent: agent1 })
+    const second = selected('sess-e2b', PRESET_ID)
+    await Promise.all([first, second])
+    return apiProxy.calls.length === 2
+      && agent1.options.provider === MAIN_MODEL.provider && agent1.options.model === MAIN_MODEL.model
+      && agent2.options.provider === MAIN_MODEL.provider && agent2.options.model === MAIN_MODEL.model
+      && defaults.state.current.provider === NATIVE.provider
+      && defaults.state.current.model === NATIVE.model
+  })
+}
+
+// ── F. reasoningEffort 路径断言（R0 F-2：透传 / 漂移判据 / 重置透传） ─────
+{
+  await dcheck('F1 配置 main 带 reasoningEffort → selectModel payload 透传（空串归一=不带）', async () => {
+    const defaults = makeDefaults()
+    const apiProxy = makeApiProxy({ defaults })
+    const agent = mainBlankAgent({ id: 'sess-f1' })
+    await fireCreated(makeCtx({ defaults, apiProxy }),
+      makeService({ governance: presetConfig({ main: { ...MAIN_MODEL, reasoningEffort: 'high' } }) }), agent)
+    const passthrough = apiProxy.calls.length === 1 && apiProxy.calls[0].payload.reasoningEffort === 'high'
+    // effortOf 归一：空串 = 未设置 → envelope 不含该键。
+    const defaults2 = makeDefaults()
+    const apiProxy2 = makeApiProxy({ defaults: defaults2 })
+    const agent2 = mainBlankAgent({ id: 'sess-f1b' })
+    await fireCreated(makeCtx({ defaults: defaults2, apiProxy: apiProxy2 }),
+      makeService({ governance: presetConfig({ main: { ...MAIN_MODEL, reasoningEffort: '' } }) }), agent2)
+    return passthrough
+      && apiProxy2.calls.length === 1
+      && !('reasoningEffort' in apiProxy2.calls[0].payload)
+  })
+  await dcheck('F2 仅 effort 漂移（provider/model 同值）→ drifted 命中 → 恢复且恢复 payload 含原 effort', async () => {
+    const defaults = makeDefaults({ initial: { ...NATIVE, reasoningEffort: 'medium' } })
+    const apiProxy = makeApiProxy({ defaults })
+    const agent = mainBlankAgent({ id: 'sess-f2' })
+    await fireCreated(makeCtx({ defaults, apiProxy }),
+      makeService({ governance: presetConfig({ main: { provider: NATIVE.provider, model: NATIVE.model, reasoningEffort: 'high' } }) }), agent)
+    return apiProxy.calls.length === 1
+      && defaults.state.saveCalls.length === 2 // 瞬态写 + 恢复（drifted 不含 effort 判据则不恢复）
+      && defaults.state.saveCalls[0].reasoningEffort === 'high'
+      && defaults.state.saveCalls[1].reasoningEffort === 'medium'
+      && defaults.state.current.reasoningEffort === 'medium'
+  })
+  await dcheck('F3 重置路径（切无配置预设）→ selectModel payload 透传全局默认的 effort', async () => {
+    const defaults = makeDefaults({ initial: { ...NATIVE, reasoningEffort: 'low' } })
+    const apiProxy = makeApiProxy({ defaults })
+    const agent = mainBlankAgent({ id: 'sess-f3', header: { origin: 'main' } })
+    const ctx = makeCtx({ defaults, apiProxy, agents: { get: (id) => (id === 'sess-f3' ? agent : undefined) } })
+    const service = makeService({ governance: presetConfig({ main: MAIN_MODEL }) })
+    await firePresetSelected(ctx, service, 'sess-f3', PRESET_ID)
+    await firePresetSelected(ctx, service, 'sess-f3', OTHER_PRESET)
+    return apiProxy.calls.length === 2
+      && apiProxy.calls[1].payload.reasoningEffort === 'low'
+      && defaults.state.current.reasoningEffort === 'low'
+      && agent.options.provider === NATIVE.provider && agent.options.model === NATIVE.model
   })
 }
 
