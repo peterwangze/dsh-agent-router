@@ -35,6 +35,13 @@
 //     fire-and-forget（不 await 监听器），旧实现（try 内 bare return
 //     promise ≠ await）catch 不覆盖 → unhandledRejection 外泄必败；
 //     return await 修复后 catch 兜底 warn、零外泄。
+// Rework（FIX-023，EVO-014 复验失败——宿主实测 switch-seed 失效）：
+//   - H 节 = agents 属性面缺陷判别——真实 cordis 插件 ctx 只有 inject 声明
+//     过的服务名才有属性面；本插件 inject 未含 'agents' → ctx.agents 恒
+//     undefined → 切换播种静默失效 + subagent 父查找保护降级。stub 全面
+//     去属性化（注册表仅经 get('agents') 调用时解析——第三次同型 mock
+//     保真度缺陷修复），旧实现（属性访问）必败；C4 强化 = agent 查不到
+//     时 P8 warn 含 sessionId（不再静默）。
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -122,7 +129,14 @@ function makeApiProxy({ defaults, unavailable = () => false } = {}) {
   }
 }
 
-/** 伪宿主 ctx：事件注册捕获 + apiProxy/agentDefaultModel/agentPresets 服务 + agents 注册表。 */
+/**
+ * 伪宿主 ctx：事件注册捕获 + apiProxy/agentDefaultModel/agentPresets/agents
+ * 服务。FIX-023 fixture 保真度对齐：真实 cordis 插件 ctx 只有 inject 声明过
+ * 的服务名才有属性面——本插件 inject 未含 'agents'，故 stub **不提供 agents
+ * 属性**，注册表仅经 get('agents') 调用时解析（旧 stub 提供了宿主上不存在的
+ * 属性面，掩盖了属性访问恒 undefined 的真实缺陷——第三次同型 mock 保真度
+ * 缺陷，同 EVO-013 R0 F-1 / FIX-022 系列）。
+ */
 function makeCtx({ defaults, apiProxy, agents, agentPresets } = {}) {
   const listeners = {}
   const logger = {
@@ -130,7 +144,7 @@ function makeCtx({ defaults, apiProxy, agents, agentPresets } = {}) {
     info(message) { this.infoCalls.push(String(message)) },
     warn(message) { this.warnCalls.push(String(message)) },
   }
-  const ctx = {
+  return {
     listeners,
     logger,
     on(event, handler) {
@@ -141,11 +155,10 @@ function makeCtx({ defaults, apiProxy, agents, agentPresets } = {}) {
       if (key === 'agentDefaultModel') return defaults
       if (key === 'apiProxy') return apiProxy
       if (key === 'agentPresets') return agentPresets
+      if (key === 'agents') return agents
       return undefined
     },
   }
-  if (agents) ctx.agents = agents
-  return ctx
 }
 
 /** 伪 RouterService（installPresetDefaults 消费面：isEnabled/presetDefaults 热读取）。 */
@@ -403,12 +416,13 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     await firePresetSelected(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), 'sess-x', PRESET_ID)
     return apiProxy.calls.length === 0
   })
-  await dcheck('C4 防御：会话不在 agents 注册表 → 零动作不炸', async () => {
+  await dcheck('C4 防御：会话不在 agents 注册表 → 零动作不炸 + P8 warn 含 sessionId（FIX-023：不再静默）', async () => {
     const apiProxy = makeApiProxy({ defaults: makeDefaults() })
     const ctx = makeCtx({ apiProxy, agents: { get: () => undefined } })
     let rejected = null
     try { await firePresetSelected(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), 'ghost', PRESET_ID) } catch (error) { rejected = error }
     return rejected === null && apiProxy.calls.length === 0
+      && ctx.logger.warnCalls.some((line) => line.includes('ghost'))
   })
 }
 
@@ -636,6 +650,41 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
       process.off('unhandledRejection', onUnhandled)
     }
   })
+}
+
+// ── H. FIX-023 判别：agents 注册表经 ctx.get('agents') 调用时解析 ────────
+{
+  // 缺陷事实链（Coordinator 宿主源码 + API 实测双重实证）：插件 inject =
+  // ['settings','typert','webServer'] 未含 'agents' → cordis 属性访问
+  // （ctx.agents）仅对 inject 声明过的服务名生效 → 恒 undefined →
+  // onPresetSelected 静默 return（切换播种永不执行，无日志）+
+  // subagentFixup 父查找保护降级。修复形态 = ctx.get('agents') 调用时解析
+  // （先例：service.js `this.ctx.get('subagents')`；同模块 seed 内
+  // ctx.get('apiProxy') 宿主实证可用）。本节 stub 与真实 cordis ctx 同形
+  // （无 agents 属性）——旧实现（属性访问）必败（RED）。
+  await dcheck('H1 切换事件 handler 经 ctx.get(\'agents\') 查到 agent 并播种（旧实现属性面 undefined → 静默 skip → 必败）', async () => {
+    const defaults = makeDefaults()
+    const apiProxy = makeApiProxy({ defaults })
+    const agent = mainBlankAgent({ id: 'sess-h1', header: { origin: 'main' } })
+    const ctx = makeCtx({ defaults, apiProxy, agents: { get: (id) => (id === 'sess-h1' ? agent : undefined) } })
+    await firePresetSelected(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), 'sess-h1', PRESET_ID)
+    return apiProxy.calls.length === 1 && apiProxy.calls[0].payload.provider === MAIN_MODEL.provider
+      && agent.options.provider === MAIN_MODEL.provider
+      && defaults.state.current.provider === NATIVE.provider // 写回恢复完成
+  })
+  await dcheck('H2 subagentFixup 父查找经 ctx.get 生效：parent 在场且 child≠parent → 不碰（显式覆盖保护恢复，旧实现必败）', async () => {
+    const apiProxy = makeApiProxy({ defaults: makeDefaults() })
+    const agent = makeAgent({ id: 'child-h2', header: subHeader(), options: { provider: 'anthropic', model: 'claude-explicit' }, requestHeader: () => null })
+    const parent = { options: { provider: 'anthropic', model: 'claude-x' } }
+    await fireCreated(makeCtx({ apiProxy, agents: { get: (id) => (id === 'parent-1' ? parent : undefined) } }),
+      makeService({ governance: presetConfig({ main: MAIN_MODEL, subagent: SUB_MODEL }) }), agent)
+    return agent.options.model === 'claude-explicit' && apiProxy.calls.length === 0
+  })
+  check('H3 stub 保真度守卫：ctx 不暴露 agents 属性（防 fixture 再度属性化——同型 mock 缺陷结构防线）',
+    (() => {
+      const ctx = makeCtx({ agents: { get: () => undefined } })
+      return !('agents' in ctx) && typeof ctx.get === 'function' && ctx.get('agents') !== undefined
+    })())
 }
 
 console.log(failures === 0 ? '\nALL EVO-014 DISCRIMINANT TESTS PASSED' : `\n${failures} EVO-014 ASSERTION(S) FAILED`)
