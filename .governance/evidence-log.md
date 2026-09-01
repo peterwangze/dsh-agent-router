@@ -378,3 +378,5 @@
 | REVIEW-REL-007-R0 | REL-007 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-report-REL-007-R0.md; review-REL-007-R0.md | Release Reviewer | 2026-09-01 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
 
 | EV-120 | REL-007 | 发布终态 | v0.4.1 发布链完成 | E-5 执行：tag v0.4.1 + push main + GitHub Release（W-2 回滚段携带）；R0 APPROVED_WITH_NOTES/0 机录（REVIEW-REL-007-R0——12 处 README/43 SHA 全验/no-overclaim 五点落锚/回滚能力 PASS）；W-1 勘误 7df0810（PNG 665KB b64 误标）；发布范围终值 = e818183..tag（产品 30 + 治理 15） | 7df0810+tag | Coordinator | 2026-09-01 | G5 | E-5 执行中 |
+
+| EV-121 | REL-007 | E-5/E-6 终态 | v0.4.1 上架完成 | tag v0.4.1（40816dc）+ push main（4fecc06..40816dc）+ push tag + GitHub Release https://github.com/peterwangze/dsh-agent-router/releases/tag/v0.4.1（publishedAt 2026-09-01T05:19:31Z；notes 含 W-2 回滚段：步骤/能力失去清单/数据兼容/非回滚触发条件）；发布范围终值 = e818183..v0.4.1；E-6 归档检查随本 EV | v0.4.1 tag | Coordinator | 2026-09-01 | G5 | 终态 |
