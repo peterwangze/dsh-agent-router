@@ -1121,7 +1121,10 @@ export async function runClientRender(check) {
       toolCardReg.render({ t: tOf, router: () => remoteMock, block: urlBlock }))
     const combinedTree = await renderInto(galleryRoot, 'gallery-combined')
     const galleryButtons = findAll(combinedTree, (node) => node && node.type === 'button' && textOf(node).includes('🖼'))
-    check('session gallery collects products from tool card (C)', galleryButtons.length === 1 && textOf(galleryButtons[0]).includes('1'))
+    // UX 2026-09-01：纯图标按钮（28×方形内「🖼 N」会竖排折行）——计数移入 title 悬停提示。
+    check('session gallery collects products from tool card (C)', galleryButtons.length === 1
+      && String(galleryButtons[0].props.title ?? '').includes('1')
+      && !textOf(galleryButtons[0]).trim().slice(1).trim())
     if (galleryButtons.length === 1) {
       galleryButtons[0].props.onClick()
       currentTree = await settle()

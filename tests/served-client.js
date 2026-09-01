@@ -3872,7 +3872,9 @@ window.__ModuleLoader__.load({
       void version
       return sessionId ? sessionProductsOf(sessionId) : []
     }
-    /** 本会话图片产物集合视图入口：输入区「🖼 N」按钮 → 网格 → 单图放大。 */
+    /** 本会话图片产物集合视图入口：输入区纯图标按钮（28×28 与附件按钮同
+     *  形态——「🖼 N」文本在固定宽按钮内会竖排折行，用户反馈不协调
+     *  2026-09-01）→ 悬停 title 显示计数 → 网格 → 单图放大。 */
     function SessionGallery(props) {
       const { t, sessionId } = props
       // render 期锚定当前会话（工具卡 useEffect 回写作读取——render 先于 effect）。
@@ -3886,9 +3888,9 @@ window.__ModuleLoader__.load({
           type: 'button',
           className: 'dshrouter-attach',
           'aria-label': t('galleryButton'),
-          title: t('galleryTitle'),
+          title: `${t('galleryTitle')}（${products.length}）`,
           onClick: () => setOpen(true),
-        }, `🖼 ${products.length}`),
+        }, '🖼'),
         open ? el('div', { className: 'dshrouter-modal', onClick: (event) => { if (event.target === event.currentTarget) setOpen(false) } },
           el('div', { className: 'dshrouter-modal-body' },
             el('h4', { className: 'dshrouter-modal-title' }, t('galleryTitle')),
