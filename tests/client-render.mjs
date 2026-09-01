@@ -391,9 +391,13 @@ export async function runClientRender(check) {
         return { result: { ok: true } }
       },
     },
-    // EVO-013：宿主预设罗盘 RPC（roster 数据源；'fail' = 网关失败形态——
-    // 客户端按可观测降级处理：错误提示 + 空列表，不阻塞整页）。
-    agentPreset: {
+    // EVO-013 / FIX-022：宿主预设罗盘 RPC（roster 数据源；'fail' = 网关失败
+    // 形态——客户端按可观测降级处理：错误提示 + 空列表，不阻塞整页）。
+    // FIX-022：宿主客户端 api 面方法组名为复数 agentPresets（wire 方法名
+    // agentPreset.list 是单数——宿主自身命名不一致陷阱，EV-123）；响应值含
+    // presets/authorable/hasDocument 三字段（宿主 L5774-5778 真实形状）。
+    // fixture 仅提供复数域——旧实现（误调 api.agentPreset）对此必败（判别 RED）。
+    agentPresets: {
       // R0 F-1：broken 用宿主真实形状——非空原因字符串（dsh-agent-presets
       // `AgentPreset.broken?: string`，zod min(1)；宿主不发 boolean false，健康
       // 条目直接省略该字段）。legacy-broken 条目保留 boolean true 历史形态，
@@ -405,7 +409,7 @@ export async function runClientRender(check) {
           { id: 'novel', name: '小说写作', trust: 'user' },
           { id: 'broken-one', name: '坏预设', trust: 'user', broken: 'composition missing' },
           { id: 'legacy-broken', name: '旧形态坏预设', trust: 'user', broken: true },
-        ] } } },
+        ], authorable: true, hasDocument: false } } },
     },
     credentials: {
       describe: async () => ({ result: { ok: true, value: { credentials: {} } } }),
@@ -1574,6 +1578,10 @@ export async function runClientRender(check) {
     const presetsHeadOf = () => categoryHeadsOf().find((node) => textOf(node).includes(zh.presetsTitle))
     const entryHeadsOf = () => findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-card-head'))
 
+    // FIX-022 判别自证：apiMock 仅提供宿主真实复数域 agentPresets，不提供单数
+    // 形态——旧实现（误调 api.agentPreset）在本 fixture 下无可用方法组，必败。
+    check('EVO-013: fixture 仅提供宿主复数域 api.agentPresets（FIX-022）', typeof apiMock.agentPresets?.list === 'function' && !('agentPreset' in apiMock))
+
     // 场景 1：默认态（presets 空、roster ok）——位置/折叠/空提示/添加模板。
     presetMode = 'none'
     unknownPresetMode = false
@@ -1589,6 +1597,10 @@ export async function runClientRender(check) {
     if (presetsHead) {
       presetsHead.props.onClick()
       currentTree = await settle()
+      // FIX-022 判别：fixture 仅提供复数域 api.agentPresets——旧实现误调单数
+      // api.agentPreset.list 时此处为 roster 错误（「Cannot read properties of
+      // undefined (reading 'list')」，EV-123 真机形态）→ 本断言 RED；域名修复后 GREEN。
+      check('EVO-013: 仅复数域 agentPresets 时 roster 正常加载（无错误文案，FIX-022）', !textOf(currentTree).includes(zh.presetsRosterError))
       check('EVO-013: 展开后空列表提示渲染（默认空）', textOf(currentTree).includes(zh.presetsEmpty))
       check('EVO-013: 统一添加入口渲染（+ 添加预设配置）', textOf(currentTree).includes(zh.presetsAdd))
       const addCardNode = findAll(currentTree, (node) => hasClass(node, 'dshrouter-add')).find((node) => textOf(node).includes(zh.presetsAdd))
