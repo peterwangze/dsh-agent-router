@@ -1142,6 +1142,49 @@ export async function runClientRender(check) {
     const emptyTree = await renderInto(galleryReg.render({ t: tOf, sessionId: 'sess-gallery-2' }), 'gallery-empty')
     const emptyButtons = findAll(emptyTree, (node) => node && node.type === 'button' && textOf(node).includes('🖼'))
     check('session gallery hidden when session has no products (C)', emptyButtons.length === 0)
+
+    // ── FIX-021（EVO-012 复验失败真根因）：宿主浏览器侧把 tool-result marker
+    // 结构化为 image content block 时 attachment 字段是 **id**（dsh-client-
+    // ui-conversation 实证 `b.type==="image" && b.attachment` + `attachment.id`
+    // ——浏览器 store 的 block 形状与持久化 jsonl 格式不同，宿主编解码层归一
+    // 化为 id 字段）→ 批二代码 directAssetUrlOf 只认 url/attachmentId → 推导
+    // 空 → RouteImage useEffect load() 走 imageData RPC → 宿主网关 rejected →
+    // 用户见错误按钮（铁证逻辑链：directUrl 非空时 error 按钮代码不可达）。
+    // 修复：兜底序 url > attachmentId > id。判别：id-only ref 渲染推导 img
+    // （RED=批二代码必走 RPC）；三字段优先序逐一断言。
+    console.log('FIX-021 attachment.id fallback:')
+    {
+      captured.imageDataCalls = []
+      const idA = `sha256:${'a'.repeat(64)}`
+      const idB = `sha256:${'b'.repeat(64)}`
+      const fix21Block = {
+        kind: 'tool-result',
+        seq: 7,
+        time: 48000,
+        callId: 'c7',
+        call: { name: 'route_agent', argsRaw: '{"agent":"draw"}' },
+        callTime: 5000,
+        content: [
+          // ① 宿主结构化形态：仅 id 字段（无 attachmentId/url）。
+          { type: 'image', attachment: { id: idA, mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'host-shaped.png' } },
+          // ② 标记形态：仅 attachmentId。
+          { type: 'image', attachment: { attachmentId: idB, mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'marker-shaped.png' } },
+          // ③ url 优先：url + id 并存（历史双字段形态）→ 用 url。
+          { type: 'image', attachment: { url: 'https://cdn.example/x.png', id: idA, mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'url-shaped.png' } },
+        ],
+        isError: false,
+        subCalls: [],
+      }
+      const fix21Tree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: fix21Block }), 'toolcard-fix21')
+      const fix21Thumbs = findAll(fix21Tree, (node) => node && node.type === 'img' && hasClass(node, 'dshrouter-toolthumb'))
+      check('FIX-021 id-only ref derives asset url (RED: batch-2 walks RPC)', fix21Thumbs.length === 3 && fix21Thumbs.some((img) => img.props.src === `/router-assets/${encodeURIComponent(idA)}`))
+      check('FIX-021 attachmentId ref still derives asset url', fix21Thumbs.some((img) => img.props.src === `/router-assets/${encodeURIComponent(idB)}`))
+      check('FIX-021 url field wins over id (priority)', fix21Thumbs.some((img) => img.props.src === 'https://cdn.example/x.png'))
+      check('FIX-021 zero imageData RPC calls (RED: batch-2 calls for id-only)', captured.imageDataCalls.length === 0)
+      const fix21Expanded = await expandCard(fix21Tree)
+      const fix21Imgs = findAll(fix21Expanded, (node) => node && node.type === 'img')
+      check('FIX-021 expanded gallery keeps direct rendering, zero RPC', fix21Imgs.length === 3 && captured.imageDataCalls.length === 0)
+    }
   }
 
   // v3 Step 9（三级展示 L3 / N-7）：route_agent 工具卡片 L3——调用参数 filePath /
