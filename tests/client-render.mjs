@@ -1065,22 +1065,25 @@ export async function runClientRender(check) {
     check('tool card collapsed issues no imageData RPC (old markers stay off-line)', captured.imageDataCalls.length === 0)
     const expandedTree = await expandCard(tree)
     const imgs = findAll(expandedTree, (node) => node && node.type === 'img')
-    check('tool card renders marker images after expand', imgs.length === 2 && imgs.some((img) => img.props && img.props.src === 'data:image/png;base64,aGk='))
+    // EVO-012 批二 A：无 url 字段的标记 ref（旧产物/输入回显）从 attachmentId
+    // 推导直达 url——RPC 零调用（RED：批一客户端走 RPC，imageData 必调）。
+    check('tool card derives asset url for url-less marker (A)', imgs.length === 2 && imgs.some((img) => img.props && img.props.src === '/router-assets/sha256%3Atv') && imgs.some((img) => img.props && img.props.src === '/router-assets/sha256%3Aold'))
+    check('tool card derives legacy image block url without RPC (A)', captured.imageDataCalls.length === 0)
     check('tool card hides marker text after expand', !textOf(expandedTree).includes('[router:image:') && textOf(expandedTree).includes('已生成图片'))
-    check('tool card loads legacy image blocks after expand', captured.imageDataCalls.some((call) => call.ref && call.ref.attachmentId === 'sha256:old') && captured.imageDataCalls.some((call) => call.ref && call.ref.attachmentId === 'sha256:tv'))
     const runningBlock = { callId: 'c2', name: 'route_agent', argsRaw: '{}', turn: 1, step: 1, time: 1, callView: null, subCalls: [] }
     const running = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: runningBlock }), 'toolcard-running')
     check('tool card running state', textOf(running).includes(tOf('toolRunning')))
     // 错误结果：摘要行显示失败状态与错误消息（可观测——折叠不吞错），展开行
-    // 展示错误文案，不渲染图片。
+    // 展示错误文案。
     const failedBlock = { ...settledBlock, isError: true, error: { name: 'Error', code: 'X', message: '端点拒绝（无额度）' } }
     const failed = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: failedBlock }), 'toolcard-failed')
     check('tool card error state visible in collapsed summary (EVO-012)', textOf(failed).includes(tOf('statsFail')) && textOf(failed).includes('端点拒绝（无额度）'))
     const failedExpanded = await expandCard(failed)
     check('tool card error state expanded body', textOf(failedExpanded).includes('端点拒绝（无额度）'))
 
-    // EVO-012：url 直达——生图标记带同源 url → 折叠态缩略图 <img src> 直达
-    //（零 RPC、零等待）；展开态 gallery 仍直达；无 url 旧图片块展开后经 RPC。
+    // EVO-012 批二 A 判别（真实内容寻址 id）：标记带 url → 直接使用标记 url；
+    // 无 url 的旧图片 content 块（旧会话输入回显遗留）→ 从 attachmentId 推导
+    // 直达（RPC 零调用；onError 最后回退仅在真实加载失败时发生）。
     captured.imageDataCalls = []
     const urlId = `sha256:${'e'.repeat(64)}`
     const urlRef = { attachmentId: urlId, mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'router-draw.png', url: `/router-assets/${urlId}` }
@@ -1100,11 +1103,45 @@ export async function runClientRender(check) {
     }
     const urlTree = await renderInto(toolCardReg.render({ t: tOf, router: () => remoteMock, block: urlBlock }), 'toolcard-url')
     const thumbs = findAll(urlTree, (node) => node && node.type === 'img' && hasClass(node, 'dshrouter-toolthumb'))
-    check('tool card collapsed thumbnail renders via url direct (EVO-012)', thumbs.length === 1 && thumbs[0].props.src === `/router-assets/${urlId}`)
-    check('tool card collapsed url thumbnail issues no imageData RPC (EVO-012)', captured.imageDataCalls.length === 0)
+    check('tool card collapsed thumbnails render url markers + derived legacy (A)', thumbs.length === 2 && thumbs.some((img) => img.props.src === `/router-assets/${urlId}`) && thumbs.some((img) => img.props.src === '/router-assets/sha256%3Aold'))
+    check('tool card collapsed thumbnails issue no imageData RPC (A)', captured.imageDataCalls.length === 0)
     const urlExpanded = await expandCard(urlTree)
     const expandedUrlImgs = findAll(urlExpanded, (node) => node && node.type === 'img')
-    check('tool card expanded keeps url direct + RPC fallback only for legacy (EVO-012)', expandedUrlImgs.length === 2 && expandedUrlImgs.some((img) => img.props && img.props.src === `/router-assets/${urlId}`) && captured.imageDataCalls.some((call) => call.ref && call.ref.attachmentId === 'sha256:old') && !captured.imageDataCalls.some((call) => call.ref && call.ref.attachmentId === urlId))
+    check('tool card expanded: url direct + derived legacy, zero RPC (A)', expandedUrlImgs.length === 2 && expandedUrlImgs.some((img) => img.props && img.props.src === `/router-assets/${urlId}`) && expandedUrlImgs.some((img) => img.props && img.props.src === '/router-assets/sha256%3Aold') && captured.imageDataCalls.length === 0)
+
+    // EVO-012 批二 C：会话产物集合视图——输入区按钮（N 张；空态不渲染）→ 网格
+    // → 单图放大。喂料链路：工具卡渲染标记产物 → 回写当前会话（activeId 由
+    // 输入区组件 render 期锚定）→ 集合订阅重渲染。组合树驱动（同一根树上
+    // input.right 与 toolview 两槽位）。
+    const galleryReg = captured.registrations.find((reg) => reg && reg.id === 'router-session-gallery')
+    check('session gallery slot registered in input.right (C)', !!galleryReg && typeof galleryReg.render === 'function')
+    bundleExports.resetSessionGallery()
+    const galleryRoot = createElement('div', {},
+      galleryReg.render({ t: tOf, sessionId: 'sess-gallery-1' }),
+      toolCardReg.render({ t: tOf, router: () => remoteMock, block: urlBlock }))
+    const combinedTree = await renderInto(galleryRoot, 'gallery-combined')
+    const galleryButtons = findAll(combinedTree, (node) => node && node.type === 'button' && textOf(node).includes('🖼'))
+    check('session gallery collects products from tool card (C)', galleryButtons.length === 1 && textOf(galleryButtons[0]).includes('1'))
+    if (galleryButtons.length === 1) {
+      galleryButtons[0].props.onClick()
+      currentTree = await settle()
+      // 集合只收标记派生 ref（产物）——旧图片 content 块（输入回显遗留）不入集合。
+      const gridCells = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-gallery-cell'))
+      check('session gallery grid renders marker products only (C)', gridCells.length === 1)
+      const cellImgs = findAll(currentTree, (node) => hasClass(node, 'dshrouter-gallery-image'))
+      check('session gallery cells carry direct asset urls (C)', cellImgs.length === 1 && cellImgs.some((img) => img.props && img.props.src === `/router-assets/${urlId}`))
+      if (gridCells.length >= 1) {
+        gridCells[0].props.onClick()
+        currentTree = await settle()
+        const viewer = findAll(currentTree, (node) => node && node.type === 'img' && node.props && node.props.src === `/router-assets/${urlId}` && node.props.style !== undefined && node.props.style.maxWidth === '100%')
+        check('session gallery cell opens lightbox viewer (C)', viewer.length === 1)
+      }
+    }
+    // 空态：无产物时输入区按钮不渲染（另一会话无污染——键 = sessionId）。
+    bundleExports.resetSessionGallery()
+    const emptyTree = await renderInto(galleryReg.render({ t: tOf, sessionId: 'sess-gallery-2' }), 'gallery-empty')
+    const emptyButtons = findAll(emptyTree, (node) => node && node.type === 'button' && textOf(node).includes('🖼'))
+    check('session gallery hidden when session has no products (C)', emptyButtons.length === 0)
   }
 
   // v3 Step 9（三级展示 L3 / N-7）：route_agent 工具卡片 L3——调用参数 filePath /
