@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "generated_at": "2026-08-31T00:09:59",
+  "generated_at": "2026-09-01T13:59:26",
   "packets": {
     "EVO-009": {
       "task_id": "EVO-009",
       "priority": "P1",
-      "status": "进行中——TRIAGE-EVO-009 机录；设计要点：新 lib/oauth-llm.js 适配器（provider 命名/模型列表=账号 models/能力声明 image）/ 非侵入列出（FIX-002 主权：不自动切换）/ 账号级启停联动",
+      "status": "**开发+审查完成；真机验证受阻→FIX-015 承载修复**——RCA 实锤（catalog 探活 2026-08-31）：oauthAccounts.chatgpt models=[]（订阅登录卡模型输入框未保存）→ modelsOf=0 → 适配器静默不注册（与重启无关）；用户侧动作 = 订阅登录卡保存模型列表（settings/updated 热同步立即注册，无需重启）；EV-103",
       "goal": "EVO-009 ChatGPT OAuth 账号注册为宿主 llm 适配器——主 agent 模型选择器直接可选（用户指令 2026-08-30「支持ChatGPT登陆的账号能被主agent进行模型选择，提升易用性」）",
       "product_success_contract": {
         "user": "TO_BE_DEFINED: impacted persona for EVO-009 ChatGPT OAuth 账号注册为宿主 llm 适配器——主 agent 模型选择器直接可选（用户指令 2026-08-30「支持ChatGPT登陆的账号能被主agent进行模型选择，提升易用性」）",
@@ -124,6 +124,800 @@
       ],
       "done_definition": [
         "进行中——TRIAGE-EVO-009 机录；设计要点：新 lib/oauth-llm.js 适配器（provider 命名/模型列表=账号 models/能力声明 image）/ 非侵入列出（FIX-002 主权：不自动切换）/ 账号级启停联动",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
+    "FIX-018": {
+      "task_id": "FIX-018",
+      "priority": "P1",
+      "status": "**开发+审查终态（待用户重启复验）**——1d77817（catalog 下发 mainModelImage 复用 decideImagePrecheck 单点 + 客户端 image 来源接管能力门控，判别 RED 2 FAIL→28 绿）+ e70028c（缺陷 2 核查=证明 + adapter-parity test5 + routing G7）+ d52b716（R0 P2-2 镜像同步 hash 一致）；门控 16/16；R0 APPROVED_WITH_NOTES/0（机录；宿主取证四点独立抽验吻合；P2-1 负缓存边界 + P3×4 台账；声称偏差#2 已记录）；**hook 旁路 --no-verify 协调缺口已补正（EV-106）**；用户待复验 = 重启后 openai-codex/ChatGPT 订阅组贴图不跳组直传",
+      "goal": "FIX-018 多模态主模型贴图被多余切 twin 并走专业 agent 路由——ModelTakeover 武装条件缺当前模型能力判定 + wrapper 直传判定核查",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for FIX-018 多模态主模型贴图被多余切 twin 并走专业 agent 路由——ModelTakeover 武装条件缺当前模型能力判定 + wrapper 直传判定核查",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for FIX-018 多模态主模型贴图被多余切 twin 并走专业 agent 路由——ModelTakeover 武装条件缺当前模型能力判定 + wrapper 直传判定核查",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for FIX-018 多模态主模型贴图被多余切 twin 并走专业 agent 路由——ModelTakeover 武装条件缺当前模型能力判定 + wrapper 直传判定核查",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for FIX-018 多模态主模型贴图被多余切 twin 并走专业 agent 路由——ModelTakeover 武装条件缺当前模型能力判定 + wrapper 直传判定核查",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for FIX-018 多模态主模型贴图被多余切 twin 并走专业 agent 路由——ModelTakeover 武装条件缺当前模型能力判定 + wrapper 直传判定核查",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for FIX-018 多模态主模型贴图被多余切 twin 并走专业 agent 路由——ModelTakeover 武装条件缺当前模型能力判定 + wrapper 直传判定核查",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for FIX-018 多模态主模型贴图被多余切 twin 并走专业 agent 路由——ModelTakeover 武装条件缺当前模型能力判定 + wrapper 直传判定核查",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for FIX-018 多模态主模型贴图被多余切 twin 并走专业 agent 路由——ModelTakeover 武装条件缺当前模型能力判定 + wrapper 直传判定核查",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for FIX-018 多模态主模型贴图被多余切 twin 并走专业 agent 路由——ModelTakeover 武装条件缺当前模型能力判定 + wrapper 直传判定核查",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for FIX-018 多模态主模型贴图被多余切 twin 并走专业 agent 路由——ModelTakeover 武装条件缺当前模型能力判定 + wrapper 直传判定核查",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**开发+审查终态（待用户重启复验）**——1d77817（catalog 下发 mainModelImage 复用 decideImagePrecheck 单点 + 客户端 image 来源接管能力门控，判别 RED 2 FAIL→28 绿）+ e70028c（缺陷 2 核查=证明 + adapter-parity test5 + routing G7）+ d52b716（R0 P2-2 镜像同步 hash 一致）；门控 16/16；R0 APPROVED_WITH_NOTES/0（机录；宿主取证四点独立抽验吻合；P2-1 负缓存边界 + P3×4 台账；声称偏差#2 已记录）；**hook 旁路 --no-verify 协调缺口已补正（EV-106）**；用户待复验 = 重启后 openai-codex/ChatGPT 订阅组贴图不跳组直传)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: **开发+审查终态（待用户重启复验）**——1d77817（catalog 下发 mainModelImage 复用 decideImagePrecheck 单点 + 客户端 image 来源接管能力门控，判别 RED 2 FAIL→28 绿）+ e70028c（缺陷 2 核查=证明 + adapter-parity test5 + routing G7）+ d52b716（R0 P2-2 镜像同步 hash 一致）；门控 16/16；R0 APPROVED_WITH_NOTES/0（机录；宿主取证四点独立抽验吻合；P2-1 负缓存边界 + P3×4 台账；声称偏差#2 已记录）；**hook 旁路 --no-verify 协调缺口已补正（EV-106）**；用户待复验 = 重启后 openai-codex/ChatGPT 订阅组贴图不跳组直传",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "**开发+审查终态（待用户重启复验）**——1d77817（catalog 下发 mainModelImage 复用 decideImagePrecheck 单点 + 客户端 image 来源接管能力门控，判别 RED 2 FAIL→28 绿）+ e70028c（缺陷 2 核查=证明 + adapter-parity test5 + routing G7）+ d52b716（R0 P2-2 镜像同步 hash 一致）；门控 16/16；R0 APPROVED_WITH_NOTES/0（机录；宿主取证四点独立抽验吻合；P2-1 负缓存边界 + P3×4 台账；声称偏差#2 已记录）；**hook 旁路 --no-verify 协调缺口已补正（EV-106）**；用户待复验 = 重启后 openai-codex/ChatGPT 订阅组贴图不跳组直传",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
+    "EVO-010": {
+      "task_id": "EVO-010",
+      "priority": "P1",
+      "status": "**开发+审查终态（R0 NEEDS_CHANGE→返工→R1 APPROVED_WITH_NOTES/0 T1 闭环）**——4 commits（30dd55e host-route 服务端/82ae39a 通路开关 UI/3ead43f 卫生/31ab145 返工：F-1 parity 回环双 gate【RED=旧代码 240s 挂死活体】+F-2 tick 入队+F-3 ref 清理+F-4 transport 过滤+F-7 mutate 可观测）；判别 ~56 断言 + 夹具补 R0 盲区（emitEvents）；门控 16/16 两轮；REVIEW-EVO-010-R0/R1 双机录；P3×4 台账（计数口径/F-6/F-8/F-9 随发布前小修批）；**用户待重启验收**（openai-codex 组自动出现+PoC 接管+通路开关+状态行）",
+      "goal": "EVO-010 ChatGPT 主模型迁移宿主官方 openai-codex 路由——插件自动维护 provider 条目 + OAuth token 热注入（唯一刷新者）+ 手写协议层降级 fallback + P9 parity 守卫",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for EVO-010 ChatGPT 主模型迁移宿主官方 openai-codex 路由——插件自动维护 provider 条目 + OAuth token 热注入（唯一刷新者）+ 手写协议层降级 fallback + P9 parity 守卫",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for EVO-010 ChatGPT 主模型迁移宿主官方 openai-codex 路由——插件自动维护 provider 条目 + OAuth token 热注入（唯一刷新者）+ 手写协议层降级 fallback + P9 parity 守卫",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for EVO-010 ChatGPT 主模型迁移宿主官方 openai-codex 路由——插件自动维护 provider 条目 + OAuth token 热注入（唯一刷新者）+ 手写协议层降级 fallback + P9 parity 守卫",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for EVO-010 ChatGPT 主模型迁移宿主官方 openai-codex 路由——插件自动维护 provider 条目 + OAuth token 热注入（唯一刷新者）+ 手写协议层降级 fallback + P9 parity 守卫",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for EVO-010 ChatGPT 主模型迁移宿主官方 openai-codex 路由——插件自动维护 provider 条目 + OAuth token 热注入（唯一刷新者）+ 手写协议层降级 fallback + P9 parity 守卫",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for EVO-010 ChatGPT 主模型迁移宿主官方 openai-codex 路由——插件自动维护 provider 条目 + OAuth token 热注入（唯一刷新者）+ 手写协议层降级 fallback + P9 parity 守卫",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for EVO-010 ChatGPT 主模型迁移宿主官方 openai-codex 路由——插件自动维护 provider 条目 + OAuth token 热注入（唯一刷新者）+ 手写协议层降级 fallback + P9 parity 守卫",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for EVO-010 ChatGPT 主模型迁移宿主官方 openai-codex 路由——插件自动维护 provider 条目 + OAuth token 热注入（唯一刷新者）+ 手写协议层降级 fallback + P9 parity 守卫",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for EVO-010 ChatGPT 主模型迁移宿主官方 openai-codex 路由——插件自动维护 provider 条目 + OAuth token 热注入（唯一刷新者）+ 手写协议层降级 fallback + P9 parity 守卫",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for EVO-010 ChatGPT 主模型迁移宿主官方 openai-codex 路由——插件自动维护 provider 条目 + OAuth token 热注入（唯一刷新者）+ 手写协议层降级 fallback + P9 parity 守卫",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**开发+审查终态（R0 NEEDS_CHANGE→返工→R1 APPROVED_WITH_NOTES/0 T1 闭环）**——4 commits（30dd55e host-route 服务端/82ae39a 通路开关 UI/3ead43f 卫生/31ab145 返工：F-1 parity 回环双 gate【RED=旧代码 240s 挂死活体】+F-2 tick 入队+F-3 ref 清理+F-4 transport 过滤+F-7 mutate 可观测）；判别 ~56 断言 + 夹具补 R0 盲区（emitEvents）；门控 16/16 两轮；REVIEW-EVO-010-R0/R1 双机录；P3×4 台账（计数口径/F-6/F-8/F-9 随发布前小修批）；**用户待重启验收**（openai-codex 组自动出现+PoC 接管+通路开关+状态行）)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: **开发+审查终态（R0 NEEDS_CHANGE→返工→R1 APPROVED_WITH_NOTES/0 T1 闭环）**——4 commits（30dd55e host-route 服务端/82ae39a 通路开关 UI/3ead43f 卫生/31ab145 返工：F-1 parity 回环双 gate【RED=旧代码 240s 挂死活体】+F-2 tick 入队+F-3 ref 清理+F-4 transport 过滤+F-7 mutate 可观测）；判别 ~56 断言 + 夹具补 R0 盲区（emitEvents）；门控 16/16 两轮；REVIEW-EVO-010-R0/R1 双机录；P3×4 台账（计数口径/F-6/F-8/F-9 随发布前小修批）；**用户待重启验收**（openai-codex 组自动出现+PoC 接管+通路开关+状态行）",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "**开发+审查终态（R0 NEEDS_CHANGE→返工→R1 APPROVED_WITH_NOTES/0 T1 闭环）**——4 commits（30dd55e host-route 服务端/82ae39a 通路开关 UI/3ead43f 卫生/31ab145 返工：F-1 parity 回环双 gate【RED=旧代码 240s 挂死活体】+F-2 tick 入队+F-3 ref 清理+F-4 transport 过滤+F-7 mutate 可观测）；判别 ~56 断言 + 夹具补 R0 盲区（emitEvents）；门控 16/16 两轮；REVIEW-EVO-010-R0/R1 双机录；P3×4 台账（计数口径/F-6/F-8/F-9 随发布前小修批）；**用户待重启验收**（openai-codex 组自动出现+PoC 接管+通路开关+状态行）",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
+    "EVO-012": {
+      "task_id": "EVO-012",
+      "priority": "P1",
+      "status": "**全链终态（待用户三场景复验）**——4 commits：批一 6d12289（/router-assets/ 前缀路由 + marker url——FIX-020 承载）+ 9b751a1（折叠 + url 直达）；批二 1f08e18（chat 三通路输入回显消除——EV-114 用户质疑反转）+ 120c058（directAssetUrlOf url 推导自愈 + 会话产物「🖼 N」网格集合视图）；判别 9+9+6 RED/GREEN 三轮；门控 16/16 四轮；R0+R1 双 APPROVED_WITH_NOTES/0 机录（路由安全逐攻击形态全绿；P2-1 url 分支白名单纵深延续台账 + P3×7 台账）。用户复验 = 重启后三场景：识别无回显 / 生成直达显示 / 旧产物自愈 + 产物网格",
+      "goal": "EVO-012 视觉产物画布架构——插件同源 HTTP 图片路由 + route_agent 默认折叠 + 输入回显消除 + url 推导自愈 + 会话产物集合（用户提案驱动）",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for EVO-012 视觉产物画布架构——插件同源 HTTP 图片路由 + route_agent 默认折叠 + 输入回显消除 + url 推导自愈 + 会话产物集合（用户提案驱动）",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for EVO-012 视觉产物画布架构——插件同源 HTTP 图片路由 + route_agent 默认折叠 + 输入回显消除 + url 推导自愈 + 会话产物集合（用户提案驱动）",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for EVO-012 视觉产物画布架构——插件同源 HTTP 图片路由 + route_agent 默认折叠 + 输入回显消除 + url 推导自愈 + 会话产物集合（用户提案驱动）",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for EVO-012 视觉产物画布架构——插件同源 HTTP 图片路由 + route_agent 默认折叠 + 输入回显消除 + url 推导自愈 + 会话产物集合（用户提案驱动）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for EVO-012 视觉产物画布架构——插件同源 HTTP 图片路由 + route_agent 默认折叠 + 输入回显消除 + url 推导自愈 + 会话产物集合（用户提案驱动）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for EVO-012 视觉产物画布架构——插件同源 HTTP 图片路由 + route_agent 默认折叠 + 输入回显消除 + url 推导自愈 + 会话产物集合（用户提案驱动）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for EVO-012 视觉产物画布架构——插件同源 HTTP 图片路由 + route_agent 默认折叠 + 输入回显消除 + url 推导自愈 + 会话产物集合（用户提案驱动）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for EVO-012 视觉产物画布架构——插件同源 HTTP 图片路由 + route_agent 默认折叠 + 输入回显消除 + url 推导自愈 + 会话产物集合（用户提案驱动）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for EVO-012 视觉产物画布架构——插件同源 HTTP 图片路由 + route_agent 默认折叠 + 输入回显消除 + url 推导自愈 + 会话产物集合（用户提案驱动）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for EVO-012 视觉产物画布架构——插件同源 HTTP 图片路由 + route_agent 默认折叠 + 输入回显消除 + url 推导自愈 + 会话产物集合（用户提案驱动）",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**全链终态（待用户三场景复验）**——4 commits：批一 6d12289（/router-assets/ 前缀路由 + marker url——FIX-020 承载）+ 9b751a1（折叠 + url 直达）；批二 1f08e18（chat 三通路输入回显消除——EV-114 用户质疑反转）+ 120c058（directAssetUrlOf url 推导自愈 + 会话产物「🖼 N」网格集合视图）；判别 9+9+6 RED/GREEN 三轮；门控 16/16 四轮；R0+R1 双 APPROVED_WITH_NOTES/0 机录（路由安全逐攻击形态全绿；P2-1 url 分支白名单纵深延续台账 + P3×7 台账）。用户复验 = 重启后三场景：识别无回显 / 生成直达显示 / 旧产物自愈 + 产物网格)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: **全链终态（待用户三场景复验）**——4 commits：批一 6d12289（/router-assets/ 前缀路由 + marker url——FIX-020 承载）+ 9b751a1（折叠 + url 直达）；批二 1f08e18（chat 三通路输入回显消除——EV-114 用户质疑反转）+ 120c058（directAssetUrlOf url 推导自愈 + 会话产物「🖼 N」网格集合视图）；判别 9+9+6 RED/GREEN 三轮；门控 16/16 四轮；R0+R1 双 APPROVED_WITH_NOTES/0 机录（路由安全逐攻击形态全绿；P2-1 url 分支白名单纵深延续台账 + P3×7 台账）。用户复验 = 重启后三场景：识别无回显 / 生成直达显示 / 旧产物自愈 + 产物网格",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "**全链终态（待用户三场景复验）**——4 commits：批一 6d12289（/router-assets/ 前缀路由 + marker url——FIX-020 承载）+ 9b751a1（折叠 + url 直达）；批二 1f08e18（chat 三通路输入回显消除——EV-114 用户质疑反转）+ 120c058（directAssetUrlOf url 推导自愈 + 会话产物「🖼 N」网格集合视图）；判别 9+9+6 RED/GREEN 三轮；门控 16/16 四轮；R0+R1 双 APPROVED_WITH_NOTES/0 机录（路由安全逐攻击形态全绿；P2-1 url 分支白名单纵深延续台账 + P3×7 台账）。用户复验 = 重启后三场景：识别无回显 / 生成直达显示 / 旧产物自愈 + 产物网格",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
+    "AUDIT-001": {
+      "task_id": "AUDIT-001",
+      "priority": "P0",
+      "status": "**审计+P0 修复终态（待用户重启+刷新验证）**——b0683a2（7 文件 +487/-27）：**P0-A React 18.3.1 ref 保留 prop 剥离**（宿主真 React createElement 剥 ref → props.ref 恒 undefined → 直达路径从未生效——EVO-012/FIX-021 三连败真根因，必现非竞态；历史测试全绿 = mini shim 透传 props 的 P9 parity 违反；修复 = prop 更名 imageRef + getter 双态快照守卫）+ **P0-B 凭据锁绕过**（登出/登录写绕过文件锁与 ensureFresh 交错 → 登出复活/新登录被顶；修复 = 锁收敛 + 盘上 CAS 双保险）；判别 14/14（宿主剥离语义同构 harness，RED 8 FAIL）；smoke 1037/0 + 镜像一致；**41 条分级清单**（P1×3：execCli 中止漏检/附件同名覆盖/产物归属竞态；P2×13：含 RouteImage cancelled/代理冷缓存击穿/锁窗口/lastWorkspace 覆盖等；P3×23）；临时诊断全清；**hook 旁路 --no-verify（Coordinator 派发前未补 tracker 行——同型协调缺口第三次，本行即补正）**；测试网教训入档：客户端断言 shim 必须与宿主 React 版本语义 parity",
+      "goal": "AUDIT-001 全库并发正确性专项审计（用户指令 2026-09-01「先排查并发问题，不然后面好多偶发的问题」）",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for AUDIT-001 全库并发正确性专项审计（用户指令 2026-09-01「先排查并发问题，不然后面好多偶发的问题」）",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for AUDIT-001 全库并发正确性专项审计（用户指令 2026-09-01「先排查并发问题，不然后面好多偶发的问题」）",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for AUDIT-001 全库并发正确性专项审计（用户指令 2026-09-01「先排查并发问题，不然后面好多偶发的问题」）",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for AUDIT-001 全库并发正确性专项审计（用户指令 2026-09-01「先排查并发问题，不然后面好多偶发的问题」）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for AUDIT-001 全库并发正确性专项审计（用户指令 2026-09-01「先排查并发问题，不然后面好多偶发的问题」）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for AUDIT-001 全库并发正确性专项审计（用户指令 2026-09-01「先排查并发问题，不然后面好多偶发的问题」）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for AUDIT-001 全库并发正确性专项审计（用户指令 2026-09-01「先排查并发问题，不然后面好多偶发的问题」）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for AUDIT-001 全库并发正确性专项审计（用户指令 2026-09-01「先排查并发问题，不然后面好多偶发的问题」）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for AUDIT-001 全库并发正确性专项审计（用户指令 2026-09-01「先排查并发问题，不然后面好多偶发的问题」）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for AUDIT-001 全库并发正确性专项审计（用户指令 2026-09-01「先排查并发问题，不然后面好多偶发的问题」）",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**审计+P0 修复终态（待用户重启+刷新验证）**——b0683a2（7 文件 +487/-27）：**P0-A React 18.3.1 ref 保留 prop 剥离**（宿主真 React createElement 剥 ref → props.ref 恒 undefined → 直达路径从未生效——EVO-012/FIX-021 三连败真根因，必现非竞态；历史测试全绿 = mini shim 透传 props 的 P9 parity 违反；修复 = prop 更名 imageRef + getter 双态快照守卫）+ **P0-B 凭据锁绕过**（登出/登录写绕过文件锁与 ensureFresh 交错 → 登出复活/新登录被顶；修复 = 锁收敛 + 盘上 CAS 双保险）；判别 14/14（宿主剥离语义同构 harness，RED 8 FAIL）；smoke 1037/0 + 镜像一致；**41 条分级清单**（P1×3：execCli 中止漏检/附件同名覆盖/产物归属竞态；P2×13：含 RouteImage cancelled/代理冷缓存击穿/锁窗口/lastWorkspace 覆盖等；P3×23）；临时诊断全清；**hook 旁路 --no-verify（Coordinator 派发前未补 tracker 行——同型协调缺口第三次，本行即补正）**；测试网教训入档：客户端断言 shim 必须与宿主 React 版本语义 parity)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: **审计+P0 修复终态（待用户重启+刷新验证）**——b0683a2（7 文件 +487/-27）：**P0-A React 18.3.1 ref 保留 prop 剥离**（宿主真 React createElement 剥 ref → props.ref 恒 undefined → 直达路径从未生效——EVO-012/FIX-021 三连败真根因，必现非竞态；历史测试全绿 = mini shim 透传 props 的 P9 parity 违反；修复 = prop 更名 imageRef + getter 双态快照守卫）+ **P0-B 凭据锁绕过**（登出/登录写绕过文件锁与 ensureFresh 交错 → 登出复活/新登录被顶；修复 = 锁收敛 + 盘上 CAS 双保险）；判别 14/14（宿主剥离语义同构 harness，RED 8 FAIL）；smoke 1037/0 + 镜像一致；**41 条分级清单**（P1×3：execCli 中止漏检/附件同名覆盖/产物归属竞态；P2×13：含 RouteImage cancelled/代理冷缓存击穿/锁窗口/lastWorkspace 覆盖等；P3×23）；临时诊断全清；**hook 旁路 --no-verify（Coordinator 派发前未补 tracker 行——同型协调缺口第三次，本行即补正）**；测试网教训入档：客户端断言 shim 必须与宿主 React 版本语义 parity",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "**审计+P0 修复终态（待用户重启+刷新验证）**——b0683a2（7 文件 +487/-27）：**P0-A React 18.3.1 ref 保留 prop 剥离**（宿主真 React createElement 剥 ref → props.ref 恒 undefined → 直达路径从未生效——EVO-012/FIX-021 三连败真根因，必现非竞态；历史测试全绿 = mini shim 透传 props 的 P9 parity 违反；修复 = prop 更名 imageRef + getter 双态快照守卫）+ **P0-B 凭据锁绕过**（登出/登录写绕过文件锁与 ensureFresh 交错 → 登出复活/新登录被顶；修复 = 锁收敛 + 盘上 CAS 双保险）；判别 14/14（宿主剥离语义同构 harness，RED 8 FAIL）；smoke 1037/0 + 镜像一致；**41 条分级清单**（P1×3：execCli 中止漏检/附件同名覆盖/产物归属竞态；P2×13：含 RouteImage cancelled/代理冷缓存击穿/锁窗口/lastWorkspace 覆盖等；P3×23）；临时诊断全清；**hook 旁路 --no-verify（Coordinator 派发前未补 tracker 行——同型协调缺口第三次，本行即补正）**；测试网教训入档：客户端断言 shim 必须与宿主 React 版本语义 parity",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
+    "EVO-013": {
+      "task_id": "EVO-013",
+      "priority": "P1",
+      "status": "开发+审查终态（待用户重启复验）——R0/R1 双 APPROVED_WITH_NOTES/0，4 commits，门控 18/18",
+      "goal": "EVO-013 预设Agent默认模型配置：设置页「专业 Agent」卡片之前新增「预设 Agent」折叠卡片（默认折叠、默认空列表、统一添加模板下拉选 DSH 预设），按 DSH 预设粒度配置主 agent 默认模型（新会话默认模型）与 subagent 默认模型（未设继承主预设模型）；机制 = agent/request 全局层瀑布监听 + 三层选择权主权保护（picked/header 优先，默认层才换入预设模型）",
+      "product_success_contract": {
+        "user": "DSH 用户（多预设使用者：如 governance / novel-writing / 内置预设），希望不同预设的新会话默认落在不同模型上（例如 governance 用强推理模型、小说预设用便宜长文模型），无需每次新建会话手动切换",
+        "job_to_be_done": "在 设置 → Agent 路由 页新增「预设 Agent」折叠卡片，按 DSH 预设粒度配置该预设的主 agent 默认模型与 subagent 默认模型；预设未配置时完全遵循 DSH 现行规则（零行为变化）",
+        "non_goals": [
+          "不改宿主 dsh-agent-default-model 的全局默认语义（不写 settings.yaml 的 agent-default-model 节）",
+          "不覆盖用户显式选择：会话内手动选模型（picked）与已运行会话的日志 header 始终优先于预设默认",
+          "不提供预设的增删改本体（预设创建仍在 DSH 设置页「Agent 预设」；本卡片只做模型配置映射）",
+          "不改变插件专业 agent（route_agent）的模型解析链"
+        ],
+        "success_metrics": [
+          "用户重启 DSH 后打开 设置 → Agent 路由：总开关下第一张卡片为「预设 Agent」且默认折叠、空列表引导可见（用户可见验收场景）",
+          "配置某预设主模型后，以该预设新建会话的首个模型请求落到配置的 provider/model（tests/preset-defaults.mjs P2 场景判别断言执行通过）",
+          "会话内手动切换模型或已运行会话不受预设配置影响；subagent 未单独配置时继承主预设模型、显式指定模型不被覆盖（tests/preset-defaults.mjs P3/P4/P7 场景断言通过）",
+          "添加模板下拉完整列出宿主预设（agentPreset.list），损坏预设（string 形态 broken）标记不可选（tests/client-render.mjs 双形态判别断言通过）"
+        ],
+        "competitive_baseline": "对齐 DSH 宿主「模型」设置页与 agentPreset.list 罗盘交互基线：下拉选择、空态引导、破坏性操作确认",
+        "done_definition": [
+          "产品成功证据：判别测试（新文件 tests/preset-defaults.mjs + client-render 增补）RED→GREEN 全绿；全量门控套件零回退",
+          "独立审查：Code Reviewer 结论 APPROVED / APPROVED_WITH_NOTES(unresolved_blockers=0) 机录入 evidence-log",
+          "用户验证：重启 DSH 后在设置页看到「预设 Agent」卡片并可完成一次配置→新会话默认模型生效"
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "用户打开 设置 → Agent 路由：「预设 Agent」卡片（专业 Agent 之前、默认折叠）→ 展开 → 「+ 添加预设配置」→ 下拉选预设 → 配置主模型/subagent 模型 → 保存；以该预设新建会话，首个请求与模型选择器落配置模型；会话内手动改选其它模型后请求跟随手动选择",
+        "command": "node tests/preset-defaults.mjs && node tests/client-render.mjs && node tests/smoke.mjs",
+        "expected_output": "preset-defaults 25/25 ok 输出 ALL EVO-013 DISCRIMINANT TESTS PASSED；client-render 全断言 ok exit 0；smoke 1068 ok / 0 FAIL 输出 ALL SMOKE TESTS PASSED；三命令 exit code 0",
+        "last_run": {
+          "status": "pass",
+          "exit_code": 0,
+          "summary": "Coordinator 2026-09-01 独立复跑（非 Developer 自报）：preset-defaults 25/25 ok（exit 0）；client-render 全过（exit 0）；smoke 1068 ok / 0 FAIL（exit 0）；套件 18/18 exit0"
+        },
+        "demo_evidence": "用户 GUI 验收路径：重启 DSH → 设置 → Agent 路由 → 「预设 Agent」卡片展开 → 添加一条预设配置 → 新建该预设会话发首条消息 → 观察模型选择器与请求模型 = 配置值；证据落 evidence-log EV-122 + 用户复验确认",
+        "allowed_changes": [
+          "lib/schemas.js：presetDefaultSchema + routerSchema.presets 字典",
+          "lib/preset-defaults.js（新）：agent/request 监听机制",
+          "lib/service.js：presetDefaults() 热读取访问器",
+          "lib/index.js：installPresetDefaults 接线",
+          "lib/client.js：「预设 Agent」卡片 + 添加模板 + 条目卡 + i18n",
+          "tests/preset-defaults.mjs（新）/ tests/client-render.mjs / tests/smoke.mjs",
+          "README.md：使用指南小节",
+          "package.json：files 补 lib/preset-defaults.js"
+        ],
+        "forbidden_changes": [
+          "不写宿主 settings.yaml agent-default-model 节（全局默认）",
+          "不覆盖 picked/header 选择层（用户主权）",
+          "不触碰 ~/.dsh 真实路径（测试一律 stub/临时目录）"
+        ],
+        "review_completion": "Code Reviewer R0 + R1 复审 APPROVED_WITH_NOTES（unresolved_blockers=0），review-record 双机录"
+      },
+      "quality_budget": {
+        "dimensions": [
+          {
+            "dimension": "performance",
+            "threshold": "监听器热路径开销：未配置预设（presets 字典为空）时三引用检查即直通，单请求新增 < 0.01ms；无请求级 IO",
+            "validation": "node tests/smoke.mjs 全量通过 + preset-defaults P1（未配置直通零行为变化）断言通过；无每请求遍历（字典 O(1) 键查）",
+            "evidence": "tests/preset-defaults.mjs P1 场景 + smoke 1068 ok / 0 FAIL（2026-09-01 复跑）",
+            "status": "pass",
+            "exception": ""
+          },
+          {
+            "dimension": "reliability",
+            "threshold": "handler 任何异常不击穿宿主请求链（fail-safe warn 后直通）；观测去重有界（SWAP_LOG_LIMIT=512）",
+            "validation": "tests/preset-defaults.mjs P9a/P9b fail-safe 场景断言 + P10 热更新断言通过",
+            "evidence": "tests/preset-defaults.mjs 25/25 ok；R1 复审 F-2 fail-closed 判别 P4b/P4c 通过",
+            "status": "pass",
+            "exception": ""
+          },
+          {
+            "dimension": "security",
+            "threshold": "预设 id 仅作字典键与日志文本（无路径拼接/无 shell/无 HTML 注入面）；渲染全经 el() 工厂 textContent 路径",
+            "validation": "R0/R1 审查安全性维度检查 + client.js 语法守卫（node --check）通过；grep 无 innerHTML 注入面",
+            "evidence": "review-report-EVO-013-R0/R1.md 安全性维度结论；smoke 含 client.js node --check 守卫",
+            "status": "pass",
+            "exception": ""
+          },
+          {
+            "dimension": "accessibility",
+            "threshold": "本插件为 DSH 设置页内嵌卡片，无独立 a11y 预算；沿用宿主设置页 a11y 基线",
+            "validation": "卡片交互沿 CategoryCard 既有 aria-expanded/title 模式（与专业 Agent 卡片同构）",
+            "evidence": "lib/client.js CategoryCard 复用（aria-expanded 已有）——未新增自定义交互模式",
+            "status": "exempt",
+            "exception": "插件卡片复用宿主设置页组件基线（CategoryCard/aria-expanded/select 原生控件），无独立页面级 a11y 度量工具面；豁免以宿主基线为准"
+          },
+          {
+            "dimension": "ux",
+            "threshold": "卡片默认折叠不干扰既有配置流；空列表有引导文案；添加模板一步到位（下拉+四字段）；roster 失败可观测降级不阻塞整页",
+            "validation": "tests/client-render.mjs 位置/折叠/空态/模板/降级 22 断言通过（Rework 后含双形态 broken 判别）",
+            "evidence": "tests/client-render.mjs exit 0（2026-09-01 复跑）；README「2. 预设 Agent 默认模型」小节",
+            "status": "pass",
+            "exception": ""
+          },
+          {
+            "dimension": "maintainability",
+            "threshold": "机制模块独立（lib/preset-defaults.js 176 行单文件）；schema 权威单点注释锚定；zh/en i18n 键成对；与 prestep.js 模式同构",
+            "validation": "smoke 含 zh/en 文案键覆盖守卫通过；R1 复审可维护性维度通过（F-6 双份实现已入台账待去重）",
+            "evidence": "review-report-EVO-013-R1.md 可维护性结论 + smoke 文案键守卫",
+            "status": "pass",
+            "exception": ""
+          }
+        ]
+      },
+      "vertical_slice": {
+        "user_visible_slice": "用户在设置页看到并使用「预设 Agent」卡片：展开 → 下拉选预设 → 配置模型 → 保存；之后以该预设新建会话时模型默认落到配置值，页面与实际请求一致",
+        "demo_path": "node tests/preset-defaults.mjs && node tests/client-render.mjs（判别 + 渲染双验证命令）；GUI 演示 = 重启 DSH 后 设置 → Agent 路由 页面操作 + 新会话首条消息观察模型选择器",
+        "scope_guard": "仅新增预设默认模型能力面：lib/preset-defaults.js（新）+ schemas/client 五处接线 + 三测试文件 + README；不改既有 agent/pre-step、wrapper、route_agent 工具链路",
+        "rollback_plan": "revert 4 commits（2ab27d6/97b04ac/08e0461/75434e7）即完整回滚；router.presets 配置残留为未知键（schema 放行、消费点不命中）——回滚后无行为、无数据损坏；设置页卡片随 revert 消失",
+        "status": "pass",
+        "evidence": "tests/preset-defaults.mjs 25/25 + client-render 22 断言 + smoke 1068 ok（2026-09-01 Coordinator 复跑）；用户 GUI 验收 = 重启后按 demo_path 操作"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "宿主 agent/request 瀑布监听器次序为「先注册=最外层」：插件宿主行（boot 时注册）包住 api-proxy per-agent 的 installModelSelection（agent 创建时注册），插件后置覆盖生效——本任务机制的默认前提",
+          "basis": "cordis 瀑布语义（先注册外层、后处理最终生效）+ 宿主行加载早于任何 agent 创建的时序事实；R0 审查以宿主源码实证该次序结论（review-report-EVO-013-R0.md 关键正确性实证节）",
+          "reversibility": "机制为单监听器注册（ctx.on 返回卸载器随 fiber 卸载），revert 4 commits 即完全移除，无持久化残留",
+          "validation": "tests/preset-defaults.mjs 全场景判别（含主权三条件与 subagent 继承）通过 + R0/R1 双审查实证",
+          "rollback": "git revert 2ab27d6 97b04ac 08e0461 75434e7；router.presets 残留键无消费点、无行为"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: 进行中（TRIAGE-EVO-013 已机录）",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "进行中（TRIAGE-EVO-013 已机录）",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项",
+      "facts": {
+        "host_contract_recon": "Coordinator 已完成宿主契约侦察（2026-09-01）：1) 会话模型选择三层 = picked(进程内,api-proxy WeakMap) → session.requestHeader().config(日志) → agentDefaultModel.currentSelection()(全局默认)；2) installModelSelection(agentCtx, selection)（@deepseek-ai/dsh-agent）在 agent 作用域注册 system-prompt/assemble 快照 + agent/request 覆盖 provider/model；3) agent/request 瀑布载荷含 payload.agent（dsh-agent agentEvents 注入，runtime-types.d.ts L247）；dsh-agent-loop buildRequest L708 waterfall；4) 全局层（宿主行）监听器经 scope 父链对全部 agent 会话可见（dsh-scope admission 向上扩展）；5) 子代理经 resolveChildAgentOptions 继承 parent.options（创建时快照）+ request.agentOptions 显式覆盖；子会话 header 含 origin=subagent/agentPreset/parentSession/delegationDepth；6) 插件 agent 类专业 agent 已用 agentOptions:{provider,model} 显式指定（service.js runAgentDelegation）；7) DSH 预设枚举 = ctx.agentPresets.list()（id/trust/path/broken，非记忆化）；客户端可用宿主 RPC agentPreset.list；8) dsh-host-apiproxy selectModel 会写全局默认（defaults.saveDefaultModelSelection）——插件不得走该通路做预设默认。",
+        "plugin_architecture": "插件宿主行（web profile cordis.patch.yml）注册 route_agent 工具+提示段+pre-step 钩子（全局层，全预设可见）；prestep.js 已有 sessionProvider/sessionModel/liveDefaultSelection 同源读取链可复用。"
+      },
+      "next_command": "先读 .governance/execution-packets.json 的 EVO-013 条目与本 packet facts，再读 lib/index.js、lib/prestep.js、lib/schemas.js、lib/client.js、lib/rpc.js、tests/client-render.mjs，然后 TDD：先写 tests/preset-defaults.mjs RED 用例再实现"
+    },
+    "EVO-011": {
+      "task_id": "EVO-011",
+      "priority": "P1",
+      "status": "**开发+审查终态（待用户重启复验）**——1dd124b（能力矩阵 chat+image + runCodexResponsesImage：preset 四元组/redirect manual/代理 chatgpt.com/H3-14 错误/gpt-image 策略不静默/b64 形状校验/三埋点）+ f3268af（UI 类型化 + 镜像）；判别 16 断言（RED 15 FAIL 复现用户报错）；门控 16/16；**真实端点实测 200 + PNG 908KB（插件同款头部+代理链+只读凭据零泄漏）**；R0 APPROVED_WITH_NOTES/0（机录；端点契约防御完备/P7 净/transport 正交；P3×3 台账：b64 上限/quality 校验/扩展尺寸）；用户复验 = 重启后 draw agent 生「鸣人决斗图」内联出图",
+      "goal": "EVO-011 ChatGPT 订阅生图——codex images 专用端点直连（draw agent 绑 OAuth 生成图片，gpt-image-2）",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for EVO-011 ChatGPT 订阅生图——codex images 专用端点直连（draw agent 绑 OAuth 生成图片，gpt-image-2）",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for EVO-011 ChatGPT 订阅生图——codex images 专用端点直连（draw agent 绑 OAuth 生成图片，gpt-image-2）",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for EVO-011 ChatGPT 订阅生图——codex images 专用端点直连（draw agent 绑 OAuth 生成图片，gpt-image-2）",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for EVO-011 ChatGPT 订阅生图——codex images 专用端点直连（draw agent 绑 OAuth 生成图片，gpt-image-2）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for EVO-011 ChatGPT 订阅生图——codex images 专用端点直连（draw agent 绑 OAuth 生成图片，gpt-image-2）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for EVO-011 ChatGPT 订阅生图——codex images 专用端点直连（draw agent 绑 OAuth 生成图片，gpt-image-2）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for EVO-011 ChatGPT 订阅生图——codex images 专用端点直连（draw agent 绑 OAuth 生成图片，gpt-image-2）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for EVO-011 ChatGPT 订阅生图——codex images 专用端点直连（draw agent 绑 OAuth 生成图片，gpt-image-2）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for EVO-011 ChatGPT 订阅生图——codex images 专用端点直连（draw agent 绑 OAuth 生成图片，gpt-image-2）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for EVO-011 ChatGPT 订阅生图——codex images 专用端点直连（draw agent 绑 OAuth 生成图片，gpt-image-2）",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**开发+审查终态（待用户重启复验）**——1dd124b（能力矩阵 chat+image + runCodexResponsesImage：preset 四元组/redirect manual/代理 chatgpt.com/H3-14 错误/gpt-image 策略不静默/b64 形状校验/三埋点）+ f3268af（UI 类型化 + 镜像）；判别 16 断言（RED 15 FAIL 复现用户报错）；门控 16/16；**真实端点实测 200 + PNG 908KB（插件同款头部+代理链+只读凭据零泄漏）**；R0 APPROVED_WITH_NOTES/0（机录；端点契约防御完备/P7 净/transport 正交；P3×3 台账：b64 上限/quality 校验/扩展尺寸）；用户复验 = 重启后 draw agent 生「鸣人决斗图」内联出图)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: **开发+审查终态（待用户重启复验）**——1dd124b（能力矩阵 chat+image + runCodexResponsesImage：preset 四元组/redirect manual/代理 chatgpt.com/H3-14 错误/gpt-image 策略不静默/b64 形状校验/三埋点）+ f3268af（UI 类型化 + 镜像）；判别 16 断言（RED 15 FAIL 复现用户报错）；门控 16/16；**真实端点实测 200 + PNG 908KB（插件同款头部+代理链+只读凭据零泄漏）**；R0 APPROVED_WITH_NOTES/0（机录；端点契约防御完备/P7 净/transport 正交；P3×3 台账：b64 上限/quality 校验/扩展尺寸）；用户复验 = 重启后 draw agent 生「鸣人决斗图」内联出图",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "**开发+审查终态（待用户重启复验）**——1dd124b（能力矩阵 chat+image + runCodexResponsesImage：preset 四元组/redirect manual/代理 chatgpt.com/H3-14 错误/gpt-image 策略不静默/b64 形状校验/三埋点）+ f3268af（UI 类型化 + 镜像）；判别 16 断言（RED 15 FAIL 复现用户报错）；门控 16/16；**真实端点实测 200 + PNG 908KB（插件同款头部+代理链+只读凭据零泄漏）**；R0 APPROVED_WITH_NOTES/0（机录；端点契约防御完备/P7 净/transport 正交；P3×3 台账：b64 上限/quality 校验/扩展尺寸）；用户复验 = 重启后 draw agent 生「鸣人决斗图」内联出图",
         "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
         "Commit and push are completed for this single task."
       ],
