@@ -10,6 +10,7 @@ import { runOauthCredentialTests } from './oauth-credentials.mjs'
 import { runOauthPromotionTests } from './oauth-promotion.mjs'
 import { runLoopbackTests } from './oauth-loopback.mjs'
 import { runStatsTests } from './stats.mjs'
+import { runAudit001ConcurrencyTests } from './audit-001-concurrency.mjs'
 import { OauthCredentialStore, CHATGPT_PRESET } from '../lib/oauth-credentials.js'
 import { isAttachmentId, contentHashId } from '../lib/attachments.js'
 import { BlockAssembler, LlmRuntime, contentHasImage } from '@deepseek-ai/dsh-llm'
@@ -2303,6 +2304,12 @@ console.log('apply wiring:')
   // oauth-credentials 同构导出；独立入口 node tests/stats.mjs 互补——执行包
   // next_commands 两列均绿）。四件套/版本迁移/往返/W-4 内核语义全量回归。
   await runStatsTests(check)
+
+  // AUDIT-001 并发正确性判别组：宿主真 React 18.3.1 保留 prop 剥离语义下的
+  // 工具卡直达渲染（P0-A）+ attachment getter 双态撕裂守卫 + 凭据刷新在途
+  // 窗口写回 CAS 守卫（P0-B）。可用 AUDIT001_CLIENT_SOURCE=<path> 指向任意
+  // client.js 变体做 RED 复现（如 git show HEAD:lib/client.js）。
+  await runAudit001ConcurrencyTests(check)
 }
 
 // 7.5 准入包装机制验证：真实 LlmRuntime 上的 twin 路由
