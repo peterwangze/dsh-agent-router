@@ -1122,9 +1122,10 @@ export async function runClientRender(check) {
     const combinedTree = await renderInto(galleryRoot, 'gallery-combined')
     const galleryButtons = findAll(combinedTree, (node) => node && node.type === 'button' && textOf(node).includes('🖼'))
     // UX 2026-09-01：纯图标按钮（28×方形内「🖼 N」会竖排折行）——计数移入 title 悬停提示。
+    // emoji 是 surrogate pair——文本等值比对按码点（Array.from），slice(1) 会切半个代理对。
     check('session gallery collects products from tool card (C)', galleryButtons.length === 1
       && String(galleryButtons[0].props.title ?? '').includes('1')
-      && !textOf(galleryButtons[0]).trim().slice(1).trim())
+      && Array.from(textOf(galleryButtons[0]).trim()).join('') === '🖼')
     if (galleryButtons.length === 1) {
       galleryButtons[0].props.onClick()
       currentTree = await settle()
