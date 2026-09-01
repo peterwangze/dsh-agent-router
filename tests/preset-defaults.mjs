@@ -30,6 +30,11 @@
 //     （S4：announce/cordis emit 均不 await 监听器），旧实现（无队列）必败；
 //   - F 节 = F-2（P2）reasoningEffort 路径断言——对现有实现应全绿
 //     （透传 / effort 漂移判据 / 重置路径透传）。
+// Rework（R1 finding）：
+//   - G 节 = NF-1（P2）seed 拒绝兜底判别——复刻宿主 cordis emit
+//     fire-and-forget（不 await 监听器），旧实现（try 内 bare return
+//     promise ≠ await）catch 不覆盖 → unhandledRejection 外泄必败；
+//     return await 修复后 catch 兜底 warn、零外泄。
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -592,6 +597,44 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
       && apiProxy.calls[1].payload.reasoningEffort === 'low'
       && defaults.state.current.reasoningEffort === 'low'
       && agent.options.provider === NATIVE.provider && agent.options.model === NATIVE.model
+  })
+}
+
+// ── G. seed 拒绝兜底（R1 NF-1：fire-and-forget 下 handler catch 必须覆盖） ─
+{
+  // 事实链复刻：① try 内 bare return promise ≠ await——run 拒绝时 catch 不
+  // 执行，async handler 直接拒绝；② 现实拒绝源 = seed 面可用性预检的
+  // ctx.get('apiProxy')（唯一未包 try/catch 的逃逸）；③ 宿主 cordis emit
+  // fire-and-forget 丢弃返回值 → unhandledRejection。旧实现必败（RED），
+  // return await 后 catch 兜底 warn、零外泄（GREEN）。
+  await dcheck('G1 seed 内部拒绝（ctx.get 抛错注入）→ handler catch 兜底 warn 可观测 + 零 unhandledRejection 外泄', async () => {
+    const defaults = makeDefaults()
+    const agent = mainBlankAgent({ id: 'sess-g1', header: { origin: 'main' } })
+    const ctx = makeCtx({ defaults, apiProxy: makeApiProxy({ defaults }), agents: { get: (id) => (id === 'sess-g1' ? agent : undefined) } })
+    setup(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }))
+    const handler = (ctx.listeners['agent-preset/selected'] ?? [])[0]
+    // 拒绝注入：仅 ctx.get('apiProxy') 抛错（其余键原样放行——liveDefaultSelection 等不受影响）。
+    const realGet = ctx.get
+    ctx.get = (key) => {
+      if (key === 'apiProxy') throw new Error('injected apiProxy face failure')
+      return realGet(key)
+    }
+    // process 级 unhandledRejection 捕获器（外泄判据——RED 复现点）。
+    const captured = []
+    const onUnhandled = (reason) => captured.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      // 复刻宿主 cordis emit fire-and-forget（S4）：不 await、丢弃返回值——
+      // 只有外泄的 handler 拒绝才会成为 unhandledRejection。
+      handler('sess-g1', PRESET_ID)
+      // 排空微任务 + 跨 setImmediate 轮次（Node 在 turn 末检测 unhandled rejection）。
+      for (let i = 0; i < 3; i++) await new Promise((resolve) => setImmediate(resolve))
+      if (captured.length > 0) console.error(`  (G1 诊断: process 级捕获 unhandledRejection ×${captured.length}: ${captured[0]?.message ?? String(captured[0])})`)
+      return captured.length === 0
+        && ctx.logger.warnCalls.some((line) => line.includes('agent-preset/selected') && line.includes('injected apiProxy face failure'))
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
   })
 }
 
