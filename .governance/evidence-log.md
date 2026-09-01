@@ -374,3 +374,7 @@
 | TRIAGE-REL-007 | REL-007 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/REL-007.json） | REL-007.json | change-triage | 2026-09-01 | G11 | TRIAGED |
 
 | EV-119 | REL-007 | 发布链 | v0.4.1 发布链 E-1~E-3 | E-1 bump 5ddc849（0.3.3→0.4.1 + CHANGELOG 七节 + README 12 处同步——0.4.0 跳版原因/三分账 SHA 底账/勘误 abc001→01729a2+bc500f7）+ E-2 门控 17/17（含审计判别）+ E-3 隔离冷装（tgz 1,583,544B → DSH_HOME/npm_config_cache 重定向 → 安装 exit0 → 完整 ESM import OK keys=5 lib 14 模块 → 版本 0.4.1）；发布范围实采 44 commits（产品 30 + 治理 14） | 5ddc849 | Developer（7dabac71）+ Coordinator | 2026-09-01 | G5 | E-4/E-5 待续 |
+
+| REVIEW-REL-007-R0 | REL-007 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-report-REL-007-R0.md; review-REL-007-R0.md | Release Reviewer | 2026-09-01 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| EV-120 | REL-007 | 发布终态 | v0.4.1 发布链完成 | E-5 执行：tag v0.4.1 + push main + GitHub Release（W-2 回滚段携带）；R0 APPROVED_WITH_NOTES/0 机录（REVIEW-REL-007-R0——12 处 README/43 SHA 全验/no-overclaim 五点落锚/回滚能力 PASS）；W-1 勘误 7df0810（PNG 665KB b64 误标）；发布范围终值 = e818183..tag（产品 30 + 治理 15） | 7df0810+tag | Coordinator | 2026-09-01 | G5 | E-5 执行中 |
