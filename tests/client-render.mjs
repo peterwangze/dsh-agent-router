@@ -252,6 +252,10 @@ export async function runClientRender(check) {
   // L3 打开文件失败模式（Step 9）：true 时 remoteMock.readWorkspaceFile 返回
   // ok:false（错误码形状）；mediaType 按路径扩展名派生（audio/video/doc）。
   let readFileFailMode = false
+  // EVO-013：预设 Agent 卡片——roster 模式（'ok'|'fail'，fail = 宿主 RPC
+  // 失败形态）与 config.presets 夹具（可变对象，EVO-013 块内按场景注入）。
+  let presetRosterMode = 'ok'
+  const configPresets = {}
   const remoteMock = {
     catalog: async () => ({
       ok: true,
@@ -298,6 +302,7 @@ export async function runClientRender(check) {
       },
       oauthAccounts: {},
       pools: {},
+      presets: configPresets,
       cliAgents: {
         codexentry: { name: 'Codex 子代理', enabled: true, command: 'codex', args: '', timeoutMs: 0, maxConcurrent: 1, loginArgs: '', statusArgs: '', modelsArgs: '' },
       },
@@ -385,6 +390,17 @@ export async function runClientRender(check) {
         mutateCalls.push(payload)
         return { result: { ok: true } }
       },
+    },
+    // EVO-013：宿主预设罗盘 RPC（roster 数据源；'fail' = 网关失败形态——
+    // 客户端按可观测降级处理：错误提示 + 空列表，不阻塞整页）。
+    agentPreset: {
+      list: async () => presetRosterMode === 'fail'
+        ? { result: { ok: false, error: { message: 'agentPreset gateway rejected' } } }
+        : { result: { ok: true, value: { presets: [
+          { id: 'governance', name: 'Governance 预设', trust: 'system', broken: false },
+          { id: 'novel', name: '小说写作', trust: 'user', broken: false },
+          { id: 'broken-one', name: '坏预设', trust: 'user', broken: true },
+        ] } } },
     },
     credentials: {
       describe: async () => ({ result: { ok: true, value: { credentials: {} } } }),
@@ -1540,5 +1556,114 @@ export async function runClientRender(check) {
         check('export downloads CSV via data: URL (②)', captured.openCalls.some((url) => url.startsWith('data:text/csv;charset=utf-8,') && decodeURIComponent(url.split(',')[1]).includes('date,agent,account,model')))
       }
     }
+  }
+
+  // ── EVO-013：预设 Agent 卡片（专业 Agent 之前 / 默认折叠 / 默认空 / 统一
+  //    添加模板下拉选预设 / 保存 payload 含 presets 字典 / roster 失败降级 /
+  //    残留条目「预设已不存在」提示）────────────────────────────────────────
+  {
+    const renderFresh = async (prefix) => {
+      await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} }), prefix, 60)
+    }
+    const categoryHeadsOf = () => findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head'))
+    const presetsHeadOf = () => categoryHeadsOf().find((node) => textOf(node).includes(zh.presetsTitle))
+    const entryHeadsOf = () => findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-card-head'))
+
+    // 场景 1：默认态（presets 空、roster ok）——位置/折叠/空提示/添加模板。
+    presetMode = 'none'
+    unknownPresetMode = false
+    presetRosterMode = 'ok'
+    for (const key of Object.keys(configPresets)) delete configPresets[key]
+    await renderFresh('evo013-empty')
+    const presetsHead = presetsHeadOf()
+    const agentsHead = categoryHeadsOf().find((node) => textOf(node).includes(zh.agentsTitle))
+    check('EVO-013: 预设 Agent 卡片渲染', !!presetsHead)
+    check('EVO-013: 预设 Agent 位于专业 Agent 之前', !!presetsHead && !!agentsHead && categoryHeadsOf().indexOf(presetsHead) < categoryHeadsOf().indexOf(agentsHead))
+    check('EVO-013: 默认折叠（aria-expanded=false）', !!presetsHead && presetsHead.props['aria-expanded'] === false)
+    check('EVO-013: 默认折叠时空态提示不渲染（主体未挂载）', !textOf(currentTree).includes(zh.presetsEmpty))
+    if (presetsHead) {
+      presetsHead.props.onClick()
+      currentTree = await settle()
+      check('EVO-013: 展开后空列表提示渲染（默认空）', textOf(currentTree).includes(zh.presetsEmpty))
+      check('EVO-013: 统一添加入口渲染（+ 添加预设配置）', textOf(currentTree).includes(zh.presetsAdd))
+      const addCardNode = findAll(currentTree, (node) => hasClass(node, 'dshrouter-add')).find((node) => textOf(node).includes(zh.presetsAdd))
+      check('EVO-013: 添加入口为可点击卡片', !!addCardNode)
+      if (addCardNode) {
+        addCardNode.props.onClick()
+        currentTree = await settle()
+        const presetSelect = findAll(currentTree, (node) => node && node.type === 'select').find((node) => textOf(node).includes('governance'))
+        check('EVO-013: 添加模板预设下拉列出宿主预设（roster 数据源）', !!presetSelect)
+        const brokenOption = presetSelect ? findAll(presetSelect, (node) => node && node.type === 'option' && node.props.value === 'broken-one')[0] : null
+        check('EVO-013: broken 预设带标记且不可选（disabled）', !!brokenOption && brokenOption.props.disabled === true)
+        check('EVO-013: 展开模板含预设下拉 + 主/subagent 服务商下拉', findAll(currentTree, (node) => node && node.type === 'select').length >= 3)
+        if (presetSelect) {
+          presetSelect.props.onChange({ target: { value: 'governance' } })
+          currentTree = await settle()
+          let addConfirm = buttonsOf(currentTree).find((node) => textOf(node) === zh.add)
+          check('EVO-013: 选定预设后添加按钮可用', !!addConfirm && addConfirm.props.disabled !== true)
+          if (addConfirm) {
+            captured.saveOps = []
+            // 先填主模型服务商（夹具激活 provider = gateway）再保存——payload
+            // 应携带完整草稿。每次状态更新后重取控件引用（对齐真实浏览器：
+            // 点击的是最新一次渲染的按钮，闭包持最新状态）。
+            const providerSelects = findAll(currentTree, (node) => node && node.type === 'select' && findAll(node, (option) => option.type === 'option' && option.props.value === 'gateway').length > 0)
+            if (providerSelects[0]) providerSelects[0].props.onChange({ target: { value: 'gateway' } })
+            currentTree = await settle()
+            addConfirm = buttonsOf(currentTree).find((node) => textOf(node) === zh.add)
+            if (addConfirm) addConfirm.props.onClick()
+            currentTree = await settle()
+            const setOp = captured.saveOps.find((op) => Array.isArray(op.path) && op.path[0] === 'presets' && op.path[1] === 'governance')
+            check('EVO-013: 保存 payload 含 presets 字典（set op path=presets/governance）', !!setOp)
+            check('EVO-013: 保存值与 presetDefaultSchema 同构（enabled/main/subagent）', !!setOp && setOp.value?.enabled === true && !!setOp.value?.main && typeof setOp.value.main === 'object' && !!setOp.value?.subagent && typeof setOp.value.subagent === 'object')
+            check('EVO-013: 主模型草稿随保存下发（main.provider=gateway）', !!setOp && setOp.value?.main?.provider === 'gateway')
+          }
+        }
+      }
+    }
+
+    // 场景 2：已配置条目（含 roster 无此 id 的残留条目）。
+    configPresets.governance = { enabled: true, main: { provider: 'openai', model: 'gpt-5.6-sol' }, subagent: { provider: '', model: '' } }
+    configPresets.gone = { enabled: true, main: { provider: 'gateway', model: 'm1' }, subagent: { provider: '', model: '' } }
+    await renderFresh('evo013-entries')
+    const presetsHead2 = presetsHeadOf()
+    check('EVO-013: 卡片摘要计数（已配置 2 个预设）', !!presetsHead2 && textOf(presetsHead2).includes('2'))
+    if (presetsHead2) {
+      presetsHead2.props.onClick()
+      currentTree = await settle()
+      const entryHead = entryHeadsOf().find((node) => textOf(node).includes('governance'))
+      check('EVO-013: 条目卡摘要行（预设 id · 主模型 · subagent 继承文案）', !!entryHead && textOf(entryHead).includes('openai/gpt-5.6-sol') && textOf(entryHead).includes(zh.presetsInheritMain))
+      const goneHead = entryHeadsOf().find((node) => textOf(node).includes('gone'))
+      check('EVO-013: roster 无此 id 的残留条目仍渲染', !!goneHead)
+      if (entryHead) {
+        entryHead.props.onClick()
+        currentTree = await settle()
+        const addCardNode2 = findAll(currentTree, (node) => hasClass(node, 'dshrouter-add')).find((node) => textOf(node).includes(zh.presetsAdd))
+        if (addCardNode2) {
+          addCardNode2.props.onClick()
+          currentTree = await settle()
+        }
+        const presetSelect = findAll(currentTree, (node) => node && node.type === 'select').find((node) => textOf(node).includes('novel'))
+        check('EVO-013: 已配置的预设从添加下拉排除', !!presetSelect && !textOf(presetSelect).includes('governance') && !textOf(presetSelect).includes('gone'))
+      }
+      if (goneHead) {
+        goneHead.props.onClick()
+        currentTree = await settle()
+        check('EVO-013: 「预设已不存在」提示渲染', textOf(currentTree).includes(zh.presetsMissing))
+      }
+    }
+    for (const key of Object.keys(configPresets)) delete configPresets[key]
+
+    // 场景 3：roster 失败降级——错误提示 + 空列表，不阻塞整页。
+    presetRosterMode = 'fail'
+    await renderFresh('evo013-roster-fail')
+    const failHead = presetsHeadOf()
+    check('EVO-013: roster 失败 → 卡片仍渲染（不阻塞整页）', !!failHead)
+    if (failHead) {
+      failHead.props.onClick()
+      currentTree = await settle()
+      check('EVO-013: roster 失败 → 错误提示可见', textOf(currentTree).includes(zh.presetsRosterError))
+      check('EVO-013: roster 失败 → 添加下拉为空态提示（presetsRosterEmpty）', textOf(currentTree).includes(zh.presetsAdd) || textOf(currentTree).includes(zh.presetsRosterEmpty))
+    }
+    presetRosterMode = 'ok'
   }
 }

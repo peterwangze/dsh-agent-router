@@ -113,6 +113,14 @@ console.log('schemas:')
   check('default stats.persist=true (W-4 persistence on by default)', c.stats.persist === true)
   check('explicit stats.persist=false kept (W-4 fallback switch)', routerSchema({ stats: { persist: false } }).stats.persist === false)
   check('empty stats object resolves defaults', routerSchema({ stats: {} }).stats.persist === true)
+  // EVO-013：presets 字典（键 = DSH 预设 id，自由字符串）——默认空 + 条目字段
+  // 默认值归一（enabled/main/subagent；空串 = 未设置语义与 agentSchema 同源）。
+  check('default presets = {} (EVO-013)', c.presets && Object.keys(c.presets).length === 0)
+  const g13 = routerSchema({ presets: { governance: { main: { provider: 'p1', model: 'm1' } }, gone: {} } })
+  check('preset entry resolves defaults (EVO-013)', g13.presets.governance.enabled === true && g13.presets.governance.main.provider === 'p1' && g13.presets.governance.main.model === 'm1' && g13.presets.governance.subagent.provider === '' && g13.presets.governance.subagent.model === '')
+  check('empty preset entry resolves full defaults (EVO-013)', g13.presets.gone.enabled === true && g13.presets.gone.main.provider === '' && g13.presets.gone.subagent.model === '')
+  check('explicit preset enabled=false kept (EVO-013)', routerSchema({ presets: { x: { enabled: false } } }).presets.x.enabled === false)
+  check('unknown preset ids tolerated (EVO-013 残留键放行)', (() => { try { routerSchema({ presets: { 'weird-键': {} } }); return true } catch { return false } })())
 }
 
 // 2. wire codec
@@ -123,6 +131,17 @@ console.log('wire codecs:')
   let threw = false
   try { wireCodecs.catalogResult.parse({ ok: true }) } catch { threw = true }
   check('catalogResult rejects missing fields', threw)
+  // EVO-013：config/save 通道往返——configResult.value 为自由 object codec
+  // （全量透传，无字段白名单）：presets 字典保存后随 config 下发原样可达；
+  // saveRequest ops.value 为 json 透传。与 schemas.js presetDefaultSchema
+  // 权威单点注释同源（FIX-019 镜像教训：此处断言即镜像一致性机械守卫）。
+  const cfg13 = wireCodecs.configResult.parse({
+    ok: true, enabled: true, revision: 7, writable: true,
+    value: { enabled: true, presets: { governance: { enabled: true, main: { provider: 'p1', model: 'm1' }, subagent: { provider: '', model: '' } } } },
+  })
+  check('configResult carries presets dict verbatim (EVO-013 round trip)', cfg13.value.presets.governance.main.model === 'm1' && cfg13.value.presets.governance.subagent.provider === '')
+  const saveReq13 = wireCodecs.saveRequest.parse({ ops: [{ op: 'set', path: ['presets', 'governance'], value: { enabled: true, main: { provider: 'p1', model: 'm1' }, subagent: {} } }] })
+  check('saveRequest accepts presets path-op (EVO-013)', Array.isArray(saveReq13.ops) && saveReq13.ops[0].path[1] === 'governance')
   const s = wireCodecs.statsResult.parse({ ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [], accountSeries: [] })
   check('statsResult parses empty', s.ok === true)
   // EVO-003 Phase 2：statsResult C-3 增量字段（days 按天聚合 / selfReport 自诊断
