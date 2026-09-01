@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-09-01T13:59:26",
+  "generated_at": "2026-09-01T21:25:50",
   "packets": {
     "EVO-009": {
       "task_id": "EVO-009",
@@ -637,10 +637,163 @@
       ],
       "source": "plan-tracker.md##当前活跃事项"
     },
+    "EVO-014": {
+      "task_id": "EVO-014",
+      "priority": "P1",
+      "status": "开发+审查终态（待用户重启复验）——R0/R1 APPROVED_WITH_NOTES/0 + R2 APPROVED/0 三机录，3 commits",
+      "goal": "EVO-014 预设默认模型事件驱动重构：模型跟随预设变更事件（agent/created + agent-preset/selected），不介入会话过程（移除 agent/request 监听），新会话对话框直接显示预设配置模型（selectModel 播种 + 全局默认立即写回恢复——用户已裁决接受）；subagent 纯 options 修正零副作用；用户主权结构化保证",
+      "product_success_contract": {
+        "user": "DSH 多预设用户：新开（或空白切换）某预设会话时，对话框模型选择器立即显示该预设配置的默认模型；会话内手动改模型只影响当前会话",
+        "job_to_be_done": "把预设默认模型从「请求层换入（首条消息后显示）」重构为「预设事件驱动播种（打开即显示）」，同时彻底退出会话过程拦截",
+        "non_goals": [
+          "不监听/不感知用户会话内模型变更（主权结构化：无此类监听器）",
+          "不修改宿主全局默认的持久值（播种瞬态写入后立即恢复原值）",
+          "不改 EVO-013 的设置页 UI/schema/保存链路（保留复用）",
+          "不处理已产出会话（宿主 agent-preset-locked 保证不可切预设）"
+        ],
+        "success_metrics": [
+          "用户新建配置过主模型的预设会话：模型选择器立即显示配置模型（用户可见验收场景，无需发消息）",
+          "空白会话切换预设：模型实时跟随新预设配置；切到无配置预设回落 DSH 全局默认（tests/preset-defaults.mjs 事件判别断言执行通过）",
+          "用户在会话内手动选模型后该会话跟随用户选择；插件无模型变更监听器（结构性主权断言通过）",
+          "subagent 子代理按预设 subagent/main 配置继承或覆盖，显式指定不被碰（options 修正断言通过）"
+        ],
+        "competitive_baseline": "对齐 DSH 宿主「模型选择器即所见即所得」基线：打开会话显示的模型 = 实际请求模型",
+        "done_definition": [
+          "产品成功证据：判别测试重写全绿（事件语义 ≥15 断言）+ 全量套件零回退 + 用户真机复验（新会话显示即配置模型）",
+          "独立审查：Code Reviewer APPROVED 族结论经 review-record 机录"
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "配置 governance 主模型 → 新建 governance 会话：选择器立即显示该模型；空白会话切到另一配置预设：选择器实时跟随；切到无配置预设：回落全局默认；会话内手动改模型：当前会话跟随用户（插件无感知）；spawn subagent：按预设 subagent/main 继承",
+        "command": "node tests/preset-defaults.mjs && node tests/client-render.mjs && node tests/smoke.mjs",
+        "expected_output": "preset-defaults 事件判别全 ok（输出 ALL EVO-013 DISCRIMINANT TESTS PASSED 或同等汇总行）；client-render 全过 exit 0；smoke ALL SMOKE TESTS PASSED；三命令 exit 0",
+        "last_run": {
+          "status": "pass",
+          "exit_code": 0,
+          "summary": "Coordinator 2026-09-01 独立复跑：preset-defaults 38/38 ok（含 E1/E2 并发串行化与 G1 零外泄判别）exit 0；client-render exit 0；smoke ALL PASSED（1070+ ok / 0 FAIL）exit 0"
+        },
+        "demo_evidence": "用户 GUI 验收：重启 DSH → 新建 governance 会话 → 观察模型选择器即显示 deepseek-official/deepseek-v4-flash-vision-exp；证据落 evidence-log EV 行 + 用户复验确认",
+        "allowed_changes": [
+          "lib/preset-defaults.js：事件驱动重构（移除 agent/request，新增 agent/created + agent-preset/selected）",
+          "lib/index.js：接线注释同步",
+          "tests/preset-defaults.mjs：判别测试重写（事件语义）",
+          "README.md：「预设 Agent 默认模型」小节语义更新"
+        ],
+        "forbidden_changes": [
+          "不持久修改宿主全局默认（瞬态写回必须恢复；恢复失败重试+高声告警）",
+          "不添加任何用户模型变更监听（主权结构化）",
+          "不触碰 ~/.dsh 真实路径；不修改 EVO-013 UI/schema/save 链路"
+        ],
+        "review_completion": "Code Reviewer 审查 APPROVED 族结论机录（review-record）"
+      },
+      "quality_budget": {
+        "dimensions": [
+          {
+            "dimension": "performance",
+            "threshold": "事件面仅两个监听器；每次播种 = 1 次 selectModel 进程内调用 + 至多 1 次全局写回；无请求路径开销（移除 request 层）",
+            "validation": "node tests/smoke.mjs 全量通过 + 无 per-request 监听断言（回归守卫）",
+            "evidence": "测试输出 + diff 审查（agent/request 监听移除）",
+            "status": "pass",
+            "exception": ""
+          },
+          {
+            "dimension": "reliability",
+            "threshold": "handler 异常不破坏 agent 创建（fail-safe warn）；全局写回失败重试一次+高声告警；apiProxy 面缺失可观测降级",
+            "validation": "tests/preset-defaults.mjs fail-safe/恢复失败重试/面缺失场景断言",
+            "evidence": "判别测试 D 节 + E1/E2 并发判别 + G1 零外泄（38/38，2026-09-01 Coordinator 复跑）",
+            "status": "pass",
+            "exception": ""
+          },
+          {
+            "dimension": "security",
+            "threshold": "预设 id 仅字典键+日志文本；无新注入面（options 突变值为插件配置受 schema 校验）",
+            "validation": "审查安全性维度 + schema 归一不变",
+            "evidence": "review 报告",
+            "status": "pass",
+            "exception": ""
+          },
+          {
+            "dimension": "accessibility",
+            "threshold": "无新增 UI 面（复用 EVO-013 卡片）",
+            "validation": "diff 范围审查（node --check + review）通过：client.js 零改动",
+            "evidence": "R0/R1/R2 审查可维护性/范围结论 + smoke client.js 语法守卫",
+            "status": "exempt",
+            "exception": "本任务无 UI 改动面，复用既有卡片 a11y 基线"
+          },
+          {
+            "dimension": "ux",
+            "threshold": "打开即显示（核心验收）；切换实时跟随；手动选择即生效",
+            "validation": "tests/preset-defaults.mjs A/B/C 节事件判别断言通过 + 用户真机复验（打开即显示）",
+            "evidence": "事件语义判别 A/B/C 节断言 + 待用户重启复验（打开即显示）",
+            "status": "pass",
+            "exception": ""
+          },
+          {
+            "dimension": "maintainability",
+            "threshold": "单模块重构（preset-defaults.js）；事件处理与播种动作分离；语义注释含用户三原则",
+            "validation": "审查可维护性维度",
+            "evidence": "review 报告",
+            "status": "pass",
+            "exception": ""
+          }
+        ]
+      },
+      "vertical_slice": {
+        "user_visible_slice": "用户新建/空白切换预设会话时，对话框模型选择器立即显示该预设配置的默认模型（打开即所见）",
+        "demo_path": "node tests/preset-defaults.mjs（事件判别）；GUI 演示 = 重启 DSH → 新建 governance 会话 → 观察选择器",
+        "scope_guard": "仅 lib/preset-defaults.js 事件重构 + lib/index.js 注释 + 测试重写 + README 语义段；不动 UI/schema/save 链路",
+        "rollback_plan": "revert 本任务 commit 即回到 EVO-013 request 层实现（完整可用形态）；配置数据向前向后兼容",
+        "status": "pass",
+        "evidence": "判别 38/38 + smoke 零回退（Coordinator 复跑）；用户 GUI 验收 = 重启 DSH 后新建 governance 会话观察选择器即显示配置模型"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "宿主 api-proxy 的 sessions.selectModel 可经 ctx.get('apiProxy').sessions 进程内调用（envelope {payload} 形态），其 picked 写入即时生效于会话显示层——本重构显示跟随的前提",
+          "basis": "dsh-host-apiproxy 源码 selectModel 实现（selectionFor(agent).current = selected + defaults.saveDefaultModelSelection）+ apiProxy 服务面导出形态（createApiProxy 返回 {hosts, sessions, events}）；精确 envelope 形状由实现期读源码验证",
+          "reversibility": "纯插件侧行为，revert 本任务 commit 完整回退到 request 层实现",
+          "validation": "tests/preset-defaults.mjs 播种断言（selectModel 调用记录 + options/全局写回验证）+ 用户真机显示复验",
+          "rollback": "git revert 单 commit；配置无 schema 变化"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: 进行中（TRIAGE-EVO-014 已机录；宿主契约侦察完成：agent/created payload {agent} runtime-types L146、agent-preset/selected(sessionId,preset) 非scoped 双参、subagent 子代理无 selectionFor=纯 options 驱动、selectModel 附带 saveDefaultModelSelection 全局写）",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "进行中（TRIAGE-EVO-014 已机录；宿主契约侦察完成：agent/created payload {agent} runtime-types L146、agent-preset/selected(sessionId,preset) 非scoped 双参、subagent 子代理无 selectionFor=纯 options 驱动、selectModel 附带 saveDefaultModelSelection 全局写）",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项",
+      "next_command": "读 lib/preset-defaults.js 现状 + dsh-host-apiproxy lib/index.js selectModel/ok/err 形状 → 重写判别测试（RED）→ 事件驱动重构（GREEN）→ 全量",
+      "facts": {
+        "host_contract": "1) agent/created：Scoped 事件，payload {agent}（runtime-types L146 \"newly registered agent with its live session and completed setup\"），全局层监听器 admitted（agent/request/pre-step 同款先例）；恢复（resume）是否触发由实现期读 dsh-agent 源码验证并在 README 披露。2) agent-preset/selected(sessionId, agentPreset)：非 scoped 双参 cordis 事件（dsh-agent-presets 转发；仅空白会话切换触发——宿主 agent-preset-locked 保证）。3) 子会话 header：origin='subagent'/agentPreset/parentSession/delegationDepth；子代理无 api-proxy selectionFor → 请求纯 options 驱动（seedConfig）。4) selectModel 内部：selectionFor(agent).current = selected（picked，显示+路由层）+ await defaults.saveDefaultModelSelection(selected)（全局写，副作用源）；含 ctx.llm.resolveCallConfig 校验（模型不可用会失败）+ serializeImageAdmission 串行化。5) 全局写回：ctx.get('agentDefaultModel').saveSelection({provider, model, reasoningEffort?})；读 live：currentSelection()。6) 显式覆盖判别：child.options ≠ parent.options（ctx.agents.get(parentSession)）= 显式指定（插件专业 agent/workflow 覆盖）→ 不碰。7) 主权结构化：不注册任何模型变更监听；播种仅由预设事件触发；宿主锁定保证已产出会话无事件。"
+      }
+    },
     "EVO-013": {
       "task_id": "EVO-013",
       "priority": "P1",
-      "status": "开发+审查终态（待用户重启复验）——R0/R1 双 APPROVED_WITH_NOTES/0，4 commits，门控 18/18",
+      "status": "**开发+审查终态（待用户重启复验）**——4 commits：2ab27d6（机制 + 判别 23 断言 RED→GREEN）+ 97b04ac（UI 卡片 + render 22 + smoke 7）+ 08e0461（README）+ 75434e7（Rework：F-1 broken 契约对齐 string 形状消测试假绿 + F-2 主权③ fail-closed P4b/P4c + F-3 注释更正）；R0 APPROVED_WITH_NOTES/0（F-1 P1 即修裁定）→ R1 复审 APPROVED_WITH_NOTES/0（7/7 比对：F-1/F-2/F-3 已修复，F-4~F-7 台账；新发现 N-1 P3 入台账）——双机录 REVIEW-EVO-013-R0/R1；门控 18/18 套件全绿（smoke 1068 ok/0）；用户复验 = 重启 DSH → 设置 → Agent 路由 → 「预设 Agent」卡片 + 配置一条预设 → 新会话默认模型生效",
       "goal": "EVO-013 预设Agent默认模型配置：设置页「专业 Agent」卡片之前新增「预设 Agent」折叠卡片（默认折叠、默认空列表、统一添加模板下拉选 DSH 预设），按 DSH 预设粒度配置主 agent 默认模型（新会话默认模型）与 subagent 默认模型（未设继承主预设模型）；机制 = agent/request 全局层瀑布监听 + 三层选择权主权保护（picked/header 优先，默认层才换入预设模型）",
       "product_success_contract": {
         "user": "DSH 用户（多预设使用者：如 governance / novel-writing / 内置预设），希望不同预设的新会话默认落在不同模型上（例如 governance 用强推理模型、小说预设用便宜长文模型），无需每次新建会话手动切换",

@@ -396,3 +396,13 @@
 | REVIEW-FIX-022-R0 | FIX-022 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-report-FIX-022-R0.md; review-FIX-022-R0.md | Code Reviewer | 2026-09-01 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
 
 | EV-124 | FIX-022 | 修复终态 | roster 域名修复全链闭环（RCA→RED→GREEN→R0） | RCA 实锤：宿主 dsh-client-connection L6318-6324 JS 方法组复数 agentPresets / wire 方法名单数 agentPreset.list（宿主命名不一致陷阱——插件唯一从 wire 名推导组名的域）；修复 740f95a：presetApi = api.agentPresets ?? api.agentPreset+ typeof list 守卫 + 缺域中文诊断 throw（走既有 catch 可观测降级，替代裸 TypeError）+ fixture 对齐宿主真实形状（复数方法组 + {presets,authorable,hasDocument} 三字段 + entry 六字段）——消断言假绿根因；RED 6 FAIL 精确圈定域名缺陷（fixture 先改对旧实现）→ GREEN smoke ALL PASSED 零回退（Coordinator 复跑 exit0）；R0 APPROVED_WITH_NOTES/0（机录 REVIEW-FIX-022-R0；P2×2 台账：isDefault 同构/缺域 throw 场景；P3×2）；apiMock 五域 parity 复核（llm/settings/credentials/sessions/agentPresets）无其它不一致
+
+| TRIAGE-EVO-014 | EVO-014 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/EVO-014.json） | EVO-014.json | change-triage | 2026-09-01 | G11 | TRIAGED |
+
+| REVIEW-EVO-014-R0 | EVO-014 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-report-EVO-014-R0.md; review-EVO-014-R0.md | Code Reviewer | 2026-09-01 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| REVIEW-EVO-014-R1 | EVO-014 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 1） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-report-EVO-014-R1.md; review-EVO-014-R1.md | Code Reviewer | 2026-09-01 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| REVIEW-EVO-014-R2 | EVO-014 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 2） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-report-EVO-014-R2.md; review-EVO-014-R2.md | Code Reviewer | 2026-09-01 | G11 | APPROVED |
+
+| EV-125 | EVO-014 | 开发+审查终态 | 预设默认模型事件驱动重构全链闭环（用户三原则落地） | 用户裁决链：显示跟随接受 selectModel 播种（ask_user_question 2026-09-01）；3 commits：de72e0c（agent/created + agent-preset/selected 双事件播种 + selectModel 全局瞬态写回恢复 + subagent 纯 options 修正 + 移除 agent/request；32 断言 RED 20 FAIL→GREEN；实现期三验证：selectModel envelope 精确形状/resume 也发 agent/created（announce veto 风险双防护）/options 可变且空白会话现读）+ fe0a94e（F-1 播种 Promise 链串行化消并发交错全局默认静默污染——E1/E2 判别 RED 确定性复现交错终态错误→GREEN 恢复稳定值；F-2 effort 三断言；F-3 README 披露）+ 4e1d9cc（NF-1 return await 消 unhandledRejection 外泄——G1 判别 process 级捕获×1→0 + warn 可观测）；审查链 R0 APPROVED_WITH_NOTES/0（宿主 16 项契约实证无幻觉 API；F-1 P1 即修）→ R1 APPROVED_WITH_NOTES/0（F-1 修复闭合+队列四性质验证；NF-1 P2 即修）→ R2 APPROVED/0（NF-1 关闭、零新发现、修复面纯净）三机录；门控 preset-defaults 38/38 + smoke ALL PASSED 零回退（Coordinator 每轮独立复跑）；主权结构化全绿（D1 守卫：全库无 agent/request 注册、无模型变更监听）
