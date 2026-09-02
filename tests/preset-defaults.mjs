@@ -49,6 +49,20 @@
 //     内部的设置写无值差异 → 文档事件不触发 → 选择器停留旧值。旧实现
 //     （无 emit）对 I1/I3/I4 必败（RED）；I2/I5 为负向回归守卫（失败分支
 //     与 subagent 零副作用路径绝不 emit）。
+// Rework（FIX-025，EV-130 老无消息会话切换不跟随——空白判据与宿主不同构）：
+//   - 宿主空白判据 = sessionBlank（dsh-host-apiproxy L1187-1189）：
+//     `!session.events.some(e => e.type === 'turn/start')`——标题/目标/命令/
+//     plan-mode 等**独立事件不开启 turn**，老无消息会话宿主仍判空白、允许
+//     切换预设（a53ec5a2 日志：5× preset 事件 + 0 turn/start + 0
+//     request/header）。旧实现 requestHeader 判据更严且不同构——老会话存
+//     陈旧 request/header 时宿主允许切、插件跳过播种 → 切换不跟随；
+//   - J 节 = 判别节：J1/J2（老会话：独立事件无 turn/start + 陈旧
+//     requestHeader → 播种执行）旧实现必败（RED）；J3/J4 = events 不可读
+//     回落守卫（requestHeader 反演，保守方向宁漏播不误播）；J5 = 事件元素
+//     防御（null/非对象元素不炸）；
+//   - A6/C3 按 FIX-025 同构语义修订为「events 含 turn/start → 不播种」
+//     负向守卫（原 requestHeader 判据断言退役）；fixture session 增 events
+//     数组（真实 Session 形态）。
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -182,14 +196,17 @@ function makeService(presets, enabled = true) {
   }
 }
 
-/** 伪 agent：session.id/header（宿主 dsh-agent 会话头快照）+ requestHeader（日志持久层）。 */
-function makeAgent({ id = 'sess-1', header, options, requestHeader, agentCtx } = {}) {
+/** 伪 agent：session.id/header（宿主 dsh-agent 会话头快照）+ requestHeader（日志持久层）
+ * + events（FIX-025：真实 Session 对象带事件数组——宿主 sessionBlank 判据事实源；
+ * 空白会话 = events 无 turn/start（可含独立事件），fixture 缺省 events: []）。 */
+function makeAgent({ id = 'sess-1', header, options, requestHeader, events, agentCtx } = {}) {
   const agent = {
     options,
     session: {
       id,
       ...(header ? { header } : {}),
       ...(requestHeader !== undefined ? { requestHeader } : {}),
+      ...(events !== undefined ? { events } : {}),
     },
   }
   if (agentCtx !== undefined) agent.ctx = agentCtx
@@ -232,6 +249,7 @@ const mainBlankAgent = (overrides = {}) => makeAgent({
   header: { origin: 'main', agentPreset: PRESET_ID },
   options: { ...NATIVE },
   requestHeader: () => null,
+  events: [], // FIX-025：真实 Session 形态带 events（空白 = 无 turn/start）
   ...overrides,
 })
 
@@ -280,11 +298,16 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   })
 }
 {
-  // A6 非空白（恢复的已产出会话）→ 零动作。
-  await dcheck('A6 会话已有 requestHeader → 零动作（已产出会话不受配置影响）', async () => {
+  // A6 已产出会话 → 零动作。FIX-025 判据同构修订：已产出 = events 含
+  // turn/start（宿主 sessionBlank 判非空白、拒绝切换预设）——requestHeader
+  // 真值为真实已产出会话形态，一并列入断言（负向守卫两个事实源）。
+  await dcheck('A6 已产出会话（events 含 turn/start）→ 零动作（宿主 sessionBlank 同构负向守卫，FIX-025 判据同构）', async () => {
     const defaults = makeDefaults()
     const apiProxy = makeApiProxy({ defaults })
-    const agent = mainBlankAgent({ requestHeader: () => ({ config: { provider: 'anthropic', model: 'user-picked' } }) })
+    const agent = mainBlankAgent({
+      requestHeader: () => ({ config: { provider: 'anthropic', model: 'user-picked' } }),
+      events: [{ type: 'session/title' }, { type: 'turn/start' }, { type: 'turn/end' }],
+    })
     await fireCreated(makeCtx({ defaults, apiProxy }), makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
     return apiProxy.calls.length === 0 && defaults.state.saveCalls.length === 0
       && agent.options.provider === NATIVE.provider && agent.options.model === NATIVE.model
@@ -422,9 +445,12 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
       && defaults.state.current.provider === NATIVE.provider && defaults.state.current.model === NATIVE.model
       && defaults.state.saveCalls.length === 3 // P.main 瞬态 + 恢复 + G→G 同值写（无第二次恢复）
   })
-  await dcheck('C3 防御：非空白会话收到事件 → 零动作', async () => {
+  await dcheck('C3 防御：已产出会话（events 含 turn/start）收到切换事件 → 零动作（FIX-025 同构负向守卫）', async () => {
     const apiProxy = makeApiProxy({ defaults: makeDefaults() })
-    const agent = mainBlankAgent({ requestHeader: () => ({ config: { provider: 'anthropic', model: 'user-picked' } }) })
+    const agent = mainBlankAgent({
+      requestHeader: () => ({ config: { provider: 'anthropic', model: 'user-picked' } }),
+      events: [{ type: 'turn/start' }],
+    })
     const ctx = makeCtx({ apiProxy, agents: { get: () => agent } })
     await firePresetSelected(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), 'sess-x', PRESET_ID)
     return apiProxy.calls.length === 0
@@ -761,6 +787,74 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL, subagent: SUB_MODEL }) }), agent)
     return agent.options.provider === SUB_MODEL.provider && agent.options.model === SUB_MODEL.model
       && apiProxy.calls.length === 0 && ctx.emitted.length === 0
+  })
+}
+
+// ── J. FIX-025 判别：会话空白判据与宿主 sessionBlank 同构（无 turn/start 即播种）──
+{
+  // 缺陷事实链（EV-130 实测）：宿主空白判据 = `!session.events.some(e =>
+  // e.type === 'turn/start')`（dsh-host-apiproxy L1187-1189）——标题/目标/
+  // 命令/plan-mode 等**独立事件不开启 turn**，老无消息会话（哪怕数天前创建、
+  // 含若干独立事件）宿主仍判空白、允许切换预设（a53ec5a2 日志：5× preset
+  // 事件 + 0 turn/start + 0 request/header，终局判别即时生效——机制链路通、
+  // 纯判据缺口）。旧插件判据（requestHeader 存在即跳过）与之不同构：老会话
+  // 存陈旧 request/header 时宿主允许切、插件跳过播种 → 切换不跟随。
+  // 判别点选取（旧实现必败形态）：events 含独立事件 + requestHeader 真值
+  // （宿主只看 turn/start 判空白可切；旧实现 requestHeader 真值 return）——
+  // J1（切换面，用户报障场景）/J2（resume 面）旧实现必败（RED），新实现
+  // 同构判据无 turn/start → 播种（GREEN）。
+  await dcheck('J1 老无消息会话（独立事件无 turn/start + 陈旧 requestHeader）切换预设 → 播种执行（旧实现 requestHeader 判据必败 RED）', async () => {
+    const defaults = makeDefaults()
+    const apiProxy = makeApiProxy({ defaults })
+    const agent = mainBlankAgent({
+      id: 'sess-j1',
+      header: { origin: 'main' },
+      requestHeader: () => ({ config: { provider: 'anthropic', model: 'stale-header' } }), // 老会话陈旧 header（宿主不据此判非空白）
+      events: [{ type: 'agent-preset/selected' }, { type: 'session/title' }, { type: 'session/plan-mode' }], // 独立事件：不开启 turn
+    })
+    const ctx = makeCtx({ defaults, apiProxy, agents: { get: (id) => (id === 'sess-j1' ? agent : undefined) } })
+    await firePresetSelected(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), 'sess-j1', PRESET_ID)
+    return apiProxy.calls.length === 1 && apiProxy.calls[0].payload.provider === MAIN_MODEL.provider
+      && agent.options.provider === MAIN_MODEL.provider
+      && defaults.state.current.provider === NATIVE.provider // 写回恢复完成
+  })
+  await dcheck('J2 同形态老会话 resume（agent/created 面）→ 播种执行（旧实现必败 RED）', async () => {
+    const defaults = makeDefaults()
+    const apiProxy = makeApiProxy({ defaults })
+    const agent = mainBlankAgent({
+      id: 'sess-j2',
+      requestHeader: () => ({ config: { provider: 'anthropic', model: 'stale-header' } }),
+      events: [{ type: 'session/title' }],
+    })
+    await fireCreated(makeCtx({ defaults, apiProxy }), makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    return apiProxy.calls.length === 1 && agent.options.provider === MAIN_MODEL.provider
+  })
+  // 回落链（events 不可读 = 形态防御）：Session 恒带 events（宿主实证），
+  // 读不到视为形态漂移——回落 requestHeader 反演，保守方向宁漏播（空白会话
+  // 少一次播种）不误播（已产出会话被插件接管 = 击穿宿主锁定语义）。
+  await dcheck('J3 回落守卫：session 无 events 属性 + requestHeader 真值 → 不播种（防御回落，宁漏播不误播）', async () => {
+    const defaults = makeDefaults()
+    const apiProxy = makeApiProxy({ defaults })
+    const agent = mainBlankAgent({ events: undefined, requestHeader: () => ({ config: { provider: 'anthropic', model: 'user-picked' } }) }) // events 显式移除
+    await fireCreated(makeCtx({ defaults, apiProxy }), makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    return apiProxy.calls.length === 0 && defaults.state.saveCalls.length === 0
+      && agent.options.provider === NATIVE.provider
+  })
+  await dcheck('J4 回落守卫（切换面）：无 events 属性 + requestHeader 真值 → 不播种', async () => {
+    const apiProxy = makeApiProxy({ defaults: makeDefaults() })
+    const agent = mainBlankAgent({ events: undefined, requestHeader: () => ({ config: { provider: 'anthropic', model: 'user-picked' } }) })
+    const ctx = makeCtx({ apiProxy, agents: { get: () => agent } })
+    await firePresetSelected(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), 'sess-y', PRESET_ID)
+    return apiProxy.calls.length === 0
+  })
+  // 事件元素防御：同构判据的 some 谓词带真值守卫（e && e.type === …）——
+  // events 含 null/非对象元素不炸，按「无 turn/start」处理。
+  await dcheck('J5 events 含 null/非对象元素 → 不炸，同构判据按无 turn/start 处理 → 播种', async () => {
+    const defaults = makeDefaults()
+    const apiProxy = makeApiProxy({ defaults })
+    const agent = mainBlankAgent({ id: 'sess-j5', events: [null, 'garbage', { noType: true }] })
+    await fireCreated(makeCtx({ defaults, apiProxy }), makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    return apiProxy.calls.length === 1 && agent.options.provider === MAIN_MODEL.provider
   })
 }
 
