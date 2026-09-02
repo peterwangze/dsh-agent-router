@@ -171,7 +171,7 @@ export async function runClientRender(check) {
   }
 
   // ── 装配：评估浏览器包 → mock ctx → apply → 渲染 ─────────────────────
-  const captured = { registrations: [], listeners: [], uploadFileCalls: [], readWorkspaceFileCalls: [], saveOps: [], oauthLogoutCalls: [], beginCalls: [], openCalls: [], statsExportCalls: [], credUnsetCalls: [] }
+  const captured = { registrations: [], listeners: [], effectCleanups: [], uploadFileCalls: [], readWorkspaceFileCalls: [], saveOps: [], oauthLogoutCalls: [], beginCalls: [], openCalls: [], statsExportCalls: [], credUnsetCalls: [] }
   const fakeWindow = {
     __ModuleLoader__: { load: (payload) => { captured.bundle = payload } },
     location: { search: '', pathname: '/' },
@@ -357,9 +357,20 @@ export async function runClientRender(check) {
   // 模型接管面：会话当前选中 + 切换调用记录（视觉开→切包装组，关→切回）。
   let sessionCurrent = { provider: 'openai', model: 'gpt-4o' }
   const sessionSelectCalls = []
+  // FIX-026：保底路径（session.models RPC）调用记录——主路径不可达时的
+  // 可观测降级判别（保底仅维持可观测，不更新显示）。
+  const sessionModelsCalls = []
+  // FIX-026：模型目录服务面模式——'ok' 主路径（directoryFor→load）、
+  // 'absent' 服务不可达（ctx.get 返回 undefined → 保底 RPC）、
+  // 'throw' subagent 会话形态（directoryFor 同步 throw，宿主 service.js:193
+  // 「resolved no scope」同型——防御断言：捕获不炸 + warn 可观测）。
+  let modelDirectoriesMode = 'ok'
+  const directoryForCalls = []
+  const directoryLoadCalls = []
   const apiMock = {
     sessions: {
-      models: async () => ({ result: { ok: true, value: { current: { ...sessionCurrent }, routable: true, groups: [], failures: [] } } }),
+      // FIX-026：记录保底路径调用（载荷形参判别）——返回形状与既有断言一致。
+      models: async (payload) => { sessionModelsCalls.push(payload && typeof payload === 'object' ? { ...payload } : payload); return { result: { ok: true, value: { current: { ...sessionCurrent }, routable: true, groups: [], failures: [] } } } },
       selectModel: async (payload) => {
         sessionSelectCalls.push({ ...payload })
         sessionCurrent = { provider: payload.provider, model: payload.model }
@@ -418,15 +429,35 @@ export async function runClientRender(check) {
       unset: async (payload) => { captured.credUnsetCalls.push(payload); return { result: { ok: true } } },
     },
   }
+  // FIX-026：modelDirectories 客户端服务 stub——宿主 ModelDirectoryResolver
+  // （dsh-client-ui-model-selection lib/client.js:170 `super(ctx, "modelDirectories")`
+  // 注册；directoryFor :187 惰性返回带 load() 的会话目录，load 为只读幂等刷新
+  // directory.d.ts:52）。directoryFor 记录调用；'throw' 模式复刻宿主无 scope
+  // 会话的同步 throw 形态（宿主 lib/client.js:193「resolved no scope」）。
+  const modelDirectoriesStub = () => {
+    if (modelDirectoriesMode === 'absent') return undefined
+    return {
+      directoryFor: (sessionId) => {
+        directoryForCalls.push(sessionId)
+        if (modelDirectoriesMode === 'throw') throw new Error(`ui-model-selection: session "${String(sessionId)}" resolved no scope`)
+        return { load: async () => { directoryLoadCalls.push(sessionId); return { current: { ...sessionCurrent }, routable: true, groups: [], failures: [] } } }
+      },
+    }
+  }
   const zh = {}
   const ctx = {
-    effect: (fn) => { fn(); return () => {} },
+    // FIX-026：捕获装配清理函数（产品代码 ctx.effect(() => cleanup, label)）——
+    // 「装配卸载 off 生效」判别需要真实可调用的卸载路径（旧 stub 丢弃 cleanup
+    // 无法判别）；locale effect 的 fn 返回 undefined，不入列。
+    effect: (fn) => { const cleanup = fn(); if (typeof cleanup === 'function') captured.effectCleanups.push(cleanup); return () => {} },
     locale: {
       register: (_ns, tables) => { Object.assign(zh, tables.zh) },
       bind: () => (key) => zh[key] ?? key,
     },
-    get: (key) => (key === 'connection' ? { api: apiMock } : key === 'remote.router' ? remoteMock : undefined),
-    remote: { $mount: (contribution) => { captured.mount = contribution; return Promise.resolve() }, $on: (event, listener) => { captured.listeners.push({ event, listener }); return () => {} } },
+    get: (key) => (key === 'connection' ? { api: apiMock } : key === 'remote.router' ? remoteMock : key === 'modelDirectories' ? modelDirectoriesStub() : undefined),
+    // FIX-026：$on 订阅带 active 标记——退订函数置 inactive，「卸载后派发不再
+    // 触发」的判别基础；既有断言经 entry.listener 直调，不受影响。
+    remote: { $mount: (contribution) => { captured.mount = contribution; return Promise.resolve() }, $on: (event, listener) => { const entry = { event, listener, active: true }; captured.listeners.push(entry); return () => { entry.active = false } } },
     slots: {
       inject: (_slot, register) => { captured.registrations.push(register()); return () => {} },
       register: (descriptor, renderFn) => ({ ...descriptor, render: renderFn }),
@@ -1689,5 +1720,79 @@ export async function runClientRender(check) {
       check('EVO-013: roster 失败 → 添加下拉为空态提示（presetsRosterEmpty）', textOf(currentTree).includes(zh.presetsAdd) || textOf(currentTree).includes(zh.presetsRosterEmpty))
     }
     presetRosterMode = 'ok'
+  }
+
+  // ── FIX-026：预设切换显示刷新——客户端直驱模型目录重载 ────────────────
+  // 缺陷事实：服务端播种全对（fce2785a 四连切终态正确），显示层不跟随——
+  // FIX-024 服务端 ctx.emit 在真机不可达。修复 = FIX-012 已验证模式：客户端
+  // 订阅 agent-preset/selected（dsh-api-remotes API_REMOTE_FORWARDED_EVENTS
+  // 首项，lib/index.js:19）直接调宿主 modelDirectories 服务 directoryFor(
+  // sessionId).load()（只读幂等、generation 守卫，composer ModelSelect 经
+  // uSES 订阅目录 store——load 完成即显示更新）。判别断言四组：主路径恰一
+  // 次 / 服务不可达保底 RPC / directoryFor throw 不炸 + warn 可观测 / 卸载
+  // off 生效。旧实现（无此订阅）对第 1/2/3 组必败 = RED。
+  {
+    const presetEntries = captured.listeners.filter((entry) => entry.event === 'agent-preset/selected')
+    check('FIX-026: agent-preset/selected 订阅经 ctx.remote.$on 装配（转发白名单首项）', presetEntries.length === 1 && typeof presetEntries[0]?.listener === 'function')
+    if (presetEntries.length === 1) {
+      // 派发模拟宿主远程事件总线：仅投递给仍订阅（active）的监听器——$on 退订
+      // 函数置 inactive 后总线不再投递（场景 4 的判别基础）。
+      const dispatch = (...args) => { if (presetEntries[0].active !== false) presetEntries[0].listener(...args) }
+      // 场景 1（主路径）：modelDirectories 可达 → directoryFor(sessionId) 恰一次
+      // 且参数正确，load() 恰一次，零保底 RPC（主路径短路）。
+      modelDirectoriesMode = 'ok'
+      directoryForCalls.length = 0
+      directoryLoadCalls.length = 0
+      sessionModelsCalls.length = 0
+      dispatch('sess-main', 'novel-writing')
+      await new Promise((resolve) => setImmediate(resolve))
+      check('FIX-026: 主路径 directoryFor(sessionId) 恰一次且参数正确（旧实现无订阅必败）', directoryForCalls.length === 1 && directoryForCalls[0] === 'sess-main')
+      check('FIX-026: 主路径 directory.load() 恰一次（客户端直驱目录重载）', directoryLoadCalls.length === 1 && directoryLoadCalls[0] === 'sess-main')
+      check('FIX-026: 主路径不触发保底 RPC（短路语义）', sessionModelsCalls.length === 0)
+      // 场景 1b（幂等）：用户连切（真机四连切形态）→ load 跟随触发次数 1:1，
+      // 无放大无叠加（只读幂等刷新，宿主 generation 守卫兜底）。
+      dispatch('sess-main', 'cordis')
+      await new Promise((resolve) => setImmediate(resolve))
+      check('FIX-026: 多次切换 load 1:1 跟随无放大（只读幂等无害）', directoryForCalls.length === 2 && directoryLoadCalls.length === 2)
+      // 场景 2（保底降级）：modelDirectories 服务面不可达 → 保底 session.models
+      // RPC 恰一次（可观测降级不炸；保底不更新显示，主路径是 load）。
+      modelDirectoriesMode = 'absent'
+      directoryForCalls.length = 0
+      directoryLoadCalls.length = 0
+      sessionModelsCalls.length = 0
+      dispatch('sess-fallback', 'minimal')
+      await new Promise((resolve) => setImmediate(resolve))
+      check('FIX-026: 服务不可达 → 保底 sessions.models RPC 恰一次（载荷含 sessionId）', sessionModelsCalls.length === 1 && sessionModelsCalls[0]?.sessionId === 'sess-fallback')
+      check('FIX-026: 保底路径零 load 调用（服务面不可达不误触主路径）', directoryLoadCalls.length === 0 && directoryForCalls.length === 0)
+      // 场景 3（subagent 会话防御）：directoryFor 同步 throw（宿主无 scope/
+      // subagent 形态）→ 捕获不炸 + warn 级可观测（P8），且不误触发保底 RPC
+      // （subagent 会话直连 session.models RPC 会被宿主拒绝——绝不降级到它）。
+      modelDirectoriesMode = 'throw'
+      directoryForCalls.length = 0
+      directoryLoadCalls.length = 0
+      sessionModelsCalls.length = 0
+      const warnLines = []
+      const originalWarn = console.warn
+      console.warn = (...parts) => { warnLines.push(parts.map(String).join(' ')) }
+      try {
+        dispatch('sess-sub', 'standard')
+      } finally {
+        console.warn = originalWarn
+      }
+      await new Promise((resolve) => setImmediate(resolve))
+      check('FIX-026: directoryFor throw 捕获不炸（事件分发链零外泄）', directoryForCalls.length === 1 && directoryLoadCalls.length === 0 && sessionModelsCalls.length === 0)
+      check('FIX-026: subagent 形态降级 warn 可观测（P8：含标识与 sessionId）', warnLines.some((line) => line.includes('dsh-agent-router') && line.includes('sess-sub')))
+      modelDirectoriesMode = 'ok'
+      // 场景 4（卸载 off 生效）：装配卸载（effect cleanup 全量执行）→ 后续
+      // 派发零触发（directoryFor/load/保底 RPC 全静默）。
+      directoryForCalls.length = 0
+      directoryLoadCalls.length = 0
+      sessionModelsCalls.length = 0
+      for (const cleanup of captured.effectCleanups) cleanup()
+      check('FIX-026: 卸载执行了退订（$on 退订函数被调用）', presetEntries[0].active === false)
+      dispatch('sess-after-off', 'novel-writing')
+      await new Promise((resolve) => setImmediate(resolve))
+      check('FIX-026: 卸载后派发零触发（off 生效——目录重载/保底 RPC 全静默）', directoryForCalls.length === 0 && directoryLoadCalls.length === 0 && sessionModelsCalls.length === 0)
+    }
   }
 }

@@ -63,6 +63,14 @@
 //   - A6/C3 按 FIX-025 同构语义修订为「events 含 turn/start → 不播种」
 //     负向守卫（原 requestHeader 判据断言退役）；fixture session 增 events
 //     数组（真实 Session 形态）。
+// Rework（FIX-026 范围追加，EV-132 真机反证 + 用户架构裁决 P5 单一路径）：
+//   - EV-132 真机反证 FIX-024 的服务端 emit 链不可达（源码推演通过、真机
+//     实证失败）；FIX-026 客户端直驱（client.js 订阅 agent-preset/selected
+//     → directoryFor(sessionId).load()）为唯一显示刷新路径，服务端 emit 与
+//     之并存 = 双显示刷新逻辑（被取代的旧路径 MUST 删除，P-v3 原则 5）；
+//   - I 节由 emit 正向判别改为**零 emit 负向守卫**（防复活）：I1/I3/I4 对
+//     旧实现（有 emit）必败（RED）；I2/I5 原负向语义保留（失败零副作用 /
+//     subagent 边界）；fixture 的 emit 记录面保留专供本组判别。
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -726,29 +734,29 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     })())
 }
 
-// ── I. FIX-024 判别：种子成功 → 显式 ctx.emit('llm/adapters-updated') 驱动宿主模型目录刷新 ──
+// ── I. FIX-026 范围追加：服务端 emit 死路径删除——种子成功零 emit 负向守卫（防复活）──
 {
-  // 缺陷事实链（EV-128 三重实测）：宿主状态 100% 正确（FIX-023 后 selectModel
-  // picked + options 播种即时生效），缺口纯在显示层——宿主客户端模型目录仅
-  // 三个刷新源：`llm/adapters-updated` 远程事件 / `settings/document-updated`
-  // 远程事件 / 目录入口打开时 load()。目标模型 = 当前全局默认时，selectModel
-  // 内部的全局设置写无值差异 → 文档无变更 → `settings/document-updated` 不
-  // 触发 → 选择器停留旧值（完美解释「部分预设有问题」：standard/novel-writing
-  // 目标 ≠ 全局默认 → 有差异 → 刷新正常）。修复 = 种子成功后显式
-  // ctx.emit('llm/adapters-updated')（dsh-api-remotes 转发白名单内；客户端
-  // ModelDirectory 对该事件的处理就是 load() 幂等刷新）。旧实现（无 emit）
-  // 对 I1/I3/I4 必败（RED）；I2/I5 为负向回归守卫（失败分支与 subagent 纯
-  // options 路径绝不 emit——信号只随真实的选择面变更发出）。
-  await dcheck('I1 种子成功 → ctx.emit(\'llm/adapters-updated\') 恰一次（旧实现无 emit 必败 RED）', async () => {
+  // 演进事实链：FIX-024（EV-128）曾以种子成功后显式 ctx.emit
+  // ('llm/adapters-updated') 补显示刷新；EV-132 真机反证该服务端 emit 链
+  // 不可达（源码推演通过、真机实证失败），且与 FIX-026 客户端直驱
+  // （client.js 订阅 agent-preset/selected → directoryFor(sessionId).load()）
+  // 并存 = 双显示刷新逻辑。用户架构裁决（P5 单一路径原则 / P-v3 原则 5）：
+  // 删除服务端 emit，客户端订阅为唯一显示刷新路径。本节由 FIX-024 的
+  // emit 正向判别改为**负向守卫**：种子全成功路径（含重置路径）绝不打
+  // 'llm/adapters-updated'——旧实现（有 emit）对 I1/I3/I4 必败（RED）；
+  // fixture 的 emit 记录面保留专供本组防复活判别。I2/I5 原负向语义保留
+  // （失败分支与 subagent 纯 options 路径零信号）。
+  await dcheck('I1 种子成功 → 零 llm/adapters-updated emit（服务端死路径已删——旧实现恰一次必败 RED）+ 播种照常生效', async () => {
     const defaults = makeDefaults()
     const apiProxy = makeApiProxy({ defaults })
     const agent = mainBlankAgent({ id: 'sess-i1' })
     const ctx = makeCtx({ defaults, apiProxy })
     await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
-    const signals = ctx.emitted.filter((entry) => entry.event === 'llm/adapters-updated')
-    return apiProxy.calls.length === 1 && signals.length === 1 && signals[0].args.length === 0
+    return apiProxy.calls.length === 1
+      && agent.options.provider === MAIN_MODEL.provider && agent.options.model === MAIN_MODEL.model
+      && ctx.emitted.filter((entry) => entry.event === 'llm/adapters-updated').length === 0
   })
-  await dcheck('I2 种子失败分支（selectModel err 信封）→ 零 emit（显示零变化零信号）', async () => {
+  await dcheck('I2 种子失败分支（selectModel err 信封）→ 零 emit（失败零副作用零信号——原负向语义保留）', async () => {
     const defaults = makeDefaults()
     const apiProxy = makeApiProxy({ defaults, unavailable: (provider, model) => model === MAIN_MODEL.model })
     const agent = mainBlankAgent({ id: 'sess-i2' })
@@ -757,7 +765,7 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     return apiProxy.calls.length === 1 && ctx.emitted.length === 0
       && agent.options.provider === NATIVE.provider && agent.options.model === NATIVE.model // 回滚成立
   })
-  await dcheck('I3 重置路径（切无配置预设 → selectModel(全局默认) 成功）→ 也 emit（G→G 同值写无文档事件，此信号补齐刷新）', async () => {
+  await dcheck('I3 重置路径（切无配置预设 → selectModel(全局默认) 成功）→ 同样零 emit（旧实现恰一次必败 RED）', async () => {
     const defaults = makeDefaults()
     const apiProxy = makeApiProxy({ defaults })
     const agent = mainBlankAgent({ id: 'sess-i3', header: { origin: 'main' } })
@@ -766,21 +774,24 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     await firePresetSelected(ctx, service, 'sess-i3', OTHER_PRESET) // OTHER_PRESET 无配置 → 重置回全局默认
     return apiProxy.calls.length === 1 && apiProxy.calls[0].payload.provider === NATIVE.provider
       && agent.options.provider === NATIVE.provider
-      && ctx.emitted.filter((entry) => entry.event === 'llm/adapters-updated').length === 1
+      && ctx.emitted.filter((entry) => entry.event === 'llm/adapters-updated').length === 0
   })
-  await dcheck('I4 emit 面异常（宿主 emit 抛错注入）→ warn 可观测 + 种子成功路径零击穿（options/picked 照常生效）', async () => {
+  await dcheck('I4 emit 面零接触守卫（抛错注入也不可达）→ 零记录 + 零目录刷新告警 + 种子照常生效（旧实现 emit→记录+warn 必败 RED）', async () => {
     const defaults = makeDefaults()
     const apiProxy = makeApiProxy({ defaults })
     const agent = mainBlankAgent({ id: 'sess-i4' })
     const ctx = makeCtx({ defaults, apiProxy })
-    ctx.emit = () => { throw new Error('injected emit failure') }
+    // 注入「记录 + 抛错」emit：无论复活实现是否自带 try/catch 吞错，只要
+    // 触碰 emit 面就会留下记录（判别面比单纯的恰一次断言更强）。
+    ctx.emit = (event, ...args) => { ctx.emitted.push({ event, args }); throw new Error('injected emit failure') }
     let rejected = null
     try { await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent) } catch (error) { rejected = error }
     return rejected === null && apiProxy.calls.length === 1
       && agent.options.provider === MAIN_MODEL.provider && agent.options.model === MAIN_MODEL.model
-      && ctx.logger.warnCalls.some((line) => line.includes('adapters-updated') || line.includes('directory refresh'))
+      && ctx.emitted.length === 0
+      && !ctx.logger.warnCalls.some((line) => line.includes('adapters-updated') || line.includes('directory refresh'))
   })
-  await dcheck('I5 边界：subagent 纯 options 修正（零显示层面变化）→ 零 emit（信号不越出主会话种子成功路径）', async () => {
+  await dcheck('I5 边界：subagent 纯 options 修正（零显示层面变化）→ 零 emit（信号不越出主会话种子路径——原负向语义保留）', async () => {
     const apiProxy = makeApiProxy({ defaults: makeDefaults() })
     const agent = makeAgent({ id: 'child-i5', header: subHeader(), options: { ...NATIVE }, requestHeader: () => null })
     const ctx = makeCtx({ apiProxy, agents: { get: () => ({ options: { ...NATIVE } }) } })
