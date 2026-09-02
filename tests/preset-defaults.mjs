@@ -42,6 +42,13 @@
 //     去属性化（注册表仅经 get('agents') 调用时解析——第三次同型 mock
 //     保真度缺陷修复），旧实现（属性访问）必败；C4 强化 = agent 查不到
 //     时 P8 warn 含 sessionId（不再静默）。
+// Rework（FIX-024，EV-128 显示跟随缺口——宿主状态全对、GUI 目录不刷新）：
+//   - I 节 = 种子成功后显式 ctx.emit('llm/adapters-updated') 判别——宿主
+//     客户端模型目录仅三个刷新源（该远程事件 / settings/document-updated
+//     远程事件 / 目录打开时 load()）；目标模型 = 当前全局默认时 selectModel
+//     内部的设置写无值差异 → 文档事件不触发 → 选择器停留旧值。旧实现
+//     （无 emit）对 I1/I3/I4 必败（RED）；I2/I5 为负向回归守卫（失败分支
+//     与 subagent 零副作用路径绝不 emit）。
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -135,10 +142,12 @@ function makeApiProxy({ defaults, unavailable = () => false } = {}) {
  * 的服务名才有属性面——本插件 inject 未含 'agents'，故 stub **不提供 agents
  * 属性**，注册表仅经 get('agents') 调用时解析（旧 stub 提供了宿主上不存在的
  * 属性面，掩盖了属性访问恒 undefined 的真实缺陷——第三次同型 mock 保真度
- * 缺陷，同 EVO-013 R0 F-1 / FIX-022 系列）。
+ * 缺陷，同 EVO-013 R0 F-1 / FIX-022 系列）。FIX-024：补 emit 调用记录
+ * （真实 cordis ctx.emit 存在——stub 同形记录 (event, args) 供 I 节判别）。
  */
 function makeCtx({ defaults, apiProxy, agents, agentPresets } = {}) {
   const listeners = {}
+  const emitted = []
   const logger = {
     infoCalls: [], warnCalls: [],
     info(message) { this.infoCalls.push(String(message)) },
@@ -147,9 +156,13 @@ function makeCtx({ defaults, apiProxy, agents, agentPresets } = {}) {
   return {
     listeners,
     logger,
+    emitted,
     on(event, handler) {
       ;(listeners[event] ??= []).push(handler)
       return () => { listeners[event] = (listeners[event] ?? []).filter((entry) => entry !== handler) }
+    },
+    emit(event, ...args) {
+      emitted.push({ event, args })
     },
     get(key) {
       if (key === 'agentDefaultModel') return defaults
@@ -685,6 +698,70 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
       const ctx = makeCtx({ agents: { get: () => undefined } })
       return !('agents' in ctx) && typeof ctx.get === 'function' && ctx.get('agents') !== undefined
     })())
+}
+
+// ── I. FIX-024 判别：种子成功 → 显式 ctx.emit('llm/adapters-updated') 驱动宿主模型目录刷新 ──
+{
+  // 缺陷事实链（EV-128 三重实测）：宿主状态 100% 正确（FIX-023 后 selectModel
+  // picked + options 播种即时生效），缺口纯在显示层——宿主客户端模型目录仅
+  // 三个刷新源：`llm/adapters-updated` 远程事件 / `settings/document-updated`
+  // 远程事件 / 目录入口打开时 load()。目标模型 = 当前全局默认时，selectModel
+  // 内部的全局设置写无值差异 → 文档无变更 → `settings/document-updated` 不
+  // 触发 → 选择器停留旧值（完美解释「部分预设有问题」：standard/novel-writing
+  // 目标 ≠ 全局默认 → 有差异 → 刷新正常）。修复 = 种子成功后显式
+  // ctx.emit('llm/adapters-updated')（dsh-api-remotes 转发白名单内；客户端
+  // ModelDirectory 对该事件的处理就是 load() 幂等刷新）。旧实现（无 emit）
+  // 对 I1/I3/I4 必败（RED）；I2/I5 为负向回归守卫（失败分支与 subagent 纯
+  // options 路径绝不 emit——信号只随真实的选择面变更发出）。
+  await dcheck('I1 种子成功 → ctx.emit(\'llm/adapters-updated\') 恰一次（旧实现无 emit 必败 RED）', async () => {
+    const defaults = makeDefaults()
+    const apiProxy = makeApiProxy({ defaults })
+    const agent = mainBlankAgent({ id: 'sess-i1' })
+    const ctx = makeCtx({ defaults, apiProxy })
+    await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    const signals = ctx.emitted.filter((entry) => entry.event === 'llm/adapters-updated')
+    return apiProxy.calls.length === 1 && signals.length === 1 && signals[0].args.length === 0
+  })
+  await dcheck('I2 种子失败分支（selectModel err 信封）→ 零 emit（显示零变化零信号）', async () => {
+    const defaults = makeDefaults()
+    const apiProxy = makeApiProxy({ defaults, unavailable: (provider, model) => model === MAIN_MODEL.model })
+    const agent = mainBlankAgent({ id: 'sess-i2' })
+    const ctx = makeCtx({ defaults, apiProxy })
+    await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    return apiProxy.calls.length === 1 && ctx.emitted.length === 0
+      && agent.options.provider === NATIVE.provider && agent.options.model === NATIVE.model // 回滚成立
+  })
+  await dcheck('I3 重置路径（切无配置预设 → selectModel(全局默认) 成功）→ 也 emit（G→G 同值写无文档事件，此信号补齐刷新）', async () => {
+    const defaults = makeDefaults()
+    const apiProxy = makeApiProxy({ defaults })
+    const agent = mainBlankAgent({ id: 'sess-i3', header: { origin: 'main' } })
+    const ctx = makeCtx({ defaults, apiProxy, agents: { get: (id) => (id === 'sess-i3' ? agent : undefined) } })
+    const service = makeService({ governance: presetConfig({ main: MAIN_MODEL }) })
+    await firePresetSelected(ctx, service, 'sess-i3', OTHER_PRESET) // OTHER_PRESET 无配置 → 重置回全局默认
+    return apiProxy.calls.length === 1 && apiProxy.calls[0].payload.provider === NATIVE.provider
+      && agent.options.provider === NATIVE.provider
+      && ctx.emitted.filter((entry) => entry.event === 'llm/adapters-updated').length === 1
+  })
+  await dcheck('I4 emit 面异常（宿主 emit 抛错注入）→ warn 可观测 + 种子成功路径零击穿（options/picked 照常生效）', async () => {
+    const defaults = makeDefaults()
+    const apiProxy = makeApiProxy({ defaults })
+    const agent = mainBlankAgent({ id: 'sess-i4' })
+    const ctx = makeCtx({ defaults, apiProxy })
+    ctx.emit = () => { throw new Error('injected emit failure') }
+    let rejected = null
+    try { await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent) } catch (error) { rejected = error }
+    return rejected === null && apiProxy.calls.length === 1
+      && agent.options.provider === MAIN_MODEL.provider && agent.options.model === MAIN_MODEL.model
+      && ctx.logger.warnCalls.some((line) => line.includes('adapters-updated') || line.includes('directory refresh'))
+  })
+  await dcheck('I5 边界：subagent 纯 options 修正（零显示层面变化）→ 零 emit（信号不越出主会话种子成功路径）', async () => {
+    const apiProxy = makeApiProxy({ defaults: makeDefaults() })
+    const agent = makeAgent({ id: 'child-i5', header: subHeader(), options: { ...NATIVE }, requestHeader: () => null })
+    const ctx = makeCtx({ apiProxy, agents: { get: () => ({ options: { ...NATIVE } }) } })
+    await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL, subagent: SUB_MODEL }) }), agent)
+    return agent.options.provider === SUB_MODEL.provider && agent.options.model === SUB_MODEL.model
+      && apiProxy.calls.length === 0 && ctx.emitted.length === 0
+  })
 }
 
 console.log(failures === 0 ? '\nALL EVO-014 DISCRIMINANT TESTS PASSED' : `\n${failures} EVO-014 ASSERTION(S) FAILED`)
