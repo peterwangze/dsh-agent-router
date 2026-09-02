@@ -506,6 +506,29 @@ window.__ModuleLoader__.load({
       // 按此区分；endpoint / API Key 由账号凭据直连自取。
       oauthImageHint: '经 ChatGPT 订阅出图（gpt-image 系）——账号凭据直连 codex images 端点，无需配置 endpoint / API Key（尺寸仅支持 1024x1024 / 1024x1536 / 1536x1024 / auto）',
       oauthImageModelHint: '订阅出图建议在「模型」使用 gpt-image 系（如 gpt-image-2；draw 预设默认 dall-e-3 为平台 API 模型，经订阅账号调用时服务端自动换用 gpt-image-2 并提示）',
+      // EVO-013：预设 Agent（按 DSH 预设粒度的默认模型；主权规则——手动选择
+      // 与已运行会话永不被覆盖，未设置的预设零行为变化）。
+      presetsTitle: '预设 Agent',
+      presetsSummary: (n) => `已配置 ${n} 个预设`,
+      presetsIntro: '以 DSH 预设为粒度配置默认模型：对应预设新开会话的主 Agent 与其派生的 subagent 将以配置模型为默认（subagent 留空 = 继承主 Agent 模型）。未配置的预设完全遵循 DSH 现行规则（零行为变化）；会话内手动选择的模型与已运行会话始终优先，不受此处影响。',
+      presetsEmpty: '尚未配置预设默认模型——添加后，对应预设的新会话将以配置模型为默认模型。',
+      presetsAdd: '添加预设配置',
+      presetsAddHint: '从下拉选择宿主预设并配置模型后保存；已配置的预设不会再出现在下拉中。',
+      presetsPresetLabel: 'DSH 预设',
+      presetsSelectPreset: '选择预设',
+      presetsMainLabel: '主 Agent 默认模型',
+      presetsSubagentLabel: 'subagent 默认模型',
+      presetsFieldProvider: '服务商',
+      presetsFieldModel: '模型',
+      presetsNotSet: '未设置（遵循 DSH 规则）',
+      presetsInheritMain: '继承主 Agent 模型',
+      presetsSubagentEmpty: '留空 = 继承主 Agent 模型',
+      presetsMissing: '该预设已不存在（配置残留）：对应会话不会应用此配置，可删除本条目。',
+      presetsDelete: '删除配置',
+      presetsDeleteConfirm: '确认删除该预设的默认模型配置？',
+      presetsRosterError: '预设列表获取失败',
+      presetsRosterEmpty: '未获取到宿主预设：请确认宿主已提供 agentPreset 接口，或稍后重试。',
+      presetsBroken: '已损坏',
       statsTitle: '统计信息',
       statsIntro: '实时用量（每 2 秒刷新）：Agent 级与账号级（服务商）两级明细卡片，默认折叠，点击展开查看平均耗时、模型细分与分钟级 tokens 分布；统计保存在内存中，重启后清零。',
       statsSummary: (calls, errors) => `累计 ${calls} 次调用 / ${errors} 次失败`,
@@ -781,6 +804,29 @@ window.__ModuleLoader__.load({
       oauthChatOnly: 'OAuth accounts support chat type only',
       oauthImageHint: 'Generates via ChatGPT subscription (gpt-image family) — account credentials connect directly to the codex images endpoint; endpoint / API Key fields are not used (sizes: 1024x1024 / 1024x1536 / 1536x1024 / auto)',
       oauthImageModelHint: 'Use a gpt-image model for subscription generation (e.g. gpt-image-2; the draw preset defaults to dall-e-3 for platform API — the server switches to gpt-image-2 with a hint when an OAuth account is bound)',
+      // EVO-013: per-DSH-preset default models (sovereignty — manual picks and
+      // already-running sessions are never overridden; unconfigured presets keep DSH behavior).
+      presetsTitle: 'Preset Agents',
+      presetsSummary: (n) => `${n} preset(s) configured`,
+      presetsIntro: 'Configure default models per DSH preset: new sessions of the preset main agent and its subagents default to the configured model (empty subagent = inherit the main model). Unconfigured presets fully follow current DSH rules (zero behavior change); models picked manually in a session and already-running sessions always win.',
+      presetsEmpty: 'No preset default models configured yet — once added, new sessions of the matching preset default to the configured model.',
+      presetsAdd: 'Add preset configuration',
+      presetsAddHint: 'Pick a host preset from the dropdown, configure models and save; presets already configured are excluded from the dropdown.',
+      presetsPresetLabel: 'DSH preset',
+      presetsSelectPreset: 'Select preset',
+      presetsMainLabel: 'Main agent default model',
+      presetsSubagentLabel: 'Subagent default model',
+      presetsFieldProvider: 'Provider',
+      presetsFieldModel: 'Model',
+      presetsNotSet: 'Not set (follows DSH rules)',
+      presetsInheritMain: 'Inherit main agent model',
+      presetsSubagentEmpty: 'Leave empty to inherit the main agent model',
+      presetsMissing: 'This preset no longer exists (residual config): sessions will not apply it — you can delete this entry.',
+      presetsDelete: 'Delete config',
+      presetsDeleteConfirm: 'Delete the default model configuration for this preset?',
+      presetsRosterError: 'Failed to load preset list',
+      presetsRosterEmpty: 'No host presets available: make sure the host provides the agentPreset API, or retry later.',
+      presetsBroken: 'broken',
       statsTitle: 'Usage Statistics',
       statsIntro: 'Realtime usage (refreshed every 2s) at agent level and account (provider) level. Cards are collapsed by default — expand for average latency, model breakdown and per-minute token distribution; stats live in memory and reset on restart.',
       statsSummary: (calls, errors) => `${calls} calls / ${errors} errors`,
@@ -1484,6 +1530,129 @@ window.__ModuleLoader__.load({
         expanded ? el('div', { className: 'dshrouter-category-body' }, ...(Array.isArray(children) ? children : [children])) : null)
     }
 
+    /**
+     * EVO-013：宿主 agentPreset.list 返回归一（容忍数组 / {presets|items|roster}
+     * 包裹形态；条目至少含字符串 id；字段缺省容错；broken 条目保留——UI 标记
+     * 不可选）。失败由调用方按可观测降级处理（错误提示 + 空列表）。
+     * broken 归一为字符串（R0 F-1）：宿主 wire 契约为非空原因字符串
+     * （dsh-agent-presets `AgentPreset.broken?: string`，两处 zod 实证），非
+     * 布尔——非空字符串 = 损坏；历史 boolean true 容忍映射 'broken'；其余
+     * （含缺省/空串/false）= 未损坏。下游 disabled/标记一律真值判定。
+     */
+    function presetRosterItemsOf(value) {
+      const raw = Array.isArray(value) ? value
+        : Array.isArray(value?.presets) ? value.presets
+          : Array.isArray(value?.items) ? value.items
+            : Array.isArray(value?.roster) ? value.roster
+              : []
+      return raw
+        .filter((entry) => entry && typeof entry === 'object' && typeof entry.id === 'string' && entry.id)
+        .map((entry) => ({
+          id: entry.id,
+          name: typeof entry.name === 'string' ? entry.name : '',
+          trust: entry.trust === 'system' || entry.trust === 'user' ? entry.trust : '',
+          broken: typeof entry.broken === 'string' && entry.broken ? entry.broken : (entry.broken === true ? 'broken' : ''),
+        }))
+    }
+
+    /**
+     * EVO-013：provider/model 下拉对（数据源与专业 Agent 卡同款 providers /
+     * state.models 分组；模型为 datalist 自由输入 + 分组选项）。group = 草稿里
+     * 的模型组键（'main' | 'subagent'）；idPrefix 保证同页多实例的 datalist id
+     * 唯一（AgentCard `dshrouter-models-${id}` 同款防碰撞）。
+     */
+    function PresetModelFields(props) {
+      const { label, group, draft, providers, models, t, onGroupField, idPrefix } = props
+      const listId = `dshrouter-preset-models-${idPrefix}-${group}`
+      const current = draft[group] ?? { provider: '', model: '' }
+      const selectedGroup = (models ?? []).find((entry) => entry.id === current.provider)
+      const modelOptions = selectedGroup ? selectedGroup.models ?? [] : []
+      const known = new Set(modelOptions.map((model) => model.id))
+      const list = (current.model && !known.has(current.model) ? [current.model] : []).concat(modelOptions.map((model) => model.id))
+      return el('div', { className: 'dshrouter-row' },
+        el('div', { className: 'dshrouter-field' },
+          el('span', { className: 'dshrouter-field-label' }, `${label} · ${t('presetsFieldProvider')}`),
+          el('select', { className: 'dshrouter-select', value: current.provider ?? '', onChange: (event) => onGroupField(group, 'provider', event.target.value) },
+            el('option', { value: '' }, `— ${t('presetsNotSet')} —`),
+            ...(providers ?? []).filter((entry) => entry.active || entry.provider === current.provider).map((entry) => el('option', { value: entry.provider, key: entry.provider }, `${entry.displayName} (${entry.provider})`)))),
+        el('div', { className: 'dshrouter-field' },
+          el('span', { className: 'dshrouter-field-label' }, `${label} · ${t('presetsFieldModel')}`),
+          el('input', { className: 'dshrouter-input', list: listId, value: current.model ?? '', placeholder: '—', onChange: (event) => onGroupField(group, 'model', event.target.value) }),
+          el('datalist', { id: listId },
+            ...list.map((modelId) => el('option', { value: modelId, key: modelId }, modelId)))))
+    }
+
+    /**
+     * EVO-013：预设默认模型条目卡（一行摘要：预设 id · 主模型 · subagent 模型
+     * 或「继承主 Agent」；点击展开编辑 + 删除；roster 无此 id 时提示「预设已
+     * 不存在」）。
+     */
+    function PresetCard(props) {
+      const { id, draft, rosterEntry, providers, models, busy, notice, expanded, t, writable, onToggle, onGroupField, onSave, onDelete } = props
+      const mainSet = !!(draft.main?.provider && draft.main?.model)
+      const subSet = !!(draft.subagent?.provider && draft.subagent?.model)
+      const mainLabel = mainSet ? `${draft.main.provider}/${draft.main.model}` : t('presetsNotSet')
+      const subLabel = subSet ? `${draft.subagent.provider}/${draft.subagent.model}` : t('presetsInheritMain')
+      const head = el('button', { type: 'button', className: 'dshrouter-card-head', onClick: onToggle, 'aria-expanded': expanded, title: expanded ? t('collapse') : t('expand') },
+        el('span', { className: 'dshrouter-name' }, rosterEntry?.name || id),
+        el('span', { className: 'dshrouter-id' }, id),
+        el('span', { className: 'dshrouter-meta' }, `${t('presetsMainLabel')}: ${mainLabel}`),
+        el('span', { className: 'dshrouter-meta' }, `${t('presetsSubagentLabel')}: ${subLabel}`),
+        el('span', { className: 'dshrouter-spacer' }),
+        el('span', { className: 'dshrouter-chevron' }, expanded ? '▾' : '▸'))
+      if (!expanded) {
+        return el('div', { className: 'dshrouter-card' }, head)
+      }
+      return el('div', { className: 'dshrouter-card' },
+        head,
+        notice ? el('p', { className: 'dshrouter-hint' }, notice) : null,
+        !rosterEntry ? el('p', { className: 'dshrouter-error' }, t('presetsMissing')) : null,
+        el(PresetModelFields, { label: t('presetsMainLabel'), group: 'main', draft, providers, models, t, onGroupField, idPrefix: `preset-${id}` }),
+        el('p', { className: 'dshrouter-hint' }, t('presetsNotSet')),
+        el(PresetModelFields, { label: t('presetsSubagentLabel'), group: 'subagent', draft, providers, models, t, onGroupField, idPrefix: `preset-${id}` }),
+        el('p', { className: 'dshrouter-hint' }, t('presetsSubagentEmpty')),
+        el('div', { className: 'dshrouter-row' },
+          el('button', { type: 'button', className: 'dshrouter-button', disabled: busy || !writable, onClick: onSave }, t('save')),
+          el('span', { className: 'dshrouter-spacer' }),
+          el('button', { type: 'button', className: 'dshrouter-button danger', disabled: busy || !writable, onClick: onDelete }, t('presetsDelete'))))
+    }
+
+    /** EVO-013：统一添加模板（折叠为「+ 添加预设配置」，展开 = 内联表单：
+     *  预设下拉（roster 数据源，已配置排除、broken 不可选）→ 主模型两下拉 →
+     *  subagent 模型两下拉（留空 = 继承主 Agent）→ 保存/取消）。 */
+    function AddPresetCard(props) {
+      const { t, adding, setAdding, newPresetId, onChoosePreset, newPresetDraft, onGroupField, rosterItems, configuredIds, providers, models, writable, busy, onSave } = props
+      if (!adding) {
+        return el('div', { className: 'dshrouter-add', role: 'button', tabIndex: 0, onClick: () => setAdding(true), onKeyDown: (event) => { if (event.key === 'Enter') setAdding(true) } },
+          el('span', { style: { fontSize: 18, lineHeight: 1 } }, '+'),
+          el('span', null, t('presetsAdd')))
+      }
+      const available = (rosterItems ?? []).filter((entry) => !(configuredIds ?? []).includes(entry.id))
+      const selected = available.find((entry) => entry.id === newPresetId.trim())
+      return el('div', { className: 'dshrouter-card' },
+        el('div', { className: 'dshrouter-head' },
+          el('span', { className: 'dshrouter-name' }, t('presetsAdd')),
+          el('span', { className: 'dshrouter-spacer' }),
+          el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: () => { setAdding(false); onChoosePreset('') } }, t('cancel'))),
+        el('p', { className: 'dshrouter-hint' }, t('presetsAddHint')),
+        el('div', { className: 'dshrouter-field' },
+          el('span', { className: 'dshrouter-field-label' }, t('presetsPresetLabel')),
+          el('select', { className: 'dshrouter-select', 'aria-label': t('presetsPresetLabel'), value: newPresetId, onChange: (event) => onChoosePreset(event.target.value) },
+            el('option', { value: '' }, `— ${t('presetsSelectPreset')} —`),
+            ...available.map((entry) => el('option', { value: entry.id, key: entry.id, disabled: !!entry.broken },
+              `${entry.name || entry.id} (${entry.id})${entry.trust ? ` · ${entry.trust}` : ''}${entry.broken ? ` · ${t('presetsBroken')}` : ''}`)))),
+        el(PresetModelFields, { label: t('presetsMainLabel'), group: 'main', draft: newPresetDraft, providers, models, t, onGroupField, idPrefix: 'preset-add' }),
+        el(PresetModelFields, { label: t('presetsSubagentLabel'), group: 'subagent', draft: newPresetDraft, providers, models, t, onGroupField, idPrefix: 'preset-add' }),
+        el('p', { className: 'dshrouter-hint' }, t('presetsSubagentEmpty')),
+        el('div', { className: 'dshrouter-row' },
+          el('button', {
+            type: 'button', className: 'dshrouter-button',
+            disabled: !selected || !!selected.broken || busy || !writable,
+            onClick: onSave,
+          }, t('add'))),
+        (rosterItems ?? []).length === 0 ? el('p', { className: 'dshrouter-hint' }, t('presetsRosterEmpty')) : null)
+    }
+
     // ── 页面 ────────────────────────────────────────────────────────────────
     function AgentsPage(props) {
       const { api, remote, remoteReady, t, $on } = props
@@ -1531,8 +1700,18 @@ window.__ModuleLoader__.load({
       const [poolDrafts, setPoolDrafts] = useState({})
       const [poolBusy, setPoolBusy] = useState({})
       const [poolNotice, setPoolNotice] = useState({})
-      // 分级分类卡片：专业 Agent 核心区前置且默认展开；账号与统计默认折叠。
-      const [expandedSection, setExpandedSection] = useState({ agents: true, accounts: false, stats: false })
+      // EVO-013：预设 Agent 默认模型——条目草稿/展开/忙碌与添加模板状态 +
+      // 宿主预设罗盘（agentPreset.list；失败可观测降级为错误提示 + 空列表）。
+      const [presetDrafts, setPresetDrafts] = useState({})
+      const [expandedPresets, setExpandedPresets] = useState({})
+      const [presetBusy, setPresetBusy] = useState({})
+      const [presetNotice, setPresetNotice] = useState({})
+      const [addingPreset, setAddingPreset] = useState(false)
+      const [newPresetId, setNewPresetId] = useState('')
+      const [presetRoster, setPresetRoster] = useState({ status: 'idle', items: [], failure: '' })
+      // 分级分类卡片：预设 Agent 与专业 Agent 核心区前置（预设默认折叠）；
+      // 账号与统计默认折叠。
+      const [expandedSection, setExpandedSection] = useState({ presets: false, agents: true, accounts: false, stats: false })
       const loadRef = useRef(() => {})
 
       const load = useCallback(async () => {
@@ -1574,6 +1753,28 @@ window.__ModuleLoader__.load({
         const groupResponse = await api.llm.models({})
         if (groupResponse.result.ok) {
           setState((current) => ({ ...current, models: groupResponse.result.value.groups ?? [], modelsFailure: groupResponse.result.value.failures ?? [] }))
+        }
+        // EVO-013：宿主预设罗盘（wire 方法 agentPreset.list）——独立失败面：罗盘
+        // 不可达不阻塞整页（卡片显示错误提示 + 空列表，添加下拉为空），P8 可观测。
+        // FIX-022：宿主客户端 api 面方法组名是复数 agentPresets（wire 方法名保持
+        // 单数——宿主自身命名不一致陷阱）；曾误用单数 api.agentPreset 导致真机
+        // 「Cannot read properties of undefined (reading 'list')」（EV-123）。
+        // P9 防御：优先复数、复数缺失回落单数形态；两者皆缺 → 明确诊断的
+        // 可观测降级（P8：禁裸 TypeError 击穿）。
+        const presetApi = api.agentPresets ?? api.agentPreset
+        try {
+          if (!presetApi || typeof presetApi.list !== 'function') {
+            throw new Error('宿主连接未提供 agentPresets.list（复数/单数方法组均缺失——宿主版本过旧或连接面不完整）')
+          }
+          const presetResponse = await presetApi.list({})
+          const presetValue = presetResponse && presetResponse.result && presetResponse.result.ok ? presetResponse.result.value : null
+          if (presetValue !== null) {
+            setPresetRoster({ status: 'ready', items: presetRosterItemsOf(presetValue), failure: '' })
+          } else {
+            setPresetRoster({ status: 'error', items: [], failure: presetResponse?.result?.error?.message ?? '' })
+          }
+        } catch (error) {
+          setPresetRoster({ status: 'error', items: [], failure: messageOf(error) })
         }
       }, [api, remote, t])
 
@@ -2590,6 +2791,50 @@ window.__ModuleLoader__.load({
         setPoolDrafts((current) => { const next = { ...current }; delete next[id]; return next })
       }
 
+      // ── 预设 Agent 默认模型（EVO-013）派生与操作 ───────────────────────
+      const valuePresets = value.presets && typeof value.presets === 'object' ? value.presets : {}
+      const presetIds = Object.keys(valuePresets).sort()
+      const emptyPresetDraft = () => ({ enabled: true, main: { provider: '', model: '' }, subagent: { provider: '', model: '' } })
+      const presetDraftOf = (id) => {
+        const stored = valuePresets[id]
+        const base = stored
+          ? {
+            enabled: stored.enabled !== false,
+            main: { provider: stored.main?.provider ?? '', model: stored.main?.model ?? '' },
+            subagent: { provider: stored.subagent?.provider ?? '', model: stored.subagent?.model ?? '' },
+          }
+          : emptyPresetDraft()
+        return { ...base, ...(presetDrafts[id] ?? {}) }
+      }
+      const setPresetDraft = (id, patch) => setPresetDrafts((current) => ({ ...current, [id]: { ...presetDraftOf(id), ...patch } }))
+      const setPresetDraftField = (id, group, key, fieldValue) => setPresetDraft(id, { [group]: { ...presetDraftOf(id)[group], [key]: fieldValue } })
+
+      const savePreset = async (id, isNew) => {
+        if (!id) return
+        if (isNew && valuePresets[id]) return
+        setPresetBusy((current) => ({ ...current, [id]: true }))
+        const draft = presetDraftOf(id)
+        // 保存形状 = presetDefaultSchema（权威单点在 schemas.js）；布尔与
+        // 空串归一保证 wire 保存值与 schema 默认同构。
+        const value = {
+          enabled: draft.enabled !== false,
+          main: { provider: draft.main?.provider ?? '', model: draft.main?.model ?? '' },
+          subagent: { provider: draft.subagent?.provider ?? '', model: draft.subagent?.model ?? '' },
+        }
+        const outcome = await mutate([{ op: 'set', path: ['presets', id], value }])
+        setPresetBusy((current) => ({ ...current, [id]: false }))
+        setPresetNotice((current) => ({ ...current, [id]: outcome.ok ? t('saved') : outcome.message }))
+        if (outcome.ok && isNew) { setNewPresetId(''); setAddingPreset(false) }
+      }
+
+      const deletePreset = async (id) => {
+        if (!window.confirm(t('presetsDeleteConfirm'))) return
+        setPresetBusy((current) => ({ ...current, [id]: true }))
+        await mutate([{ op: 'unset', path: ['presets', id] }])
+        setPresetBusy((current) => ({ ...current, [id]: false }))
+        setPresetDrafts((current) => { const next = { ...current }; delete next[id]; return next })
+      }
+
       const addAccountToPool = async (poolId, accountId) => {
         const draft = poolDraftOf(poolId)
         if ((draft.accounts ?? []).includes(accountId)) return
@@ -2937,6 +3182,49 @@ window.__ModuleLoader__.load({
                 el('td', null, `${fmtMs(row.ms)}${row.outputTokens ? ` · ${fmtTokens(row.outputTokens)} out` : ''}`))
             })))) : null,
       ]
+      // ── 预设 Agent（EVO-013：按 DSH 预设粒度的默认模型；第一张分类卡片，
+      //    默认折叠）──────────────────────────────────────────────────────
+      const presetsBody = [
+        el('p', { className: 'dshrouter-intro' }, t('presetsIntro')),
+        presetRoster.status === 'error' ? el('p', { className: 'dshrouter-error' }, `${t('presetsRosterError')}${presetRoster.failure ? `：${presetRoster.failure}` : ''}`) : null,
+        presetIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('presetsEmpty')) : null,
+        ...presetIds.map((id) => {
+          const rosterEntry = (presetRoster.items ?? []).find((entry) => entry.id === id)
+          return el(PresetCard, {
+            key: id, id, draft: presetDraftOf(id), rosterEntry,
+            providers, models: state.models ?? [],
+            busy: !!presetBusy[id], notice: presetNotice[id],
+            expanded: expandedPresets[id] === true,
+            t, writable: state.writable,
+            onToggle: () => setExpandedPresets((current) => ({ ...current, [id]: !current[id] })),
+            onGroupField: (group, key, fieldValue) => setPresetDraftField(id, group, key, fieldValue),
+            onSave: () => savePreset(id, false),
+            onDelete: () => deletePreset(id),
+          })
+        }),
+        el(AddPresetCard, {
+          t, adding: addingPreset, setAdding: setAddingPreset,
+          newPresetId,
+          onChoosePreset: (id) => {
+            setNewPresetId(id)
+            // 切换预设清空同 id 残留草稿（从干净模板开始，避免上一预设的
+            // 未保存字段串扰）。
+            const trimmed = id.trim()
+            if (!trimmed) return
+            setPresetDrafts((current) => { const next = { ...current }; delete next[trimmed]; return next })
+          },
+          newPresetDraft: newPresetId.trim() ? presetDraftOf(newPresetId.trim()) : emptyPresetDraft(),
+          onGroupField: (group, key, fieldValue) => {
+            const trimmed = newPresetId.trim()
+            if (!trimmed) return
+            setPresetDraftField(trimmed, group, key, fieldValue)
+          },
+          rosterItems: presetRoster.items ?? [], configuredIds: presetIds,
+          providers, models: state.models ?? [],
+          writable: state.writable, busy: !!presetBusy[newPresetId.trim()],
+          onSave: () => savePreset(newPresetId.trim(), true),
+        }),
+      ]
       // ── 核心区：专业 Agent（前置，默认展开）────────────────────────────
       const agentsBody = [
         el('p', { className: 'dshrouter-intro' }, t('agentsIntro')),
@@ -2971,7 +3259,13 @@ window.__ModuleLoader__.load({
       ]
       return el('section', { className: 'dshrouter-section', 'aria-label': t('title') },
         ...sectionHead,
-        // ── 分级分类卡片：专业 Agent 前置且默认展开；账号与统计默认折叠 ──
+        // ── 分级分类卡片：预设 Agent 第一张（默认折叠）；专业 Agent 前置且
+        //    默认展开；账号与统计默认折叠 ──────────────────────────────────
+        el(CategoryCard, {
+          title: t('presetsTitle'), summary: t('presetsSummary')(presetIds.length),
+          expanded: expandedSection.presets === true, t, onToggle: () => toggleSection('presets'),
+          children: presetsBody,
+        }),
         el(CategoryCard, {
           title: t('agentsTitle'), summary: t('agentsSummary')(agentIds.length),
           expanded: expandedSection.agents === true, t, onToggle: () => toggleSection('agents'),
@@ -4174,6 +4468,48 @@ window.__ModuleLoader__.load({
         offSettingsForCatalog()
         window.clearInterval(catalogTimer)
       }, 'dsh-agent-router: composer catalog polling')
+      // ── FIX-026：预设切换显示刷新——客户端直驱模型目录重载 ────────────
+      // 缺陷事实（EV-129）：服务端播种全对（fce2785a 四连切终态正确）而显示层
+      // 不跟随——宿主模型目录的刷新源只有 llm/adapters-updated 与
+      // settings/document-updated 两个远程事件（dsh-client-ui-model-selection
+      // lib/client.js:175-179）加目录打开时 load()，预设切换三者皆不触发；
+      // FIX-024 的服务端 ctx.emit('llm/adapters-updated') 在真机不可达（源码
+      // 推演通过、真机实证失败——方法论教训已入档）。本修复走 FIX-012 已验证
+      // 模式：客户端订阅 agent-preset/selected（dsh-api-remotes
+      // API_REMOTE_FORWARDED_EVENTS 首项，lib/index.js:19；$on 即
+      // ctx.remote.$on），直接调宿主 modelDirectories 服务
+      // （ModelDirectoryResolver，super(ctx, "modelDirectories") 注册，宿主
+      // lib/client.js:170）的 directoryFor(sessionId).load()——load 只读幂等
+      // （generation 守卫，宿主 :47/:53）、从 session.models 重拉并写 store
+      // 快照，composer 模型选择器经 uSES 订阅该 store（宿主 :292）→ load 完成
+      // 即显示更新；与新会话打开时组件 mount → load() 同构。FIX-026 范围
+      // 追加（EV-132 真机反证 emit 链不可达 + 用户架构裁决 P5 单一路径）：
+      // 服务端 preset-defaults.js 的 FIX-024 emit 死路径已删除——本订阅是
+      // 唯一显示刷新路径（服务端防复活守卫见 tests/preset-defaults.mjs I 节）。
+      const refreshSessionDirectory = (sessionId, agentPreset) => {
+        try {
+          const directory = ctx.get('modelDirectories')?.directoryFor?.(sessionId)
+          if (directory && typeof directory.load === 'function') {
+            // 只读幂等刷新（宿主语义：失败保留上次好状态并写 store.error）——
+            // 多次触发无害；拒绝仅意味着显示不更新（插件层无重试面，不放大）。
+            Promise.resolve(directory.load()).catch(() => undefined)
+            return
+          }
+          // 保底路径（modelDirectories 服务面不可达）：退化为一次
+          // session.models RPC——仅维持可观测（证明订阅与分发链路活着），不
+          // 更新显示（主路径是上面的 directory.load() 直驱 store 快照）。
+          Promise.resolve(api.sessions?.models?.({ sessionId })).catch(() => undefined)
+        } catch (error) {
+          // directoryFor 对无 scope/subagent 会话可能同步 throw（宿主
+          // lib/client.js:193「resolved no scope」；subagent 的 load 拒绝形态
+          // 经上方 catch 容错）——warn 级可观测（P8），绝不破坏预设切换本身。
+          console.warn(`dsh-agent-router: preset switch model directory refresh failed (agent-preset/selected, preset ${agentPreset}, session ${sessionId}), preset switch unaffected: ${error && error.message ? error.message : String(error)}`)
+        }
+      }
+      const offPresetSelected = $on('agent-preset/selected', (sessionId, agentPreset) => refreshSessionDirectory(sessionId, agentPreset))
+      ctx.effect(() => () => {
+        offPresetSelected()
+      }, 'dsh-agent-router: preset switch directory refresh')
       // conversation 插槽由 ui-conversation 声明：声明存在才注册，注册失败
       // （如 key 冲突）只记录、绝不击穿插件其余功能（settings 页等不受影响）。
       const safeRegister = (options, render) => {
