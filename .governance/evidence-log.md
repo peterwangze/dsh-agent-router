@@ -428,3 +428,5 @@
 | REVIEW-FIX-025-R0 | FIX-025 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-report-FIX-025-R0.md; review-FIX-025-R0.md | Code Reviewer | 2026-09-02 | G11 | APPROVED |
 
 | EV-131 | FIX-025 | 开发+审查终态 | 空白判据宿主同构修复闭环 | 根因（EV-130）：宿主 sessionBlank=无 turn/start（独立事件不开启 turn——apiproxy L1187-1189）vs 插件 requestHeader 判据更严 → 老无消息会话（4 天龄，5x 切换事件 0 turn/start 0 request/header——zstd 日志解压实证）宿主允许切换但插件漏播种；修复 a80e935：sessionNeverProduced 与宿主逐行同构（events.some(turn/start) 同判据 + 防御超集 + 不可读回落 requestHeader 反演保守方向）；J1/J2 判别 RED（独立事件+陈旧 header 宿主可切/旧实现跳过）→GREEN 50/50（Reviewer P3-1 静态清点 51——以复跑输出为准）；smoke ALL PASSED 零回退；R0 APPROVED/0（机录——同构精确性/消费点完整 grep/session.events+requestHeader 宿主契约三方实证；P3×3 台账）；README 已知行为段更新入 0.4.2 台账批；用户复验 = 重启 DSH → 老空白会话切任意预设模型跟随
+
+| TRIAGE-FIX-026 | FIX-026 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/FIX-026.json） | FIX-026.json | change-triage | 2026-09-02 | G11 | TRIAGED |
