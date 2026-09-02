@@ -444,6 +444,13 @@ export async function runClientRender(check) {
       },
     }
   }
+  // FIX-027：注入门控判据——模块 inject 声明列表决定可解析面（复刻真实
+  // cordis 客户端形态；'remote.router' 的声明名是 'remote'——命名空间远程面
+  // 挂在 remote 服务下）。'getMiss' 模式 = get 解析落空而属性面可用（隔离域/
+  // 注入门控下裸 get 失败的 EV-134 嫌疑形态；双形态防御判别面——
+  // agentPresetsServiceOf 先例 lib/preset-defaults.js:100-108）。
+  const declaredService = (key) => Array.isArray(bundleExports.inject) && bundleExports.inject.includes(String(key).split('.')[0])
+  let modelDirectoriesGetMiss = false
   const zh = {}
   const ctx = {
     // FIX-026：捕获装配清理函数（产品代码 ctx.effect(() => cleanup, label)）——
@@ -454,7 +461,20 @@ export async function runClientRender(check) {
       register: (_ns, tables) => { Object.assign(zh, tables.zh) },
       bind: () => (key) => zh[key] ?? key,
     },
-    get: (key) => (key === 'connection' ? { api: apiMock } : key === 'remote.router' ? remoteMock : key === 'modelDirectories' ? modelDirectoriesStub() : undefined),
+    // FIX-027：get 按注入门控解析——未声明名返回 undefined（EV-134 缺陷形态：
+    // 旧 inject 不含 modelDirectories → 主路径裸解析落空 → 保底 RPC 只读不更新
+    // 显示）。声明名且服务就绪才回 stub；'getMiss' 模式 = 声明在而 get 落空。
+    get: (key) => {
+      if (!declaredService(key)) return undefined
+      if (key === 'connection') return { api: apiMock }
+      if (key === 'remote.router') return remoteMock
+      if (key === 'modelDirectories') return modelDirectoriesGetMiss ? undefined : modelDirectoriesStub()
+      return undefined
+    },
+    // FIX-027：属性面（宿主 cordis-client-runner：属性访问按 fiber.inject 声明
+    // 门控的形态）——声明后才可见，双形态防御的兜底面；'absent' 模式（提供者
+    // 未就绪）两形态皆 undefined（与真实服务未激活一致）。
+    get modelDirectories() { return declaredService('modelDirectories') ? modelDirectoriesStub() : undefined },
     // FIX-026：$on 订阅带 active 标记——退订函数置 inactive，「卸载后派发不再
     // 触发」的判别基础；既有断言经 entry.listener 直调，不受影响。
     remote: { $mount: (contribution) => { captured.mount = contribution; return Promise.resolve() }, $on: (event, listener) => { const entry = { event, listener, active: true }; captured.listeners.push(entry); return () => { entry.active = false } } },
@@ -1731,7 +1751,39 @@ export async function runClientRender(check) {
   // uSES 订阅目录 store——load 完成即显示更新）。判别断言四组：主路径恰一
   // 次 / 服务不可达保底 RPC / directoryFor throw 不炸 + warn 可观测 / 卸载
   // off 生效。旧实现（无此订阅）对第 1/2/3 组必败 = RED。
+  // ── FIX-027（EV-134）：fixture 保真度修正 + 注入声明守卫 + 遥测断言 ────
+  // 缺陷事实：FIX-026 状态层/部署层全对而显示层仍断（EV-134 P10 取证链）——
+  // 剩余嫌疑 = 裸 ctx.get('modelDirectories') 在客户端隔离域/注入门控下解析
+  // undefined → handler 走保底 RPC（只读不更新显示）。fixture 同型 mock 保真度
+  // 缺陷（旧 ctx.get 直塞服务、未复刻注入门控）已修正：get 与属性面均按模块
+  // inject 声明门控（宿主 cordis-client-runner dynamicCordisContext：属性访问
+  // 按 fiber.inject 声明门控 L342、get 为可选查找 L335；声明 = 激活等待
+  // L581 waitingFor + 可见性保证）。RED 判别：旧 inject 不含 modelDirectories
+  // → 主路径解析 undefined → 保底 RPC → 下方场景 1 断言与结构守卫必败。
+  // 修复面 = 模块 inject 声明（宿主 dsh-client-ui-model-selection lib/client.js:
+  // 157-161 static inject / :729-736 模块级 inject + :799 exports.inject 同款
+  // 机制）+ get→属性面双形态解析（agentPresetsServiceOf 先例
+  // lib/preset-defaults.js:100-108）+ 结构化 console 遥测（前缀
+  // dsh-agent-router[FIX-027]；服务端上行面待后续任务——不为遥测新造 RPC 面）。
   {
+    // FIX-027 结构守卫：模块 inject 声明含 modelDirectories（丢失即 EV-134
+    // 缺陷复活——激活等待与属性面可见性同时失效）。
+    check('FIX-027: 模块 inject 声明含 modelDirectories（结构守卫——runner 激活门控 + 属性面可见性前提）', Array.isArray(bundleExports.inject) && bundleExports.inject.includes('modelDirectories'))
+    // FIX-027 遥测捕获：handler 同步触发的 info/warn 结构化行（含结果/解析形态）。
+    const captureTelemetry = (fn) => {
+      const lines = []
+      const originalInfo = console.info
+      const originalWarn = console.warn
+      console.info = (...parts) => { lines.push(parts.map(String).join(' ')) }
+      console.warn = (...parts) => { lines.push(parts.map(String).join(' ')) }
+      try {
+        fn()
+      } finally {
+        console.info = originalInfo
+        console.warn = originalWarn
+      }
+      return lines
+    }
     const presetEntries = captured.listeners.filter((entry) => entry.event === 'agent-preset/selected')
     check('FIX-026: agent-preset/selected 订阅经 ctx.remote.$on 装配（转发白名单首项）', presetEntries.length === 1 && typeof presetEntries[0]?.listener === 'function')
     if (presetEntries.length === 1) {
@@ -1741,29 +1793,48 @@ export async function runClientRender(check) {
       // 场景 1（主路径）：modelDirectories 可达 → directoryFor(sessionId) 恰一次
       // 且参数正确，load() 恰一次，零保底 RPC（主路径短路）。
       modelDirectoriesMode = 'ok'
+      modelDirectoriesGetMiss = false
       directoryForCalls.length = 0
       directoryLoadCalls.length = 0
       sessionModelsCalls.length = 0
-      dispatch('sess-main', 'novel-writing')
+      const mainTelemetry = captureTelemetry(() => dispatch('sess-main', 'novel-writing'))
       await new Promise((resolve) => setImmediate(resolve))
       check('FIX-026: 主路径 directoryFor(sessionId) 恰一次且参数正确（旧实现无订阅必败）', directoryForCalls.length === 1 && directoryForCalls[0] === 'sess-main')
       check('FIX-026: 主路径 directory.load() 恰一次（客户端直驱目录重载）', directoryLoadCalls.length === 1 && directoryLoadCalls[0] === 'sess-main')
       check('FIX-026: 主路径不触发保底 RPC（短路语义）', sessionModelsCalls.length === 0)
+      // FIX-027：主路径遥测——结构化 info（前缀 + 结果 + 解析形态 + 标识）。
+      check('FIX-027: 主路径遥测 load（前缀 dsh-agent-router[FIX-027] + form ctx.get + sessionId/preset）', mainTelemetry.length === 1 && mainTelemetry[0].startsWith('dsh-agent-router[FIX-027]') && mainTelemetry[0].includes('load') && mainTelemetry[0].includes('form ctx.get') && mainTelemetry[0].includes('sess-main') && mainTelemetry[0].includes('novel-writing'))
       // 场景 1b（幂等）：用户连切（真机四连切形态）→ load 跟随触发次数 1:1，
       // 无放大无叠加（只读幂等刷新，宿主 generation 守卫兜底）。
       dispatch('sess-main', 'cordis')
       await new Promise((resolve) => setImmediate(resolve))
       check('FIX-026: 多次切换 load 1:1 跟随无放大（只读幂等无害）', directoryForCalls.length === 2 && directoryLoadCalls.length === 2)
+      // 场景 1c（FIX-027 双形态防御）：get 解析落空（'getMiss'——隔离域/注入
+      // 门控下裸 get 失败的 EV-134 嫌疑形态）而属性面可用（声明后 intercept
+      // 生效）→ handler 兜属性面，主路径照常 load，遥测 form=ctx.modelDirectories
+      // （旧实现无属性兜底 → 保底 RPC → 必败 RED）。
+      modelDirectoriesMode = 'ok'
+      modelDirectoriesGetMiss = true
+      directoryForCalls.length = 0
+      directoryLoadCalls.length = 0
+      sessionModelsCalls.length = 0
+      const propTelemetry = captureTelemetry(() => dispatch('sess-prop', 'cordis'))
+      await new Promise((resolve) => setImmediate(resolve))
+      check('FIX-027: get 解析落空 → 属性面兜底仍走主路径 load（双形态防御——agentPresetsServiceOf 先例）', directoryForCalls.length === 1 && directoryForCalls[0] === 'sess-prop' && directoryLoadCalls.length === 1 && sessionModelsCalls.length === 0)
+      check('FIX-027: 属性面兜底遥测 form ctx.modelDirectories（解析形态可观测）', propTelemetry.length === 1 && propTelemetry[0].startsWith('dsh-agent-router[FIX-027]') && propTelemetry[0].includes('form ctx.modelDirectories'))
+      modelDirectoriesGetMiss = false
       // 场景 2（保底降级）：modelDirectories 服务面不可达 → 保底 session.models
       // RPC 恰一次（可观测降级不炸；保底不更新显示，主路径是 load）。
       modelDirectoriesMode = 'absent'
       directoryForCalls.length = 0
       directoryLoadCalls.length = 0
       sessionModelsCalls.length = 0
-      dispatch('sess-fallback', 'minimal')
+      const fallbackTelemetry = captureTelemetry(() => dispatch('sess-fallback', 'minimal'))
       await new Promise((resolve) => setImmediate(resolve))
       check('FIX-026: 服务不可达 → 保底 sessions.models RPC 恰一次（载荷含 sessionId）', sessionModelsCalls.length === 1 && sessionModelsCalls[0]?.sessionId === 'sess-fallback')
       check('FIX-026: 保底路径零 load 调用（服务面不可达不误触主路径）', directoryLoadCalls.length === 0 && directoryForCalls.length === 0)
+      // FIX-027：服务未就绪遥测——降级路径 warn 级结构化（P8 失败/降级可观测）。
+      check('FIX-027: 服务未就绪遥测 fallback-rpc（warn 级 + 前缀 + 不可达原因）', fallbackTelemetry.length === 1 && fallbackTelemetry[0].startsWith('dsh-agent-router[FIX-027]') && fallbackTelemetry[0].includes('fallback-rpc') && fallbackTelemetry[0].includes('unavailable'))
       // 场景 3（subagent 会话防御）：directoryFor 同步 throw（宿主无 scope/
       // subagent 形态）→ 捕获不炸 + warn 级可观测（P8），且不误触发保底 RPC
       // （subagent 会话直连 session.models RPC 会被宿主拒绝——绝不降级到它）。
@@ -1771,17 +1842,12 @@ export async function runClientRender(check) {
       directoryForCalls.length = 0
       directoryLoadCalls.length = 0
       sessionModelsCalls.length = 0
-      const warnLines = []
-      const originalWarn = console.warn
-      console.warn = (...parts) => { warnLines.push(parts.map(String).join(' ')) }
-      try {
-        dispatch('sess-sub', 'standard')
-      } finally {
-        console.warn = originalWarn
-      }
+      const throwTelemetry = captureTelemetry(() => dispatch('sess-sub', 'standard'))
       await new Promise((resolve) => setImmediate(resolve))
       check('FIX-026: directoryFor throw 捕获不炸（事件分发链零外泄）', directoryForCalls.length === 1 && directoryLoadCalls.length === 0 && sessionModelsCalls.length === 0)
-      check('FIX-026: subagent 形态降级 warn 可观测（P8：含标识与 sessionId）', warnLines.some((line) => line.includes('dsh-agent-router') && line.includes('sess-sub')))
+      check('FIX-026: subagent 形态降级 warn 可观测（P8：含标识与 sessionId）', throwTelemetry.some((line) => line.includes('dsh-agent-router') && line.includes('sess-sub')))
+      // FIX-027：throw 遥测——错误路径 warn 级结构化（结果 + 前缀 + 标识）。
+      check('FIX-027: throw 遥测 error（warn 级 + 前缀 + sessionId）', throwTelemetry.length === 1 && throwTelemetry[0].startsWith('dsh-agent-router[FIX-027]') && throwTelemetry[0].includes('error') && throwTelemetry[0].includes('sess-sub'))
       modelDirectoriesMode = 'ok'
       // 场景 4（卸载 off 生效）：装配卸载（effect cleanup 全量执行）→ 后续
       // 派发零触发（directoryFor/load/保底 RPC 全静默）。
