@@ -1,0 +1,246 @@
+{
+  "schema_version": 1,
+  "task_id": "FIX-024",
+  "title": "预设切换显示不跟随：目标模型=全局默认时设置写无差异→目录刷新事件不触发——种子成功后显式 emit llm/adapters-updated 驱动 GUI 刷新",
+  "priority": "P1",
+  "target_version": "0.4.2",
+  "depends_on": [
+    "FIX-023"
+  ],
+  "files": [
+    "lib/preset-defaults.js",
+    "tests/preset-defaults.mjs"
+  ],
+  "reason": "EV-128 三重实测定位：宿主状态全对（种子即时生效）；显示层缺口=宿主模型选择器仅三刷新源（adapters-updated/settings 文档变更/打开时），目标等于全局默认时两写均无差异不触发；修复=种子成功后 emit 白名单内刷新事件（幂等无害，语义=会话有效模型面变化）",
+  "created_at": "2026-09-02",
+  "tool": "change-triage",
+  "tool_version": "0.77.0",
+  "analysis": {
+    "dependency": {
+      "unblocked": [
+        "EVO-010",
+        "FIX-020",
+        "EVO-012",
+        "AUDIT-001",
+        "FIX-023",
+        "EVO-013",
+        "EVO-011"
+      ],
+      "blocked": [
+        "REL-002",
+        "REL-005",
+        "EVO-008",
+        "REL-006",
+        "FIX-014",
+        "FIX-017",
+        "FIX-018",
+        "FIX-019",
+        "REL-007",
+        "EVO-014"
+      ],
+      "blocked_by": [
+        "FIX-023"
+      ],
+      "unknown_deps": [],
+      "cycles": [
+        [
+          "FIX-014",
+          "REL-006",
+          "FIX-014"
+        ]
+      ],
+      "cycle_warning": true,
+      "new_task_cycle": false
+    },
+    "priority_context": {
+      "proposed": "P1",
+      "in_flight": {
+        "P0": 14,
+        "P1": 22,
+        "P2": 1
+      },
+      "version_chain": []
+    },
+    "conflicts": [
+      {
+        "task_id": "EVO-013",
+        "files": [
+          "lib/client.js",
+          "lib/index.js",
+          "lib/rpc.js",
+          "lib/schemas.js",
+          "lib/service.js",
+          "tests/client-render.mjs",
+          "tests/preset-defaults.mjs"
+        ],
+        "overlap": [
+          "tests/preset-defaults.mjs"
+        ]
+      },
+      {
+        "task_id": "EVO-014",
+        "files": [
+          "lib/index.js",
+          "lib/preset-defaults.js",
+          "readme.md",
+          "tests/preset-defaults.mjs"
+        ],
+        "overlap": [
+          "lib/preset-defaults.js",
+          "tests/preset-defaults.mjs"
+        ]
+      },
+      {
+        "task_id": "FIX-023",
+        "files": [
+          "lib/preset-defaults.js",
+          "tests/preset-defaults.mjs"
+        ],
+        "overlap": [
+          "lib/preset-defaults.js",
+          "tests/preset-defaults.mjs"
+        ]
+      }
+    ],
+    "version": {
+      "target": "0.4.2",
+      "current": "",
+      "planned_next": null,
+      "issues": []
+    },
+    "side_effect": {
+      "detected": false,
+      "touches_real_env": false,
+      "requires_r1": false,
+      "declared": "",
+      "blast_radius": [],
+      "review_conditions": [],
+      "issues": []
+    }
+  },
+  "snapshot": {
+    "tool": "task-priority-analysis",
+    "module_version": "0.71.0",
+    "report_json": {
+      "total": 38,
+      "completed": [
+        "OPS-001"
+      ],
+      "blocked": [
+        {
+          "task_id": "REL-002",
+          "blocking_dependencies": [
+            "FIX-006"
+          ]
+        },
+        {
+          "task_id": "REL-005",
+          "blocking_dependencies": [
+            "FIX-009",
+            "FIX-010"
+          ]
+        },
+        {
+          "task_id": "EVO-008",
+          "blocking_dependencies": [
+            "FIX-012"
+          ]
+        },
+        {
+          "task_id": "REL-006",
+          "blocking_dependencies": [
+            "FIX-011",
+            "FIX-012",
+            "FIX-013",
+            "FIX-014"
+          ]
+        },
+        {
+          "task_id": "FIX-014",
+          "blocking_dependencies": [
+            "REL-006"
+          ]
+        },
+        {
+          "task_id": "FIX-017",
+          "blocking_dependencies": [
+            "FIX-016"
+          ]
+        },
+        {
+          "task_id": "FIX-018",
+          "blocking_dependencies": [
+            "FIX-017"
+          ]
+        },
+        {
+          "task_id": "FIX-019",
+          "blocking_dependencies": [
+            "FIX-015"
+          ]
+        },
+        {
+          "task_id": "REL-007",
+          "blocking_dependencies": [
+            "AUDIT-001"
+          ]
+        },
+        {
+          "task_id": "EVO-014",
+          "blocking_dependencies": [
+            "FIX-022"
+          ]
+        }
+      ],
+      "unblocked": [
+        "EVO-010",
+        "FIX-020",
+        "EVO-012",
+        "AUDIT-001",
+        "FIX-023",
+        "EVO-013",
+        "EVO-011"
+      ],
+      "recommended_next": [
+        "AUDIT-001",
+        "FIX-020",
+        "FIX-023",
+        "EVO-010",
+        "EVO-011",
+        "EVO-012",
+        "EVO-013"
+      ],
+      "non_executable": [
+        "FIX-004",
+        "EVO-004",
+        "FIX-006",
+        "EVO-005",
+        "REL-003",
+        "FIX-007",
+        "EVO-006",
+        "REL-004",
+        "FIX-009",
+        "FIX-010",
+        "EVO-007",
+        "FIX-011",
+        "FIX-012",
+        "FIX-013",
+        "EVO-009",
+        "FIX-015",
+        "FIX-016",
+        "ARCH-003",
+        "FIX-021",
+        "FIX-022"
+      ],
+      "cycles": [
+        [
+          "FIX-014",
+          "REL-006",
+          "FIX-014"
+        ]
+      ],
+      "cycle_warning": true
+    },
+    "report_text": "# Task Priority Analysis\n\nTotal: **38** tasks — 1 completed, 7 unblocked, 10 blocked, 20 non-executable.\n\n## ⚠️ CYCLE DETECTED (WARNING)\n\nThe dependency graph contains a cycle. The analysis below is best-effort; the cycle should be resolved (a task should not depend, directly or transitively, on itself). This is a WARNING and does not block the analysis output (FIX-237.2 cycle tolerance).\n\n- FIX-014 → REL-006 → FIX-014\n\n## Recommended next\n\n**Top pick: `AUDIT-001` [P0]**\n\n- `AUDIT-001` [P0] v=0.4.1 status=**审计+P0 修复终态 deps=[—]\n- `FIX-020` [P0] v=0.4.1 status=**已关闭 deps=[—]  [refs: EVO-011]\n- `FIX-023` [P0] v=0.4.2 status=**开发+审查终态 deps=[—]  [refs: EVO-014, EV-126]\n- `EVO-010` [P1] v=0.4.0 status=**开发+审查终态 deps=[—]  [refs: ARCH-003]\n- `EVO-011` [P1] v=0.4.1 status=**开发+审查终态 deps=[—]  [refs: RES-004]\n- `EVO-012` [P1] v=0.4.1 status=**全链终态 deps=[—]  [refs: EVO-011]\n- `EVO-013` [P1] v=0.4.2 status=**开发+审查终态 deps=[—]\n\n## Unblocked (ready to work)\n\n- `EVO-010` [P1] v=0.4.0 status=**开发+审查终态 deps=[—]  [refs: ARCH-003]\n- `FIX-020` [P0] v=0.4.1 status=**已关闭 deps=[—]  [refs: EVO-011]\n- `EVO-012` [P1] v=0.4.1 status=**全链终态 deps=[—]  [refs: EVO-011]\n- `AUDIT-001` [P0] v=0.4.1 status=**审计+P0 修复终态 deps=[—]\n- `FIX-023` [P0] v=0.4.2 status=**开发+审查终态 deps=[—]  [refs: EVO-014, EV-126]\n- `EVO-013` [P1] v=0.4.2 status=**开发+审查终态 deps=[—]\n- `EVO-011` [P1] v=0.4.1 status=**开发+审查终态 deps=[—]  [refs: RES-004]\n\n## Excluded (non-executable status)\n\n_Dependency-satisfied rows excluded from Unblocked / Recommended next: their status leading marker is terminal / non-executable (⛔/⏸/🔴/🚧/🛑/📋/✅) or their wording is terminal without an emoji marker (FIX-237.2 / ADR-017 §4.4 P1-3 / FIX-288 ⑦) even though their dependencies are met._\n\n- `FIX-004` [P1] v=v0.3.x status=已完成 deps=[—]\n- `EVO-004` [P1] v=v0.3.1 status=已完成 deps=[—]\n- `FIX-006` [P0] v=v0.3.0 status=已完成 deps=[—]\n- `EVO-005` [P1] v=v0.3.0 status=已完成 deps=[—]  [refs: EVO-002]\n- `REL-003` [P1] v=v0.3.0 status=已完成 deps=[—]  [refs: EVO-005, DEC-025]\n- `FIX-007` [P0] v=v0.3.0（或热修） status=已完成 deps=[—]  [refs: RISK-003]\n- `EVO-006` [P1] v=v0.3.1 status=已完成 deps=[—]  [refs: EVO-002, EVO-005, DEC-026]\n- `REL-004` [P1] v=v0.3.1 status=已完成 deps=[—]  [refs: EVO-006, DEC-026]\n- `FIX-009` [P0] v=未规划版本（热修候选） status=已完成 deps=[—]\n- `FIX-010` [P0] v=未规划版本 status=已完成 deps=[—]\n- `EVO-007` [P1] v=0.3.2 status=已完成 deps=[—]\n- `FIX-011` [P0] v=未规划版本（热修候选） status=**已完成 deps=[—]\n- `FIX-012` [P0] v=未规划版本（热修候选） status=**已完成 deps=[—]\n- `FIX-013` [P1] v=未规划版本（热修候选） status=**已完成 deps=[—]\n- `EVO-009` [P1] v=0.4.0 status=**开发+审查完成 deps=[—]\n- `FIX-015` [P1] v=0.4.0 status=**已完成 deps=[—]  [refs: EVO-009]\n- `FIX-016` [P0] v=0.4.0 status=**已完成 deps=[—]  [refs: EVO-009]\n- `ARCH-003` [P1] v=0.4.0（EVO-010 输入） status=**已完成 deps=[—]\n- `FIX-021` [P0] v=0.4.1 status=**已完成 deps=[—]  [refs: EVO-012]\n- `FIX-022` [P0] v=0.4.2 status=**已完成 deps=[—]  [refs: EVO-013, EV-123]\n\n## Blocked\n\n- `REL-002` [P1] v=v0.3.0 status=已完成 blocked_by=[FIX-006]\n- `REL-005` [P1] v=0.3.2 status=已完成 blocked_by=[FIX-009, FIX-010]\n- `EVO-008` [P1] v=未规划版本 status=**已完成 blocked_by=[FIX-012]\n- `REL-006` [P1] v=0.3.3 status=**已完成 blocked_by=[FIX-011, FIX-012, FIX-013, FIX-014]\n- `FIX-014` [P0] v=0.3.3 status=**已完成 blocked_by=[REL-006]\n- `FIX-017` [P0] v=0.4.0 status=**已完成 blocked_by=[FIX-016]\n- `FIX-018` [P1] v=0.4.0 status=**开发+审查终态 blocked_by=[FIX-017]\n- `FIX-019` [P2] v=0.4.0 status=**已完成 blocked_by=[FIX-015]\n- `REL-007` [P1] v=0.4.1 status=**已发布 blocked_by=[AUDIT-001]\n- `EVO-014` [P1] v=0.4.2 status=**开发+审查终态 blocked_by=[FIX-022]\n\n## Completed\n\n- `OPS-001` [P9] v=— status=✅ 已完成 deps=[—]\n"
+  }
+}
