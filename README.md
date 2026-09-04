@@ -2,23 +2,24 @@
 
 > 专业的事情，交给专业的 agent。
 >
-> DeepSeek Harness（DSH）多模型路由插件：为任意 DSH 主 agent 挂载专业 agent 目录，按任务自动路由到带独立模型的视觉、翻译、语音、子代理等专业 agent，扩展主 agent 的能力边界。
+> DeepSeek Harness（DSH）多模型路由插件：为任意 DSH 主 agent 挂载专业 agent 目录——**Agent 预设与 subagent 默认模型**、**专业 Agent 配置与自动路由**、**ChatGPT 订阅登录 + 主模型调用**三大主要功能，按任务自动路由到带独立模型的视觉、翻译、语音、子代理等专业 agent，扩展主 agent 的能力边界。
 
 [![version](https://img.shields.io/badge/version-v0.4.1-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## 项目目标
 
-专业的事情交给专业的 agent：支持**自定义任意类型 agent**并配置对应的文本模型/多模态模型，扩展任意 DSH 主 agent 的能力边界——图片识别与生成、语音识别与转写、视频脚本与字幕、翻译、复杂子任务委派等任意专业能力，一套工具完成多模型协同。
+专业的事情交给专业的 agent：以三大主要功能为主轴，扩展任意 DSH 主 agent 的能力边界——**Agent 预设默认模型**（按 DSH 预设粒度配置主 Agent 与 subagent 的默认模型）、**专业 Agent 配置**（自定义任意类型 agent 并配置对应的文本模型/多模态模型，按能力标签自动路由）、**ChatGPT 订阅接入**（订阅登录，并支持主模型调用与订阅生图）——图片识别与生成、语音识别与转写、视频脚本与字幕、翻译、复杂子任务委派等任意专业能力，一套工具完成多模型协同。
 
 ## 特性
 
-- 🧭 **自定义专业 Agent（核心）**：五种执行通路（chat 远端模型 / agent 完整子代理 / cli 无头 CLI 子代理 / image 图片生成 / speech 语音转写）+ 自定义能力标签，主 agent 按标签自动路由；每个 agent 独立服务商与模型，未配置自动复用主 agent 模型
-- 🖼 **多模态任务路由**：图片识别（OCR、截图、图表）、图片生成（v0.4.1 起 ChatGPT 订阅直连出图，gpt-image 系）、语音转写；`files` 参数按能力分发——图片内联注入、文本内联、任意文件交给 agent / cli 类型子代理读取
+- 🎯 **Agent 预设默认模型**：按 DSH 预设粒度配置主 Agent 与 subagent 的默认模型——新会话/切换预设即时跟随显示（打开即显示，无需先发消息）；会话内手动选择永远优先（用户主权）；subagent 未配置继承主预设模型；未配置的预设完全遵循 DSH 现行规则（零行为变化）
+- 🧭 **专业 Agent 配置（核心）**：五种执行通路（chat 远端模型 / agent 完整子代理 / cli 无头 CLI 子代理 / image 图片生成 / speech 语音转写）+ 自定义能力标签自动路由；每个 agent 独立服务商与模型，未配置自动复用主 agent 模型
+- 🔑 **ChatGPT 订阅登录 + 主模型调用**：ChatGPT 订阅经官方 Codex OAuth 通路一键授权登录；v0.4.1 起订阅模型可直接作为主模型——经宿主官方 openai-codex 路由，模型选择器直接可选 gpt-5.6 系列订阅模型组，OAuth token 由插件自动注入刷新（订阅卡可随时切回「插件内置」通路）；订阅生图——draw 类 agent 绑定订阅账号即可出图（gpt-image 系模型透传）
+- 🖼 **多模态任务路由**：图片识别（OCR、截图、图表）、图片生成、语音转写；`files` 参数按能力分发——图片内联注入、文本内联、任意文件交给 agent / cli 类型子代理读取
 - 💬 **对话框图片能力**：启用视觉类专业 agent（能力标签含 `image`）后，输入框出现「添加图片」按钮——附件图片进入原生草稿栏随消息原生发送，会话日志保留原件（界面原生显示）；插件在 system 层注入路由提示，主 agent 按需调用 route_agent（`includeImages` 把最近消息的图片转发给视觉 agent，自动附带主会话最近上下文，截图真正成为对话上下文的一部分）；生成图片经插件同源画布直达显示（v0.4.1 起：`/router-assets/` 内容寻址同源路由，不再依赖宿主附件通道；route_agent 工具卡默认折叠、输入区 🖼 按钮汇总会话产物；纯插件机制：带图轮始终由主模型应答，纯文本主模型全程不接触图片字节）
 - 🤖 **无头 CLI 子代理（Codex / Claude / Gemini）**：把 `codex` / `claude` / `gemini` 等外部 agent 工具作为子代理接入——无头模式（`codex exec --json` / `claude -p` / `gemini -p`）在工作区内自动执行多步任务，图片与文件按工作区路径注入；CLI 使用自身登录态（各自终端登录一次），插件零 OAuth 对接
-- 🔑 **多模态账号**：任意服务商 API Key 配置式添加（官方/中转/本地部署同一条路径，无预设无登录）；ChatGPT 订阅登录（正式通道，官方 Codex OAuth 通路一键授权）；无头 CLI 子代理（Codex / Claude / Gemini，插件零 OAuth 对接）；账号池按健康/用量/轮询策略自动选号与失败切换（官方 API 不提供 OAuth——v0.3.2 起已移除不可用的「OAuth 官方登录」入口）
-- ⚡ **主模型官方路由（v0.4.1 起）**：ChatGPT 订阅主模型默认经宿主官方 openai-codex 路由——模型选择器直接可选订阅模型组，OAuth token 由插件自动注入刷新（订阅卡可随时切回「插件内置」通路）
+- 💳 **多模态账号与账号池**：任意服务商 API Key 配置式添加（官方/中转/本地部署同一条路径，无预设无登录）；账号池按健康/用量/轮询策略自动选号与失败切换（官方 API 不提供 OAuth——v0.3.2 起已移除不可用的「OAuth 官方登录」入口）
 - 📊 **实时用量统计**：Agent 级与账号级两级明细（调用/失败/tokens/耗时）、分钟级 tokens 分布、最近调用记录；用量按天持久化（缺省落盘 `$DSH_HOME`、保留 90 天，重启不清零；`router.stats.persist=false` 可关闭）、按天视图与 CSV 导出
 - 🔌 **零配置接入**：宿主平面注册 `route_agent` 工具与路由提示段，内置与自定义的任意 agent 预设自动获得路由能力
 
