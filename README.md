@@ -4,7 +4,7 @@
 >
 > DeepSeek Harness（DSH）多模型路由插件：为任意 DSH 主 agent 挂载专业 agent 目录——**Agent 预设与 subagent 默认模型**、**专业 Agent 配置与自动路由**、**ChatGPT 订阅登录 + 主模型调用**三大主要功能，按任务自动路由到带独立模型的视觉、图片生成、翻译、语音、子代理等专业 agent，扩展主 agent 的能力边界。
 
-[![version](https://img.shields.io/badge/version-v0.4.2-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
+[![version](https://img.shields.io/badge/version-v0.4.3-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## 项目目标
@@ -79,23 +79,23 @@ npx @deepseek-ai/dsh plugin --profile web add file:./
 
 安装脚本自动完成：克隆源码 → 链接到 `~/.dsh/profiles/node_modules/` → 在 `profiles/web/cordis.patch.yml` 写入宿主行（幂等，可重复执行）。完成后**重启 DSH** 即可。
 
-固定版本：把命令中的 `main` 换成版本号，如 `v0.4.2`。
+固定版本：把命令中的 `main` 换成版本号，如 `v0.4.3`。
 
 #### 离线安装
 
-1. 下载发行包：[dsh-agent-router-0.4.2.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.4.2/dsh-agent-router-0.4.2.tar.gz)
+1. 下载发行包：[dsh-agent-router-0.4.3.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.4.3/dsh-agent-router-0.4.3.tar.gz)
 2. 解压并进入包目录（npm pack 形态，目录名为 `package`）：
 
 ```powershell
 # Windows
-tar -xzf dsh-agent-router-0.4.2.tar.gz
+tar -xzf dsh-agent-router-0.4.3.tar.gz
 cd package
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -LocalPath .
 ```
 
 ```sh
 # macOS / Linux
-tar -xzf dsh-agent-router-0.4.2.tar.gz
+tar -xzf dsh-agent-router-0.4.3.tar.gz
 cd package
 ./install.sh --local .
 ```

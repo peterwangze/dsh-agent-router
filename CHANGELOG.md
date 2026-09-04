@@ -3,6 +3,35 @@
 > dsh-agent-router 的版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 > 内部注解（提交号 / EV 编号）供追溯，用户可忽略。
 
+## v0.4.3 — 2026-09-04
+
+### 摘要
+
+**标准插件管理版**。核心变化一句话：**`dsh plugin --profile web add / update / remove` 官方管理命令真实可用（此前该通道装而不激活）；README 安装文档双通道化，每条命令经隔离环境实测**。
+
+### 新增
+
+- **🔌 dsh plugin 标准管理支持（EVO-015）**：package.json 声明 `dsh.bundle` + 包内 bundle patch 层（`cordis.patch.yml`，与安装脚本写入宿主 profile 的宿主平面行逐字一致——两通道注册同一对服务 `router` / `tool-router`）。README 安装章节双通道化：方式一（推荐）`dsh plugin --profile web add`——npm 安装 dsh / npx 拉起 × 在线 git spec / 离线 `file:` 解压目录（说明 `link:` 只创建符号链接、不安装依赖故不采用），并附 `update` / `remove` 命令矩阵与「从旧方式（junction/脚本）迁移」三步；方式二安装脚本原样保留——已用脚本通道的用户零影响、可继续使用（内部注解：commit `7965c9d`；REVIEW-EVO-015-R0 APPROVED_WITH_NOTES / unresolved_blockers=0；EV-143~144）。
+
+### 修复
+
+- **README 离线安装链接勘误（EVO-015 顺带取证）**：v0.4.2 及此前的发行资产名**无 v 前缀**（`dsh-agent-router-X.Y.Z.tar.gz`）——旧文档链接（带 v 前缀）实为 404 坏链（GitHub API 列举 + 实下载核验）；发行包为 npm pack 形态（解压根目录固定 `package/`），旧文档的 `cd dsh-agent-router-vX.Y.Z` 目录名不存在——离线安装步骤已按真实结构改写。
+
+### 变更
+
+- **files 列表新增 `cordis.patch.yml`**（打包完整性——bundle patch 层随发行包分发）。
+- **install-entry 新增 11 条判别断言**（dsh.bundle 声明 / patch 层逐字一致 / README 双通道命令守卫；`tests/smoke.mjs` 1087 → 1098，零回退）。
+
+### 破坏性变更
+
+**无。**论证（四证）：① **配置面零新增节**——`dsh.bundle` 为包清单声明（宿主 `dsh plugin` 通道读取），不新增任何用户配置项；② **依赖面零变更**——deps/peerDeps 与 v0.4.2 逐项一致，仅 files 列表 +1；③ **数据面零变更**——不触碰任何存储格式与用户数据；④ **行为面零强制**——双通道并存，既有脚本通道安装（junction + 手写 patch 行）运行时零影响（宿主 loadProfile 仅映射 profile 的 `dsh.profile.bundles` 列表，脚本通道该列表不含本包、不读包内 `dsh.bundle` 字段）。
+
+### 版本说明
+
+- **版本号**：0.4.2 → **v0.4.3**（版本位按用户裁决 v0.4.3 立即发布；新增面为标准管理声明与文档双通道化，零 breaking 见「破坏性变更」四证）。
+- **发布范围**：v0.4.2（tag e91f77d，2026-09-02）以来 main 全部提交 **3 个**（`git rev-list --count v0.4.2..HEAD` E-1 时点实采 = 2，加本提交）。三分账：**产品提交 1 个**——EVO-015 `7965c9d`（dsh.bundle 声明 + 包内 patch 层 + README 双通道文档 + install-entry 判别）；**治理提交 1 个**——`c2be6dc`（REL-008 tracker 终态，归属 v0.4.2 发布链尾账，不入用户面）+ **REL-009（本提交——version bump + 本节收口 + README 版本校对，hash 见 git log）**。**结论行：1 + 1 + 本提交 = 3，与实采一致（2 + 本提交）；产品提交在本节语义全覆盖，治理提交不入用户面。**
+- **验证基线**：E-1 时点 `node tests/smoke.mjs` **1098 ok / 0 FAIL / exit 0**（含 install-entry 判别 11 断言）。内部注解：发布执行段 E-2 十八面门控复跑（tests/ 下全部 .mjs 门控套件，metrics.mjs 观测脚本除外）与 E-3 tarball 隔离环境安装冒烟（环境变量重定向至临时目录）随发布链执行，最终以复跑实测值为准。
+
 ## v0.4.2 — 2026-09-02
 
 ### 摘要
