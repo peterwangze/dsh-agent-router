@@ -2,9 +2,9 @@
 
 > 专业的事情，交给专业的 agent。
 >
-> DeepSeek Harness（DSH）多模型路由插件：为任意 DSH 主 agent 挂载专业 agent 目录——**Agent 预设与 subagent 默认模型**、**专业 Agent 配置与自动路由**、**ChatGPT 订阅登录 + 主模型调用**三大主要功能，按任务自动路由到带独立模型的视觉、翻译、语音、子代理等专业 agent，扩展主 agent 的能力边界。
+> DeepSeek Harness（DSH）多模型路由插件：为任意 DSH 主 agent 挂载专业 agent 目录——**Agent 预设与 subagent 默认模型**、**专业 Agent 配置与自动路由**、**ChatGPT 订阅登录 + 主模型调用**三大主要功能，按任务自动路由到带独立模型的视觉、图片生成、翻译、语音、子代理等专业 agent，扩展主 agent 的能力边界。
 
-[![version](https://img.shields.io/badge/version-v0.4.1-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
+[![version](https://img.shields.io/badge/version-v0.4.2-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## 项目目标
@@ -34,24 +34,24 @@
 
 安装脚本自动完成：克隆源码 → 链接到 `~/.dsh/profiles/node_modules/` → 在 `profiles/web/cordis.patch.yml` 写入宿主行（幂等，可重复执行）。完成后**重启 DSH** 即可。
 
-固定版本：把命令中的 `main` 换成版本号，如 `v0.4.1`。
+固定版本：把命令中的 `main` 换成版本号，如 `v0.4.2`。
 
 ### 离线安装
 
-1. 下载发行包：[dsh-agent-router-v0.4.1.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.4.1/dsh-agent-router-v0.4.1.tar.gz)
+1. 下载发行包：[dsh-agent-router-v0.4.2.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.4.2/dsh-agent-router-v0.4.2.tar.gz)
 2. 解压并进入包目录：
 
 ```powershell
 # Windows
-tar -xzf dsh-agent-router-v0.4.1.tar.gz
-cd dsh-agent-router-v0.4.1
+tar -xzf dsh-agent-router-v0.4.2.tar.gz
+cd dsh-agent-router-v0.4.2
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -LocalPath .
 ```
 
 ```sh
 # macOS / Linux
-tar -xzf dsh-agent-router-v0.4.1.tar.gz
-cd dsh-agent-router-v0.4.1
+tar -xzf dsh-agent-router-v0.4.2.tar.gz
+cd dsh-agent-router-v0.4.2
 ./install.sh --local .
 ```
 
@@ -98,7 +98,7 @@ cd dsh-agent-router-v0.4.1
   - **打开即显示**：新开（或空白切换）某预设的会话时，对话框模型选择器**立即显示**该预设配置的默认模型——无需先发消息；空白会话切换预设时**实时跟随**新预设的配置，切到无配置的预设则回落 DSH 全局默认
   - **首条消息后锚定**：发出第一条消息后，会话模型由请求日志锚定（宿主原生行为）——后续配置修改不再影响该会话
   - **手动选择即当前会话生效**：会话内手动切换模型 = 宿主原生会话内选择，插件不监听、不干预、不打架
-  - **主 Agent 默认模型**：仅对空白会话（无请求日志）生效；已运行会话（重启恢复的已产出对话）始终优先，不受配置影响；未设置 = 完全遵循 DSH 现行规则（零行为变化）
+  - **主 Agent 默认模型**：仅对空白会话生效——未发过消息（未开启过对话轮）；已运行会话（重启恢复的已产出对话）始终优先，不受配置影响；未设置 = 完全遵循 DSH 现行规则（零行为变化）
   - **subagent 默认模型**：该预设派生的 subagent 的默认模型；未设置时 subagent 继承主预设 Agent 的设置；显式指定模型的子代理（如插件专业 agent 委派、workflow 指定模型）不受影响
 - **实现机制**：模型跟随两个预设事件（agent 创建 / 空白切换），**不介入会话过程**（无请求流拦截，会话进行中零插件开销）；主会话显示播种借用宿主会话模型选择通路，其附带的全局默认写入**立即自动写回恢复**（瞬态毫秒级，通常不可感知）——恢复失败时自动重试一次，仍失败则在日志高声告警并提示手动改回原全局默认；多个播种事件并发到达时（宿主不等待事件监听器完成）按内部**串行化队列**依次执行，并发交错不会污染全局默认的写回恢复
 - **已知行为披露**：重启后重新打开**从未发过消息的空白预设会话**，同样会触发显示播种（宿主在恢复会话时也发出 agent 创建事件）——与「打开即显示」语义一致；已发过消息的会话不受影响（日志锚定）。全局默认模型（「设置 → 模型」）在播种成功且恢复正常的情况下保持不变；保存后热生效，无需重启。宿主发出预设事件后**不等待播种完成**（fire-and-forget）——播种按内部串行化队列依次处理（极小窗口内并发创建的多个会话各自正确播种、全局默认仍恢复正确），但会话创建后到播种完成前的毫秒级窗口内，首个请求可能短暂路由到全局默认模型，显示与实际路由随后自动一致（人手操作通常不可感知）
@@ -144,7 +144,7 @@ cd dsh-agent-router-v0.4.1
 - **视觉 agent 用什么模型？** 需要支持图片输入的模型（如 `gpt-4o` 等 OpenAI 兼容多模态模型；实测 `opencode-go/qwen3.7-plus` 亦可）。模型不支持图片输入时插件会在调用前给出明确报错。
 - **能用 Codex / Claude Code / Gemini CLI 做子代理吗？** 能——在「多模态账号 → 子代理」添加 CLI 条目（一键预填或自定义），完成登录与模型拉取；然后把任意专业 agent 的执行方式切到 `cli`，从「子代理」下拉选择该条目。无头模式在工作区内执行，CLI 自己管登录（`codex login` 等一次即可），不经过插件的 OAuth 账号体系。
 - **CLI 子代理任务一直转圈/卡住？** CLI 子代理是完整 LLM agent：遇到可重试的错误（网络 502、上游超时）会自行反复重试而不是立即失败，而插件只在总超时（默认 15 分钟/条目，工具级 20 分钟）后强杀，因此表现为长时间卡住。宿主已注入重试纪律（同一失败重试 ≤2 次即报告错误结束），失败时返回结果会带上子代理 stderr 关键行（工作区 `.router-files/cli-run-*-err.log` 也有完整日志）。常见根因：① 上游网络不可达——图片生成走子代理自身的上游服务（如 Codex 走 ChatGPT 图片接口），需保证本机可达（开启代理等）；② 沙箱配置不当——Codex 在 Windows 上用 `workspace-write` / `read-only` 时，OS 沙箱无法启动 shell（每条命令报 `CreateProcessAsUserW failed: 5/1920`），子代理会反复重试浪费 token；保持参数留空（平台自适应默认）或显式使用 `--sandbox danger-full-access`（Windows）/ `workspace-write`（macOS/Linux），`read-only` 还会让产物无法落盘。注意：自定义参数里的旧版 `--full-auto` 会让 `--sandbox danger-full-access` 失效（实测仍走 Windows 沙箱并报 5/1920），请一并移除；③ 并发与超时——同一子代理受「并发上限」约束，连点多次会各自排队或报「正忙」。
-- **ChatGPT / Claude 能 OAuth 登录吗？** ChatGPT **订阅**账号：设置 → Agent 路由 → 多模态账号 →「ChatGPT 订阅登录」一键登录（v0.3.1 起为正式通道，无需开启任何开关；v0.3.0 时期的实验开关已废弃）。曾在 v0.3.0 开启实验后又手动关闭开关的用户请注意：升级后通道恢复可用（旧的「关闭」偏好不迁移），暂不使用时可在该账号卡「登出并删除凭据」或删除账号。**官方 API 不提供 OAuth**（Claude 官方 API 亦无）：官方服务请用官方 API Key；v0.3.2 起已移除不可用的「OAuth 官方登录 / 粘贴 token」管理入口，历史 OAuth 账号仅保留在账号池与「未入池的 OAuth 账号」列表中（可在池行或列表行删除清理凭据），不再提供登录与维护表单。v0.4.1 起：订阅账号可直接生图（draw 类 agent 绑定订阅账号即可出图，gpt-image 系模型透传），订阅主模型默认经宿主官方 openai-codex 路由（token 自动注入；可在订阅卡切回「插件内置」通路）。
+- **ChatGPT / Claude 能 OAuth 登录吗？** ChatGPT **订阅**账号：设置 → Agent 路由 → 多模态账号 →「ChatGPT 订阅登录」一键登录（v0.3.1 起为正式通道，无需开启任何开关；v0.3.0 时期的实验开关已废弃）。曾在 v0.3.0 开启实验后又手动关闭开关的用户请注意：升级后通道恢复可用（旧的「关闭」偏好不迁移），暂不使用时可在该账号卡「登出并删除凭据」或删除账号。**官方 API 不提供 OAuth**（Claude 官方 API 亦无）：官方服务请用官方 API Key；v0.3.2 起已移除不可用的「OAuth 官方登录 / 粘贴 token」管理入口，历史 OAuth 账号仅保留在账号池与「未入池的 OAuth 账号」列表中（可在池行或列表行删除清理凭据），不再提供登录与维护表单。v0.4.1 起：订阅账号可直接生图（draw 类 agent 绑定订阅账号即可出图，gpt-image 系模型透传），订阅主模型默认经宿主官方 openai-codex 路由（token 自动注入；可在订阅卡切回「插件内置」通路——既有会话切回后需在模型选择器手动重选模型组）。
 - **主 agent 怎么知道该调谁？** 安装后所有 agent 预设自动获得 `route_agent` 工具与路由提示段，按能力标签路由：带图片的任务路由给声明 `image` 能力的 agent，语音转写路由给 `audio` 能力 agent。
 - **纯文本主模型怎么发送对话框图片？** 主模型不支持图片输入时，harness 默认拒绝带图片的消息（且图片块进入历史会让纯文本模型的每次请求报 UNSUPPORTED_CONTENT）。启用带 `image` 能力的视觉类专业 agent 后，多模态接管生效（**v0.3.3 起为图片条件化自动接管**）：输入框**贴图即自动**把会话模型切到「\<provider\> + 多模态」包装路由（无需手动开启接管开关；无图/纯文本轮永不自动切换、用户手动选择的模型始终尊重）；**发送后保持**该路由——包装路由对带图消息放行准入，插件把模型输入中的图片块改写为路由提示（会话日志保留原件、界面原生显示，带图轮始终由主模型应答），后续纯文本轮经包装路由零开销委托原生模型，主 agent 据此调用 route_agent（`includeImages` 转发图片并**自动附带主会话最近对话上下文**，视觉 agent 结合上下文与截图作答——截图真正参与上下文理解，而非孤立 OCR）。生成图片经插件同源画布直达显示（v0.4.1 起：内容寻址同源路由直接出图，route_agent 工具卡默认折叠——过程收起、结果直出，输入区 🖼 按钮可查看会话产物集合；不再经宿主附件通道，历史「图片加载失败」类显示层问题随之根治）。行为说明：**移除未发送的图片不会自动切回原模型**（插件无法安全区分「发送后清空」与「移除」，切回请在模型列表手动选择）；主模型本身支持图片时，原生粘贴 / 拖拽发送仍照常可用。
 - **统计会丢吗？** 不会丢——v0.3.0 起用量统计默认写入磁盘（位置：DSH 数据目录 `$DSH_HOME`；按天 JSONL；默认保留 90 天），DSH 重启后统计仍在；不希望落盘可在设置中关闭 `router.stats.persist`（回纯内存行为，此前已落盘的数据不受影响，重新开启后自动恢复）。
