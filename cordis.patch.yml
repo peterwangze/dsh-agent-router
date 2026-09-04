@@ -1,0 +1,11 @@
+# dsh-agent-router bundle patch：多模型路由的宿主平面两行。
+# 经 `dsh plugin add` 安装时作为 bundle 层激活（package.json 的
+# dsh.bundle.patch 指向本文件）；与 install.ps1 脚本通道写入 profile
+# cordis.patch.yml 的行保持逐字一致。
+# - `router`      : router 服务 + Agent 路由设置页 + /api/router/* Remote
+# - `tool-router` : route_agent 工具 + router:agents 提示段（对全部 agent 预设可见）
+- insert:
+    - id: router
+      name: dsh-agent-router
+    - id: tool-router
+      name: dsh-agent-router/tool

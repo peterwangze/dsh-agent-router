@@ -25,7 +25,52 @@
 
 ## 安装
 
-### 在线安装（一条命令）
+### 方式一（推荐）：dsh plugin 标准管理
+
+前置要求：DSH ≥ 0.1.1-rc.2（含 `dsh plugin` 命令）+ [pnpm](https://pnpm.io/)（宿主插件管理以 pnpm 拉起安装）。
+
+**在线安装**（插件未发布 npm registry，走 GitHub git 源）：
+
+| dsh 形态 | 命令 |
+| --- | --- |
+| npm 全局安装了 dsh | `dsh plugin --profile web add github:peterwangze/dsh-agent-router` |
+| npx 拉起 dsh | `npx @deepseek-ai/dsh plugin --profile web add github:peterwangze/dsh-agent-router` |
+
+**离线安装**（发行包为 npm pack 形态——解压出 `package/` 目录）：
+
+1. 下载发行包：[dsh-agent-router-0.4.3.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.4.3/dsh-agent-router-0.4.3.tar.gz)
+2. 解压并进入包目录：
+
+```powershell
+# Windows（PowerShell）
+tar -xzf dsh-agent-router-0.4.3.tar.gz
+cd package
+dsh plugin --profile web add file:./
+```
+
+```sh
+# macOS / Linux
+tar -xzf dsh-agent-router-0.4.3.tar.gz
+cd package
+npx @deepseek-ai/dsh plugin --profile web add file:./
+```
+
+> 离线 spec 必须用 `file:` 且带 `./` 前缀——相对路径由宿主锚定到当前目录，不带 `./` 的裸相对名会被当作 registry 包名。不要用 `link:`：`link:` 只创建符号链接、不安装依赖，插件自身依赖缺失无法加载；`file:` 由 pnpm 完整安装依赖。
+
+**更新 / 卸载**（git 与 file: 安装均可重新解析）：
+
+| 操作 | npm 全局安装了 dsh | npx 拉起 dsh |
+| --- | --- | --- |
+| 更新 | `dsh plugin --profile web update dsh-agent-router` | `npx @deepseek-ai/dsh plugin --profile web update dsh-agent-router` |
+| 卸载 | `dsh plugin --profile web remove dsh-agent-router` | `npx @deepseek-ai/dsh plugin --profile web remove dsh-agent-router` |
+
+完成后**重启 DSH** 即可。
+
+### 方式二：安装脚本（无需 pnpm 的替代通道）
+
+> 无需 pnpm 的替代安装通道；标准管理命令见方式一。
+
+#### 在线安装（一条命令）
 
 | 平台 | 命令 |
 | --- | --- |
@@ -36,24 +81,44 @@
 
 固定版本：把命令中的 `main` 换成版本号，如 `v0.4.2`。
 
-### 离线安装
+#### 离线安装
 
-1. 下载发行包：[dsh-agent-router-v0.4.2.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.4.2/dsh-agent-router-v0.4.2.tar.gz)
-2. 解压并进入包目录：
+1. 下载发行包：[dsh-agent-router-0.4.2.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.4.2/dsh-agent-router-0.4.2.tar.gz)
+2. 解压并进入包目录（npm pack 形态，目录名为 `package`）：
 
 ```powershell
 # Windows
-tar -xzf dsh-agent-router-v0.4.2.tar.gz
-cd dsh-agent-router-v0.4.2
+tar -xzf dsh-agent-router-0.4.2.tar.gz
+cd package
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -LocalPath .
 ```
 
 ```sh
 # macOS / Linux
-tar -xzf dsh-agent-router-v0.4.2.tar.gz
-cd dsh-agent-router-v0.4.2
+tar -xzf dsh-agent-router-0.4.2.tar.gz
+cd package
 ./install.sh --local .
 ```
+
+### 从旧方式迁移（junction / 脚本安装用户）
+
+此前用安装脚本安装的用户（junction 链接 + 手写 patch 行）迁移到标准管理，三步：
+
+1. 编辑 `~/.dsh/profiles/web/cordis.patch.yml`，删除手写的 router / tool-router 两行（保留文件中的其它行）：
+
+   ```yaml
+       - id: router
+         name: dsh-agent-router
+       - id: tool-router
+         name: dsh-agent-router/tool
+   ```
+
+2. 删除 junction 链接（只删链接、不动源码）：
+   - Windows（PowerShell）：`(Get-Item ~\.dsh\profiles\node_modules\dsh-agent-router -Force).Delete()`
+   - macOS / Linux：`rm ~/.dsh/profiles/node_modules/dsh-agent-router`
+3. 按方式一重新 add，完成后重启 DSH。
+
+必须先清后装：手写 patch 行与 bundle 层会重复注册同一对服务（`router` / `tool-router`），不清除直接 add 会导致双重注册。
 
 ### 让 AI 帮你装（对话安装）
 
@@ -62,14 +127,12 @@ cd dsh-agent-router-v0.4.2
 ```text
 请帮我在 DeepSeek Harness 上安装「dsh-agent-router」多模型路由插件：
 
-1. 检测当前系统平台，在终端执行对应安装命令：
-   - Windows（PowerShell）：
-     powershell -ExecutionPolicy Bypass -Command "iex (((irm https://raw.githubusercontent.com/peterwangze/dsh-agent-router/main/install.ps1) -join [Environment]::NewLine).TrimStart([char]0xFEFF))"
-   - macOS / Linux：
-     curl -fsSL https://raw.githubusercontent.com/peterwangze/dsh-agent-router/main/install.sh | sh
-2. 等待命令执行完成，确认输出包含「安装完成」。
-3. 提醒用户重启 DeepSeek Harness。
-4. 重启后打开「设置 → Agent 路由」，用预设模板添加专业 Agent（如视觉识别）。
+1. 确认前置条件：DeepSeek Harness ≥ 0.1.1-rc.2（含 dsh plugin 命令）、本机已安装 pnpm。
+2. 在终端执行标准管理命令（npx 形态最通用，Windows / macOS / Linux 一致）：
+   npx @deepseek-ai/dsh plugin --profile web add github:peterwangze/dsh-agent-router
+3. 等待命令执行完成，确认输出无报错（pnpm 会自动安装插件依赖）。
+4. 提醒用户重启 DeepSeek Harness。
+5. 重启后打开「设置 → Agent 路由」，用预设模板添加专业 Agent（如视觉识别）。
 ```
 
 ## 使用指南
@@ -148,7 +211,7 @@ cd dsh-agent-router-v0.4.2
 - **主 agent 怎么知道该调谁？** 安装后所有 agent 预设自动获得 `route_agent` 工具与路由提示段，按能力标签路由：带图片的任务路由给声明 `image` 能力的 agent，语音转写路由给 `audio` 能力 agent。
 - **纯文本主模型怎么发送对话框图片？** 主模型不支持图片输入时，harness 默认拒绝带图片的消息（且图片块进入历史会让纯文本模型的每次请求报 UNSUPPORTED_CONTENT）。启用带 `image` 能力的视觉类专业 agent 后，多模态接管生效（**v0.3.3 起为图片条件化自动接管**）：输入框**贴图即自动**把会话模型切到「\<provider\> + 多模态」包装路由（无需手动开启接管开关；无图/纯文本轮永不自动切换、用户手动选择的模型始终尊重）；**发送后保持**该路由——包装路由对带图消息放行准入，插件把模型输入中的图片块改写为路由提示（会话日志保留原件、界面原生显示，带图轮始终由主模型应答），后续纯文本轮经包装路由零开销委托原生模型，主 agent 据此调用 route_agent（`includeImages` 转发图片并**自动附带主会话最近对话上下文**，视觉 agent 结合上下文与截图作答——截图真正参与上下文理解，而非孤立 OCR）。生成图片经插件同源画布直达显示（v0.4.1 起：内容寻址同源路由直接出图，route_agent 工具卡默认折叠——过程收起、结果直出，输入区 🖼 按钮可查看会话产物集合；不再经宿主附件通道，历史「图片加载失败」类显示层问题随之根治）。行为说明：**移除未发送的图片不会自动切回原模型**（插件无法安全区分「发送后清空」与「移除」，切回请在模型列表手动选择）；主模型本身支持图片时，原生粘贴 / 拖拽发送仍照常可用。
 - **统计会丢吗？** 不会丢——v0.3.0 起用量统计默认写入磁盘（位置：DSH 数据目录 `$DSH_HOME`；按天 JSONL；默认保留 90 天），DSH 重启后统计仍在；不希望落盘可在设置中关闭 `router.stats.persist`（回纯内存行为，此前已落盘的数据不受影响，重新开启后自动恢复）。
-- **升级 / 重复安装？** 直接重跑安装命令即可（脚本幂等；在线模式自动 `git pull` 更新源码）。
+- **升级 / 重复安装？** 已用方式一（dsh plugin 标准管理）安装的用户直接 `dsh plugin --profile web update dsh-agent-router`（或 npx 形态）；方式二脚本安装的用户重跑安装命令即可（脚本幂等；在线模式自动 `git pull` 更新源码）。
 
 ## License
 

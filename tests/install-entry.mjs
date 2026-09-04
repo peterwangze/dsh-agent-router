@@ -227,7 +227,7 @@ export async function runInstallEntryTests(check) {
     const ps1Text = readFileSync(join(ROOT_DIR, 'install.ps1'), 'utf8')
     const readmeText = readFileSync(join(ROOT_DIR, 'README.md'), 'utf8')
     check('install.ps1 header documents BOM-immune command', ps1Text.includes(core))
-    check('README documents BOM-immune command (table + AI prompt)', readmeText.split(core).length - 1 >= 2)
+    check('README documents BOM-immune command (script install table)', readmeText.split(core).length - 1 >= 1)
     check('README no longer documents irm|iex form', !readmeText.includes('irm https://raw.githubusercontent.com/peterwangze/dsh-agent-router/main/install.ps1 | iex') && !readmeText.includes('irm https://raw.githubusercontent.com/peterwangze/dsh-agent-router/main/install.ps1 \\| iex'))
   }
 
@@ -235,7 +235,35 @@ export async function runInstallEntryTests(check) {
   const server = await startFixtureServer()
   const baseUrl = `http://127.0.0.1:${server.port}`
   try {
-    // ── 3. 在线命令守卫（PowerShell 5.1 / 7）────────────────────────
+    // ── 3. dsh.bundle 标准管理守卫（`dsh plugin add/remove/update` 通道）──
+  // 回归目标：宿主按 `dsh?.bundle?.patch !== undefined` 判活插件层——未声明的
+  // 包只按普通依赖安装、不进 profile 层栈（stderr 提示 plain dependency、
+  // 不激活）。包内 cordis.patch.yml 顶层数组两行必须与 install.ps1 写入宿主
+  // profile 的宿主平面行逐字一致（脚本通道与标准管理通道注册同一对服务）。
+  {
+    const pkg = JSON.parse(readFileSync(join(ROOT_DIR, 'package.json'), 'utf8'))
+    check('package.json declares dsh.bundle.patch layer', pkg.dsh?.bundle?.patch === './cordis.patch.yml')
+    check('package.json keeps dsh.client declaration intact', pkg.dsh?.client?.platform === 'web' && Array.isArray(pkg.dsh.client.inject) && pkg.dsh.client.inject.length > 0)
+    check('package.json files ships cordis.patch.yml', Array.isArray(pkg.files) && pkg.files.includes('cordis.patch.yml'))
+    const patchPath = join(ROOT_DIR, 'cordis.patch.yml')
+    check('cordis.patch.yml exists at package root', existsSync(patchPath))
+    const patchLines = existsSync(patchPath)
+      ? readFileSync(patchPath, 'utf8').split(/\r?\n/).map((line) => line.replace(/\s+$/, ''))
+      : []
+    check('cordis.patch.yml is a top-level insert array', patchLines.includes('- insert:'))
+    check('cordis.patch.yml registers router row verbatim', patchLines.includes('    - id: router') && patchLines.includes('      name: dsh-agent-router'))
+    check('cordis.patch.yml registers tool-router row verbatim', patchLines.includes('    - id: tool-router') && patchLines.includes('      name: dsh-agent-router/tool'))
+    // README 双通道文档守卫：标准管理命令（在线 git spec / 离线 file: spec /
+    // update / remove）必须与 dsh plugin 通道同形；离线段必须说明 link: 只做
+    // 符号链接、依赖不安装的缺陷。
+    const readmeText = readFileSync(join(ROOT_DIR, 'README.md'), 'utf8')
+    check('README documents dsh plugin add (npm + npx online forms)', readmeText.includes('dsh plugin --profile web add github:peterwangze/dsh-agent-router') && readmeText.includes('npx @deepseek-ai/dsh plugin --profile web add github:peterwangze/dsh-agent-router'))
+    check('README documents offline add via file: spec', readmeText.includes('plugin --profile web add file:./'))
+    check('README documents dsh plugin update and remove', readmeText.includes('plugin --profile web update dsh-agent-router') && readmeText.includes('plugin --profile web remove dsh-agent-router'))
+    check('README warns link: skips dependency install', readmeText.includes('link:'))
+  }
+
+  // ── 4. 在线命令守卫（PowerShell 5.1 / 7）────────────────────────
     const hosts = await powerShellHosts()
     if (hosts.length === 0) {
       console.log('  skip PowerShell online checks (no powershell/pwsh available)')
@@ -265,7 +293,7 @@ export async function runInstallEntryTests(check) {
       }
     }
 
-    // ── 4. POSIX 在线命令守卫 ────────────────────────────────────────
+    // ── 5. POSIX 在线命令守卫 ────────────────────────────────────────
     const sh = await posixShell()
     if (sh === null) {
       console.log('  skip POSIX online checks (no sh/curl available)')
@@ -277,7 +305,7 @@ export async function runInstallEntryTests(check) {
       check(`online curl|sh command succeeds on ${sh}`, run.status === 0 && run.error === null && sentinel)
     }
 
-    // ── 5. 离线安装守卫（临时 DSH_HOME，不触碰真实 ~/.dsh）──────────
+    // ── 6. 离线安装守卫（临时 DSH_HOME，不触碰真实 ~/.dsh）──────────
     const dshHome = join(tmpDir, 'offline-dsh-home')
     for (const host of hosts) {
       const runInstall = () => runCommand(host, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(ROOT_DIR, 'install.ps1'), '-LocalPath', ROOT_DIR], { env: { ...process.env, DSH_HOME: dshHome } })
@@ -302,7 +330,7 @@ export async function runInstallEntryTests(check) {
       check(`offline install (sh --local) idempotent on ${sh}`, second.status === 0 && second.error === null && patchAgain)
     }
 
-    // ── 6. 依赖解析守卫：裸源码（git clone 形态，无 node_modules）────
+    // ── 7. 依赖解析守卫：裸源码（git clone 形态，无 node_modules）────
     // 回归目标：junction 挂载后 Node 从插件真实目录解析 `@deepseek-ai/*`
     // 依赖；缺依赖链接时 ERR_MODULE_NOT_FOUND 击穿 DSH 启动（实测复现）。
     // 裸环境放在仓库外：仓库自身的 dev 依赖 junction 会沿父目录污染解析，
@@ -395,7 +423,7 @@ export async function runInstallEntryTests(check) {
       }
     }
 
-    // ── 7. git 失败守卫：在线模式 git 失败必须立即中止───────────────
+    // ── 8. git 失败守卫：在线模式 git 失败必须立即中止───────────────
     // 回归目标：git clone 失败后旧脚本继续走 junction/robocopy，最终以误导性的
     // "robocopy 退出码 16" 收场且污染失败现场（用户实测报错）。修复后：
     // git 任一环节失败 → 清晰报错并退出，不创建任何链接/拷贝/补丁。
