@@ -444,3 +444,13 @@
 | | EV-136 | FIX-027 后复验 | 全场景功能确认 + 遥测验证 | 新会话（72b2ef12 六连切 + F12 遥测 6 条 load 全绿 form=ctx.get——注入生效）✅；writing 老会话 fce2785a 直切 novel → 状态 cucloud/V4-Pro + 用户屏幕显示同步跟随 ✅；router 老会话 a222d922 直切 novel → 状态 + 显示双确认 ✅；writing 工作区满屏 openai-codex/gpt-5.6-terra 系用户手动选模顺带改写全局默认（宿主"改即默认"设计）非缺陷 | 用户操作 + Coordinator API 探针 + 用户显示确认（P10③ GUI 证据） | Coordinator+用户 | 2026-09-02 | G4 | 终态/挂账 |
 | | EV-137 | 预设功能链 | 终态判定 | EVO-013/014 + FIX-022~027 全链终态：新会话创建/切换、老会话切换（两工作区）显示全部跟随；状态层全程探针验证；P-v3 原则（P10 报障纪律/P5 单路径）随链落地 | 全链证据 EV-118~136 | Coordinator+用户 | 2026-09-02 | G4 | 终态/挂账 |
 | | EV-138 | DEFERRED-001 受理 | GUI 预设切换不发请求——宿主层问题挂账（用户裁决 2026-09-02：记录暂不处理） | 事实链：①用户在 a222d922（header 无预设的会话）GUI 切换预设 → 会话日志零 agent-preset/selected 事件 + 状态零变化 + 遥测零记录；②用户 F12 Network 面板亲证：切换时无 agentPreset.select 请求行；③Coordinator 对同一会话直发 RPC 立即生效（状态+显示双确认）——插件链路无责；④结论：该会话形态下 DSH GUI 的预设下拉不发送切换请求（宿主行为，插件无法介入）——已具备向 DSH 申报的完整证据链，待用户启动处理 | 用户 Network 面板实证 + Coordinator 日志/状态/遥测三方探针 + 直发对照 | Coordinator+用户 | 2026-09-02 | G4 | 终态/挂账 |
+
+| TRIAGE-REL-008 | REL-008 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/REL-008.json） | REL-008.json | change-triage | 2026-09-04 | G11 | TRIAGED |
+
+| TRIAGE-DOC-001 | DOC-001 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/DOC-001.json） | DOC-001.json | change-triage | 2026-09-04 | G11 | TRIAGED |
+
+| REVIEW-DOC-001-R0 | DOC-001 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-report-DOC-001-R0.md; review-DOC-001-R0.md | Code Reviewer | 2026-09-04 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| REVIEW-REL-008-R0 | REL-008 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-report-REL-008-R0.md; review-REL-008-R0.md | Release Reviewer | 2026-09-04 | G11 | NEEDS_CHANGE |
+
+| REVIEW-REL-008-R1 | REL-008 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 1） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-report-REL-008-R1.md; review-REL-008-R1.md | Release Reviewer | 2026-09-04 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
