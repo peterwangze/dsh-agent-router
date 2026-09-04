@@ -23,6 +23,8 @@
 
 | 优先级 | ID | 事项 | 依赖 | 目标版本 | 状态 |
 | --- | --- | --- | --- | --- | --- |
+| P1 | REL-010 | v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查 | FIX-028✅（用户复验通过）+ 用户发布裁决（2026-09-05「正式发布链 REL-010」） | 0.4.4 | **执行中**——E-1 完成（0.4.3→0.4.4 + CHANGELOG v0.4.4 节 + README 8 处校对，零残留待提交）；E-2~E-6 随链执行 |
+| P0 | FIX-028 | 宿主 0.1.1-rc.8 → 0.1.2-rc.1 客户端面演进兼容：`connection.api` 被宿主移除 → 设置页「Agent 路由」整页「加载失败: Cannot read properties of undefined (reading 'llm')」（用户报障截图 sha256:61a445ce…，2026-09-05） | — | 未规划版本（热修候选） | **已完成（终态）——用户复验通过（2026-09-05「已经OK」）**——RCA 三方实证（dsh-client-connection 0.1.2-rc.1 lib/client.js:4754-4825 handle 无 api 字段；新面 = dsh-api-remotes typed remote 命名空间，schema 逐项锚定）；修复 = hostApiFace 适配层（remote.llm/settings/credentials/agentPresets/session → 旧信封，页面消费点零改动 + provider 目录连接 = dsh-client-ui-settings-models joinProviderDirectory 同构镜像）+ 模块 inject 命名空间声明（宿主官方先例 dsh-client-ui-settings-models :2842-2848）+ 旧 connection.api 路径删除（P5）；判别组 F28-S/B/F（RED：旧代码 + 新夹具 apply 崩溃「reading 'api'」实证 → GREEN）；门控 smoke 全量 exit 0 零回退（FIX-028 判别 +11 断言）；**用户确认设置页恢复正常（无需重装——link:/junction 安装直指开发树，热推送即生效）** |
 | P1 | FIX-004 | 模型能力判定缺陷根治：能力自证 + 预检可观测 + 热载替代评估 + 宿主缺陷申报 | — | v0.3.x | 已完成（6dd6e5b + R0 APPROVED_WITH_NOTES/0） |
 | P1 | EVO-004 | C-3 统计 UI 面（出口②按天视图/⑤导出按钮）+ R1-F3/R2-F1/F2/F3/R8-F1/F2 遗留六修 | — | v0.3.1 | 已完成（7 commits + R0 APPROVED_WITH_NOTES/0 + 门控实测全绿） |
 | P0 | FIX-006 | OAuth 代理路径修复：undici 依赖缺失 + dispatcher 版本兼容（出口①真机首联阻断） | — | v0.3.0 | 已完成（R0 APPROVED_WITH_NOTES/0——4 commits + 门控全绿 + 隔离冷装；真机 vision-2 端到端 = 出口①用户验证项） |
