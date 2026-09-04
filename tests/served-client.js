@@ -14,8 +14,9 @@
  *   · 统计信息（默认折叠）：Agent 级与账号级（服务商）两级明细卡片
  *     （平均耗时、模型细分、分钟级 tokens 分布）+ 最近调用记录。
  *
- * wire 面：固定 apiproxy（llm/credentials/白名单 settings）+ 本包 $mount
- * 的 `remote.router` namespace（catalog/stats/test/reset/config/save）。
+ * wire 面：宿主客户端 typed remote 命名空间（llm/settings/credentials/
+ * agentPresets/session——FIX-028 适配层收敛旧信封）+ 本包 $mount 的
+ * `remote.router` namespace（catalog/stats/test/reset/config/save）。
  */
 window.__ModuleLoader__.load({
   id: 'dsh-agent-router',
@@ -4401,6 +4402,243 @@ window.__ModuleLoader__.load({
               el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: () => setLightbox(null) }, t('close'))))) : null)
     }
 
+    // ── FIX-028：宿主客户端面演进适配（0.1.1-rc.8 → 0.1.2-rc.1）────────────
+    // 用户报障（2026-09-05，设置页截图 sha256:61a445ce…）：「Agent 路由」整页
+    // 「加载失败: Cannot read properties of undefined (reading 'llm')」。
+    // RCA（宿主源码实证）：
+    //  · 旧面 `connection.api` 已被宿主移除——dsh-client-connection 0.1.2-rc.1
+    //    lib/client.js:4754-4825 的 connection handle 只有 isLoopback /
+    //    generation / state / rpc / reconnect / registerGenerationSource /
+    //    start，无 api 字段；本包旧 apply() `const api = connection.api` →
+    //    undefined → load() 内 api.llm.providers 抛「Cannot read properties
+    //    of undefined (reading 'llm')」→ 整页 error（用户截图实证）。
+    //  · 新面：host 客户端统一走 typed remote 命名空间（dsh-api-remotes
+    //    lib/client.js 全部描述子——llm L5682-5760 / settings L4939-5260 /
+    //    credentials L4942-5030 / agentPresets L4337-4500 / session
+    //    L8018-8500），响应为 {ok, value|error} 直面、参数为位置参数；
+    //    宿主官方插件同款消费：dsh-client-ui-settings-models lib/client.js
+    //    :2842-2848 static inject（remote.credentials/llm/settings）+
+    //    :991-992/:2556-2588 调用。
+    // 本适配层把「新面」收敛成本包既有消费面「旧信封」——页面/组件消费点
+    // 零改动（P5：宿主面代差单点收敛；旧 connection.api 路径已删除，禁止
+    // 并存）。映射与形状全部锚定宿主 schema：
+    //
+    // | 本包消费面（旧信封）              | 宿主新面（typert remote）          |
+    // | api.llm.providers({})            | remote.llm.listProviders() +        |
+    // |                                   |   listConfigurableProviders() 连接  |
+    // | api.llm.models({})               | remote.session.modelCatalog()       |
+    // | api.llm.discoverModels(p)        | remote.llm.discoverModels(p.settingsNs, {provider,baseURL,api,apiKey}) |
+    // | api.settings.describe({})        | remote.settings.describe()           |
+    // | api.settings.mutate({ns,ops})    | remote.settings.mutate(ns, ops)      |
+    // | api.credentials.describe({refs}) | remote.credentials.describe(refs)    |
+    // | api.credentials.set({ref,v})     | remote.credentials.set(ref, v)       |
+    // | api.credentials.unset({ref})     | remote.credentials.unset(ref)        |
+    // | api.agentPresets.list({})        | remote.agentPresets.list()           |
+    // | api.sessions.models({id})        | ctx.modelDirectories.directoryFor(id).load()（宿主无 per-session wire RPC）|
+    // | api.sessions.selectModel(p)      | remote.session.selectModel(p)        |
+    //
+    // 形状锚：llm/listProviders L5678-5681、listConfigurableProviders L5671-5677、
+    // discoverModels 参数 L5658-5664 / 结果（裸数组）L5665-5670；
+    // settings/describe L4709-4757、mutate L4758-4811（参数位置 + 直面团）；
+    // credentials/describe 结果 L4698-4702 / set L4703-4705 / unset L4706-4707；
+    // agentPresets/list L4315-4325；session/modelCatalog L7794-7823、
+    // selectModel L7946-7956。
+    /** 宿主 provider 目录连接（registered ∪ declared）——dsh-client-ui-
+     *  settings-models lib/client.js:889-911 joinProviderDirectory 同构镜像
+     *  （P10：锚定宿主源码形态，非心智模型）：declared 行在前（声明序），
+     *  注册而未声明行追加在后（displayName=注册名、settingsNs=""）。
+     *  @param registered - llm.listProviders 结果（[{id,name}]）。
+     *  @param directory - llm.listConfigurableProviders 结果
+     *    （[{provider, displayName, settingsNs, settingsPath, declared?}]）。
+     *  @returns 旧 providers 条目数组（含 active/declared 判定）。 */
+    function joinProviderDirectoryHost(registered, directory) {
+      const active = new Set((registered ?? []).map((provider) => provider.id))
+      const declared = new Set((directory ?? []).map((entry) => entry.provider))
+      const rows = (directory ?? []).map((entry) => ({
+        provider: entry.provider,
+        displayName: entry.displayName,
+        settingsNs: entry.settingsNs,
+        settingsPath: Array.isArray(entry.settingsPath) ? [...entry.settingsPath] : [],
+        active: active.has(entry.provider),
+        ...(entry.declared === undefined ? {} : { declared: entry.declared }),
+      }))
+      for (const provider of registered ?? []) {
+        if (declared.has(provider.id)) continue
+        rows.push({
+          provider: provider.id,
+          displayName: provider.name,
+          settingsNs: '',
+          settingsPath: [],
+          active: true,
+        })
+      }
+      return rows
+    }
+    /** 本包消费面兼容适配（FIX-028）：把 hostApiFace 的 {ok,value|error}
+     *  直面响应包装成旧信封 {result:{ok,value?,error?}}——本包全部消费点
+     *  （probeProviderModels / load() / 账号卡 / 预设卡 / ModelTakeover /
+     *  refreshSessionDirectory 保底）以旧信封判定，包装在单点完成。 */
+    function envelopeOf(response) {
+      if (response && typeof response === 'object' && typeof response.ok === 'boolean') {
+        return {
+          result: {
+            ok: response.ok,
+            ...(response.ok
+              ? { value: response.value }
+              : { error: response.error && response.error.message ? response.error : { message: String(response.error ?? response) } }),
+          },
+        }
+      }
+      return { result: { ok: false, error: { message: `dsh-agent-router: host remote answered ${String(response)}` } } }
+    }
+    /** FIX-028 适配层主体：构造旧信封 api 面（消费点零改动）。
+     *  面按调用时延迟解析（get 优先 + ctx.remote.<ns> 属性面兜底——FIX-027
+     *  双形态防御先例；服务卸载/重挂后取最新，不缓存旧引用）。命名空间
+     *  缺失 = 宿主版本不兼容 → 结构化失败（P8：禁裸 TypeError 击穿面板，
+     *  错误文本直入页面「加载失败」行 + 可观测原因）。
+     *  @param ctx - 客户端 fiber ctx（命名空间声明见模块 inject 列表）。
+     *  @returns 旧信封面（{result:{ok,value?,error?}}）。 */
+    function hostApiFace(ctx) {
+      const faceOf = (name) => {
+        const viaGet = ctx.get(`remote.${name}`)
+        return viaGet !== undefined ? viaGet : (ctx.remote ? ctx.remote[name] : undefined)
+      }
+      // 命名空间缺失 = 宿主版本不兼容 → fail-loud（P8 可观测：清晰原因进页面
+      // 「加载失败」行，禁静默空目录/裸 TypeError；用户可据此报告版本组合）。
+      const unavailable = (name) => {
+        throw new Error(`dsh-agent-router: host remote face "${name}" 不可用——宿主 ${name} 命名空间未挂载或插件版本与宿主不兼容`)
+      }
+      const okValue = (value) => ({ result: { ok: true, value } })
+      const failureOf = (error) => ({ result: { ok: false, error: error && error.message ? error : { message: String(error) } } })
+      const llmFace = () => faceOf('llm')
+      const settingsFace = () => faceOf('settings')
+      const credentialsFace = () => faceOf('credentials')
+      const agentPresetsFace = () => faceOf('agentPresets')
+      const sessionFace = () => faceOf('session')
+      const directoryFace = () => {
+        const viaGet = ctx.get('modelDirectories')
+        return viaGet !== undefined ? viaGet : ctx.modelDirectories
+      }
+      return {
+        llm: {
+          providers: async () => {
+            const llm = llmFace()
+            if (!llm || typeof llm.listProviders !== 'function' || typeof llm.listConfigurableProviders !== 'function') return unavailable('llm')
+            const [registered, declared] = await Promise.all([llm.listProviders(), llm.listConfigurableProviders()])
+            if (!registered.ok) return failureOf(registered.error)
+            if (!declared.ok) return failureOf(declared.error)
+            return okValue({ providers: joinProviderDirectoryHost(registered.value, declared.value) })
+          },
+          models: async () => {
+            const session = sessionFace()
+            if (!session || typeof session.modelCatalog !== 'function') return unavailable('session')
+            const response = await session.modelCatalog()
+            if (!response.ok) return failureOf(response.error)
+            const catalog = response.value ?? {}
+            return okValue({ groups: Array.isArray(catalog.groups) ? catalog.groups : [], failures: Array.isArray(catalog.failures) ? catalog.failures : [] })
+          },
+          discoverModels: async (payload) => {
+            const llm = llmFace()
+            if (!llm || typeof llm.discoverModels !== 'function') return unavailable('llm')
+            const input = payload && typeof payload === 'object' ? payload : {}
+            const response = await llm.discoverModels(input.settingsNs, {
+              ...(input.provider !== undefined ? { provider: input.provider } : {}),
+              ...(input.baseURL !== undefined ? { baseURL: input.baseURL } : {}),
+              ...(input.api !== undefined ? { api: input.api } : {}),
+              ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
+            })
+            if (!response.ok) return failureOf(response.error)
+            return okValue({ models: Array.isArray(response.value) ? response.value : [] })
+          },
+        },
+        settings: {
+          describe: async () => {
+            const settings = settingsFace()
+            if (!settings || typeof settings.describe !== 'function') return unavailable('settings')
+            const response = await settings.describe()
+            if (!response.ok) return failureOf(response.error)
+            const value = response.value ?? {}
+            return okValue({
+              writable: value.writable === true,
+              hasDocument: value.hasDocument === true,
+              namespaces: Array.isArray(value.namespaces) ? value.namespaces : [],
+            })
+          },
+          mutate: async (payload) => {
+            const settings = settingsFace()
+            if (!settings || typeof settings.mutate !== 'function') return unavailable('settings')
+            const input = payload && typeof payload === 'object' ? payload : {}
+            const response = await settings.mutate(input.ns, Array.isArray(input.ops) ? input.ops : [])
+            return envelopeOf(response)
+          },
+        },
+        credentials: {
+          describe: async (payload) => {
+            const credentials = credentialsFace()
+            if (!credentials || typeof credentials.describe !== 'function') return unavailable('credentials')
+            const input = payload && typeof payload === 'object' ? payload : {}
+            const response = await credentials.describe(Array.isArray(input.refs) ? input.refs : [])
+            if (!response.ok) return failureOf(response.error)
+            return okValue({ credentials: response.value ?? {} })
+          },
+          set: async (payload) => {
+            const credentials = credentialsFace()
+            if (!credentials || typeof credentials.set !== 'function') return unavailable('credentials')
+            const input = payload && typeof payload === 'object' ? payload : {}
+            return envelopeOf(await credentials.set(input.ref, input.value))
+          },
+          unset: async (payload) => {
+            const credentials = credentialsFace()
+            if (!credentials || typeof credentials.unset !== 'function') return unavailable('credentials')
+            const input = payload && typeof payload === 'object' ? payload : {}
+            return envelopeOf(await credentials.unset(input.ref))
+          },
+        },
+        agentPresets: {
+          list: async () => {
+            const presets = agentPresetsFace()
+            if (!presets || typeof presets.list !== 'function') return unavailable('agentPresets')
+            const response = await presets.list()
+            if (!response.ok) return failureOf(response.error)
+            return okValue(response.value ?? { presets: [] })
+          },
+        },
+        sessions: {
+          // 宿主 0.1.2-rc.1 客户端面无 per-session 模型 wire RPC（api-remotes
+          // session 命名空间只有 modelCatalog——全局目录，非会话选择）；
+          // 等价读 = ctx.modelDirectories.directoryFor(sessionId).load()
+          // （ModelDirectory 快照 {current,routable,groups,failures} 与旧
+          // sessions.models 值同形——FIX-026 直驱路径同一机制）。
+          models: async (payload) => {
+            const input = payload && typeof payload === 'object' ? payload : {}
+            const directoryService = directoryFace()
+            if (!directoryService || typeof directoryService.directoryFor !== 'function' || !input.sessionId) {
+              return failureOf(new Error('dsh-agent-router: modelDirectories 服务不可用（宿主旧版本？）'))
+            }
+            let directory
+            try {
+              directory = directoryService.directoryFor(input.sessionId)
+            } catch (error) {
+              return failureOf(error)
+            }
+            if (!directory || typeof directory.load !== 'function') {
+              return failureOf(new Error('dsh-agent-router: 会话模型目录不可用'))
+            }
+            try {
+              return okValue(await directory.load())
+            } catch (error) {
+              return failureOf(error)
+            }
+          },
+          selectModel: async (payload) => {
+            const session = sessionFace()
+            if (!session || typeof session.selectModel !== 'function') return unavailable('session')
+            return envelopeOf(await session.selectModel(payload))
+          },
+        },
+      }
+    }
+
     // ── 插件装配 ────────────────────────────────────────────────────────────
     const NS = 'router'
     // FIX-027：模块级 inject 声明扩展——新增 'modelDirectories'（服务就绪时序 +
@@ -4410,17 +4648,21 @@ window.__ModuleLoader__.load({
     // 两点保证：runner 激活门控等待服务就绪（dsh-cordis-client-runner
     // lib/client.js:581 waitingFor 按 fiber.inject 过滤）+ 属性面可见
     // （dynamicCordisContext 属性访问按 fiber.inject 声明门控，:313-314/:342）。
-    // 宿主同款机制先例：dsh-client-ui-model-selection lib/client.js:157-161
-    // `static inject = ["connection", "sessions", "remote"]`（消费他方服务的
-    // 声明形态）与 :729-736 模块级 `const inject = [...]` + :799
-    // `exports.inject = inject`（本包同款形态——其 required services 同样含
-    // 他方提供的 sessions/connection）。
-    const inject = ['slots', 'locale', 'connection', 'remote', 'modelDirectories']
+    // FIX-028：命名空间面（remote.llm/settings/credentials/agentPresets/
+    // session）同样按宿主官方先例声明——dsh-client-ui-settings-models
+    // lib/client.js:2842-2848 static inject（remote.credentials/llm/settings）
+    // + runner 自身 'remote.dynamicCordisRunner'（lib/client.js:4493-4499）；
+    // 声明 = 激活前等待命名空间挂载（页面永不早于宿主面就绪加载）。
+    // 旧 'connection' 面仅用于取 .api（已随 0.1.2-rc.1 移除）——删除声明
+    // （P5：被取代路径禁止并存）。
+    const inject = ['slots', 'locale', 'remote', 'remote.llm', 'remote.settings', 'remote.credentials', 'remote.agentPresets', 'remote.session', 'modelDirectories']
 
     function apply(ctx) {
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-agent-router: locale')
-      const connection = ctx.get('connection')
-      const api = connection.api
+      // FIX-028：宿主 0.1.2-rc.1 起 connection.api 已移除——统一经 remote.*
+      // 命名空间适配（hostApiFace 单点）。旧实现 `ctx.get('connection').api`
+      // 在升级后恒 undefined → 页面加载失败（用户截图实证），已删除。
+      const api = hostApiFace(ctx)
       const t = ctx.locale.bind(NS)
       const remoteReady = ctx.remote.$mount(ROUTER_REMOTE).catch((error) => {
         console.error('dsh-agent-router: remote mount failed', error)

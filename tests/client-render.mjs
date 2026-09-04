@@ -429,6 +429,72 @@ export async function runClientRender(check) {
       unset: async (payload) => { captured.credUnsetCalls.push(payload); return { result: { ok: true } } },
     },
   }
+  // FIX-028：宿主 0.1.2-rc.1 客户端面夹具（dsh-api-remotes typed remote
+  // 直面形状——作为 apply() 里 hostApiFace 适配层的宿主面输入；数据与上方
+  // 旧 apiMock 语义等价（providers=registered∪declared 连接 / models=
+  // session.modelCatalog / discover 返回裸数组 / settings+credentials 位置
+  // 参数）。形状锚定宿主 schema（dsh-api-remotes lib/client.js）：
+  //  · llm/listProviders result L5678-5681、listConfigurableProviders result
+  //    L5671-5677、discoverModels(settingsNs, request) 参数 L5658-5664 + 结果
+  //    （裸数组）L5665-5670；
+  //  · settings/describe result L4709-4757、settings/mutate(ns, ops) L4758-4811；
+  //  · credentials/describe result L4698-4702、set(ref, value) L4703-4705、
+  //    unset(ref) L4706-4707；
+  //  · agentPresets/list result L4315-4325（含 isDefault 字段——宿主真实形状，
+  //    R0 F-1 的 legacy-broken 双形态保留）；
+  //  · session/modelCatalog result L7794-7823、session/selectModel L7946-7956。
+  // p10：夹具按宿主源码形态锚定，禁止从旧 apiMock 心智模型外推。
+  const missingFaces = new Set()
+  const hostFaces = {
+    llm: {
+      listProviders: async () => ({ ok: true, value: [
+        { id: 'gateway', name: 'Gateway' },
+        ...(hostRouteGhostMode ? [{ id: 'openai-codex', name: 'OpenAI Codex 官方' }] : []),
+      ] }),
+      listConfigurableProviders: async () => ({ ok: true, value: [
+        { provider: 'openai', displayName: 'OpenAI', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], declared: false },
+        { provider: 'gateway', displayName: 'Gateway', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'gateway'], declared: true },
+        ...(hostRouteGhostMode ? [{ provider: 'openai-codex', displayName: 'OpenAI Codex 官方', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai-codex'], declared: false }] : []),
+      ] }),
+      discoverModels: async (settingsNs, request) => {
+        discoverCalls.push({ settingsNs, ...(request ?? {}) })
+        if (discoverMode === 'fail') return { ok: false, error: { message: 'could not reach https://gateway.example/v1/models' } }
+        return { ok: true, value: [{ id: 'm-a' }, { id: 'm-b', name: 'Model B', contextWindow: 65536, maxTokens: 4096 }] }
+      },
+    },
+    settings: {
+      describe: async () => ({ ok: true, value: { writable: true, hasDocument: true, namespaces: [
+        { ns: 'llm-pi-ai', schema: null, value: { providers: { gateway: { api: 'openai-completions', baseURL: 'https://gateway.example/v1', models: [{ id: 'old-m', name: 'Old M' }] } } }, applies: 'live', secrets: [], revision: 1 },
+      ] } }),
+      mutate: async (ns, ops) => { mutateCalls.push({ ns, ops }); return { ok: true, value: { ns, schema: null, value: null, applies: 'live', secrets: [], revision: 2 } } },
+    },
+    credentials: {
+      describe: async (refs) => ({ ok: true, value: Object.fromEntries((refs ?? []).map((ref) => [ref, { configured: false, writable: true }])) }),
+      set: async (ref, value) => { credSetCalls.push({ ref, value }); return { ok: true, value: undefined } },
+      unset: async (ref) => { captured.credUnsetCalls.push({ ref }); return { ok: true, value: undefined } },
+    },
+    agentPresets: {
+      list: async () => presetRosterMode === 'fail'
+        ? { ok: false, error: { message: 'agentPreset gateway rejected' } }
+        : { ok: true, value: { presets: [
+          { id: 'governance', name: 'Governance 预设', trust: 'system', isDefault: false },
+          { id: 'novel', name: '小说写作', trust: 'user', isDefault: false },
+          { id: 'broken-one', name: '坏预设', trust: 'user', isDefault: false, broken: 'composition missing' },
+          { id: 'legacy-broken', name: '旧形态坏预设', trust: 'user', isDefault: false, broken: true },
+        ], authorable: true } },
+    },
+    session: {
+      modelCatalog: async () => ({ ok: true, value: { default: { provider: 'deepseek-official', model: 'deepseek-v4-pro' }, routableProviders: ['gateway'], groups: [
+        ...(hostRouteGhostMode ? [{ id: 'openai-codex', models: [1, 2, 3, 4, 5, 6, 7].map((index) => ({ id: `codex-m-${index}`, name: `Codex M${index}` })) }] : []),
+        { id: 'gateway', models: [{ id: 'old-m', name: 'Old M' }] },
+      ], failures: [] } }),
+      selectModel: async (payload) => {
+        sessionSelectCalls.push({ ...payload })
+        sessionCurrent = { provider: payload.provider, model: payload.model }
+        return { ok: true, value: { selected: { provider: payload.provider, model: payload.model } } }
+      },
+    },
+  }
   // FIX-026：modelDirectories 客户端服务 stub——宿主 ModelDirectoryResolver
   // （dsh-client-ui-model-selection lib/client.js:170 `super(ctx, "modelDirectories")`
   // 注册；directoryFor :187 惰性返回带 load() 的会话目录，load 为只读幂等刷新
@@ -466,8 +532,13 @@ export async function runClientRender(check) {
     // 显示）。声明名且服务就绪才回 stub；'getMiss' 模式 = 声明在而 get 落空。
     get: (key) => {
       if (!declaredService(key)) return undefined
-      if (key === 'connection') return { api: apiMock }
       if (key === 'remote.router') return remoteMock
+      if (missingFaces.has(key)) return undefined
+      if (key === 'remote.llm') return hostFaces.llm
+      if (key === 'remote.settings') return hostFaces.settings
+      if (key === 'remote.credentials') return hostFaces.credentials
+      if (key === 'remote.agentPresets') return hostFaces.agentPresets
+      if (key === 'remote.session') return hostFaces.session
       if (key === 'modelDirectories') return modelDirectoriesGetMiss ? undefined : modelDirectoriesStub()
       return undefined
     },
@@ -1801,7 +1872,7 @@ export async function runClientRender(check) {
       await new Promise((resolve) => setImmediate(resolve))
       check('FIX-026: 主路径 directoryFor(sessionId) 恰一次且参数正确（旧实现无订阅必败）', directoryForCalls.length === 1 && directoryForCalls[0] === 'sess-main')
       check('FIX-026: 主路径 directory.load() 恰一次（客户端直驱目录重载）', directoryLoadCalls.length === 1 && directoryLoadCalls[0] === 'sess-main')
-      check('FIX-026: 主路径不触发保底 RPC（短路语义）', sessionModelsCalls.length === 0)
+      check('FIX-026: 主路径不触发保底 RPC（短路语义——遥测无 fallback-rpc 行）', !mainTelemetry.some((line) => line.includes('fallback-rpc')))
       // FIX-027：主路径遥测——结构化 info（前缀 + 结果 + 解析形态 + 标识）。
       check('FIX-027: 主路径遥测 load（前缀 dsh-agent-router[FIX-027] + form ctx.get + sessionId/preset）', mainTelemetry.length === 1 && mainTelemetry[0].startsWith('dsh-agent-router[FIX-027]') && mainTelemetry[0].includes('load') && mainTelemetry[0].includes('form ctx.get') && mainTelemetry[0].includes('sess-main') && mainTelemetry[0].includes('novel-writing'))
       // 场景 1b（幂等）：用户连切（真机四连切形态）→ load 跟随触发次数 1:1，
@@ -1820,7 +1891,7 @@ export async function runClientRender(check) {
       sessionModelsCalls.length = 0
       const propTelemetry = captureTelemetry(() => dispatch('sess-prop', 'cordis'))
       await new Promise((resolve) => setImmediate(resolve))
-      check('FIX-027: get 解析落空 → 属性面兜底仍走主路径 load（双形态防御——agentPresetsServiceOf 先例）', directoryForCalls.length === 1 && directoryForCalls[0] === 'sess-prop' && directoryLoadCalls.length === 1 && sessionModelsCalls.length === 0)
+      check('FIX-027: get 解析落空 → 属性面兜底仍走主路径 load（双形态防御——agentPresetsServiceOf 先例）', directoryForCalls.length === 1 && directoryForCalls[0] === 'sess-prop' && directoryLoadCalls.length === 1)
       check('FIX-027: 属性面兜底遥测 form ctx.modelDirectories（解析形态可观测）', propTelemetry.length === 1 && propTelemetry[0].startsWith('dsh-agent-router[FIX-027]') && propTelemetry[0].includes('form ctx.modelDirectories'))
       modelDirectoriesGetMiss = false
       // 场景 2（保底降级）：modelDirectories 服务面不可达 → 保底 session.models
@@ -1831,7 +1902,15 @@ export async function runClientRender(check) {
       sessionModelsCalls.length = 0
       const fallbackTelemetry = captureTelemetry(() => dispatch('sess-fallback', 'minimal'))
       await new Promise((resolve) => setImmediate(resolve))
-      check('FIX-026: 服务不可达 → 保底 sessions.models RPC 恰一次（载荷含 sessionId）', sessionModelsCalls.length === 1 && sessionModelsCalls[0]?.sessionId === 'sess-fallback')
+      // FIX-028：保底 RPC 现经 hostApiFace 适配层的 sessions.models（旧
+      // connection.api 面已随宿主 0.1.2-rc.1 删除——旧连接面 fixture 一并
+      // 移除）；服务面不可达的降级信封 = 适配层单点结果，经
+      // settingsReg.inject()（宿主等同的注入路径）取的适配 api 直断言
+      // （P8 可观测：ok:false + 明确原因，禁裸 TypeError 击穿）。旧
+      // sessionModelsCalls 记录器只挂在旧 apiMock 上，适配层路径下不再
+      // 命中——按 P10 夹具锚定宿主面，断言指向适配层结果面。
+      const fallbackEnvelope = await settingsReg.inject().api.sessions.models({ sessionId: 'sess-fallback' })
+      check('FIX-026/FIX-028: 服务不可达 → 适配层 sessions.models 降级信封（ok:false + modelDirectories 原因）', fallbackEnvelope && fallbackEnvelope.result && fallbackEnvelope.result.ok === false && typeof fallbackEnvelope.result.error?.message === 'string' && fallbackEnvelope.result.error.message.includes('modelDirectories'))
       check('FIX-026: 保底路径零 load 调用（服务面不可达不误触主路径）', directoryLoadCalls.length === 0 && directoryForCalls.length === 0)
       // FIX-027：服务未就绪遥测——降级路径 warn 级结构化（P8 失败/降级可观测）。
       check('FIX-027: 服务未就绪遥测 fallback-rpc（warn 级 + 前缀 + 不可达原因）', fallbackTelemetry.length === 1 && fallbackTelemetry[0].startsWith('dsh-agent-router[FIX-027]') && fallbackTelemetry[0].includes('fallback-rpc') && fallbackTelemetry[0].includes('unavailable'))
@@ -1844,7 +1923,7 @@ export async function runClientRender(check) {
       sessionModelsCalls.length = 0
       const throwTelemetry = captureTelemetry(() => dispatch('sess-sub', 'standard'))
       await new Promise((resolve) => setImmediate(resolve))
-      check('FIX-026: directoryFor throw 捕获不炸（事件分发链零外泄）', directoryForCalls.length === 1 && directoryLoadCalls.length === 0 && sessionModelsCalls.length === 0)
+      check('FIX-026: directoryFor throw 捕获不炸（事件分发链零外泄）', directoryForCalls.length === 1 && directoryLoadCalls.length === 0)
       check('FIX-026: subagent 形态降级 warn 可观测（P8：含标识与 sessionId）', throwTelemetry.some((line) => line.includes('dsh-agent-router') && line.includes('sess-sub')))
       // FIX-027：throw 遥测——错误路径 warn 级结构化（结果 + 前缀 + 标识）。
       check('FIX-027: throw 遥测 error（warn 级 + 前缀 + sessionId）', throwTelemetry.length === 1 && throwTelemetry[0].startsWith('dsh-agent-router[FIX-027]') && throwTelemetry[0].includes('error') && throwTelemetry[0].includes('sess-sub'))
@@ -1858,7 +1937,63 @@ export async function runClientRender(check) {
       check('FIX-026: 卸载执行了退订（$on 退订函数被调用）', presetEntries[0].active === false)
       dispatch('sess-after-off', 'novel-writing')
       await new Promise((resolve) => setImmediate(resolve))
-      check('FIX-026: 卸载后派发零触发（off 生效——目录重载/保底 RPC 全静默）', directoryForCalls.length === 0 && directoryLoadCalls.length === 0 && sessionModelsCalls.length === 0)
+      check('FIX-026: 卸载后派发零触发（off 生效——目录重载/保底 RPC 全静默）', directoryForCalls.length === 0 && directoryLoadCalls.length === 0)
     }
+  }
+
+  // FIX-028（宿主 0.1.1-rc.8 → 0.1.2-rc.1 兼容修复）判别组：
+  // 缺陷事实：connection.api 已被宿主移除（dsh-client-connection 0.1.2-rc.1
+  // lib/client.js:4754-4825 无 api 字段）→ 旧 apply() `connection.api` 恒
+  // undefined → 设置页整页「加载失败: Cannot read properties of undefined
+  // (reading 'llm')」（用户截图 sha256:61a445ce…）。修复 = hostApiFace 适配层
+  // （remote.* → 旧信封）+ 模块 inject 声明命名空间面（宿主官方先例
+  // dsh-client-ui-settings-models lib/client.js:2842-2848）。判定矩阵：
+  //  F28-S 结构守卫：inject 含五个 remote.* 命名空间声明且不含 connection；
+  //  F28-B 行为全链：经 settingsReg.inject()（宿主等同注入路径，非直塞旧
+  //     apiMock）渲染整页 → 无「加载失败」错误面板 + 适配 api 数据面正确
+  //     （providers join / models / discover 信封）；
+  //  F28-F 失败可观测（P8+宿主面 Parity P9）：命名空间缺失 → 明确原因信封
+  //     （禁裸 TypeError 击穿面板）。
+  {
+    check('FIX-028: 模块 inject 声明 remote.llm/settings/credentials/agentPresets/session（runner 激活门控前提）', ['remote.llm', 'remote.settings', 'remote.credentials', 'remote.agentPresets', 'remote.session'].every((name) => Array.isArray(bundleExports.inject) && bundleExports.inject.includes(name)))
+    check('FIX-028: 模块 inject 不再声明 connection（旧面已删除——P5 被取代路径禁止并存）', Array.isArray(bundleExports.inject) && !bundleExports.inject.includes('connection'))
+    check('FIX-028: inject 面可注入（settingsReg.inject 是宿主注入路径）', typeof settingsReg?.inject === 'function' && typeof settingsReg.inject().api === 'object' && settingsReg.inject().api !== null)
+    const adapter = settingsReg.inject().api
+    // 适配层单点数据面（下面全部经 adapter 信封断言——旧 connection.api
+    // fixture 已被移除，旧代码在此处无法构造 adapter 命名面）。
+    const providersEnvelope = await adapter.llm.providers({})
+    check('FIX-028: llm.providers 信封——registered∪declared 连接（active/declared 判定 + 声明序）', providersEnvelope.result.ok === true && Array.isArray(providersEnvelope.result.value.providers) && providersEnvelope.result.value.providers.length === 2 && providersEnvelope.result.value.providers[0].provider === 'openai' && providersEnvelope.result.value.providers[0].active === false && providersEnvelope.result.value.providers[0].declared === false && providersEnvelope.result.value.providers[1].provider === 'gateway' && providersEnvelope.result.value.providers[1].active === true && providersEnvelope.result.value.providers[1].declared === true && providersEnvelope.result.value.providers[1].settingsNs === 'llm-pi-ai')
+    const modelsEnvelope = await adapter.llm.models({})
+    check('FIX-028: llm.models 信封——modelCatalog groups/failures 映射', modelsEnvelope.result.ok === true && Array.isArray(modelsEnvelope.result.value.groups) && modelsEnvelope.result.value.groups.some((group) => group.id === 'gateway' && group.models.some((model) => model.id === 'old-m')) && modelsEnvelope.result.value.failures.length === 0)
+    const discoveredEnvelope = await adapter.llm.discoverModels({ settingsNs: 'llm-pi-ai', provider: 'gateway', baseURL: 'https://gateway.example/v1' })
+    check('FIX-028: llm.discoverModels 信封——裸数组 → {models} 映射 + 位置参数透传', discoveredEnvelope.result.ok === true && Array.isArray(discoveredEnvelope.result.value.models) && discoveredEnvelope.result.value.models.some((model) => model.id === 'm-b') && discoverCalls.some((call) => call.settingsNs === 'llm-pi-ai' && call.provider === 'gateway'))
+    const describeEnvelope = await adapter.settings.describe({})
+    check('FIX-028: settings.describe 信封——namespace view 透传（viewOf 消费形状）', describeEnvelope.result.ok === true && Array.isArray(describeEnvelope.result.value.namespaces) && describeEnvelope.result.value.namespaces.some((view) => view.ns === 'llm-pi-ai' && view.value && view.value.providers && view.value.providers.gateway))
+    const credentialEnvelope = await adapter.credentials.describe({ refs: ['ROUTER_OAUTH_TOKEN'] })
+    check('FIX-028: credentials.describe 信封——新直面 map → {credentials} 旧形状', credentialEnvelope.result.ok === true && credentialEnvelope.result.value.credentials && credentialEnvelope.result.value.credentials.ROUTER_OAUTH_TOKEN && credentialEnvelope.result.value.credentials.ROUTER_OAUTH_TOKEN.configured === false)
+    const rosterEnvelope = await adapter.agentPresets.list({})
+    check('FIX-028: agentPresets.list 信封——host 罗盘透传（broken 双形态保留）', rosterEnvelope.result.ok === true && Array.isArray(rosterEnvelope.result.value.presets) && rosterEnvelope.result.value.presets.length === 4 && rosterEnvelope.result.value.presets.some((preset) => preset.id === 'broken-one' && typeof preset.broken === 'string'))
+    sessionCurrent = { provider: 'openai', model: 'gpt-4o' }
+    sessionSelectCalls.length = 0
+    const selectedEnvelope = await adapter.sessions.selectModel({ sessionId: 'sess-f28', provider: 'openai-router', model: 'gpt-4o' })
+    check('FIX-028: sessions.selectModel 信封——remote.session.selectModel 直通', selectedEnvelope.result.ok === true && selectedEnvelope.result.value.selected && selectedEnvelope.result.value.selected.provider === 'openai-router' && sessionSelectCalls.some((call) => call.sessionId === 'sess-f28' && call.provider === 'openai-router'))
+    // F28-B 行为全链：宿主注入路径渲染整页（适配 api 进组件）——ready 无错
+    // 面板，且 load() 数据源确实经适配层（listProviders 计数 > 0——页面
+    // load 走 api=adapter，非旧 apiMock 直塞）。
+    const rawListProviders = hostFaces.llm.listProviders
+    let adapterProviderCalls = 0
+    hostFaces.llm.listProviders = async () => { adapterProviderCalls += 1; return rawListProviders() }
+    await renderInto(settingsReg.render(settingsReg.inject()), 'fix028-fullpath')
+    const fix028Tree = await settle()
+    hostFaces.llm.listProviders = rawListProviders
+    const fix028ErrorNodes = findAll(fix028Tree, (node) => Array.isArray(node.props?.children) && node.props.children.some((child) => typeof child === 'string' && child.includes('加载失败')))
+    check('FIX-028: 宿主注入路径整页渲染零「加载失败」+ load 数据源经适配层（旧 connection.api 代码在此 fixture 下必败）', fix028ErrorNodes.length === 0 && adapterProviderCalls > 0)
+    // F28-F：命名空间缺失 → 适配层结构化原因（不击穿，页面显示可诊断错误）。
+    missingFaces.add('remote.llm')
+    await renderInto(settingsReg.render(settingsReg.inject()), 'fix028-missing')
+    const fix028MissingTree = await settle()
+    const fix028MissingError = findAll(fix028MissingTree, (node) => Array.isArray(node.props?.children) && node.props.children.some((child) => typeof child === 'string' && child.startsWith('加载失败:') && child.includes('host remote face "llm" 不可用')))
+    check('FIX-028: 命名空间缺失 → 结构化原因进页面（P8 可观测 + P9 Parity，禁裸 TypeError）', fix028MissingError.length > 0)
+    missingFaces.clear()
   }
 }

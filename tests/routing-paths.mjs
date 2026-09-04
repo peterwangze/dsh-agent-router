@@ -953,7 +953,10 @@ console.log('F. takeover 客户端会话级:')
   const ctx = {
     effect: (fn) => { fn(); return () => {} },
     locale: { register: () => () => {}, bind: () => (key) => key },
-    get: (key) => (key === 'connection' ? { api: apiMock } : key === 'remote.router' ? { catalog: catalogStub } : undefined),
+    // FIX-028：宿主 0.1.2-rc.1 起 connection.api 已移除——本测试经
+    //  takeoverReg.render({api}) 直塞旧信封 api（适配层输出面），apply 侧不再
+    //  消费 connection；get 仅保留本条路径的 remote.router（catalog 轮询）。
+    get: (key) => (key === 'remote.router' ? { catalog: catalogStub } : undefined),
     remote: { $mount: () => Promise.resolve(), $on: (event, listener) => { listeners.push({ event, listener }); return () => {} } },
     slots: {
       inject: (_slot, factory) => { registrations.push(factory()); return () => {} },

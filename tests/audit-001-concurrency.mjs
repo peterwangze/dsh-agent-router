@@ -162,7 +162,9 @@ function makeTestContext() {
       try { result = fn() } catch { return }
       if (typeof result === 'function') disposers.push(result)
     },
-    get: (name) => (name === 'connection' ? { api: {} } : undefined),
+    // FIX-028：宿主 0.1.2-rc.1 起 connection.api 已移除——apply 侧不再消费
+    // connection（remote.$mount 永不 resolve → bookmark 后链不触发）。
+    get: () => undefined,
     locale: { register: () => {}, bind: () => (key) => key },
     remote: {
       $mount: () => new Promise(() => {}), // 永不 resolve：绕开 remoteReady 后链
