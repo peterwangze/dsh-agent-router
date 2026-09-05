@@ -1,0 +1,8 @@
+{
+  "id": "FIX-029",
+  "severity": "P0",
+  "created": "2026-09-05",
+  "reason": "用户报障 2026-09-05（两项，宿主 0.1.2-rc.1 适配 FIX-028 之后回归）：①多模态模型发送图片不会自动跳到「+多模态」模式，需要手动切换；②手动选择「+多模态」后，交互界面的用户图片被转成文本标记（截图 sha256:f16a224b，vision 转写实证）。事实链（Coordinator 机器取证，零用户转嫁）：故障会话 94adf09f 日志 zstd 解压实证——[94184/94185] model/selection glm-local-router（用户手切 twin，新宿主 durable 事件）→ [94190] user/message 图片块被替换为 route_agent 标记文本（prestep 逃生组改写持久化）+ [94191] reminder 注入 → [94192] request/header 实际路由 = glm-local-router（twin，判定与实际路由分裂）。根因 A（问题②）：新宿主 selectionFor = picked(durable model/selection pending) → header → live default（dsh-api-session-controller types/agent.js:297-318），插件 prestep sessionProvider 判定链仍是 header → live default → options（FIX-010/REL-005 P1-1 时代），pre-step 时当前请求 header 未写、日志末条 header 为旧 provider（stale）→ 误判 onWrapperRoute=false → 逃生组改写污染会话日志（图片消失）。根因 B（问题①）：新宿主 conversation.input.right standardProps 只提供 useInput（SnapshotSelectorHook）/inputActions/sessionId（dsh-cordis-client-runner slots 目录 :2920-2932 锚定），不再提供 input（快照 prop）；ModelTakeover 读 props.input.imageIds → undefined → imageCount 恒 0 → takeoverArmed 永不成立 → 贴图不接管（AttachButton 已用 props.useInput 兼容形态故仅静默失效）。两项同源于宿主 0.1.1-rc.8→0.1.2-rc.1 契约演进，FIX-028 只适配了 remote.* API 面（设置页），未覆盖 slot props 面与会话选择持久化面。",
+  "fix_direction": "A：prestep sessionProvider/sessionModel 增加 sessionProjections.stateOf(agent.session,'modelSelection').pending 优先层（与宿主 selectionFor 同源；服务/投影缺失回落旧链，旧宿主兼容）；B：ModelTakeover 经 useInput hook 读输入快照（typeof 防御 + props.input 旧形态回落）；测试夹具同步锚定新宿主形态（P10④）。",
+  "status": "accepted"
+}

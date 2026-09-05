@@ -3793,7 +3793,7 @@ window.__ModuleLoader__.load({
      *    文本组后贴图，同样自动归位到包装组。
      */
     function ModelTakeover(props) {
-      const { sessionId, input, api } = props
+      const { sessionId, input, useInput, api } = props
       const catalog = useRouterCatalog()
       // FIX-002（客户端层）：会话级接管受 router.takeoverDefaultModel 开关约束
       // （默认 false = 不接管——twin 路由在模型列表，用户手动选）。此前仅看
@@ -3806,7 +3806,16 @@ window.__ModuleLoader__.load({
       // FIX-002-R7 F1：解除武装的还原同样需要来源记忆（takeoverMemory）——
       // 此前 !armed && wrapped 分支在每次 effect 触发（贴图/会话切换/子代理
       // sessionId）都把用户手动选的 twin 静默剥回原生。
-      const imageCount = input && Array.isArray(input.imageIds) ? input.imageIds.length : 0
+      // FIX-029-B：宿主 0.1.2-rc.1 起 conversation.input.right standardProps
+      // 只提供 useInput（SnapshotSelectorHook）/inputActions/sessionId，不再
+      // 提供 input（快照 prop）——宿主注入面 uiSession.provide({hooks:
+      // ['conversation','input']}),PropsHooks input→useInput（dsh-client-
+      // ui-conversation :16041-16056）。imageIds 改经 hook 快照读取；typeof
+      // 分支在组件生命周期内形态稳定（宿主面恒定），hook 调用序不漂移；
+      // props.input 旧形态回落（旧宿主/旧夹具双形态兼容——AttachButton
+      // useInput 同款先例）。
+      const inputSnapshot = typeof useInput === 'function' ? useInput((state) => state) : input
+      const imageCount = inputSnapshot && Array.isArray(inputSnapshot.imageIds) ? inputSnapshot.imageIds.length : 0
       const takeoverArmed = multimodalAgentsOf(catalog).length > 0 && (catalog.takeoverDefaultModel === true || imageCount > 0)
       const imageConditional = !catalog || catalog.takeoverDefaultModel !== true
       // FIX-018：能力快照签名进 deps——门控抑制后目录刷新带来判定变化时重评
