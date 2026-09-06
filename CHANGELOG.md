@@ -12,12 +12,13 @@
 ### 修复
 
 - **设置页「Agent 路由」加载失败（用户报障 2026-09-05，截图 sha256:61a445ce…）**：宿主 dsh 0.1.1-rc.8 → 0.1.2-rc.1 升级后，插件旧客户端经 `connection.api`（旧 apiproxy 信封面）读取 llm/settings/credentials 等——该字段已在宿主新连接面中移除（dsh-client-connection 0.1.2-rc.1 源码实证）→ `api` 恒 undefined → 整页加载失败。修复：`hostApiFace` 适配层把宿主新面（`remote.llm / settings / credentials / agentPresets / session`，typert remote `{ok,value|error}` 直面 + 位置参数）收敛回插件既有消费信封（页面与组件消费点零改动）；provider 目录经 registered∪declared 连接（与宿主「设置 → 模型」页同构语义）；会话模型读取经宿主 modelDirectories（新宿主已无 per-session wire RPC）；模块 inject 声明命名空间面（激活前等待挂载，宿主官方先例）；**旧 `connection.api` 路径删除（多触发来源单路径，被取代路径不并存）**；命名空间缺失 fail-loud——页面显示可诊断原因而非裸 TypeError（P8/P9 守护）。
-- **贴图不再自动接管到「+多模态」（用户报障 2026-09-05，问题①）**：宿主 0.1.2-rc.1 起 composer 槽位 `conversation.input.right` 的标准 props 只提供 `useInput`（订阅 hook）等，不再提供 `input`（快照 prop）——接管组件读不到草稿图片数 → 永不武装（会话日志实证：贴图后无 `model/selection` 接管事件）。修复：接管组件经 `useInput((s)=>s)` 读取输入快照（旧宿主/旧形态双兼容；判别 B1 旧代码必败）。
-- **手动选择「+多模态」后首张图片在气泡中被转成文字标记（用户报障 2026-09-05，问题②，截图 sha256:f16a224b）**：新宿主把会话模型选择持久化为 `model/selection` 会话事件（宿主请求路由以其 pending 为首层），而插件 pre-step 判定链仍从「日志末条请求头」读会话路由——切换后第一次发送时该请求头还是旧 provider（当前请求的头此刻尚未写入）→ 误判「未在包装路由」→ 逃生组把图片块改写成 route_agent 文字标记并持久化进会话日志（故障会话 94adf09f 事件链三点实证：手切 twin → 图片被改写 → 实际请求确实走了 twin）。修复：判定链增加 durable pending 优先层（与宿主请求路由同序；旧宿主无此投影时回落原链，双向兼容）。修复后：包装路由会话（含手切/自动接管）的图片块保留在会话日志中，气泡正常显示图片。
+- **贴图不再自动接管到「+多模态」（用户报障 2026-09-05，问题①）**：宿主 0.1.2-rc.1 起 composer 槽位 `conversation.input.right` 的标准 props 只提供 `useInput`（订阅 hook）等，不再提供 `input`（快照 prop）——接管组件读不到草稿图片数 → 永不武装（会话日志实证：贴图后无 `model/selection` 接管事件）。修复（两处）：接管组件经 `useInput((s)=>s)` 读取输入快照（旧宿主/旧形态双兼容；判别 B1 旧代码必败）+ **装配点补 `useInput` 透传**（真根因——组件内修复被装配层短路：`apply()` 转发处仍只传旧 `props.input`（新宿主恒 undefined），探针实测三联证据闭环定位；装配点源码契约守卫 C1-C4 防复活）。
+- **手动选择「+多模态」后首张图片在气泡中被转成文字标记（用户报障 2026-09-05，问题②，截图 sha256:f16a224b）**：新宿主把会话模型选择持久化为 `model/selection` 会话事件（宿主请求路由以其 pending 为第一优先级），而插件 pre-step 判定链仍从「日志末条请求头」读会话路由——切换后第一次发送时该请求头还是旧 provider（当前请求的头此刻尚未写入）→ 误判「未在包装路由」→ 逃生组把图片块改写成 route_agent 文字标记并持久化进会话日志（故障会话 94adf09f 事件链三点实证：手切 twin → 图片被改写 → 实际请求确实走了 twin）。修复：判定链增加 durable pending 优先层（与宿主请求路由同序；旧宿主无此投影时回落原链，双向兼容）。修复后：包装路由会话（含手切/自动接管）的图片块保留在会话日志中，气泡正常显示图片。
 
 ### 变更
 
-- **无用户可见配置变更**：纯客户端数据面适配层 + pre-step 判定链对齐宿主（内部注解：FIX-028 + FIX-029；判别组 11 + 10 断言均 RED（旧代码+新宿主面夹具必败）→GREEN；门控全量套件退出码 0 零回退）。
+- **接管链 F12 可观测遥测**：自动接管组件的每次评估在浏览器控制台输出结构化日志（前缀 `dsh-agent-router[FIX-029]`）——`switched`（成功切换，info）/ `skip-armed-wrapped`（已在包装组，info）/ `models-failed` / `models-empty` / `skip-capability` / `switch-failed` / `face-missing` / `error`（均为 warn）。此前接管失败完全静默（本轮真机首验「贴图不切且无任何痕迹」的排障成本由此终结）；仅闲逛态（`skip-idle`）不打印。
+- **无用户可见配置变更**：纯客户端数据面适配层 + pre-step 判定链对齐宿主（内部注解：FIX-028 + FIX-029；判别组 11 + 19 断言均 RED（旧代码+新宿主面夹具必败）→GREEN；门控全量套件退出码 0 零回退）。
 
 ### 破坏性变更
 
@@ -34,8 +35,8 @@
 ### 版本说明
 
 - **版本号**：0.4.3 → **v0.4.4**（版本位按用户发布裁决——用户选择「正式发布链 REL-010」；FIX-029 经用户裁决并入本版；本版为宿主演进热修，零 breaking 见「破坏性变更」四证）。
-- **发布范围**：v0.4.3（tag 5e86d23，2026-09-04）以来 main 全部提交。三分账：**产品提交 2 个**——FIX-028 `f0438f9`（hostApiFace 适配层）+ FIX-029 `334e9ed`（prestep pending 优先层 + ModelTakeover useInput 面 + 判别组 + served-client 镜像）；**治理提交**——REL-010 E-1（`545ab03`）与本节增补；**结论：产品提交在本节语义全覆盖，治理提交不入用户面。**
-- **验证基线**：FIX-029 时点全量套件 **20/20 退出码 0**（smoke ALL PASSED + metrics ALL PASSED——两项需测试自建临时目录写盘权限的授权复跑；判别组 fix-029-host-contract 10 断言 RED→GREEN）。内部注解：发布执行段 E-2 十九面门控复跑与 E-3 tarball 隔离环境安装冒烟（环境变量重定向至临时目录）随发布链执行，最终以复跑实测值为准。
+- **发布范围**：v0.4.3（tag 5e86d23，2026-09-04）以来 main 全部提交 **14 个**（`git rev-list --count v0.4.3..HEAD` 实采）。三分账：**产品提交 4 个**——FIX-028 `f0438f9`（hostApiFace 适配层）+ FIX-029 `334e9ed`（prestep pending 优先层 + ModelTakeover useInput 面 + 判别组 + served-client 镜像）/ `afe0548`（接管链 P8 遥测 + effect 结构化重构 + 镜像）/ `eda320f`（装配点透传 useInput——真根因修复 + C 组装配点契约守卫 + 镜像）；**治理提交 10 个**——REL-009 收尾 2（`626904b`/`5d3d333`）+ REL-010 E-1（`545ab03`）+ FIX-029 治理链 7（`a289723` CHANGELOG 增补 / `98a5568` EV-151 / `7b99203` EV-152 / `f676da9` tracker 推进 / `a8c5062` EV-153 / `4ddde02` EV-154 / `ac77b01` EV-155）。**结论行：4 + 10 = 14，与实采一致；产品提交在本节语义全覆盖，治理提交不入用户面。**
+- **验证基线**：E-2 门控复跑实测 **20/20 套件退出码 0**（十九面门控面 + metrics 观测脚本；判别组 fix-029-host-contract 19 断言——A 组 prestep pending 6 + B 组 useInput 组件面 4 + C 组装配点契约 4，全绿）+ E-3 隔离冷装通过（tarball 1,608,986B → 临时目录隔离安装 0.4.4 → client/prestep 语法 OK + 装配点修复在包内实证）+ E-4 发布审查 R0 **APPROVED_WITH_NOTES / unresolved_blockers=0**（P1×2 = 本节完整性补正——即本段与上两处增补；P2-1 验证基线时点口径已按终值回填）。
 
 ## v0.4.3 — 2026-09-04
 
