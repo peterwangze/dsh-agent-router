@@ -27,6 +27,9 @@
  * 返工批（REVIEW-FIX-031-R0 保留项 F-1）：跨 UTC 午夜双计 → 记录站点统一补
  * at: startedAt（D9 真实 wrapper 位点跨午夜驱动 + D9b 合并断言 + D9c 旧形态
  * 对照组 + D10/D11 源码契约；旧代码 stash 复跑 D9/D9b/D10/D11 必红）。
+ * 返工批（REVIEW-FIX-031-R0 保留项 F-2）：注释虚指 → G13/G14 权威常量值级
+ * 交叉锚定（ACCOUNT_KEY_ALIASES ↔ oauth-llm.js OAUTH_PROVIDER；
+ * HOST_ROUTE_ACCOUNT_KEY ↔ host-route.js HOST_ROUTE_PROVIDER）。
  * @module dsh-agent-router/tests/fix-031-attribution
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -59,6 +62,7 @@ const clientSource = readRepo('lib/client.js')
 const presetDefaultsSource = readRepo('lib/preset-defaults.js')
 const serviceSource = readRepo('lib/service.js')
 const oauthLlmSource = readRepo('lib/oauth-llm.js')
+const hostRouteSource = readRepo('lib/host-route.js')
 const toolSource = readRepo('lib/tool.js')
 
 let passed = 0
@@ -407,6 +411,18 @@ console.log('FIX-031 统计归因单点 + 路由透明性判别组：')
   check('G4: 记录站点汇入单点（call → #fold / scope → #foldScope 各过一次归一化，无旁路）', /#fold\(raw\) \{[\s\S]{0,420}normalizeAttribution\(raw\)/.test(statsSource) && /#foldScope\(raw\) \{[\s\S]{0,320}normalizeAttribution\(raw\)/.test(statsSource))
   check('G5: 双权威源合并单点（#accountView 一处定义、snapshot 与 CSV 共用——无第二合并路径）', (statsSource.match(/#accountView\(\)/g) ?? []).length === 3 && /#accountView\(\) \{/.test(statsSource), (statsSource.match(/#accountView\(\)/g) ?? []).length)
   check('G6: 站点仍上报事实而非归一值（recordScope 报实际路由；站点零归一化代码）', /provider: config\.provider,/.test(presetDefaultsSource) && !/normalizeAttribution\(/.test(presetDefaultsSource) && !/from '\.\/stats\.js'/.test(presetDefaultsSource) && !/WRAP_SUFFIX/.test(presetDefaultsSource))
+  // F-2（R0 审查保留项）：stats.js 依赖面锁定 node: 内建（§22）不能 import
+  // 权威常量，故以**值级交叉锚定**取代——镜像常量与权威源声明任一侧漂移，
+  // 断言即红（此前注释宣称「G 组锁定」但断言不存在：P9 注释虚指；突变验证：
+  // 临时改 OAUTH_PROVIDER/HOST_ROUTE_PROVIDER 值 → G13/G14 精确变红）。
+  {
+    const aliasDecl = /const ACCOUNT_KEY_ALIASES = new Map\(\[\['([^']+)', '([^']+)'\]\]\)/.exec(statsSource)
+    const oauthDecl = /export const OAUTH_PROVIDER = '([^']+)'/.exec(oauthLlmSource)
+    check('G13: ACCOUNT_KEY_ALIASES 键锚定权威常量（stats.js 别名键 === oauth-llm.js OAUTH_PROVIDER 值；目标键保持 oauth: 身份命名空间）', !!aliasDecl && !!oauthDecl && aliasDecl[1] === oauthDecl[1] && aliasDecl[2].startsWith('oauth:'), { aliasKey: aliasDecl?.[1], aliasTarget: aliasDecl?.[2], oauthProvider: oauthDecl?.[1] })
+    const hostDecl = /export const HOST_ROUTE_PROVIDER = '([^']+)'/.exec(hostRouteSource)
+    const hostMirrorDecl = /const HOST_ROUTE_ACCOUNT_KEY = '([^']+)'/.exec(statsSource)
+    check('G14: HOST_ROUTE_ACCOUNT_KEY 锚定权威常量（stats.js 镜像 === host-route.js HOST_ROUTE_PROVIDER 值）', !!hostDecl && !!hostMirrorDecl && hostDecl[1] === hostMirrorDecl[1], { hostRoute: hostDecl?.[1], statsMirror: hostMirrorDecl?.[1] })
+  }
   if (typeof statsModule.normalizeAttribution === 'function') {
     const { normalizeAttribution, accountDisplayLabel } = statsModule
     check('G7: 归一化纯函数不抛且种类判定正确（非法形态落到清洁缺省实体）', (() => {
