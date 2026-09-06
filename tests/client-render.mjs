@@ -594,6 +594,16 @@ export async function runClientRender(check) {
   }
   check('client renders without errors', renderErrors.length === 0)
   check('client shows ready page', textOf(currentTree).includes(zh.agentsTitle))
+  // 用户指令 2026-09-05：四张分类卡片统一默认折叠——专业 Agent 卡需先点击
+  // 分类头（dshrouter-category-head）展开后再断言卡内内容（原默认展开直接
+  // 可见的断言面随之调整）。
+  const categoryHeadsOfInitial = () => findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head'))
+  const agentsCategoryHead = categoryHeadsOfInitial().find((node) => textOf(node).includes(zh.agentsTitle))
+  check('agents category collapsed by default (chevron ▸ + all four cards)', !!agentsCategoryHead && textOf(agentsCategoryHead).includes('▸'))
+  if (agentsCategoryHead) {
+    agentsCategoryHead.props.onClick()
+    currentTree = await settle()
+  }
   const heads = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-card-head'))
   check('agent cards rendered', heads.length >= 2)
 
