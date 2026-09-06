@@ -505,7 +505,7 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
 
 // ── D. 主权结构 / fail-safe / 开关 / 热更新 / 观测 ───────────────────────
 {
-  await dcheck('D1 主权结构断言：模块只注册 agent/created + agent-preset/selected 两个监听，无 agent/request（回归守卫）', () => {
+  await dcheck('D1 主权结构断言：播种模块只注册 agent/created + agent-preset/selected 两个监听，无 agent/request（回归守卫——EVO-017 请求遥测是独立函数 installRequestTelemetry 的用户授权豁免，不在本模块）', () => {
     const ctx = makeCtx({})
     setup(ctx, makeService({}))
     const events = Object.keys(ctx.listeners)
@@ -1031,6 +1031,118 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     await fireCreated(ctxB, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
     const faceHit = presetDiagnostics().entries.find((entry) => entry.session === 'sess-k7b' && entry.skip === 'face-unavailable')
     return !!producedHit && !!faceHit
+  })
+}
+
+// ── L. EVO-017 判别：预设作用域请求遥测（installRequestTelemetry）──────────
+// 用户统计分级需求（2026-09-05）授权的观测豁免：agent/request 只读旁路——
+// 不改 config（主权）、按 header.agentPreset + origin 归属记 scope 统计、
+// 异常零影响请求链。判别：旧实现（无本函数）导出缺失 → RED；新实现全绿。
+{
+  let installRequestTelemetry = null
+  try {
+    ;({ installRequestTelemetry } = await import(pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'preset-defaults.js')).href))
+  } catch { /* RED：导出缺失 */ }
+  const scopeAgent = ({ preset, origin, id }) => ({
+    options: { ...NATIVE },
+    session: { id, header: { origin: origin === 'subagent' ? 'subagent' : 'main', agentPreset: preset } },
+  })
+
+  // L1 核心判别：主会话请求 → scope 记录（preset/origin=main/provider/model）。
+  await dcheck('L1 主会话请求 → recordScope（preset + origin=main + 路由）', async () => {
+    if (typeof installRequestTelemetry !== 'function') return false
+    const scopes = []
+    const service = { isEnabled: () => true, stats: { recordScope: (event) => scopes.push(event) } }
+    const ctx = makeCtx({})
+    installRequestTelemetry(ctx, service)
+    const handler = (ctx.listeners['agent/request'] ?? [])[0]
+    if (typeof handler !== 'function') return false
+    const out = await handler({ agent: scopeAgent({ preset: 'novel-writing', origin: 'main', id: 's-l1' }) }, async () => ({ provider: 'glm-local-router', model: 'glm-5.3' }))
+    return scopes.length === 1 && scopes[0].preset === 'novel-writing' && scopes[0].origin === 'main'
+      && scopes[0].provider === 'glm-local-router' && scopes[0].model === 'glm-5.3'
+      && out.provider === 'glm-local-router' // config 原样透传（主权）
+  })
+
+  // L2：subagent 请求 → origin=subagent。
+  await dcheck('L2 subagent 请求 → recordScope origin=subagent', async () => {
+    if (typeof installRequestTelemetry !== 'function') return false
+    const scopes = []
+    const service = { isEnabled: () => true, stats: { recordScope: (event) => scopes.push(event) } }
+    const ctx = makeCtx({})
+    installRequestTelemetry(ctx, service)
+    const handler = (ctx.listeners['agent/request'] ?? [])[0]
+    await handler({ agent: scopeAgent({ preset: 'novel-writing', origin: 'subagent', id: 's-l2' }) }, async () => ({ provider: 'gateway', model: 'qwen3.8-flash' }))
+    return scopes.length === 1 && scopes[0].origin === 'subagent' && scopes[0].model === 'qwen3.8-flash'
+  })
+
+  // L3 主权判别：next() 的 config 原样返回（旁路零修改——即使 recordScope 后）。
+  await dcheck('L3 config 原样透传（只读旁路——含 effort/maxTokens 等字段）', async () => {
+    if (typeof installRequestTelemetry !== 'function') return false
+    const service = { isEnabled: () => true, stats: { recordScope: () => undefined } }
+    const ctx = makeCtx({})
+    installRequestTelemetry(ctx, service)
+    const handler = (ctx.listeners['agent/request'] ?? [])[0]
+    const config = { provider: 'p', model: 'm', reasoningEffort: 'high', maxTokens: 4096 }
+    const out = await handler({ agent: scopeAgent({ preset: 'g', origin: 'main', id: 's-l3' }) }, async () => config)
+    return out === config && out.reasoningEffort === 'high'
+  })
+
+  // L4 fail-safe：next() 拒绝 → 原样上抛（不吞）+ 零 scope 记录。
+  await dcheck('L4 next() 拒绝 → 异常上抛 + 零记录（请求链零影响）', async () => {
+    if (typeof installRequestTelemetry !== 'function') return false
+    const scopes = []
+    const service = { isEnabled: () => true, stats: { recordScope: (event) => scopes.push(event) } }
+    const ctx = makeCtx({})
+    installRequestTelemetry(ctx, service)
+    const handler = (ctx.listeners['agent/request'] ?? [])[0]
+    let thrown = null
+    try { await handler({ agent: scopeAgent({ preset: 'g', origin: 'main', id: 's-l4' }) }, async () => { throw new Error('upstream reject') }) } catch (error) { thrown = error }
+    return thrown !== null && thrown.message === 'upstream reject' && scopes.length === 0
+  })
+
+  // L5 边界：无 preset header 且罗盘不可解析 → 零记录（不猜归属）；无
+  // header agent → 零记录不炸。
+  await dcheck('L5 无预设归属 → 零记录（不猜）+ 无 header 不炸', async () => {
+    if (typeof installRequestTelemetry !== 'function') return false
+    const scopes = []
+    const service = { isEnabled: () => true, stats: { recordScope: (event) => scopes.push(event) } }
+    const ctx = makeCtx({})
+    installRequestTelemetry(ctx, service)
+    const handler = (ctx.listeners['agent/request'] ?? [])[0]
+    await handler({ agent: scopeAgent({ preset: '', origin: 'main', id: 's-l5a' }) }, async () => ({ provider: 'p', model: 'm' }))
+    await handler({}, async () => ({ provider: 'p', model: 'm' }))
+    return scopes.length === 0
+  })
+
+  // L6 总开关关闭 → 零记录（热关闭语义）。
+  await dcheck('L6 enabled=false → 零记录（热关闭）', async () => {
+    if (typeof installRequestTelemetry !== 'function') return false
+    const scopes = []
+    const service = { isEnabled: () => false, stats: { recordScope: (event) => scopes.push(event) } }
+    const ctx = makeCtx({})
+    installRequestTelemetry(ctx, service)
+    const handler = (ctx.listeners['agent/request'] ?? [])[0]
+    await handler({ agent: scopeAgent({ preset: 'g', origin: 'main', id: 's-l6' }) }, async () => ({ provider: 'p', model: 'm' }))
+    return scopes.length === 0
+  })
+
+  // L7 recordScope 抛错 → config 仍透传（观测失败零影响请求链）。
+  await dcheck('L7 recordScope 抛错 → 请求链零影响（config 透传）', async () => {
+    if (typeof installRequestTelemetry !== 'function') return false
+    const service = { isEnabled: () => true, stats: { recordScope: () => { throw new Error('stats boom') } } }
+    const ctx = makeCtx({})
+    installRequestTelemetry(ctx, service)
+    const handler = (ctx.listeners['agent/request'] ?? [])[0]
+    const out = await handler({ agent: scopeAgent({ preset: 'g', origin: 'main', id: 's-l7' }) }, async () => ({ provider: 'p', model: 'm' }))
+    return out.provider === 'p'
+  })
+
+  // L8 D1 精神守卫：播种模块（installPresetDefaults）仍不注册 agent/request
+  //（遥测豁免只在独立函数——EVO-014 原则 2 结构边界保持）。
+  await dcheck('L8 播种模块零 agent/request（遥测豁免隔离在独立函数）', async () => {
+    const ctx = makeCtx({})
+    setup(ctx, makeService({}))
+    return !(ctx.listeners['agent/request'] ?? []).some((entry) => true)
   })
 }
 

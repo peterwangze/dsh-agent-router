@@ -550,8 +550,20 @@ window.__ModuleLoader__.load({
       statsFail: '失败',
       statsRecent: '最近调用记录',
       statsSeries: 'tokens 分布（每分钟，近 90 分钟）',
-      statsAgentLevel: 'Agent 级明细',
-      statsAccountLevel: '账号级明细（服务商）',
+      statsAgentLevel: '专业 Agent 统计',
+      statsAccountLevel: '账号级统计',
+      // EVO-017：分级统计文案（预设作用域 + 二/三级卡片 + 三类视图）。
+      statsPresetLevel: '预设 Agent 统计',
+      statsPresetSummary: (n) => `${n} 个预设有调用`,
+      statsPresetScopeHint: '按预设分组统计主 Agent 与 subagent 的每次 LLM 请求（计次口径——token 精确口径见专业/账号级视图；实时调用保留最新 10 条）。',
+      statsPresetScopeNote: '计次口径：来自请求遥测（配置生效与归属观测）。',
+      statsPresetMain: '预设 Agent（主会话）',
+      statsPresetSub: 'subagent',
+      statsPresetTotals: '总用量（模型分布）',
+      statsPresetDaily: '每日用量',
+      statsPresetRecent: '实时调用（最新 10 条）',
+      statsAgentSummary: (n) => `${n} 个专业 agent`,
+      statsAccountSummary: (n) => `${n} 个账号`,
       statsModelDetail: '模型细分',
       statsNoCalls: '暂无调用记录',
       statsDayLevel: '按天聚合',
@@ -850,8 +862,20 @@ window.__ModuleLoader__.load({
       statsFail: 'Failed',
       statsRecent: 'Recent calls',
       statsSeries: 'Tokens per minute (last 90 min)',
-      statsAgentLevel: 'Agent level',
-      statsAccountLevel: 'Account level (provider)',
+      statsAgentLevel: 'Specialist Agent stats',
+      statsAccountLevel: 'Account-level stats',
+      // EVO-017: tiered stats copy (preset scope + tier cards + three views).
+      statsPresetLevel: 'Preset Agent stats',
+      statsPresetSummary: (n) => `${n} preset(s) with calls`,
+      statsPresetScopeHint: 'Per-preset request counts for the main agent and subagents (call-count basis — exact tokens live in the specialist/account views; recent calls keep the latest 10).',
+      statsPresetScopeNote: 'Call-count basis: from request telemetry (config-effectiveness and attribution).',
+      statsPresetMain: 'Preset agent (main session)',
+      statsPresetSub: 'subagent',
+      statsPresetTotals: 'Totals (model distribution)',
+      statsPresetDaily: 'Daily usage',
+      statsPresetRecent: 'Recent calls (latest 10)',
+      statsAgentSummary: (n) => `${n} specialist agent(s)`,
+      statsAccountSummary: (n) => `${n} account(s)`,
       statsModelDetail: 'Model breakdown',
       statsNoCalls: 'No calls recorded yet',
       statsDayLevel: 'By-day aggregate',
@@ -1189,6 +1213,53 @@ window.__ModuleLoader__.load({
               el('td', null, modelTotal.calls > 0 ? fmtMs(modelTotal.totalMs / modelTotal.calls) : '—'),
               el('td', null, timeOf(modelTotal.lastAt)))))),
           buckets.length > 0 ? el(BarChart, { buckets, title: t('statsSeries') }) : null) : null)
+    }
+
+    /**
+     * EVO-017：预设作用域统计卡（三级卡片，默认折叠）——每预设分 main/
+     * subagent 两口径，各含三类：总用量（计次+模型分布）/ 每日用量（按天
+     * 计次+模型）/ 实时调用（最新 10 条请求）。计次口径说明：token 精确
+     * 口径在专业/账号级视图（此处观测配置生效与归属）。
+     */
+    function PresetStatsCard(props) {
+      const { preset, row, expanded, t, onToggle } = props
+      const armOf = (arm) => el('div', { className: 'dshrouter-stats', style: { marginTop: 4 } },
+        el('div', { className: 'dshrouter-row' },
+          el('span', { className: 'dshrouter-meta' }, `${t('statsCalls')}: ${arm.calls}`),
+          el('span', { className: 'dshrouter-meta' }, `${t('statsLast')}: ${timeOf(arm.lastAt)}`),
+          el('span', { className: 'dshrouter-spacer' })),
+        el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-meta' }, t('statsPresetTotals'))),
+        el('table', { className: 'dshrouter-table' },
+          el('thead', null, el('tr', null, el('th', null, t('fieldProvider')), el('th', null, t('fieldModel')), el('th', null, t('statsCalls')))),
+          el('tbody', null, ...arm.models.map((modelCount) => el('tr', { key: `${modelCount.provider}/${modelCount.model}` },
+            el('td', null, modelCount.provider),
+            el('td', null, modelCount.model),
+            el('td', null, modelCount.calls))))),
+        el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-meta' }, t('statsPresetDaily'))),
+        arm.days.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')) : el('table', { className: 'dshrouter-table' },
+          el('thead', null, el('tr', null, el('th', null, t('statsDate')), el('th', null, t('statsCalls')), el('th', null, t('fieldModel')))),
+          el('tbody', null, ...[...arm.days].reverse().map((day) => el('tr', { key: day.date },
+            el('td', null, day.date),
+            el('td', null, day.calls),
+            el('td', null, day.models.map((modelCount) => `${modelCount.model}×${modelCount.calls}`).join(', ')))))),
+        el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-meta' }, t('statsPresetRecent'))),
+        arm.recent.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')) : el('table', { className: 'dshrouter-table' },
+          el('thead', null, el('tr', null, el('th', null, t('statsTime')), el('th', null, t('statsProvider')))),
+          el('tbody', null, ...arm.recent.map((entry, index) => el('tr', { key: `${entry.at}-${index}` },
+            el('td', null, timeOf(entry.at)),
+            el('td', null, `${entry.provider}/${entry.model}`))))))
+      return el('div', { className: 'dshrouter-card' },
+        el('button', { type: 'button', className: 'dshrouter-card-head', onClick: onToggle, 'aria-expanded': expanded, title: expanded ? t('collapse') : t('expand') },
+          el('span', { className: 'dshrouter-name' }, preset),
+          el('span', { className: 'dshrouter-meta' }, `${t('statsPresetMain')} ${row.main.calls} · ${t('statsPresetSub')} ${row.subagent.calls}`),
+          el('span', { className: 'dshrouter-spacer' }),
+          el('span', { className: 'dshrouter-chevron' }, expanded ? '▾' : '▸')),
+        expanded ? el('div', { className: 'dshrouter-stats' },
+          el('p', { className: 'dshrouter-hint' }, t('statsPresetScopeNote')),
+          el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-subtitle' }, t('statsPresetMain'))),
+          row.main.calls > 0 ? armOf(row.main) : el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')),
+          el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-subtitle' }, t('statsPresetSub'))),
+          row.subagent.calls > 0 ? armOf(row.subagent) : el('p', { className: 'dshrouter-hint' }, t('statsNoCalls'))) : null)
     }
 
     /** 已配置账号卡片：折叠摘要 + 展开编辑（Base URL / API Key / 删除）与模型列表。 */
@@ -2173,6 +2244,8 @@ window.__ModuleLoader__.load({
       const accountSeriesById = stats ? new Map((stats.accountSeries ?? []).map((entry) => [entry.provider, entry.buckets ?? []])) : new Map()
       const recentCalls = stats ? stats.recent ?? [] : []
       const statsDays = stats ? (stats.days ?? {}) : {}
+      // EVO-017：预设作用域统计行（presetStats——main/subagent 两口径）。
+      const presetStatsRows = stats && Array.isArray(stats.presetStats) ? stats.presetStats : []
       const sumAll = (stats ? stats.totals ?? [] : []).reduce(
         (acc, entry) => ({ calls: acc.calls + entry.calls, errors: acc.errors + entry.errors, inTokens: acc.inTokens + entry.inputTokens, outTokens: acc.outTokens + entry.outputTokens }),
         { calls: 0, errors: 0, inTokens: 0, outTokens: 0 })
@@ -3100,7 +3173,8 @@ window.__ModuleLoader__.load({
           el('span', { className: 'dshrouter-meta' }, `${t('statsTokens')}: ${fmtTokens(sumAll.inTokens)} / ${fmtTokens(sumAll.outTokens)}`),
           el('span', { className: 'dshrouter-spacer' }),
           el('button', { type: 'button', className: 'dshrouter-button ghost', onClick: clearStats }, t('statsReset'))),
-        // 出口⑤导出按钮：range/level 选择 + 触发 statsExport → CSV 下载。
+        // 出口⑤导出按钮：range/level 选择 + 触发 statsExport → CSV 下载
+        //（EVO-017：level 新增 preset——预设作用域计次口径）。
         el('div', { className: 'dshrouter-row' },
           el('span', { className: 'dshrouter-meta' }, t('statsExportRange')),
           el('select', { className: 'dshrouter-select', 'aria-label': t('statsExportRange'), value: exportRange, onChange: (event) => setExportRange(event.target.value) },
@@ -3110,57 +3184,84 @@ window.__ModuleLoader__.load({
           el('span', { className: 'dshrouter-meta' }, t('statsExportLevel')),
           el('select', { className: 'dshrouter-select', 'aria-label': t('statsExportLevel'), value: exportLevel, onChange: (event) => setExportLevel(event.target.value) },
             el('option', { value: 'agent' }, 'agent'),
-            el('option', { value: 'account' }, 'account')),
+            el('option', { value: 'account' }, 'account'),
+            el('option', { value: 'preset' }, 'preset')),
           el('button', { type: 'button', className: 'dshrouter-button ghost', disabled: exportBusy, onClick: exportStats }, t('statsExport')),
           exportNotice ? el('span', { className: 'dshrouter-meta' }, exportNotice) : null),
-        // Agent 级明细卡片
-        el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-subtitle' }, t('statsAgentLevel'))),
-        agentIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')) : null,
-        ...agentIds.map((id) => {
-          const total = statsTotals.get(id)
-          const statKey = `agent:${id}`
-          return el(StatsRowCard, {
-            key: statKey,
-            title: total ? total.name : id,
-            badge: id,
-            meta: `${total ? total.provider : '—'}/${total ? total.model : '—'}`,
-            calls: total ? total.calls : 0,
-            errors: total ? total.errors : 0,
-            inputTokens: total ? total.inputTokens : 0,
-            outputTokens: total ? total.outputTokens : 0,
-            totalMs: total ? total.totalMs : 0,
-            lastAt: total ? total.lastAt : undefined,
-            buckets: statsSeries.get(id) ?? [],
-            expanded: expandedStats[statKey] === true,
-            t,
-            onToggle: () => toggleStatCard(statKey),
-          })
+        // ── EVO-017 分级统计（用户规格 2026-09-05）：三张二级卡片（默认折叠）
+        //    ——预设 Agent 统计 / 专业 Agent 统计 / 账号级统计；各含按分组
+        //    三级卡片（默认折叠），每分组三类：总用量 / 每日用量 / 实时调用
+        //    （最新 10 条）。───────────────────────────────────────────────
+        el(CategoryCard, {
+          title: t('statsPresetLevel'), summary: t('statsPresetSummary')(presetStatsRows.length),
+          expanded: expandedSection.statsPresets === true, t, onToggle: () => toggleSection('statsPresets'),
+          children: [
+            el('p', { className: 'dshrouter-hint' }, t('statsPresetScopeHint')),
+            presetStatsRows.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')) : null,
+            ...presetStatsRows.map((row) => el(PresetStatsCard, {
+              key: `pstat:${row.preset}`,
+              preset: row.preset, row, t,
+              expanded: expandedStats[`pstat:${row.preset}`] === true,
+              onToggle: () => toggleStatCard(`pstat:${row.preset}`),
+            })),
+          ],
         }),
-        // 账号级明细卡片（激活账号）
-        el('div', { className: 'dshrouter-head', style: { marginTop: 8 } }, el('span', { className: 'dshrouter-subtitle' }, t('statsAccountLevel'))),
-        statsAccountRows.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')) : null,
-        ...statsAccountRows.map((row) => {
-          const statKey = `acct:${row.provider}`
-          const accountTotal = accountTotalsById.get(row.provider)
-          const models = accountTotal && accountTotal.models ? accountTotal.models : []
-          const buckets = accountSeriesById.get(row.provider) ?? []
-          return el(AccountStatsCard, {
-            key: statKey,
-            provider: row.provider,
-            displayName: row.displayName,
-            active: row.active,
-            calls: row.calls,
-            errors: row.errors,
-            inputTokens: row.inputTokens,
-            outputTokens: row.outputTokens,
-            totalMs: row.totalMs,
-            lastAt: row.lastAt,
-            models,
-            buckets,
-            expanded: expandedStats[statKey] === true,
-            t,
-            onToggle: () => toggleStatCard(statKey),
-          })
+        el(CategoryCard, {
+          title: t('statsAgentLevel'), summary: t('statsAgentSummary')(agentIds.length),
+          expanded: expandedSection.statsAgents === true, t, onToggle: () => toggleSection('statsAgents'),
+          children: [
+            agentIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')) : null,
+            ...agentIds.map((id) => {
+              const total = statsTotals.get(id)
+              const statKey = `agent:${id}`
+              return el(StatsRowCard, {
+                key: statKey,
+                title: total ? total.name : id,
+                badge: id,
+                meta: `${total ? total.provider : '—'}/${total ? total.model : '—'}`,
+                calls: total ? total.calls : 0,
+                errors: total ? total.errors : 0,
+                inputTokens: total ? total.inputTokens : 0,
+                outputTokens: total ? total.outputTokens : 0,
+                totalMs: total ? total.totalMs : 0,
+                lastAt: total ? total.lastAt : undefined,
+                buckets: statsSeries.get(id) ?? [],
+                expanded: expandedStats[statKey] === true,
+                t,
+                onToggle: () => toggleStatCard(statKey),
+              })
+            }),
+          ],
+        }),
+        el(CategoryCard, {
+          title: t('statsAccountLevel'), summary: t('statsAccountSummary')(statsAccountRows.length),
+          expanded: expandedSection.statsAccounts === true, t, onToggle: () => toggleSection('statsAccounts'),
+          children: [
+            statsAccountRows.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')) : null,
+            ...statsAccountRows.map((row) => {
+              const statKey = `acct:${row.provider}`
+              const accountTotal = accountTotalsById.get(row.provider)
+              const models = accountTotal && accountTotal.models ? accountTotal.models : []
+              const buckets = accountSeriesById.get(row.provider) ?? []
+              return el(AccountStatsCard, {
+                key: statKey,
+                provider: row.provider,
+                displayName: row.displayName,
+                active: row.active,
+                calls: row.calls,
+                errors: row.errors,
+                inputTokens: row.inputTokens,
+                outputTokens: row.outputTokens,
+                totalMs: row.totalMs,
+                lastAt: row.lastAt,
+                models,
+                buckets,
+                expanded: expandedStats[statKey] === true,
+                t,
+                onToggle: () => toggleStatCard(statKey),
+              })
+            }),
+          ],
         }),
         // 出口②按天视图：stats.days 按天聚合表（日期/调用/失败/tokens/耗时/成本）。
         Object.keys(statsDays).length > 0 ? el('div', { className: 'dshrouter-head', style: { marginTop: 8 } },

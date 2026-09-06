@@ -270,19 +270,22 @@ export async function runStatsTests(check) {
       return out !== null && out.v === 2 && out.tag === 'm2'
     })())
     check('migrateLine returns null when chain step missing', migrateLine({ v: 1 }, { toVersion: 3, migrations: {} }) === null)
+    // EVO-017（LINE_VERSION=2）：v1→v2 内置恒等迁移——老统计盘面（v1 行）
+    // 加载零丢失；注入迁移与内置链正交（注入优先），未知步仍 null。
+    check('v1→v2 built-in identity migration upgrades line', (() => { const out = migrateLine({ v: 1, at: 1, agentId: 'x', provider: 'p', model: 'm', ok: true, ms: 0, inputTokens: 0, outputTokens: 0, costEstimate: 0 }, { toVersion: 2, migrations: {} }); return out !== null && out.v === 2 })())
     const work = mkdtempSync(join(tmpdir(), 'stats-mig-'))
     const dir = join(work, 'stats')
-    const a = new StatsStore({ dir })
-    a.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 10, inputTokens: 3, at: T0 })
-    await a.close()
-    const migrations = { 2: (l) => ({ ...l, tag: 'm2' }) }
-    const b = new StatsStore({ dir, now: NOW_AT, migrations, lineVersion: 2 })
+    // 手写 v1 老行（历史统计盘面形态）→ 默认 store（v2）加载内置迁移计数。
+    mkdirSync(dir, { recursive: true })
+    const v1Line = lineOf()
+    writeFileSync(join(dir, `daily-${D0}.jsonl`), `${JSON.stringify({ ...JSON.parse(v1Line), v: 1 })}\n`)
+    const b = new StatsStore({ dir, now: NOW_AT })
     await b.load()
     check('v1 lines migrated on load (migratedLines counted)', b.statsSelfReport().migratedLines === 1 && b.snapshot().totals[0].calls === 1)
     b.record({ agentId: 'vision', provider: 'openai', model: 'gpt-4o', ok: true, ms: 5, at: T0 })
     await b.flush()
     const rows = readFileSync(join(dir, `daily-${D0}.jsonl`), 'utf8').split('\n').filter((l) => l !== '').map((l) => JSON.parse(l))
-    check('store at lineVersion 2 writes v2 lines; migrated line upgraded on disk', rows.length === 2 && rows.every((r) => r.v === 2 && r.tag === 'm2'))
+    check('store at lineVersion 2 writes v2 lines; migrated line upgraded on disk', rows.length === 2 && rows.every((r) => r.v === 2))
     await b.close()
     // 未知版本：跳过计数 + 数据保留（P7 不损用户数据——未来版本行留给升级后的插件读）。
     const work2 = mkdtempSync(join(tmpdir(), 'stats-unk-'))
@@ -572,6 +575,53 @@ export async function runStatsTests(check) {
     const imports = [...source.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1])
     check('stats.js imports only node: builtins (no service.js reverse dependency)', imports.length > 0 && imports.every((spec) => spec.startsWith('node:')))
     check('stats.js does not import sibling runtime modules', !imports.some((spec) => spec.startsWith('./')))
+  }
+
+  // ── 23. EVO-017：预设作用域统计（recordScope + 折叠 + 持久化 + 导出）─────
+  console.log('preset scope stats (EVO-017):')
+  {
+    const work = mkdtempSync(join(tmpdir(), 'stats-scope-'))
+    const dir = join(work, 'stats')
+    const T1 = T0 + 1000
+    const T2 = T0 + 2000
+    const store = new StatsStore({ dir, now: NOW_AT })
+    // 两条 main + 一条 subagent，跨两个日期键（同日——days 键为 dateKeyOf）。
+    store.recordScope({ preset: 'novel-writing', origin: 'main', provider: 'glm-local-router', model: 'glm-5.3', at: T0 })
+    store.recordScope({ preset: 'novel-writing', origin: 'main', provider: 'glm-local-router', model: 'glm-5.3', at: T1 })
+    store.recordScope({ preset: 'novel-writing', origin: 'subagent', provider: 'gateway', model: 'qwen3.8-flash', at: T2 })
+    store.recordScope({ preset: 'novel-writing', origin: 'invalid-origin', provider: 'gateway', model: 'qwen3.8-flash', at: T2 }) // 归一为 main
+    store.recordScope({ preset: '', origin: 'main', provider: 'x', model: 'y', at: T0 }) // 无 preset → 丢弃
+    store.recordScope('garbage') // 形态防御
+    const snap = store.snapshot()
+    const novel = snap.presetStats.find((row) => row.preset === 'novel-writing')
+    check('E17-1: presetStats 按预设分组（main=3 含 origin 归一 / subagent=1）', snap.presetStats.length === 1 && novel.main.calls === 3 && novel.subagent.calls === 1)
+    check('E17-2: 模型分布（main 按模型聚合计次 / subagent 独立模型）', novel.main.models[0].calls === 2 && novel.main.models[0].model === 'glm-5.3' && novel.subagent.models[0].model === 'qwen3.8-flash')
+    check('E17-3: 每日用量（days 键 = 日期；calls 计次）', novel.main.days.length === 1 && novel.main.days[0].calls === 3 && novel.subagent.days[0].calls === 1)
+    check('E17-4: 实时调用（最新在前，≤10 条）', novel.main.recent.length === 3 && novel.main.recent[0].at === T2)
+    // 持久化往返：flush → 新 store load → presetStats 恢复（scope 行落盘 +
+    // #shapeOf scope 分支 + load 路由 #foldScope）。
+    await store.flush()
+    const reloaded = new StatsStore({ dir, now: NOW_AT })
+    await reloaded.load()
+    const reNovel = reloaded.snapshot().presetStats.find((row) => row.preset === 'novel-writing')
+    check('E17-5: scope 行持久化往返（重启恢复聚合）', !!reNovel && reNovel.main.calls === 3 && reNovel.subagent.calls === 1 && reNovel.subagent.models[0].model === 'qwen3.8-flash')
+    // 导出 preset 级：CSV 头 + 行（date,preset,origin,provider,model,calls）。
+    const csv = reloaded.export({ range: '7d', level: 'preset' })
+    const csvLines = csv.split('\n')
+    check('E17-6: preset 级 CSV 导出（表头 + 聚合行）', csvLines[0] === 'date,preset,origin,provider,model,calls'
+      && csvLines.some((line) => line.includes('novel-writing') && line.includes('subagent') && line.includes('qwen3.8-flash') && line.includes(',1'))
+      && csvLines.some((line) => line.includes('novel-writing') && line.includes('main') && line.includes('glm-5.3') && line.includes(',2')))
+    check('E17-7: 非法 level 明确报错（含 preset 提示）', (() => { try { reloaded.export({ level: 'bogus' }); return false } catch (error) { return String(error.message).includes('preset') } })())
+    // 旧统计盘面零破坏：v1 调用行 + v2 scope 行混存加载。
+    const mixed = new StatsStore({ dir, now: NOW_AT })
+    await mixed.load()
+    await mixed.close()
+    const mixedAgain = new StatsStore({ dir, now: NOW_AT })
+    await mixedAgain.load()
+    check('E17-8: v1 调用行与 v2 scope 行混存互不干扰', mixedAgain.snapshot().presetStats.length === 1)
+    await mixedAgain.close()
+    await store.close()
+    rmSync(work, { recursive: true, force: true })
   }
 }
 
