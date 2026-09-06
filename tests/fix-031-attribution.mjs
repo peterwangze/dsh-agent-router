@@ -23,6 +23,10 @@
  * 纪律（acceptance 7）：全部夹具走 mkdtempSync 临时目录 / 内存 StatsStore——零读取
  * 用户真实环境（不触碰 $HOME/.dsh 任何数据）。fixture 老数据行形状先由真实 store
  * 落盘取形状再手写（P10④：禁止按心智模型造面形态）。
+ *
+ * 返工批（REVIEW-FIX-031-R0 保留项 F-1）：跨 UTC 午夜双计 → 记录站点统一补
+ * at: startedAt（D9 真实 wrapper 位点跨午夜驱动 + D9b 合并断言 + D9c 旧形态
+ * 对照组 + D10/D11 源码契约；旧代码 stash 复跑 D9/D9b/D10/D11 必红）。
  * @module dsh-agent-router/tests/fix-031-attribution
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -30,6 +34,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as statsModule from '../lib/stats.js'
+import { createWrapAdapter } from '../lib/wrapper.js'
 
 const { StatsStore, LINE_VERSION } = statsModule
 
@@ -53,6 +58,8 @@ const wrapperSource = readRepo('lib/wrapper.js')
 const clientSource = readRepo('lib/client.js')
 const presetDefaultsSource = readRepo('lib/preset-defaults.js')
 const serviceSource = readRepo('lib/service.js')
+const oauthLlmSource = readRepo('lib/oauth-llm.js')
+const toolSource = readRepo('lib/tool.js')
 
 let passed = 0
 let failed = 0
@@ -271,6 +278,62 @@ console.log('FIX-031 统计归因单点 + 路由透明性判别组：')
   const mixedRow = mixed.snapshot().accountTotals.find((row) => row.provider === 'glm-local')
   check('D8: 同日跨模型混计不吞并（scope 覆盖 a 模型不影响 b 模型自行计数）', !!mixedRow && mixedRow.calls === 2 && mixedRow.models.length === 2, mixedRow && mixedRow.models)
   store.close(); noScope.close(); mixed.close()
+  rmSync(work, { recursive: true, force: true })
+}
+
+// ── D 组续（F-1 返工，R0 审查保留项）：跨 UTC 午夜请求不双计 ────────────────
+// 缺陷形态（REVIEW-FIX-031-R0 F-1）：scope 行 at=请求起点（遥测在请求解析时即
+// 记），call 行 at=流终点（record 缺省 now）→ 跨午夜请求两行分居两日，day2 无
+// scope 覆盖走兜底分支全计 → 同请求账号级合计 2。修复 = 记录站点统一补
+// at: startedAt（请求起点）。D9 用真实 wrapper 位点驱动（非手捏事件）。
+{
+  const work = mkdtempSync(join(tmpdir(), 'fix031-d9-'))
+  const start = Date.UTC(2026, 8, 6, 23, 59, 58, 500)
+  const end = Date.UTC(2026, 8, 7, 0, 0, 1, 500)
+  const reports = []
+  const realDateNow = Date.now
+  try {
+    let clock = start
+    Date.now = () => clock
+    const llmCross = {
+      registration: () => ({ adapter: { resolveModel: async (p, m) => ({ provider: p, id: m, name: m, inputModalities: ['text'] }) } }),
+      stream: async function* () {
+        clock = end
+        yield { type: 'usage', usage: { inputTokens: 5, outputTokens: 2 } }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      },
+    }
+    const active = [{ modality: 'image', stateOf: null, marker: () => 'MARKER', rewrite: () => null }]
+    const twin = createWrapAdapter(llmCross, 'glm-local', active, (event) => reports.push(event))
+    for await (const chunk of twin.stream({ provider: `glm-local${WRAP_ROUTE_SUFFIX}`, model: 'glm-5.3', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] })) void chunk
+    check('D9: twin onCall 事件携带 at=请求起点（跨午夜流不按终点落日；ms 仍为墙钟时长）', reports.length === 1 && reports[0].at === start && reports[0].ms === end - start, reports[0])
+  } finally {
+    Date.now = realDateNow
+  }
+  // 站点事件按真实接线形态入账（installAdmissionWrapper：record({agentId:
+  // MAIN_MODEL_AGENT_ID, ...event})；installRequestTelemetry：请求解析时
+  // recordScope，provider=实际路由含 -router）→ 同格吸收。
+  const store = new StatsStore({ dir: join(work, 'stats'), persist: false, now: NOW_AT })
+  store.recordScope({ preset: 'governance', origin: 'main', provider: `glm-local${WRAP_ROUTE_SUFFIX}`, model: 'glm-5.3', at: start })
+  store.record({ agentId: MAIN_MODEL_AGENT_ID, ...reports[0] })
+  const glm = store.snapshot().accountTotals.find((row) => row.provider === 'glm-local')
+  const glmDays = store.snapshot().accountDays.find((entry) => entry.key === 'glm-local')
+  check('D9b: 跨午夜同请求对合计恰好 1（scope day1 吸收 twin call；账号按天只 1 日且该日 calls=1）', !!glm && glm.calls === 1 && glm.requestCalls === 1 && glm.callRows === 1 && !!glmDays && glmDays.days.length === 1 && glmDays.days[0].date === D0 && glmDays.days[0].calls === 1, { glm, days: glmDays?.days })
+  // 对照组（旧形态复算，缺陷存在性证据）：同一对请求若 call 行按流终点落日
+  //（at=end，即修复前 record 缺省 now 形态）→ day2 无 scope 覆盖走兜底分支
+  // 全计 → 合计 2、跨两日。
+  const legacy = new StatsStore({ dir: join(work, 'legacy'), persist: false, now: NOW_AT })
+  legacy.recordScope({ preset: 'governance', origin: 'main', provider: `glm-local${WRAP_ROUTE_SUFFIX}`, model: 'glm-5.3', at: start })
+  legacy.record({ agentId: MAIN_MODEL_AGENT_ID, ...reports[0], at: end })
+  const legacyGlm = legacy.snapshot().accountTotals.find((row) => row.provider === 'glm-local')
+  const legacyDays = legacy.snapshot().accountDays.find((entry) => entry.key === 'glm-local')
+  check('D9c: 对照组——call 行按流终点落日即双计（旧形态合计 2、跨两日；F-1 缺陷复算）', !!legacyGlm && legacyGlm.calls === 2 && legacyGlm.requestCalls === 1 && legacyGlm.callRows === 1 && !!legacyDays && legacyDays.days.length === 2, { legacyGlm, days: legacyDays?.days.map((day) => day.date) })
+  store.close(); legacy.close()
+  // 源码契约（oauth-llm / tool 站点无轻量驱动面——真实通路含 fetch/SSE 与子代理
+  // 分发，源码锚定为既定先例形态，同 G3/F4/H 组）：两站点成功 + 失败两条 record
+  // 路径都必须携带 at: started。
+  check('D10: oauth-llm 两处 record 位点均携带 at=started（成功 + 失败路径）', (oauthLlmSource.match(/at: started,/g) ?? []).length === 2, (oauthLlmSource.match(/.{0,50}at: started,.{0,30}/g) ?? []))
+  check('D11: tool.js 两处 record 位点均携带 at=started（专业 agent 行单源无 scope 配对，对齐同规则保持全 call 行同语义）', (toolSource.match(/at: started,/g) ?? []).length === 2, (toolSource.match(/.{0,50}at: started,.{0,30}/g) ?? []))
   rmSync(work, { recursive: true, force: true })
 }
 
