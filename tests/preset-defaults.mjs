@@ -1144,6 +1144,46 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     setup(ctx, makeService({}))
     return !(ctx.listeners['agent/request'] ?? []).some((entry) => true)
   })
+
+  // L9 归属错乱修正判别（用户实证 2026-09-06：标准模式会话主会话调用被误归
+  // 旧预设 governance，subagent 正确归 standard）：根因 = header.agentPreset
+  // 是创建时冻结快照（切换预设只 append 会话事件不更新 header）；修复 =
+  // 罗盘 live 解析（composedPreset(agent.ctx)——当前生效预设）优先，header
+  // 仅兜底。判别：header=旧预设 + live=新预设 → 归新预设（旧实现必败）。
+  await dcheck('L9 归属修正：live 预设优先于 header 冻结快照（旧实现必败）', async () => {
+    if (typeof installRequestTelemetry !== 'function') return false
+    const scopes = []
+    const service = { isEnabled: () => true, stats: { recordScope: (event) => scopes.push(event) } }
+    const ctx = makeCtx({ agentPresets: { composedPreset: () => 'standard' } })
+    installRequestTelemetry(ctx, service)
+    const handler = (ctx.listeners['agent/request'] ?? [])[0]
+    await handler({ agent: scopeAgent({ preset: 'governance', origin: 'main', id: 's-l9' }) }, async () => ({ provider: 'opencode-go-local', model: 'omen-alpha' }))
+    return scopes.length === 1 && scopes[0].preset === 'standard'
+  })
+
+  // L10 罗盘不可用回落 header（旧宿主/服务缺失形态——双向兼容）。
+  await dcheck('L10 罗盘不可用 → header 兜底归属保持', async () => {
+    if (typeof installRequestTelemetry !== 'function') return false
+    const scopes = []
+    const service = { isEnabled: () => true, stats: { recordScope: (event) => scopes.push(event) } }
+    const ctx = makeCtx({})
+    installRequestTelemetry(ctx, service)
+    const handler = (ctx.listeners['agent/request'] ?? [])[0]
+    await handler({ agent: scopeAgent({ preset: 'novel-writing', origin: 'main', id: 's-l10' }) }, async () => ({ provider: 'p', model: 'm' }))
+    return scopes.length === 1 && scopes[0].preset === 'novel-writing'
+  })
+
+  // L11 罗盘解析抛错 → header 兜底（fail-safe 双保险）。
+  await dcheck('L11 罗盘抛错 → header 兜底 + 请求链零影响', async () => {
+    if (typeof installRequestTelemetry !== 'function') return false
+    const scopes = []
+    const service = { isEnabled: () => true, stats: { recordScope: (event) => scopes.push(event) } }
+    const ctx = makeCtx({ agentPresets: { composedPreset: () => { throw new Error('compass boom') } } })
+    installRequestTelemetry(ctx, service)
+    const handler = (ctx.listeners['agent/request'] ?? [])[0]
+    const out = await handler({ agent: scopeAgent({ preset: 'governance', origin: 'main', id: 's-l11' }) }, async () => ({ provider: 'p', model: 'm' }))
+    return scopes.length === 1 && scopes[0].preset === 'governance' && out.provider === 'p'
+  })
 }
 
 console.log(failures === 0 ? '\nALL EVO-014 DISCRIMINANT TESTS PASSED' : `\n${failures} EVO-014 ASSERTION(S) FAILED`)

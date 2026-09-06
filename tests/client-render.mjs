@@ -1671,7 +1671,15 @@ export async function runClientRender(check) {
     if (statsHead) {
       statsHead.props.onClick()
       currentTree = await settle()
-      check('daily view renders by-day aggregate table (①)', textOf(currentTree).includes(zh.statsDayLevel) && textOf(currentTree).includes('2026-01-15') && textOf(currentTree).includes('2026-01-16'))
+      // EVO-017 布局修正（用户裁决 2026-09-06）：按天聚合表移入「全局统计」
+      // 二级卡（默认折叠）——先展开该卡再断言表内容（标题键随迁
+      // statsPresetDaily）。
+      const globalHead = findAll(currentTree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.statsGlobalLevel))
+      if (globalHead) {
+        globalHead.props.onClick()
+        currentTree = await settle()
+      }
+      check('daily view renders by-day aggregate table (①)', !!globalHead && textOf(currentTree).includes(zh.statsPresetDaily) && textOf(currentTree).includes('2026-01-15') && textOf(currentTree).includes('2026-01-16'))
       check('daily view rows carry day call counts', textOf(currentTree).includes('3') && textOf(currentTree).includes('2'))
     }
   }
