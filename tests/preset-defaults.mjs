@@ -81,10 +81,12 @@ function check(label, condition) {
 }
 
 // EVO-014 目标模块（动态导入：实现缺失时 RED 仍可计数——逐条 FAIL 结算）。
+// FIX-030：presetDiagnostics（诊断注册表快照——K 组断言面）。
 let installPresetDefaults = null
+let presetDiagnostics = null
 let importFailure = null
 try {
-  ;({ installPresetDefaults } = await import(pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'preset-defaults.js')).href))
+  ;({ installPresetDefaults, presetDiagnostics } = await import(pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'preset-defaults.js')).href))
 } catch (error) {
   importFailure = error
 }
@@ -167,7 +169,7 @@ function makeApiProxy({ defaults, unavailable = () => false } = {}) {
  * 缺陷，同 EVO-013 R0 F-1 / FIX-022 系列）。FIX-024：补 emit 调用记录
  * （真实 cordis ctx.emit 存在——stub 同形记录 (event, args) 供 I 节判别）。
  */
-function makeCtx({ defaults, apiProxy, agents, agentPresets } = {}) {
+function makeCtx({ defaults, apiProxy, agents, agentPresets, sessionController } = {}) {
   const listeners = {}
   const emitted = []
   const logger = {
@@ -191,7 +193,35 @@ function makeCtx({ defaults, apiProxy, agents, agentPresets } = {}) {
       if (key === 'apiProxy') return apiProxy
       if (key === 'agentPresets') return agentPresets
       if (key === 'agents') return agents
+      // FIX-030-A：新宿主会话选择面（dsh-api-session-controller
+      // `super(ctx, "sessionController", {namespace:"session"})`）。
+      if (key === 'sessionController') return sessionController
       return undefined
+    },
+  }
+}
+
+/**
+ * 伪 sessionController（FIX-030-A：新宿主 0.1.2-rc.1 同构）：selectModel
+ * 直接参数（无 payload 信封）+ 成功返回 {selected} 值 + 失败**抛
+ * RemoteError**（非 result 信封）——与 makeApiProxy 形成形态对照。
+ */
+function makeSessionController({ defaults, unavailable = () => false } = {}) {
+  const calls = []
+  return {
+    calls,
+    async selectModel(request) {
+      calls.push(request)
+      const { sessionId, provider, model, reasoningEffort } = request ?? {}
+      if (typeof sessionId !== 'string' || !sessionId || typeof provider !== 'string' || !provider || typeof model !== 'string' || !model) {
+        const error = new Error('invalid request'); error.code = 'gateway/bad-request'; throw error
+      }
+      if (unavailable(provider, model)) {
+        const error = new Error(`model "${model}" unavailable`); error.code = 'session/model-unavailable'; throw error
+      }
+      const selected = { provider, model, ...(reasoningEffort === undefined ? {} : { reasoningEffort }) }
+      try { await defaults?.saveSelection?.(selected) } catch { /* 宿主对全局写失败仅 warn */ }
+      return { selected }
     },
   }
 }
@@ -510,21 +540,22 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     return !!loud && loud.includes(NATIVE.provider) && loud.includes(NATIVE.model)
       && defaults.state.current.provider === MAIN_MODEL.provider // 停留在预设模型（已尽力告警）
   })
-  await dcheck('D5 apiProxy 服务缺失 → warn 可观测降级（零动作）+ handler 正常返回（agent 创建不受影响）', async () => {
+  await dcheck('D5 会话选择面缺失（sessionController/apiProxy 双缺失）→ warn 可观测降级（零动作）+ handler 正常返回（agent 创建不受影响）', async () => {
     const agent = mainBlankAgent()
-    const ctx = makeCtx({ defaults: makeDefaults() }) // 无 apiProxy 面
+    const ctx = makeCtx({ defaults: makeDefaults() }) // 无任何选择面（FIX-030-A 双形态）
     let rejected = null
     try { await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent) } catch (error) { rejected = error }
     return rejected === null
       && agent.options.provider === NATIVE.provider && agent.options.model === NATIVE.model
-      && ctx.logger.warnCalls.some((line) => line.includes('apiProxy') || line.includes('selectModel'))
+      && ctx.logger.warnCalls.some((line) => line.includes('select face') || line.includes('apiProxy'))
   })
   await dcheck('D6 sessions.selectModel 非函数（面形态漂移）→ 同 D5 降级不炸', async () => {
     const agent = mainBlankAgent()
     const ctx = makeCtx({ apiProxy: { sessions: {} }, defaults: makeDefaults() })
     let rejected = null
     try { await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent) } catch (error) { rejected = error }
-    return rejected === null && ctx.logger.warnCalls.some((line) => line.includes('selectModel') || line.includes('preset default'))
+    // FIX-030-A：双形态适配后降级 warn 文案 = 「no session select face」。
+    return rejected === null && ctx.logger.warnCalls.some((line) => line.includes('select face') || line.includes('selectModel'))
   })
   await dcheck('D7 handler 内部异常（presetDefaults 抛错）→ fail-safe warn，不 reject', async () => {
     const agent = mainBlankAgent()
@@ -668,7 +699,10 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   // ctx.get('apiProxy')（唯一未包 try/catch 的逃逸）；③ 宿主 cordis emit
   // fire-and-forget 丢弃返回值 → unhandledRejection。旧实现必败（RED），
   // return await 后 catch 兜底 warn、零外泄（GREEN）。
-  await dcheck('G1 seed 内部拒绝（ctx.get 抛错注入）→ handler catch 兜底 warn 可观测 + 零 unhandledRejection 外泄', async () => {
+  // FIX-030-A 更新：注入点从 seed 调用中段前移到面解析——ctx.get('apiProxy')
+  // 抛错被 sessionSelectFaceOf 内 try/catch 捕获 → face=null → 降级 warn
+  // （观测语义保持：面不可用可观测）+ 零 unhandledRejection（外泄判据不变）。
+  await dcheck('G1 选择面解析拒绝（ctx.get 抛错注入）→ face 降级 warn 可观测 + 零 unhandledRejection 外泄', async () => {
     const defaults = makeDefaults()
     const agent = mainBlankAgent({ id: 'sess-g1', header: { origin: 'main' } })
     const ctx = makeCtx({ defaults, apiProxy: makeApiProxy({ defaults }), agents: { get: (id) => (id === 'sess-g1' ? agent : undefined) } })
@@ -691,8 +725,10 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
       // 排空微任务 + 跨 setImmediate 轮次（Node 在 turn 末检测 unhandled rejection）。
       for (let i = 0; i < 3; i++) await new Promise((resolve) => setImmediate(resolve))
       if (captured.length > 0) console.error(`  (G1 诊断: process 级捕获 unhandledRejection ×${captured.length}: ${captured[0]?.message ?? String(captured[0])})`)
+      // FIX-030-A：面解析抛错被吞为 face=null → 降级 warn（seeding skipped:
+      // no session select face）——可观测保持；handler 零外泄。
       return captured.length === 0
-        && ctx.logger.warnCalls.some((line) => line.includes('agent-preset/selected') && line.includes('injected apiProxy face failure'))
+        && ctx.logger.warnCalls.some((line) => line.includes('seeding skipped') && line.includes('select face'))
     } finally {
       process.off('unhandledRejection', onUnhandled)
     }
@@ -866,6 +902,135 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     const agent = mainBlankAgent({ id: 'sess-j5', events: [null, 'garbage', { noType: true }] })
     await fireCreated(makeCtx({ defaults, apiProxy }), makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
     return apiProxy.calls.length === 1 && agent.options.provider === MAIN_MODEL.provider
+  })
+}
+
+// ── K. FIX-030 判别：新宿主 0.1.2-rc.1 双适配 + 诊断面 ──────────────────
+// 报障（用户 2026-09-05，v0.4.4 发布后）：
+//   ① 调整/切换预设后模型不跟随（回归）——根因：新宿主无 apiProxy 服务
+//      （全包 grep 零注册）→ 旧预检 ctx.get('apiProxy') 恒 undefined →
+//      播种全量静默跳过（仅宿主终端 warn）；
+//   ② subagent 模型配置未生效（LLM 侧统计实证）——根因：新宿主
+//      parentAgentOptionsForDelegation（dsh-subagent L603-612）把子继承
+//      基线从 parent.options 改为「父最近请求头路由」→ 旧判别
+//      （child ≠ parent.options = 显式）把普通继承误判 → fixup 全量跳过；
+//   ③ 预设/subagent 配置生效缺观测——修复 = 诊断环形注册表（applied/skip
+//      原因/target/preset/session）+ router/presetDiagnostics RPC。
+{
+  const subBlankAgent = ({ id = 'child-1', header, options, parentHeader, parentOptions } = {}) => ({
+    options,
+    session: { id, header, requestHeader: parentHeader ? () => ({ config: parentHeader }) : undefined },
+    ...(parentOptions !== undefined ? {} : {}),
+  })
+  const makeParent = ({ header, options } = {}) => ({ options, session: { header, requestHeader: header ? () => ({ config: header }) : undefined } })
+
+  // K1 核心判别（报障①）：新宿主形态（仅 sessionController，无 apiProxy）→
+  // 播种执行（selectModel 直接参数被调用 + options 突变 + 全局恢复）。
+  // 旧实现（预检只认 apiProxy）必败：face unavailable → 零动作。
+  await dcheck('K1 新宿主 sessionController 面 → 播种执行（旧实现 apiProxy 预检必败）', async () => {
+    const defaults = makeDefaults()
+    const controller = makeSessionController({ defaults })
+    const agent = mainBlankAgent({ id: 'sess-k1' })
+    await fireCreated(makeCtx({ defaults, sessionController: controller }), makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    return controller.calls.length === 1
+      && controller.calls[0].provider === MAIN_MODEL.provider && controller.calls[0].model === MAIN_MODEL.model
+      && controller.calls[0].sessionId === 'sess-k1'
+      && agent.options.provider === MAIN_MODEL.provider
+      && defaults.state.current.provider === NATIVE.provider // 全局默认已恢复
+  })
+
+  // K2 新宿主 selectModel 抛 RemoteError（model-unavailable）→ 回滚 ① +
+  // warn + 诊断 select-rejected（不炸 handler）。
+  await dcheck('K2 新宿主面拒绝（抛错形态）→ 回滚 + warn + 诊断 select-rejected', async () => {
+    const defaults = makeDefaults()
+    const controller = makeSessionController({ defaults, unavailable: () => true })
+    const agent = mainBlankAgent({ id: 'sess-k2' })
+    const ctx = makeCtx({ defaults, sessionController: controller })
+    await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    const diag = presetDiagnostics().entries.filter((entry) => entry.session === 'sess-k2')
+    return agent.options.provider === NATIVE.provider
+      && ctx.logger.warnCalls.some((line) => line.includes('session/model-unavailable') || line.includes('model "gpt-5.6-sol" unavailable'))
+      && diag.some((entry) => entry.skip === 'select-rejected')
+  })
+
+  // K3 核心判别（报障②）：新宿主子继承基线——父有请求头路由（≠ parent.
+  // options），child.options = 父头路由 → 旧判别误跳；新判别（基线一致 =
+  // 普通继承）→ fixup 到配置的 subagent 模型。
+  await dcheck('K3 子继承 = 父最近请求头路由（≠ parent.options）→ fixup 执行（旧判别必败）', async () => {
+    const presets = presetConfig({ main: MAIN_MODEL, subagent: SUB_MODEL })
+    const parentHeaderRoute = { provider: 'glm-local-router', model: 'glm-5.3' }
+    const parent = makeParent({ options: { ...NATIVE }, header: parentHeaderRoute })
+    const child = subBlankAgent({
+      id: 'child-k3',
+      header: { origin: 'subagent', agentPreset: PRESET_ID, parentSession: 'parent-k3' },
+      options: { ...parentHeaderRoute }, // 新宿主：子继承父头路由（≠ parent.options）
+    })
+    const ctx = makeCtx({ agents: { get: (id) => (id === 'parent-k3' ? parent : undefined) } })
+    await fireCreated(ctx, makeService({ governance: presets }), child)
+    return child.options.provider === SUB_MODEL.provider && child.options.model === SUB_MODEL.model
+  })
+
+  // K4 显式覆盖仍尊重：child.options ≠ 继承基线（请求方显式 agentOptions）→
+  // 不碰（主权保持）+ 诊断 explicit-override。
+  await dcheck('K4 child 显式覆盖（≠ 继承基线）→ 尊重不碰 + 诊断 explicit-override', async () => {
+    const presets = presetConfig({ main: MAIN_MODEL, subagent: SUB_MODEL })
+    const parent = makeParent({ options: { ...NATIVE }, header: { provider: 'glm-local-router', model: 'glm-5.3' } })
+    const child = subBlankAgent({
+      id: 'child-k4',
+      header: { origin: 'subagent', agentPreset: PRESET_ID, parentSession: 'parent-k4' },
+      options: { provider: 'openai-codex', model: 'gpt-5.6-terra' }, // 显式指定 ≠ 基线
+    })
+    const ctx = makeCtx({ agents: { get: (id) => (id === 'parent-k4' ? parent : undefined) } })
+    await fireCreated(ctx, makeService({ governance: presets }), child)
+    const diag = presetDiagnostics().entries.filter((entry) => entry.session === 'child-k4')
+    return child.options.provider === 'openai-codex'
+      && diag.some((entry) => entry.skip === 'explicit-override')
+  })
+
+  // K5 旧宿主兼容：父无请求头 → 基线回落 parent.options；child = parent
+  // options 副本 → 普通继承 → fixup（回归守卫，非判别）。
+  await dcheck('K5 父无请求头 → 基线回落 parent.options → 普通继承 fixup 保持', async () => {
+    const presets = presetConfig({ main: MAIN_MODEL, subagent: SUB_MODEL })
+    const parent = makeParent({ options: { ...NATIVE } })
+    const child = subBlankAgent({
+      id: 'child-k5',
+      header: { origin: 'subagent', agentPreset: PRESET_ID, parentSession: 'parent-k5' },
+      options: { ...NATIVE },
+    })
+    const ctx = makeCtx({ agents: { get: (id) => (id === 'parent-k5' ? parent : undefined) } })
+    await fireCreated(ctx, makeService({ governance: presets }), child)
+    return child.options.provider === SUB_MODEL.provider
+  })
+
+  // K6（报障③）诊断面：播种成功入表（applied + target + kind=seed-main），
+  // presetDiagnostics() 返回拷贝且条目有界字段形状。
+  await dcheck('K6 诊断注册表：播种成功 applied 条目（kind/target/preset/session）', async () => {
+    const defaults = makeDefaults()
+    const controller = makeSessionController({ defaults })
+    const agent = mainBlankAgent({ id: 'sess-k6' })
+    const before = presetDiagnostics().entries.length
+    await fireCreated(makeCtx({ defaults, sessionController: controller }), makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    const entries = presetDiagnostics().entries
+    const hit = entries.find((entry) => entry.session === 'sess-k6' && entry.kind === 'seed-main' && entry.applied === true)
+    return !!hit && hit.target?.provider === MAIN_MODEL.provider && hit.preset === PRESET_ID
+      && entries.length === before + 1
+  })
+
+  // K7（报障③）skip 观测：未配置预设的切换（重置回全局默认路径前）+
+  // produced 跳过 + face 缺失——三类 skip 都入表（原因短码可判读）。
+  await dcheck('K7 诊断 skip 短码：produced / face-unavailable 入表', async () => {
+    const defaults = makeDefaults()
+    // produced：已开 turn 的主会话 agent/created → skip=produced。
+    const produced = mainBlankAgent({ id: 'sess-k7a', events: [{ type: 'turn/start' }] })
+    const ctxA = makeCtx({ defaults })
+    await fireCreated(ctxA, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), produced)
+    const producedHit = presetDiagnostics().entries.find((entry) => entry.session === 'sess-k7a' && entry.skip === 'produced')
+    // face-unavailable：双面全缺。
+    const agent = mainBlankAgent({ id: 'sess-k7b' })
+    const ctxB = makeCtx({ defaults })
+    await fireCreated(ctxB, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    const faceHit = presetDiagnostics().entries.find((entry) => entry.session === 'sess-k7b' && entry.skip === 'face-unavailable')
+    return !!producedHit && !!faceHit
   })
 }
 
