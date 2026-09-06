@@ -1,7 +1,134 @@
 {
   "version": 1,
-  "generated_at": "2026-09-04T10:57:20",
+  "generated_at": "2026-09-05T11:20:53",
   "packets": {
+    "REL-010": {
+      "task_id": "REL-010",
+      "priority": "P1",
+      "status": "**执行中**——E-1 完成（0.4.3→0.4.4 + CHANGELOG v0.4.4 节 + README 8 处校对，零残留待提交）；E-2~E-6 随链执行",
+      "goal": "REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**执行中**——E-1 完成（0.4.3→0.4.4 + CHANGELOG v0.4.4 节 + README 8 处校对，零残留待提交）；E-2~E-6 随链执行)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: **执行中**——E-1 完成（0.4.3→0.4.4 + CHANGELOG v0.4.4 节 + README 8 处校对，零残留待提交）；E-2~E-6 随链执行",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "**执行中**——E-1 完成（0.4.3→0.4.4 + CHANGELOG v0.4.4 节 + README 8 处校对，零残留待提交）；E-2~E-6 随链执行",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
     "EVO-009": {
       "task_id": "EVO-009",
       "priority": "P1",
@@ -1460,7 +1587,7 @@
     "EVO-015": {
       "task_id": "EVO-015",
       "priority": "P1",
-      "status": "**开发中**（TRIAGE-EVO-015 机录；缺口事实链：现状 add 只装不激活——宿主 warning「not a profile layer」）",
+      "status": "**开发+审查终态（R0 APPROVED_WITH_NOTES/0 机录 REVIEW-EVO-015-R0）**——commit 7965c9d（四文件单 commit；TDD RED 10→GREEN；smoke 1087→1098 +11 零回退；18 套件全绿；隔离 E2E EV-143/144：add 双登记无 warning/update 保持/remove 双摘除/--dump-default-config 层加载 + 真实环境 hash 基线零变更）；事实勘误×2 随 EV-143（v0.4.2 资产名无 v 前缀旧链接 404 / 发行包根目录 package/）；台账：P2-1 断言子串→整行收紧 + P3×5（R0 清单）入 v0.4.4 候选",
       "goal": "EVO-015 dsh plugin 标准管理支持：package.json `dsh.bundle.patch` 声明 + 根级 cordis.patch.yml（router/tool-router 两条 insert，与 install.ps1 宿主行一致）+ files 收录 + README 双通道标准命令文档（npm 安装/npx 拉起 × 在线 git spec/离线 file: spec；add/update/remove + junction 迁移段）+ 隔离 E2E 实测每条命令",
       "product_success_contract": {
         "user": "TO_BE_DEFINED: impacted persona for EVO-015 dsh plugin 标准管理支持：package.json `dsh.bundle.patch` 声明 + 根级 cordis.patch.yml（router/tool-router 两条 insert，与 install.ps1 宿主行一致）+ files 收录 + README 双通道标准命令文档（npm 安装/npx 拉起 × 在线 git spec/离线 file: spec；add/update/remove + junction 迁移段）+ 隔离 E2E 实测每条命令",
@@ -1579,133 +1706,6 @@
       ],
       "done_definition": [
         "**开发中**（TRIAGE-EVO-015 机录；缺口事实链：现状 add 只装不激活——宿主 warning「not a profile layer」）",
-        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
-        "Commit and push are completed for this single task."
-      ],
-      "source": "plan-tracker.md##当前活跃事项"
-    },
-    "REL-009": {
-      "task_id": "REL-009",
-      "priority": "P1",
-      "status": "待 EVO-015",
-      "goal": "REL-009 v0.4.3 发布链——EVO-015 标准插件管理承载：E-1 bump/CHANGELOG/README → E-2 门控十八面 → E-3 隔离冷装（tarball 含 cordis.patch.yml + dsh.bundle 必验）→ E-4 发布审查 → E-5 push main → **在线 git spec 隔离 E2E（push 后 tag 前）** → tag/push/GitHub Release → E-6 归档检查",
-      "product_success_contract": {
-        "user": "TO_BE_DEFINED: impacted persona for REL-009 v0.4.3 发布链——EVO-015 标准插件管理承载：E-1 bump/CHANGELOG/README → E-2 门控十八面 → E-3 隔离冷装（tarball 含 cordis.patch.yml + dsh.bundle 必验）→ E-4 发布审查 → E-5 push main → **在线 git spec 隔离 E2E（push 后 tag 前）** → tag/push/GitHub Release → E-6 归档检查",
-        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for REL-009 v0.4.3 发布链——EVO-015 标准插件管理承载：E-1 bump/CHANGELOG/README → E-2 门控十八面 → E-3 隔离冷装（tarball 含 cordis.patch.yml + dsh.bundle 必验）→ E-4 发布审查 → E-5 push main → **在线 git spec 隔离 E2E（push 后 tag 前）** → tag/push/GitHub Release → E-6 归档检查",
-        "non_goals": [
-          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
-          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
-        ],
-        "success_metrics": [
-          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
-          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
-        ],
-        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
-        "done_definition": [
-          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
-          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
-        ]
-      },
-      "acceptance_contract": {
-        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for REL-009 v0.4.3 发布链——EVO-015 标准插件管理承载：E-1 bump/CHANGELOG/README → E-2 门控十八面 → E-3 隔离冷装（tarball 含 cordis.patch.yml + dsh.bundle 必验）→ E-4 发布审查 → E-5 push main → **在线 git spec 隔离 E2E（push 后 tag 前）** → tag/push/GitHub Release → E-6 归档检查",
-        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
-        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
-        "last_run": {
-          "status": "TO_BE_DEFINED",
-          "exit_code": null,
-          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
-        },
-        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
-      },
-      "quality_budget": {
-        "dimensions": {
-          "performance": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for REL-009 v0.4.3 发布链——EVO-015 标准插件管理承载：E-1 bump/CHANGELOG/README → E-2 门控十八面 → E-3 隔离冷装（tarball 含 cordis.patch.yml + dsh.bundle 必验）→ E-4 发布审查 → E-5 push main → **在线 git spec 隔离 E2E（push 后 tag 前）** → tag/push/GitHub Release → E-6 归档检查",
-            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
-            "status": "TO_BE_DEFINED",
-            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
-            "exception": ""
-          },
-          "reliability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for REL-009 v0.4.3 发布链——EVO-015 标准插件管理承载：E-1 bump/CHANGELOG/README → E-2 门控十八面 → E-3 隔离冷装（tarball 含 cordis.patch.yml + dsh.bundle 必验）→ E-4 发布审查 → E-5 push main → **在线 git spec 隔离 E2E（push 后 tag 前）** → tag/push/GitHub Release → E-6 归档检查",
-            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
-            "status": "TO_BE_DEFINED",
-            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
-            "exception": ""
-          },
-          "security": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for REL-009 v0.4.3 发布链——EVO-015 标准插件管理承载：E-1 bump/CHANGELOG/README → E-2 门控十八面 → E-3 隔离冷装（tarball 含 cordis.patch.yml + dsh.bundle 必验）→ E-4 发布审查 → E-5 push main → **在线 git spec 隔离 E2E（push 后 tag 前）** → tag/push/GitHub Release → E-6 归档检查",
-            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
-            "status": "TO_BE_DEFINED",
-            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
-            "exception": ""
-          },
-          "accessibility": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for REL-009 v0.4.3 发布链——EVO-015 标准插件管理承载：E-1 bump/CHANGELOG/README → E-2 门控十八面 → E-3 隔离冷装（tarball 含 cordis.patch.yml + dsh.bundle 必验）→ E-4 发布审查 → E-5 push main → **在线 git spec 隔离 E2E（push 后 tag 前）** → tag/push/GitHub Release → E-6 归档检查",
-            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
-            "status": "TO_BE_DEFINED",
-            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
-            "exception": ""
-          },
-          "ux": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for REL-009 v0.4.3 发布链——EVO-015 标准插件管理承载：E-1 bump/CHANGELOG/README → E-2 门控十八面 → E-3 隔离冷装（tarball 含 cordis.patch.yml + dsh.bundle 必验）→ E-4 发布审查 → E-5 push main → **在线 git spec 隔离 E2E（push 后 tag 前）** → tag/push/GitHub Release → E-6 归档检查",
-            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
-            "status": "TO_BE_DEFINED",
-            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
-            "exception": ""
-          },
-          "maintainability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for REL-009 v0.4.3 发布链——EVO-015 标准插件管理承载：E-1 bump/CHANGELOG/README → E-2 门控十八面 → E-3 隔离冷装（tarball 含 cordis.patch.yml + dsh.bundle 必验）→ E-4 发布审查 → E-5 push main → **在线 git spec 隔离 E2E（push 后 tag 前）** → tag/push/GitHub Release → E-6 归档检查",
-            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
-            "status": "TO_BE_DEFINED",
-            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
-            "exception": ""
-          }
-        }
-      },
-      "vertical_slice": {
-        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for REL-009 v0.4.3 发布链——EVO-015 标准插件管理承载：E-1 bump/CHANGELOG/README → E-2 门控十八面 → E-3 隔离冷装（tarball 含 cordis.patch.yml + dsh.bundle 必验）→ E-4 发布审查 → E-5 push main → **在线 git spec 隔离 E2E（push 后 tag 前）** → tag/push/GitHub Release → E-6 归档检查",
-        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
-        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (待 EVO-015)",
-        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
-        "status": "TO_BE_DEFINED",
-        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
-      },
-      "interruption_policy": {
-        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
-        "critical_triggers": [
-          "Ask the user when product intent is unclear.",
-          "Ask the user when acceptance standard or done criteria are unclear.",
-          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
-        ],
-        "auto_execute": [
-          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
-          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
-        ],
-        "assumption_record": {
-          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
-          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
-          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
-          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
-          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
-        },
-        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
-      },
-      "allowed_change_scope": [
-        "Only change files required by this task row: 待 EVO-015",
-        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
-      ],
-      "required_evidence": [
-        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
-        "validation commands with exit_code and concise output summary",
-        "independent review evidence or explicit degraded review evidence that does not claim full separation"
-      ],
-      "next_commands": [
-        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
-        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
-      ],
-      "done_definition": [
-        "待 EVO-015",
         "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
         "Commit and push are completed for this single task."
       ],
