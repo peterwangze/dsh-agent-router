@@ -623,6 +623,37 @@ export async function runStatsTests(check) {
     await store.close()
     rmSync(work, { recursive: true, force: true })
   }
+
+  // ── 24. EVO-017 R2：统一分组视图派生（per-agent/per-account 按天+最近）──
+  console.log('unified group derivations (EVO-017 R2):')
+  {
+    const work = mkdtempSync(join(tmpdir(), 'stats-r2-'))
+    const dir = join(work, 'stats')
+    const T1 = T0 + 1000
+    const store = new StatsStore({ dir, now: NOW_AT })
+    store.record({ agentId: 'vision', provider: 'oauth:chatgpt/x', model: 'gpt-5.6-sol', ok: true, ms: 100, inputTokens: 10, outputTokens: 5, at: T0 })
+    store.record({ agentId: 'vision', provider: 'oauth:chatgpt/x', model: 'gpt-5.6-sol', ok: false, ms: 50, inputTokens: 3, outputTokens: 1, at: T1, error: 'boom' })
+    store.record({ agentId: 'twin', provider: 'glm-local-router', model: 'glm-5.3', ok: true, ms: 200, inputTokens: 7, outputTokens: 2, at: T1 })
+    const snap = store.snapshot()
+    const agentDay = (snap.agentDays ?? []).find((entry) => entry.key === 'vision')
+    const acctDay = (snap.accountDays ?? []).find((entry) => entry.key === 'glm-local-router')
+    check('R2-1: agentDays 按天聚合（calls/errors/tokens/models 分布）', !!agentDay && agentDay.days.length === 1 && agentDay.days[0].calls === 2 && agentDay.days[0].errors === 1 && agentDay.days[0].inputTokens === 13 && agentDay.days[0].models[0].calls === 2)
+    check('R2-2: accountDays 按账号聚合（twin 路由键入账号维度）', !!acctDay && acctDay.days[0].calls === 1 && acctDay.days[0].models[0].model === 'glm-5.3')
+    const agentRecent = (snap.recentByAgent ?? []).find((entry) => entry.key === 'vision')
+    const acctRecent = (snap.recentByAccount ?? []).find((entry) => entry.key === 'glm-local-router')
+    check('R2-3: recentByAgent/Account 最新在前（≤10；ok/ms/tokens 携带）', !!agentRecent && agentRecent.recent.length === 2 && agentRecent.recent[0].at === T1 && agentRecent.recent[0].ok === false
+      && !!acctRecent && acctRecent.recent[0].model === 'glm-5.3')
+    await store.flush()
+    const re = new StatsStore({ dir, now: NOW_AT })
+    await re.load()
+    const reSnap = re.snapshot()
+    const reAgentDay = (reSnap.agentDays ?? []).find((entry) => entry.key === 'vision')
+    const reAcctRecent = (reSnap.recentByAccount ?? []).find((entry) => entry.key === 'glm-local-router')
+    check('R2-4: 派生索引持久化往返（load 重放重建）', !!reAgentDay && reAgentDay.days[0].calls === 2 && !!reAcctRecent)
+    await re.close()
+    await store.close()
+    rmSync(work, { recursive: true, force: true })
+  }
 }
 
 // 独立入口：node tests/stats.mjs（与 smoke 接线互补——Phase 2 解锁后接入；exit 0/1）。

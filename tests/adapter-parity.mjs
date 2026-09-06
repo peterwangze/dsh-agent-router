@@ -185,6 +185,48 @@ export async function runAdapterParityTests(check) {
     check('EVO-009 形状：图片块保真（零改写直传）', Array.isArray(delegations[0].messages[0].content) && delegations[0].messages[0].content.some((b) => b.type === 'image'))
     check('EVO-009 形状：零 system 标记注入（不进 route_agent 改写面）', delegations[0].system === undefined)
   }
+
+  // 6. EVO-017 R2：twin 调用统计回调（onCall）——预设会话主/subagent 的 LLM
+  //    流经 twin，账号级用量此前零记录（账号统计恒 0 根因）。判别：成功流
+  //    上报 ok:true + usage tokens；失败流上报 ok:false + error + 原样上抛；
+  //    回调抛错零影响流。
+  {
+    // 6a 成功流：usage chunk 提取 + ok:true。
+    const reports = []
+    const llmOk = {
+      registration: () => ({ adapter: { resolveModel: async (p, m) => ({ provider: p, id: m, name: m, inputModalities: ['text'] }) } }),
+      stream: async function* () {
+        yield { type: 'usage', usage: { inputTokens: 11, outputTokens: 7 } }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      },
+    }
+    const activeOk = [{ modality: 'image', stateOf: null, marker: () => 'MARKER', rewrite: () => null }]
+    const twinOk = createWrapAdapter(llmOk, 'fake-stat', activeOk, (event) => reports.push(event))
+    for await (const chunk of twinOk.stream({ provider: 'fake-stat' + WRAP_SUFFIX, model: 'm1', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] })) { void chunk }
+    check('R2-5: twin onCall 成功上报（provider=twin 路由 + usage tokens）', reports.length === 1 && reports[0].ok === true && reports[0].provider === 'fake-stat' + WRAP_SUFFIX && reports[0].model === 'm1' && reports[0].inputTokens === 11 && reports[0].outputTokens === 7 && reports[0].ms >= 0)
+
+    // 6b 失败流：ok:false + error + 原样上抛。
+    const reportsFail = []
+    const llmFail = {
+      registration: () => ({ adapter: { resolveModel: async (p, m) => ({ provider: p, id: m, name: m, inputModalities: ['text'] }) } }),
+      stream: async function* () { throw new Error('upstream boom') },
+    }
+    const twinFail = createWrapAdapter(llmFail, 'fake-stat2', activeOk, (event) => reportsFail.push(event))
+    let thrown = null
+    try { for await (const chunk of twinFail.stream({ provider: 'fake-stat2' + WRAP_SUFFIX, model: 'm1', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] })) { void chunk } } catch (error) { thrown = error }
+    check('R2-6: twin onCall 失败上报 + 异常原样上抛', thrown !== null && thrown.message === 'upstream boom' && reportsFail.length === 1 && reportsFail[0].ok === false && String(reportsFail[0].error).includes('upstream boom'))
+
+    // 6c 回调抛错零影响流（统计旁路）。
+    const llmQuiet = {
+      registration: () => ({ adapter: { resolveModel: async (p, m) => ({ provider: p, id: m, name: m, inputModalities: ['text'] }) } }),
+      stream: async function* () { yield { type: 'finish', reason: { kind: 'stop' } } },
+    }
+    const twinQuiet = createWrapAdapter(llmQuiet, 'fake-stat3', activeOk, () => { throw new Error('stats boom') })
+    let quietChunks = 0
+    let quietThrown = null
+    try { for await (const chunk of twinQuiet.stream({ provider: 'fake-stat3' + WRAP_SUFFIX, model: 'm1', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] })) quietChunks += 1 } catch (error) { quietThrown = error }
+    check('R2-7: onCall 抛错零影响流（chunks 正常产出）', quietThrown === null && quietChunks === 1)
+  }
 }
 
 // FIX-001b F1：pathToFileURL 可移植比较（Windows 下 argv[1] 反斜杠路径 vs
