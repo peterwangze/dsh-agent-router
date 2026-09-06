@@ -1639,7 +1639,11 @@ console.log('RouterService:')
   check('stats totals', stats.totals.length === 3 && stats.totals.find((t) => t.agentId === 'vision').calls === 1 && stats.totals.find((t) => t.agentId === 'draw').errors === 1 && stats.totals.find((t) => t.agentId === 'pchat').calls === 1)
   check('stats recent', stats.recent.length === 3 && stats.recent[2].agentId === 'pchat')
   check('stats series', stats.series.some((s) => s.agentId === 'vision' && s.buckets.length === 1 && s.buckets[0].outputTokens === 2))
-  check('stats account totals', stats.accountTotals.length === 3 && stats.accountTotals.find((a) => a.provider === 'openai').calls === 1 && stats.accountTotals.find((a) => a.provider === 'openai').models.length === 1 && stats.accountTotals.find((a) => a.provider === 'openai').models[0].model === 'dall-e-3' && stats.accountTotals.find((a) => a.provider === 'oauth:oauth2').errors === 1)
+  // FIX-031 对齐（可见面）：snapshot 账号行 provider = 清洁账号标签——`oauth:` 是
+  // 插件账号身份命名空间标记，属实现路径，不得直出任何用户可见面（DEC-029②）；
+  // 内部聚合键仍为 `oauth:oauth2`（上方「pool failed account recorded」白盒断言
+  // 证明 service.accountHealth 寻址不回归），实体种类经 accountKind 下发。
+  check('stats account totals', stats.accountTotals.length === 3 && stats.accountTotals.find((a) => a.provider === 'openai').calls === 1 && stats.accountTotals.find((a) => a.provider === 'openai').models.length === 1 && stats.accountTotals.find((a) => a.provider === 'openai').models[0].model === 'dall-e-3' && stats.accountTotals.find((a) => a.provider === 'oauth2').errors === 1 && stats.accountTotals.find((a) => a.provider === 'oauth2').accountKind === 'oauth')
   check('stats account series', stats.accountSeries.some((s) => s.provider === 'deepseek-official' && s.buckets.length === 1 && s.buckets[0].inputTokens === 10))
 
   const test = await service.test({ agentId: 'vision' })

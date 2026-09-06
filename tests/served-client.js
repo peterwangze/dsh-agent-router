@@ -60,6 +60,61 @@ window.__ModuleLoader__.load({
     const isHostManagedRoute = (id) => typeof id === 'string' && id === HOST_ROUTE_ID
     const isPluginSelfRegisteredProvider = (id) => isPluginRouteProvider(id) || isHostManagedRoute(id)
 
+    // ── FIX-031 统计归因显示层（DEC-029②「实现路径不可见」浏览器面单点）──────
+    // 权威单点在 Node 侧 lib/stats.js（normalizeAttribution / accountDisplayLabel）：
+    // 统计快照下发的账号与 agent 已是规范实体。此处是其**同构镜像 + 滚动升级
+    // 兜底**（旧服务端/历史值仍可能带 `*-router` / `oauth:` / 'chatgpt-oauth' /
+    // 'twin' / 'main' 形态），且**键→显示名**只经这一处，禁止在各渲染点重复
+    // 展开条件（P5）。与权威单点的不漂移由 tests/fix-031-attribution.mjs G 组
+    // 源码契约 + 值 parity 断言锁定（P-v3 原则 9）。
+    const WRAP_ROUTE_SUFFIX = '-router'
+    const MAIN_MODEL_AGENT_ID = 'main-model'
+
+    /** 账号键 → 清洁显示键（与 lib/stats.js accountDisplayLabel 同构镜像：剥包装
+     *  路由后缀与内部命名空间标记，输出实体 id）。 */
+    function accountDisplayKeyOf(value) {
+      let key = typeof value === 'string' ? value.trim() : ''
+      while (key.length > WRAP_ROUTE_SUFFIX.length && key.endsWith(WRAP_ROUTE_SUFFIX)) key = key.slice(0, -WRAP_ROUTE_SUFFIX.length)
+      if (key === OAUTH_ROUTE_PROVIDER) key = 'oauth:chatgpt'
+      if (key.startsWith('oauth:pool:')) return key.slice('oauth:pool:'.length)
+      if (key.startsWith('oauth:')) return key.slice('oauth:'.length)
+      if (key.startsWith('cli:')) return key.slice('cli:'.length)
+      return key
+    }
+
+    /** agent 键 → 规范 agent 键（内部实现 id 'twin'/'main' 折回主模型实体）。 */
+    function agentDisplayKeyOf(value) {
+      const id = typeof value === 'string' ? value.trim() : ''
+      return !id || id === 'twin' || id === 'main' ? MAIN_MODEL_AGENT_ID : id
+    }
+
+    /**
+     * 可见名单点（配置面 roster 解析）：账号/agent 规范键 → 用户配置名。
+     * @param {string} kind 'provider' | 'oauth' | 'pool' | 'cli' | 'host-route' | 'agent'
+     * @param {Map<string, string>} names 建键形态 `${kind}|${清洁键}`
+     */
+    function rosterDisplayName(names, kind, key) {
+      if (!names || !key) return undefined
+      return names.get(`${kind}|${key}`)
+    }
+
+    /**
+     * 「服务商/模型」列与账号卡标题的显示名单点：账号清洁键优先（配置面名覆盖），
+     * 无账号归属时回落 agent 词汇——主模型用用户语言「主模型」，专业 agent 用配置名。
+     * 内部标记（`oauth:` / `pool:` / `-router` / 'twin' / 裸 'main'）永不直出
+     * （DEC-029②）。
+     */
+    function statsProviderLabelOf(row, names, t) {
+      const account = accountDisplayKeyOf(row?.provider)
+      if (account && account !== '?') {
+        return rosterDisplayName(names, row?.accountKind ?? 'provider', account) ?? account
+      }
+      const agentKey = agentDisplayKeyOf(row?.agentId)
+      if (agentKey === MAIN_MODEL_AGENT_ID) return t('statsMainModel')
+      return rosterDisplayName(names, 'agent', agentKey) ?? agentKey
+    }
+
+
     // ── wire codecs（与宿主 lib/schemas.js 同形状的轻量校验器）──────────────
     function wireCheck(spec, value, path) {
       if (value === undefined || value === null) {
@@ -177,6 +232,11 @@ window.__ModuleLoader__.load({
       series: wv.array(wv.object({ agentId: wv.string(), buckets: wv.array(wBucket) })),
       accountTotals: wv.array(wv.object({
         provider: wv.string(),
+        // FIX-031：归一化实体种类（provider/oauth/pool/cli/host-route/unknown）+
+        // 双权威源计数分解（可选——旧服务端缺省 = 客户端按 provider 判据回退）。
+        accountKind: wv.string(true),
+        requestCalls: wv.number(true),
+        callRows: wv.number(true),
         calls: wv.number(), errors: wv.number(), inputTokens: wv.number(), outputTokens: wv.number(),
         totalMs: wv.number(), lastAt: wv.number(true),
         models: wv.array(wv.object({
@@ -550,6 +610,9 @@ window.__ModuleLoader__.load({
       statsFail: '失败',
       statsRecent: '最近调用记录',
       statsSeries: 'tokens 分布（每分钟，近 90 分钟）',
+      // EVO-017 R3（FIX-031）：账号级调用数口径披露（双权威源合并的用户语义）。
+      statsMainModel: '主模型',
+      statsAccountScopeHint: '账号级调用数按请求口径（每次 LLM 请求恰记一条，覆盖全部路由形态，含端点无 token 上报的请求）；token / 耗时 / 失败数按调用明细口径统计，因此调用数可大于有明细的调用条数。',
       statsAgentLevel: '专业 Agent 统计',
       statsAccountLevel: '账号级统计',
       // EVO-017：分级统计文案（预设作用域 + 二/三级卡片 + 三类视图）。
@@ -863,6 +926,9 @@ window.__ModuleLoader__.load({
       statsFail: 'Failed',
       statsRecent: 'Recent calls',
       statsSeries: 'Tokens per minute (last 90 min)',
+      // EVO-017 R3 (FIX-031): account-level call-count basis disclosure.
+      statsMainModel: 'Main model',
+      statsAccountScopeHint: 'Account-level calls use the request basis (exactly one record per LLM request, covering every routing shape including requests whose endpoint reports no tokens); tokens / latency / failures come from call detail, so calls can exceed the number of detailed calls.',
       statsAgentLevel: 'Specialist Agent stats',
       statsAccountLevel: 'Account-level stats',
       // EVO-017: tiered stats copy (preset scope + tier cards + three views).
@@ -1224,7 +1290,7 @@ window.__ModuleLoader__.load({
      * 口径在专业/账号级视图（此处观测配置生效与归属）。
      */
     function PresetStatsCard(props) {
-      const { preset, row, expanded, t, onToggle } = props
+      const { preset, row, expanded, accountNames, t, onToggle } = props
       const armOf = (arm) => el('div', { className: 'dshrouter-stats', style: { marginTop: 4 } },
         el('div', { className: 'dshrouter-row' },
           el('span', { className: 'dshrouter-meta' }, `${t('statsCalls')}: ${arm.calls}`),
@@ -1234,7 +1300,7 @@ window.__ModuleLoader__.load({
         el('table', { className: 'dshrouter-table' },
           el('thead', null, el('tr', null, el('th', null, t('fieldProvider')), el('th', null, t('fieldModel')), el('th', null, t('statsCalls')))),
           el('tbody', null, ...arm.models.map((modelCount) => el('tr', { key: `${modelCount.provider}/${modelCount.model}` },
-            el('td', null, modelCount.provider),
+            el('td', null, statsProviderLabelOf(modelCount, accountNames, t)),
             el('td', null, modelCount.model),
             el('td', null, modelCount.calls))))),
         el('div', { className: 'dshrouter-head' }, el('span', { className: 'dshrouter-meta' }, t('statsPresetDaily'))),
@@ -1249,7 +1315,7 @@ window.__ModuleLoader__.load({
           el('thead', null, el('tr', null, el('th', null, t('statsTime')), el('th', null, t('statsProvider')))),
           el('tbody', null, ...arm.recent.map((entry, index) => el('tr', { key: `${entry.at}-${index}` },
             el('td', null, timeOf(entry.at)),
-            el('td', null, `${entry.provider}/${entry.model}`))))))
+            el('td', null, `${statsProviderLabelOf(entry, accountNames, t)}/${entry.model}`))))))
       return el('div', { className: 'dshrouter-card' },
         el('button', { type: 'button', className: 'dshrouter-card-head', onClick: onToggle, 'aria-expanded': expanded, title: expanded ? t('collapse') : t('expand') },
           el('span', { className: 'dshrouter-name' }, preset),
@@ -1271,9 +1337,12 @@ window.__ModuleLoader__.load({
      * errors/inputTokens/outputTokens/ms/cost/models?）+ recent 数组（≤10
      * 条 {at, provider?, agentId?, model, ok?, ms?, inputTokens?,
      * outputTokens?}）+ models 可选（总用量模型分布表）。
+     * FIX-031：明细「服务商」列经 statsProviderLabelOf 单点取名（账号清洁键 →
+     * 配置面显示名；无账号归属时按 agent 词汇），旧实现 `provider || agentId`
+     * 直接把内部 agentId 当服务商打印（用户实证 `twin/glm-5.3`）。
      */
     function GroupStatsBody(props) {
-      const { totals, days, recent, models, t } = props
+      const { totals, days, recent, models, accountNames, t } = props
       const call = totals || { calls: 0, errors: 0, inputTokens: 0, outputTokens: 0, totalMs: 0 }
       return el('div', { className: 'dshrouter-stats' },
         el('div', { className: 'dshrouter-row' },
@@ -1310,7 +1379,7 @@ window.__ModuleLoader__.load({
             el('th', null, t('statsTime')), el('th', null, t('statsProvider')), el('th', null, t('statsStatus')), el('th', null, t('statsAvg')))),
           el('tbody', null, ...recent.map((row, index) => el('tr', { key: `${row.at}-${index}` },
             el('td', null, timeOf(row.at)),
-            el('td', null, `${row.provider || row.agentId || '?'}/${row.model || '?'}`),
+            el('td', null, `${statsProviderLabelOf(row, accountNames, t)}/${row.model || '?'}`),
             el('td', null, row.ok === false ? el('span', { className: 'dshrouter-error' }, t('statsFail')) : t('statsOk')),
             el('td', null, `${fmtMs(row.ms || 0)}${row.outputTokens ? ` · ${fmtTokens(row.outputTokens)} out` : ''}`)))))
       )
@@ -1321,7 +1390,7 @@ window.__ModuleLoader__.load({
      * Agent / 账号 / 全局 复用（预设卡因双口径结构保持 PresetStatsCard）。
      */
     function GroupStatsCard(props) {
-      const { title, badge, summaryText, totals, days, recent, models, expanded, t, onToggle } = props
+      const { title, badge, summaryText, totals, days, recent, models, accountNames, expanded, t, onToggle } = props
       return el('div', { className: 'dshrouter-card' },
         el('button', { type: 'button', className: 'dshrouter-card-head', onClick: onToggle, 'aria-expanded': expanded, title: expanded ? t('collapse') : t('expand') },
           el('span', { className: 'dshrouter-name' }, title),
@@ -1329,7 +1398,7 @@ window.__ModuleLoader__.load({
           el('span', { className: 'dshrouter-meta' }, summaryText),
           el('span', { className: 'dshrouter-spacer' }),
           el('span', { className: 'dshrouter-chevron' }, expanded ? '▾' : '▸')),
-        expanded ? el(GroupStatsBody, { totals, days, recent, models, t }) : null)
+        expanded ? el(GroupStatsBody, { totals, days, recent, models, accountNames, t }) : null)
     }
 
     /** 已配置账号卡片：折叠摘要 + 展开编辑（Base URL / API Key / 删除）与模型列表。 */
@@ -2308,19 +2377,53 @@ window.__ModuleLoader__.load({
       const idInvalid = newId.trim() !== '' && !ID_PATTERN.test(newId.trim())
 
       // 统计归一视图
-      const statsTotals = stats ? new Map((stats.totals ?? []).map((entry) => [entry.agentId, entry])) : new Map()
-      const statsSeries = stats ? new Map((stats.series ?? []).map((entry) => [entry.agentId, entry.buckets ?? []])) : new Map()
-      const accountTotalsById = stats ? new Map((stats.accountTotals ?? []).map((entry) => [entry.provider, entry])) : new Map()
-      const accountSeriesById = stats ? new Map((stats.accountSeries ?? []).map((entry) => [entry.provider, entry.buckets ?? []])) : new Map()
+      // FIX-031：账号索引一律按**清洁账号键**（accountDisplayKeyOf）建键——服务端
+      // 快照下发的 provider/key 已是规范实体，镜像一次保证滚动期新旧行同键空间；
+      // 专业 agent 与「主模型」按规范 agent 键建键（内部 'twin'/'main' 归一）。
+      const statsTotals = stats ? new Map((stats.totals ?? []).map((entry) => [agentDisplayKeyOf(entry.agentId), entry])) : new Map()
+      const statsSeries = stats ? new Map((stats.series ?? []).map((entry) => [agentDisplayKeyOf(entry.agentId), entry.buckets ?? []])) : new Map()
+      const accountTotalsById = stats ? new Map((stats.accountTotals ?? []).map((entry) => [accountDisplayKeyOf(entry.provider), entry])) : new Map()
+      const accountSeriesById = stats ? new Map((stats.accountSeries ?? []).map((entry) => [accountDisplayKeyOf(entry.provider), entry.buckets ?? []])) : new Map()
       const recentCalls = stats ? stats.recent ?? [] : []
       const statsDays = stats ? (stats.days ?? {}) : {}
       // EVO-017：预设作用域统计行（presetStats——main/subagent 两口径）。
       const presetStatsRows = stats && Array.isArray(stats.presetStats) ? stats.presetStats : []
       // EVO-017 R2：统一分组视图派生索引（per-agent / per-account 按天 + 最近≤10）。
-      const agentDaysById = stats ? new Map((stats.agentDays ?? []).map((entry) => [entry.key, entry.days ?? []])) : new Map()
-      const accountDaysById = stats ? new Map((stats.accountDays ?? []).map((entry) => [entry.key, entry.days ?? []])) : new Map()
-      const recentByAgentId = stats ? new Map((stats.recentByAgent ?? []).map((entry) => [entry.key, entry.recent ?? []])) : new Map()
-      const recentByAccountId = stats ? new Map((stats.recentByAccount ?? []).map((entry) => [entry.key, entry.recent ?? []])) : new Map()
+      const agentDaysById = stats ? new Map((stats.agentDays ?? []).map((entry) => [agentDisplayKeyOf(entry.key), entry.days ?? []])) : new Map()
+      const accountDaysById = stats ? new Map((stats.accountDays ?? []).map((entry) => [accountDisplayKeyOf(entry.key), entry.days ?? []])) : new Map()
+      const recentByAgentId = stats ? new Map((stats.recentByAgent ?? []).map((entry) => [agentDisplayKeyOf(entry.key), entry.recent ?? []])) : new Map()
+      const recentByAccountId = stats ? new Map((stats.recentByAccount ?? []).map((entry) => [accountDisplayKeyOf(entry.key), entry.recent ?? []])) : new Map()
+      // kind 参与键空间：provider 账号与同名 OAuth 账号/池/子代理条目互不顶掉。
+      const accountKindKey = (kind, key) => `${kind ?? 'provider'}|${key}`
+      const accountTotalsByKindId = stats ? new Map((stats.accountTotals ?? []).map((entry) => [accountKindKey(entry.accountKind, accountDisplayKeyOf(entry.provider)), entry])) : new Map()
+      // FIX-031 显示名单点（配置面 roster → 用户可见名）：建键形态
+      // `${kind}|${清洁键}`——kind 参与键空间，provider 账号与同名 OAuth 账号/
+      // 池/子代理条目不会互相顶掉；统计面所有键→名映射经此一处（P5）。
+      const accountNames = new Map()
+      for (const entry of providers) {
+        if (entry && typeof entry.provider === 'string' && entry.displayName) accountNames.set(`provider|${accountDisplayKeyOf(entry.provider)}`, entry.displayName)
+      }
+      for (const entry of (state.catalog?.oauthAccounts ?? [])) {
+        if (entry && entry.id && entry.name) accountNames.set(`oauth|${accountDisplayKeyOf(`oauth:${entry.id}`)}`, entry.name)
+      }
+      for (const entry of (state.catalog?.pools ?? [])) {
+        if (entry && entry.id && entry.name) accountNames.set(`pool|${accountDisplayKeyOf(`oauth:pool:${entry.id}`)}`, entry.name)
+      }
+      for (const entry of (state.catalog?.cliAgents ?? [])) {
+        if (entry && entry.id && entry.name) accountNames.set(`cli|${accountDisplayKeyOf(`cli:${entry.id}`)}`, entry.name)
+      }
+      for (const entry of (state.catalog?.agents ?? [])) {
+        if (entry && entry.id && entry.name) accountNames.set(`agent|${entry.id}`, entry.name)
+      }
+      for (const [id, agent] of Object.entries(value.agents ?? {})) {
+        if (agent && agent.name && !accountNames.has(`agent|${id}`)) accountNames.set(`agent|${id}`, agent.name)
+      }
+      // FIX-031：专业 Agent 分组行 = 配置的专业 agent + 「主模型」统一实体
+      // （twin/oauth 两条内部记录路径归一后只此一行；无数据不出卡）。
+      const agentStatsRows = [
+        ...agentIds.map((id) => ({ id, isMainModel: false })),
+        ...(statsTotals.has(MAIN_MODEL_AGENT_ID) ? [{ id: MAIN_MODEL_AGENT_ID, isMainModel: true }] : []),
+      ]
       const sumAll = (stats ? stats.totals ?? [] : []).reduce(
         (acc, entry) => ({ calls: acc.calls + entry.calls, errors: acc.errors + entry.errors, inTokens: acc.inTokens + entry.inputTokens, outTokens: acc.outTokens + entry.outputTokens }),
         { calls: 0, errors: 0, inTokens: 0, outTokens: 0 })
@@ -2347,13 +2450,14 @@ window.__ModuleLoader__.load({
         .map((entry) => entry.provider)
         .filter((provider) => !isPluginSelfRegisteredProvider(provider))
       for (const total of stats ? stats.accountTotals ?? [] : []) {
-        // FIX-015 + FIX-019：插件自注册 provider 键（oauth 面 `oauth:` 前缀旧
-        // 聚合键 / 无冒号路由 id；宿主路由面 openai-codex）而非可配置账号——
-        // 由「ChatGPT 订阅登录」卡自管 / 归「设置 → 模型」，不得并入配置区渲染
-        // 成通用 API Key 编辑器（幽灵卡；用户实证指认）；判据经
-        // isPluginSelfRegisteredProvider 单点化（与 statsAccountRows 同判据）。
-        if (isPluginSelfRegisteredProvider(total.provider)) continue
-        if (!addedAccounts.includes(total.provider)) addedAccounts.push(total.provider)
+        // FIX-015 + FIX-019 + FIX-031：插件自注册身份键（OAuth 订阅账号 / 账号池 /
+        // 子代理条目 / 宿主官方路由）不是「可配置 API Key 账号」，不得并入配置区
+        // 渲染成通用 API Key 编辑器（幽灵卡——用户实证）。判据单点：优先服务端
+        // 归一化下发的 accountKind（实体种类），无该字段（滚动升级旧服务端）回退
+        // isPluginSelfRegisteredProvider 字符串判据；两处判据同点消费。
+        if ((total.accountKind && total.accountKind !== 'provider') || isPluginSelfRegisteredProvider(total.provider)) continue
+        const clean = accountDisplayKeyOf(total.provider)
+        if (!addedAccounts.includes(clean)) addedAccounts.push(clean)
       }
       addedAccounts.sort()
       const accountModelsOf = (provider) => {
@@ -2512,6 +2616,7 @@ window.__ModuleLoader__.load({
         if (entry.active !== true && !total) continue
         statsAccountRows.push({
           provider: entry.provider,
+          accountKind: 'provider',
           displayName: entry.displayName,
           active: entry.active === true,
           calls: total ? total.calls : 0,
@@ -2523,12 +2628,15 @@ window.__ModuleLoader__.load({
         })
       }
       for (const total of stats ? stats.accountTotals ?? [] : []) {
-        // EVO-017 R2：有真实用量的 provider（含插件自注册键 oauth:*/chatgpt-
-        // oauth/openai-codex/twin 路由）都进统计行（用户需求：账号级统计全量）。
-        if (statsAccountRows.some((row) => row.provider === total.provider)) continue
+        // EVO-017 R2：有真实用量的账号（含插件自注册身份 oauth/pool/cli——用户
+        // 需求「统计所有经过当前账号的数据，不关联场景」）都进统计行。
+        // FIX-031：provider 已是归一化后的规范账号键（无 `-router` 伪实体、无
+        // 内部标记），displayName 经配置面 roster 单点解析。
+        if (statsAccountRows.some((row) => row.provider === total.provider && (row.accountKind ?? 'provider') === (total.accountKind ?? 'provider'))) continue
         statsAccountRows.push({
           provider: total.provider,
-          displayName: total.provider,
+          accountKind: total.accountKind ?? 'provider',
+          displayName: rosterDisplayName(accountNames, total.accountKind ?? 'provider', accountDisplayKeyOf(total.provider)) ?? total.provider,
           active: true,
           calls: total.calls,
           errors: total.errors,
@@ -3133,7 +3241,9 @@ window.__ModuleLoader__.load({
         cliEntryIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('accountMissing')) : null,
         ...cliEntryIds.map((id) => {
           const entry = cliEntriesById.get(id)
-          const total = accountTotalsById.get(`cli:${id}`)
+          // FIX-031：子代理用量的账号侧记账键 = 规范账号键（服务端 accountKind
+          // 'cli' + 清洁 id；旧实现按内部 `cli:<id>` 形态直查聚合表）。
+          const total = accountTotalsByKindId.get(`cli|${id}`) ?? accountTotalsById.get(id)
           return el(CliAgentCard, {
             key: id, id, entry, total,
             expanded: expandedCli[id] === true,
@@ -3268,31 +3378,34 @@ window.__ModuleLoader__.load({
             presetStatsRows.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')) : null,
             ...presetStatsRows.map((row) => el(PresetStatsCard, {
               key: `pstat:${row.preset}`,
-              preset: row.preset, row, t,
+              preset: row.preset, row, accountNames, t,
               expanded: expandedStats[`pstat:${row.preset}`] === true,
               onToggle: () => toggleStatCard(`pstat:${row.preset}`),
             })),
           ],
         }),
         el(CategoryCard, {
-          title: t('statsAgentLevel'), summary: t('statsAgentSummary')(agentIds.length),
+          title: t('statsAgentLevel'), summary: t('statsAgentSummary')(agentStatsRows.length),
           expanded: expandedSection.statsAgents === true, t, onToggle: () => toggleSection('statsAgents'),
           children: [
-            agentIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')) : null,
+            agentStatsRows.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')) : null,
             // EVO-017 R2：专业 Agent 分组复用统一分组卡（总用量/每日/实时
             // 三段——GroupStatsCard；days/recent 来自 R2 派生索引）。
-            ...agentIds.map((id) => {
+            // FIX-031：分组行 = 配置的专业 agent + 「主模型」统一实体（twin/main
+            // 两条内部记录路径在此归一，DEC-029①——路由中间构件不再另立分组）。
+            ...agentStatsRows.map(({ id, isMainModel }) => {
               const total = statsTotals.get(id)
               const statKey = `agent:${id}`
               return el(GroupStatsCard, {
                 key: statKey,
-                title: total ? total.name : id,
-                badge: id,
+                title: isMainModel ? t('statsMainModel') : (total ? total.name : (rosterDisplayName(accountNames, 'agent', id) ?? id)),
+                badge: isMainModel ? '' : id,
                 summaryText: `${t('statsCalls')} ${total ? total.calls : 0} · ${t('statsErrors')} ${total ? total.errors : 0} · ${fmtTokens(total ? total.inputTokens : 0)}/${fmtTokens(total ? total.outputTokens : 0)}`,
                 totals: total ?? { calls: 0, errors: 0, inputTokens: 0, outputTokens: 0, totalMs: 0 },
                 days: agentDaysById.get(id) ?? [],
                 recent: recentByAgentId.get(id) ?? [],
                 models: [],
+                accountNames,
                 expanded: expandedStats[statKey] === true,
                 t,
                 onToggle: () => toggleStatCard(statKey),
@@ -3304,22 +3417,26 @@ window.__ModuleLoader__.load({
           title: t('statsAccountLevel'), summary: t('statsAccountSummary')(statsAccountRows.length),
           expanded: expandedSection.statsAccounts === true, t, onToggle: () => toggleSection('statsAccounts'),
           children: [
+            el('p', { className: 'dshrouter-hint' }, t('statsAccountScopeHint')),
             statsAccountRows.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('statsNoCalls')) : null,
             // EVO-017 R2：账号分组复用统一分组卡（模型分布进总用量段；
             // days/recent 来自 R2 派生索引；含插件自注册键全量）。
+            // FIX-031：标题 = 配置面账号显示名（归一化键 → roster 映射）；徽标
+            // 只给可配置 provider 账号（oauth/pool/cli 身份键不外显）。
             ...statsAccountRows.map((row) => {
-              const statKey = `acct:${row.provider}`
-              const accountTotal = accountTotalsById.get(row.provider)
+              const statKey = `acct:${row.accountKind ?? 'provider'}:${row.provider}`
+              const accountTotal = accountTotalsByKindId.get(accountKindKey(row.accountKind, row.provider)) ?? accountTotalsById.get(row.provider)
               const models = accountTotal && accountTotal.models ? accountTotal.models : []
               return el(GroupStatsCard, {
                 key: statKey,
-                title: row.displayName || row.provider,
-                badge: row.provider,
+                title: row.displayName || statsProviderLabelOf(row, accountNames, t),
+                badge: (row.accountKind ?? 'provider') === 'provider' ? row.provider : '',
                 summaryText: `${t('statsCalls')} ${row.calls} · ${t('statsErrors')} ${row.errors} · ${fmtTokens(row.inputTokens)}/${fmtTokens(row.outputTokens)}`,
                 totals: { calls: row.calls, errors: row.errors, inputTokens: row.inputTokens, outputTokens: row.outputTokens, totalMs: row.totalMs, lastAt: row.lastAt },
                 days: accountDaysById.get(row.provider) ?? [],
                 recent: recentByAccountId.get(row.provider) ?? [],
                 models,
+                accountNames,
                 expanded: expandedStats[statKey] === true,
                 t,
                 onToggle: () => toggleStatCard(statKey),
@@ -3339,6 +3456,7 @@ window.__ModuleLoader__.load({
                 days: Object.keys(statsDays).sort().map((date) => ({ date, ...statsDays[date], models: [] })),
                 recent: recentCalls.slice(0, 10),
                 models: [],
+                accountNames,
                 t,
               })),
           ],
@@ -5083,6 +5201,12 @@ window.__ModuleLoader__.load({
     exports.ModelTakeover = ModelTakeover
     exports.setRouterCatalog = setRouterCatalog
     exports.mergePresetModels = mergePresetModels
+    // FIX-031 判别钩子：统计显示层单点（浏览器面归一化镜像）。宿主运行时只消费
+    // apply/inject；tests/fix-031-attribution.mjs G 组直接驱动这三个函数与服务端
+    // lib/stats.js 权威单点做值 parity 断言（双面漂移 = 该组红，P-v3 原则 9）。
+    exports.accountDisplayKeyOf = accountDisplayKeyOf
+    exports.agentDisplayKeyOf = agentDisplayKeyOf
+    exports.statsProviderLabelOf = statsProviderLabelOf
     // EVO-012 批二 C 判别测试钩子：清空会话产物表（渲染测试跨块隔离；产品
     // 运行零占用——模块级状态只被 addSessionProduct/SessionGallery 读写）。
     exports.resetSessionGallery = () => {
