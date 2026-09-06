@@ -1,0 +1,8 @@
+{
+  "id": "FIX-030",
+  "severity": "P0",
+  "created": "2026-09-05",
+  "reason": "用户报障三连（2026-09-05，v0.4.4 发布后、宿主 0.1.2-rc.1）：①预设调整/切换后模型不跟随（截图 sha256:09f1a402——小说写作工作流预设会话模型选择器仍 glm-5.3 High；FIX-027 遥测在 F12 出现证明 agent-preset/selected 事件与客户端显示刷新链活着，仅服务端播种失效）②subagent 模型配置未生效（LLM 侧统计网站实证——子代理跑在父最近路由而非配置模型）③预设/subagent 配置生效缺统计与观测手段。根因（宿主源码三方实证）：①新宿主无 apiProxy 服务（全包 super(ctx,'apiProxy') 零注册——拆为 api-session-controller；dsh-api-session-controller super(ctx,'sessionController',{namespace:'session'}) 为新等价面）→ preset-defaults seed 预检 ctx.get('apiProxy') 恒 undefined → 播种全量静默跳过（warn 仅宿主终端不可见）；②新宿主 parentAgentOptionsForDelegation（dsh-subagent L603-612 'The latest request header owns provider, model…'）把子继承基线从 parent.options 改为父最近请求头路由 → 旧显式覆盖判别（child ≠ parent.options）把普通继承几乎恒误判 → subagentFixup 全量跳过（取证补强：子代理 setup 无 installModelSelection（仅 session-controller composeAgent 装配）→ options 仍为子请求路由载体（buildRequest L705-706 现读 this.options）——fixup 机制本身有效，仅判别基线漂移）；③观测面：播种/修正仅有宿主 ctx.logger 终端日志——无插件侧可查面。",
+  "fix": "A sessionSelectFaceOf 双形态适配（sessionController 新面优先 / apiProxy 旧面回落；归一信封）；B inheritedRouteOf 与宿主同构继承基线（header 路由 ∥ parent.options 回落；≠基线=显式覆盖仍尊重）；C presetDiag 环形诊断注册表（64 条）+ router/presetDiagnostics RPC + 设置页预设卡生效诊断面板。",
+  "status": "implemented"
+}
