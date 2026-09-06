@@ -4880,6 +4880,10 @@ window.__ModuleLoader__.load({
         sessionId: props.sessionId,
       })))
       // 模型接管（无 UI）：与附件按钮同一槽位、独立条目，随 InputZone 快照驱动。
+      // FIX-029-B 事故根因补漏：装配点此前只透传 props.input（新宿主恒
+      // undefined——探针实测 input=undefined/useInput=function），组件内
+      // useInput 消费修复被装配层短路——useInput 必须透传（组件内双形态
+      // 兼容保持，旧宿主 props.input 形态仍回落）。
       ctx.slots.inject('conversation.input.right', () => safeRegister({
         name: 'conversation.input.right',
         id: 'router-model-takeover',
@@ -4888,6 +4892,7 @@ window.__ModuleLoader__.load({
       }, (props) => el(ModelTakeover, {
         sessionId: props.sessionId,
         input: props.input,
+        useInput: props.useInput,
         api: props.api,
       })))
       ctx.slots.inject('tool.call.toolview', () => safeRegister({

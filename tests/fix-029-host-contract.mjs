@@ -344,5 +344,26 @@ if (renderErrors.length > 0) {
   failures += renderErrors.length
   console.error(`FAIL  render errors: ${renderErrors.map((error) => String(error)).join(' | ')}`)
 }
-console.log(failures === 0 ? '\nALL FIX-029 DISCRIMINANT TESTS PASSED' : `\n${failures} FIX-029 ASSERTION(S) FAILED (RED — fix pending)`)
+// ── C 组：装配点透传契约（FIX-029-B 事故回归守卫）────────────────────────
+// 事故形态：组件内修复 B 消费 props.useInput，但 apply() 装配点只透传
+// props.input（新宿主恒 undefined，探针实测 input=undefined/useInput=
+// function/imgs=1 而接管无声）→ 组件 useInput=undefined → 回落 input=
+// undefined → imageCount=0 → 永不武装且 skip-idle 静默。组件级测试（B 组）
+// 直渲染组件绕过装配层，漏掉该形态（mock 保真度第六次同型）——本组以装配点
+// 源码契约守住：ModelTakeover 装配必须透传 useInput。
+console.log('fix-029 C: assembly prop wiring (RED if wiring dropped):')
+{
+  const mount = source.indexOf('el(ModelTakeover, {')
+  check('C0: ModelTakeover 装配点存在', mount > 0)
+  if (mount > 0) {
+    const wiring = source.slice(mount, source.indexOf('}))', mount))
+    check('C1: 装配点透传 useInput（props.useInput → 组件）', /useInput:\s*props\.useInput/.test(wiring))
+    check('C2: 装配点透传 sessionId', /sessionId:\s*props\.sessionId/.test(wiring))
+    check('C3: 装配点透传 api', /api:\s*props\.api/.test(wiring))
+  }
+  const served = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'served-client.js'), 'utf8')
+  const servedMount = served.indexOf('el(ModelTakeover, {')
+  const servedWiring = servedMount > 0 ? served.slice(servedMount, served.indexOf('}))', servedMount)) : ''
+  check('C4: served-client 镜像装配同步透传 useInput', servedMount > 0 && /useInput:\s*props\.useInput/.test(servedWiring))
+}console.log(failures === 0 ? '\nALL FIX-029 DISCRIMINANT TESTS PASSED' : `\n${failures} FIX-029 ASSERTION(S) FAILED (RED — fix pending)`)
 process.exit(failures === 0 ? 0 : 1)
