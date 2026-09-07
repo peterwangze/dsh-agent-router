@@ -43,6 +43,9 @@
  * D17d-g service 触发点行为与挂载位（幂等、未就绪不触发、persist 门控）。
  * 微批 6（R3 保留项 N2）：D18/D18b reload 转换链后 persist 复检——与在途
  * setPersist(false) 真实交错时内存聚合不被清空（复检早退）。
+ * 微批 7（D9 第二轮复验）：D19/D19a resolver 身份与路由健康度解耦（真实
+ * RouterService + 真实 resolver 闭包——降级态配置推导兜底归并）/ D19b-d
+ * maybeReload 门槛 = 身份就绪（降级触发、真未知不触发不消费）。
  * @module dsh-agent-router/tests/fix-031-attribution
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -440,7 +443,9 @@ console.log('FIX-031 统计归因单点 + 路由透明性判别组：')
     hostRouteStatsReloaded: false,
     hostRouteState: state,
     ctx: { get: () => fakeSettings },
-    stats: { persist, reload: () => { reloadCalls.push(1); return Promise.resolve() } },
+    // D9（微批 7）门槛适配：阈值 = 身份就绪（resolver 给出身份键）——fake
+    // stats 携带身份 resolver（就绪态给键 / 未知态给 null）。
+    stats: { persist, hostRouteAccountKeyOf: state.accountId ? () => `oauth:${state.accountId}` : () => null, reload: () => { reloadCalls.push(1); return Promise.resolve() } },
   })
   const callTrigger = (fake) => { try { RouterService.prototype.maybeReloadStatsAfterHostRouteSync.call(fake); return true } catch { return false } }
   const readyState = { maintained: true, accountId: 'chatgpt', tokenInjected: 'ok', degraded: false, failures: 0 }
@@ -451,11 +456,56 @@ console.log('FIX-031 统计归因单点 + 路由透明性判别组：')
   check('D17d: 维护就绪 → 触发一次性 reload（重复探测幂等——恰一次 + 旗标置位）', reloadCalls.length === 1 && svcReady.hostRouteStatsReloaded === true, { calls: reloadCalls.length, flag: svcReady.hostRouteStatsReloaded })
   const svcUnknown = makeFakeService(unknownState)
   callTrigger(svcUnknown)
-  check('D17e: 路由未激活/账号未知 → 不触发（回落语义保持诚实；旗标不消费）', reloadCalls.length === 1 && svcUnknown.hostRouteStatsReloaded === false)
+  check('D17e: 身份未知（resolver null——维护未激活且配置无启用账号）→ 不触发（回落语义保持诚实；旗标不消费）', reloadCalls.length === 1 && svcUnknown.hostRouteStatsReloaded === false)
   const svcNoPersist = makeFakeService(readyState, false)
   callTrigger(svcNoPersist)
   check('D17f: stats 未启用持久化 → 不触发且不消费旗标（persist 启用后的下一维护 pass 再触发）', reloadCalls.length === 1 && svcNoPersist.hostRouteStatsReloaded === false)
   check('D17g: 触发点挂在维护队列完成位（queueHostRouteSync → syncHostRoute 后探测——boot/settings/tick 同链全覆盖）', /\.then\(\(result\) => \{ this\.maybeReloadStatsAfterHostRouteSync\(\); return result \}\)/.test(serviceSource))
+}
+{
+  // D19（微批 7，D9 第二轮复验）：resolver 身份与路由健康度解耦（DEC-029——
+  // 账号身份 ≠ 健康度）。真实 RouterService（cordis Context + initial
+  // oauthAccounts——oauth-main-model.mjs harness 先例）驱动**真实 resolver
+  // 闭包**（非手搓镜像）：维护降级（maintained=false/accountId=''，token
+  // 注入/parity 探活失败即达）但配置面有启用 host-transport 账号 →
+  // selectHostAccount 配置推导兜底 → 身份仍可知、历史行照常归并；真未知
+  //（无启用账号）→ null 诚实回落。
+  const work = mkdtempSync(join(tmpdir(), 'fix031-d19-'))
+  const { Context } = await import('@deepseek-ai/cordis')
+  const { RouterService: D19Service } = await import('../lib/service.js')
+  const { hostRouteStatusOf } = await import('../lib/host-route.js')
+  const credFile = join(work, 'cred.json')
+  writeFileSync(credFile, JSON.stringify({ version: 1, credential: { type: 'oauth', access: 'A', refresh: 'R', expires: Date.now() + 3600_000, accountId: 'acct-1' } }))
+  // 用户配置实证形态：仅一个启用 ChatGPT 账号（preset chatgpt-codex /
+  // protocol codex-responses / 无 transport 字段 = normalizeTransport 缺省 host）。
+  const hostAccount = { name: 'ChatGPT 订阅', enabled: true, preset: 'chatgpt-codex', protocol: 'codex-responses', baseURL: 'https://chatgpt.com/backend-api', credentialFile: credFile, clientId: '', clientSecret: '', publicClient: false, authUrl: '', tokenUrl: '', scope: '', models: ['gpt-5.6-sol'], tokenRef: '' }
+  const root = new Context()
+  const service = new D19Service(root, { enabled: true, oauthAccounts: { chatgpt: hostAccount } })
+  const resolver = service.stats.hostRouteAccountKeyOf
+  const degraded = hostRouteStatusOf(service)
+  const identity = resolver()
+  check('D19: 维护降级（maintained=false/accountId=\'\'）但配置面有启用 host 账号 → resolver 配置推导兜底给出身份键（身份 ≠ 健康度，不再恒 null）', degraded.maintained === false && degraded.accountId === '' && identity === 'oauth:chatgpt', { maintained: degraded.maintained, accountId: degraded.accountId, identity })
+  service.stats.recordScope({ preset: '', origin: 'main', provider: 'openai-codex', model: 'gpt-5.6-sol', at: T0 })
+  service.stats.recordScope({ preset: '', origin: 'main', provider: 'openai-codex', model: 'gpt-5.6-sol', at: T0 + 1 })
+  const d19Snap = service.stats.snapshot()
+  check('D19a: 降级态 host-route 行照常归并（真实 service.stats 全链 → oauth 账号格单卡 calls=2，无回落实体）', d19Snap.accountTotals.length === 1 && d19Snap.accountTotals[0].provider === 'chatgpt' && d19Snap.accountTotals[0].accountKind === 'oauth' && d19Snap.accountTotals[0].calls === 2, d19Snap.accountTotals)
+  const reloadCalls = []
+  const fakeDegradedKnown = { hostRouteStatsReloaded: false, stats: { persist: true, hostRouteAccountKeyOf: resolver, reload: () => { reloadCalls.push(1); return Promise.resolve() } } }
+  D19Service.prototype.maybeReloadStatsAfterHostRouteSync.call(fakeDegradedKnown)
+  D19Service.prototype.maybeReloadStatsAfterHostRouteSync.call(fakeDegradedKnown)
+  check('D19b: maybeReload 门槛 = 身份就绪（降级态也触发一次性重载；重复探测幂等恰一次 + 旗标置位）', reloadCalls.length === 1 && fakeDegradedKnown.hostRouteStatsReloaded === true, { calls: reloadCalls.length, flag: fakeDegradedKnown.hostRouteStatsReloaded })
+  const emptyRoot = new Context()
+  const emptyService = new D19Service(emptyRoot, { enabled: true, oauthAccounts: {} })
+  const emptyIdentity = emptyService.stats.hostRouteAccountKeyOf()
+  emptyService.stats.recordScope({ preset: '', origin: 'main', provider: 'openai-codex', model: 'gpt-5.6-sol', at: T0 })
+  const emptySnap = emptyService.stats.snapshot()
+  check('D19c: 真未知（无启用 host-transport 账号）→ resolver null → 独立 host-route 实体诚实回落（不伪装成已知账号）', emptyIdentity === null && emptySnap.accountTotals.length === 1 && emptySnap.accountTotals[0].provider === 'openai-codex' && emptySnap.accountTotals[0].accountKind === 'host-route', { identity: emptyIdentity, snap: emptySnap.accountTotals })
+  const fakeUnknown = { hostRouteStatsReloaded: false, stats: { persist: true, hostRouteAccountKeyOf: emptyService.stats.hostRouteAccountKeyOf, reload: () => { reloadCalls.push(1); return Promise.resolve() } } }
+  D19Service.prototype.maybeReloadStatsAfterHostRouteSync.call(fakeUnknown)
+  check('D19d: 身份真未知 → 不触发重载且不消费旗标（回落语义保持）', reloadCalls.length === 1 && fakeUnknown.hostRouteStatsReloaded === false)
+  service.stats.close()
+  emptyService.stats.close()
+  rmSync(work, { recursive: true, force: true })
 }
 {
   // D18（微批 6，R3 保留项 N2）：reload 转换链后的 persist 复检。真实交错——
