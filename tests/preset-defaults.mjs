@@ -1100,9 +1100,11 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     return thrown !== null && thrown.message === 'upstream reject' && scopes.length === 0
   })
 
-  // L5 边界：无 preset header 且罗盘不可解析 → 零记录（不猜归属）；无
-  // header agent → 零记录不炸。
-  await dcheck('L5 无预设归属 → 零记录（不猜）+ 无 header 不炸', async () => {
+  // L5 边界（FIX-031 D7 返工批 3 对齐——旧断言锁定 preset 门控，授权解除）：
+  // 无 preset header 且罗盘不可解析 → **仍记录** scope 行（preset=''，归属不
+  // 猜——预设留空；账号级计数权威覆盖全部路由形态）；无 header agent →
+  // 零记录不炸。
+  await dcheck('L5 无预设归属 → preset 空串记录（不猜）+ 无 header 不炸', async () => {
     if (typeof installRequestTelemetry !== 'function') return false
     const scopes = []
     const service = { isEnabled: () => true, stats: { recordScope: (event) => scopes.push(event) } }
@@ -1111,7 +1113,7 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     const handler = (ctx.listeners['agent/request'] ?? [])[0]
     await handler({ agent: scopeAgent({ preset: '', origin: 'main', id: 's-l5a' }) }, async () => ({ provider: 'p', model: 'm' }))
     await handler({}, async () => ({ provider: 'p', model: 'm' }))
-    return scopes.length === 0
+    return scopes.length === 1 && scopes[0].preset === '' && scopes[0].origin === 'main' && scopes[0].provider === 'p' && scopes[0].model === 'm'
   })
 
   // L6 总开关关闭 → 零记录（热关闭语义）。

@@ -30,6 +30,12 @@
  * 返工批（REVIEW-FIX-031-R0 保留项 F-2）：注释虚指 → G13/G14 权威常量值级
  * 交叉锚定（ACCOUNT_KEY_ALIASES ↔ oauth-llm.js OAUTH_PROVIDER；
  * HOST_ROUTE_ACCOUNT_KEY ↔ host-route.js HOST_ROUTE_PROVIDER）。
+ * 返工批 3（用户复验 D5/D6 + 追问 D7）：D6 宿主官方路由归并到路由选中
+ * 订阅账号（resolver 注入，D12/D12b/D12c 含动态失效回落）；D5 roster 行
+ * 排除宿主路由键 + 身份去重跨 accountKind（D13/D13b，回落诚实标签 D13c/e、
+ * 纯函数非法 resolver 全形态 D14/D14b）；D7 账号级计数解除 preset 门控
+ * （D15/D15b/D15c 账号视图 + 盘面/导出兼容；D16/D16b 预设视图分流 + 站点
+ * 门控解除源码契约）。
  * @module dsh-agent-router/tests/fix-031-attribution
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -341,6 +347,79 @@ console.log('FIX-031 统计归因单点 + 路由透明性判别组：')
   rmSync(work, { recursive: true, force: true })
 }
 
+// ── D 组续 2（返工批 3，用户复验 D5/D6 + 追问 D7）：账号实体的通路归并收口 ──
+// D6：宿主官方路由（openai-codex）与 oauth 通路共用同一份 ChatGPT 订阅凭据
+//（host-route selectHostAccount 选首个启用账号注入同一凭据库）——同一真实
+// 账号不得拆两张卡。归并 = StatsStore 注入 hostRouteAccountKeyOf resolver
+//（service 侧读 hostRouteStatusOf 的 maintained+accountId），归一化单点消费。
+// D5：roster provider 行 + 统计 host-route 行同键不同 kind 双卡（dedup 旧判据
+// provider+kind 双等）。D7：账号级计数解除 preset 门控（无预设通路可见）。
+{
+  // D12（D6 归并，store 级真实 resolver 形态——用户实证数字：ChatGPT 19 调用
+  // + openai-codex 2 调用 → 修复后单卡 21）。
+  const work = mkdtempSync(join(tmpdir(), 'fix031-d12-'))
+  let routeAccount = 'chatgpt'
+  const store = new StatsStore({ dir: join(work, 's'), persist: false, now: NOW_AT, hostRouteAccountKeyOf: () => (routeAccount ? `oauth:${routeAccount}` : null) })
+  for (let i = 0; i < 19; i++) store.record({ agentId: 'vision', provider: 'oauth:chatgpt', model: 'gpt-5.6-sol', ok: true, ms: 1000, inputTokens: 4700, outputTokens: 1736, at: T0 + i })
+  for (let i = 0; i < 2; i++) store.record({ agentId: MAIN_MODEL_AGENT_ID, provider: 'openai-codex', model: 'gpt-5.6-sol', ok: true, ms: 200, inputTokens: 4500, outputTokens: 2000, at: T0 + 100 + i })
+  const snap = store.snapshot()
+  const chatgpt = snap.accountTotals.find((row) => row.provider === 'chatgpt')
+  check('D12: host-route 用量经 resolver 归并到路由选中账号（同卡合计恰 21；单一 oauth 实体，kind 继承）', snap.accountTotals.length === 1 && !!chatgpt && chatgpt.accountKind === 'oauth' && chatgpt.calls === 21 && chatgpt.inputTokens === 19 * 4700 + 2 * 4500, snap.accountTotals)
+  check('D12b: 归并直达白盒键空间（host-route 行落 oauth:<accountId>——accountHealth 寻址直接吃到；无 openai-codex 残留键）', [...store.accountTotals.keys()].join(',') === 'oauth:chatgpt' && store.accountTotals.get('oauth:chatgpt').calls === 21, [...store.accountTotals.keys()])
+  routeAccount = ''
+  store.record({ agentId: MAIN_MODEL_AGENT_ID, provider: 'openai-codex', model: 'gpt-5.6-sol', ok: true, ms: 50, at: T0 + 200 })
+  const after = store.snapshot()
+  check('D12c: resolver 动态失效（路由未激活/账号未知）→ 新行回落独立实体（不伪装进已知账号；已归并不回滚）', after.accountTotals.length === 2 && after.accountTotals.find((row) => row.provider === 'chatgpt').calls === 21 && !!after.accountTotals.find((row) => row.provider === 'openai-codex' && row.accountKind === 'host-route' && row.calls === 1), after.accountTotals.map((row) => `${row.provider}/${row.accountKind}:${row.calls}`))
+  store.close()
+  rmSync(work, { recursive: true, force: true })
+}
+{
+  // D13（D5 双卡，源码契约 + 浏览器包值级——旧代码 roster 行与统计行双渲染）。
+  check('D13: roster 统计行不再为宿主路由键出卡（通路不是账号；取数键与统计行同键空间）', /if \(isHostManagedRoute\(entry\.provider\)\) continue/.test(clientSource) && /accountTotalsById\.get\(accountDisplayKeyOf\(entry\.provider\)\)/.test(clientSource))
+  check('D13b: 账号卡身份去重按归一账号键跨 accountKind（旧判据 provider+kind 双等 → 同键双卡）', /accountDisplayKeyOf\(row\.provider\) === accountDisplayKeyOf\(total\.provider\)/.test(clientSource) && !/row\.provider === total\.provider && \(row\.accountKind \?\? 'provider'\) === \(total\.accountKind \?\? 'provider'\)/.test(clientSource))
+  const bundle13 = await loadBrowserBundle()
+  const t13 = (key) => ({ statsHostRouteAccount: '宿主路由（账号未知）', statsMainModel: '主模型' }[key] ?? key)
+  check('D13c: 浏览器包回落标签诚实（host-route 行无 roster 名 → 「宿主路由（账号未知）」，不冒充实体键/已知账号）', bundle13?.statsProviderLabelOf({ provider: 'openai-codex', accountKind: 'host-route' }, new Map(), t13) === '宿主路由（账号未知）', bundle13 && bundle13.statsProviderLabelOf({ provider: 'openai-codex', accountKind: 'host-route' }, new Map(), t13))
+  check('D13d: 归并行标签走 oauth 账号名（roster 覆盖同一显示名单点）', bundle13?.statsProviderLabelOf({ provider: 'chatgpt', accountKind: 'oauth' }, new Map([['oauth|chatgpt', 'ChatGPT 订阅']]), t13) === 'ChatGPT 订阅')
+  check('D13e: 回落标签 i18n 在册（zh + en）', /statsHostRouteAccount: '宿主路由（账号未知）'/.test(clientSource) && /statsHostRouteAccount: 'Host route \(account unknown\)'/.test(clientSource))
+}
+{
+  // D14（回落诚实性，纯函数直测——resolver 一切非法形态不抛不伪装）。
+  const junkResolvers = [null, () => null, () => undefined, () => '', () => 'oauth:', () => 'chatgpt', () => 42, () => { throw new Error('resolver boom') }]
+  check('D14: resolver 不可用/返回非法/抛错 → 回落独立实体且永不抛（诚实不伪装）', typeof statsModule.normalizeAttribution === 'function' && junkResolvers.every((resolver) => {
+    const out = statsModule.normalizeAttribution({ provider: 'openai-codex' }, resolver)
+    return out.accountKey === 'openai-codex' && out.accountKind === 'host-route' && out.accountLabel === 'openai-codex'
+  }))
+  check('D14b: resolver 佳形态归并（oauth: 前缀 + 非空 id）且幂等（归并键再过单点不变）', (() => {
+    if (typeof statsModule.normalizeAttribution !== 'function') return false
+    const once = statsModule.normalizeAttribution({ provider: 'openai-codex' }, () => 'oauth:chatgpt')
+    return once.accountKey === 'oauth:chatgpt' && once.accountKind === 'oauth' && once.accountLabel === 'chatgpt' && statsModule.normalizeAttribution({ provider: once.accountKey }, () => 'oauth:chatgpt').accountKey === once.accountKey
+  })())
+}
+{
+  // D15/D16（D7：账号级计数解除 preset 门控——deepseek-official 形态夹具）。
+  const work = mkdtempSync(join(tmpdir(), 'fix031-d15-'))
+  const dir = join(work, 'stats')
+  const store = new StatsStore({ dir, now: NOW_AT })
+  for (let i = 0; i < 17; i++) store.recordScope({ preset: '', origin: 'main', provider: 'deepseek-official', model: 'deepseek-v3.2', at: T0 + i })
+  store.recordScope({ preset: 'standard', origin: 'main', provider: 'glm-local', model: 'glm-5.3', at: T0 + 50 })
+  const snap = store.snapshot()
+  const deepseek = snap.accountTotals.find((row) => row.provider === 'deepseek-official')
+  check('D15: 无预设请求进账号视图（preset=\'\' 行——deepseek-official 请求口径计数可见，RED：旧代码该行直接丢弃）', !!deepseek && deepseek.calls === 17 && deepseek.requestCalls === 17 && deepseek.accountKind === 'provider', deepseek)
+  await store.flush()
+  const reloaded = new StatsStore({ dir, now: NOW_AT })
+  await reloaded.load()
+  const reDeepseek = reloaded.snapshot().accountTotals.find((row) => row.provider === 'deepseek-official')
+  check('D15b: preset=\'\' 盘面行 load 兼容（#shapeOf 容忍空串——重启计数仍在 + 零坏行）', !!reDeepseek && reDeepseek.calls === 17 && reloaded.statsSelfReport().skippedLines === 0 && reloaded.statsSelfReport().skippedVersionLines === 0, reloaded.statsSelfReport())
+  const csvRow = reloaded.export({ range: '7d', level: 'account' }).split('\n').find((line) => line.startsWith(`${D0},,deepseek-official,deepseek-v3.2,`))
+  check('D15c: 导出 CSV account 级含无预设通路行（与账号卡同源——可见面不缺席）', !!csvRow && csvRow.split(',')[4] === '17', csvRow)
+  check('D16: 预设视图不含 preset=\'\' 行（预设卡不出现无预设用量；预设维度对无预设请求不适用）', snap.presetStats.length === 1 && snap.presetStats[0].preset === 'standard' && snap.presetStats[0].main.calls === 1, snap.presetStats.map((row) => `${row.preset}:${row.main.calls}`))
+  check('D16b: 遥测站点解除 preset 门控（无预设请求也上报——preset 解析链不动：罗盘 → header → 空串）', /if \(typeof config\?\.provider !== 'string' \|\| typeof config\?\.model !== 'string'\) return config/.test(presetDefaultsSource) && !/if \(!preset \|\| typeof config\?\.provider/.test(presetDefaultsSource))
+  await reloaded.close()
+  await store.close()
+  rmSync(work, { recursive: true, force: true })
+}
+
 // ── E 组：读侧迁移 + 盘面基线语义（不改写用户观测值）────────────────────────
 {
   const work = mkdtempSync(join(tmpdir(), 'fix031-e-'))
@@ -408,7 +487,7 @@ console.log('FIX-031 统计归因单点 + 路由透明性判别组：')
   const suffixOwners = libNames.filter((name) => /['"]-router['"]/.test(readRepo(`lib/${name}`)))
   check('G2: -router 字面量唯一定义点 = lib/stats.js（浏览器面包为显示层镜像，双面各自定义是既有约定）', suffixOwners.join(',') === 'stats.js,client.js', suffixOwners)
   check('G3: wrapper.js 从单点取用后缀与主模型键（自有定义与内部 agentId 已删）', /export const WRAP_SUFFIX = WRAP_ROUTE_SUFFIX/.test(wrapperSource) && !/agentId: 'twin'/.test(wrapperSource) && /agentId: MAIN_MODEL_AGENT_ID/.test(wrapperSource), wrapperSource.match(/WRAP_SUFFIX = [^\n]*/g))
-  check('G4: 记录站点汇入单点（call → #fold / scope → #foldScope 各过一次归一化，无旁路）', /#fold\(raw\) \{[\s\S]{0,420}normalizeAttribution\(raw\)/.test(statsSource) && /#foldScope\(raw\) \{[\s\S]{0,320}normalizeAttribution\(raw\)/.test(statsSource))
+  check('G4: 记录站点汇入单点（call → #fold / scope → #foldScope 各过一次归一化，无旁路——D6 起经实例包装 #normalize 携带宿主路由 resolver）', /#fold\(raw\) \{[\s\S]{0,420}this\.#normalize\(raw\)/.test(statsSource) && /#foldScope\(raw\) \{[\s\S]{0,120}this\.#normalize\(raw\)/.test(statsSource))
   check('G5: 双权威源合并单点（#accountView 一处定义、snapshot 与 CSV 共用——无第二合并路径）', (statsSource.match(/#accountView\(\)/g) ?? []).length === 3 && /#accountView\(\) \{/.test(statsSource), (statsSource.match(/#accountView\(\)/g) ?? []).length)
   check('G6: 站点仍上报事实而非归一值（recordScope 报实际路由；站点零归一化代码）', /provider: config\.provider,/.test(presetDefaultsSource) && !/normalizeAttribution\(/.test(presetDefaultsSource) && !/from '\.\/stats\.js'/.test(presetDefaultsSource) && !/WRAP_SUFFIX/.test(presetDefaultsSource))
   // F-2（R0 审查保留项）：stats.js 依赖面锁定 node: 内建（§22）不能 import

@@ -103,10 +103,13 @@ window.__ModuleLoader__.load({
      * 无账号归属时回落 agent 词汇——主模型用用户语言「主模型」，专业 agent 用配置名。
      * 内部标记（`oauth:` / `pool:` / `-router` / 'twin' / 裸 'main'）永不直出
      * （DEC-029②）。
+     * FIX-031 D6 回落：host-route 通路行在归并 resolver 不可用/账号未知时保持
+     * 独立实体——标签出「宿主路由（账号未知）」而非冒充实体键/已知账号。
      */
     function statsProviderLabelOf(row, names, t) {
       const account = accountDisplayKeyOf(row?.provider)
       if (account && account !== '?') {
+        if (row?.accountKind === 'host-route') return rosterDisplayName(names, 'host-route', account) ?? t('statsHostRouteAccount')
         return rosterDisplayName(names, row?.accountKind ?? 'provider', account) ?? account
       }
       const agentKey = agentDisplayKeyOf(row?.agentId)
@@ -613,6 +616,9 @@ window.__ModuleLoader__.load({
       // EVO-017 R3（FIX-031）：账号级调用数口径披露（双权威源合并的用户语义）。
       statsMainModel: '主模型',
       statsAccountScopeHint: '账号级调用数按请求口径（每次 LLM 请求恰记一条，覆盖全部路由形态，含端点无 token 上报的请求）；token / 耗时 / 失败数按调用明细口径统计，因此调用数可大于有明细的调用条数。',
+      // FIX-031 D6 回落：宿主路由通路行在归并账号未知时的诚实标签（不伪装
+      // 成已知账号/实体键）。
+      statsHostRouteAccount: '宿主路由（账号未知）',
       statsAgentLevel: '专业 Agent 统计',
       statsAccountLevel: '账号级统计',
       // EVO-017：分级统计文案（预设作用域 + 二/三级卡片 + 三类视图）。
@@ -929,6 +935,9 @@ window.__ModuleLoader__.load({
       // EVO-017 R3 (FIX-031): account-level call-count basis disclosure.
       statsMainModel: 'Main model',
       statsAccountScopeHint: 'Account-level calls use the request basis (exactly one record per LLM request, covering every routing shape including requests whose endpoint reports no tokens); tokens / latency / failures come from call detail, so calls can exceed the number of detailed calls.',
+      // FIX-031 D6 fallback: honest label for host-route rows when the backing
+      // account is unknown (never impersonate a known account/entity key).
+      statsHostRouteAccount: 'Host route (account unknown)',
       statsAgentLevel: 'Specialist Agent stats',
       statsAccountLevel: 'Account-level stats',
       // EVO-017: tiered stats copy (preset scope + tier cards + three views).
@@ -2612,7 +2621,12 @@ window.__ModuleLoader__.load({
         // **账号管理**可编辑行（原判据保持），但**统计行**按用户需求 4「统计
         // 所有经过当前账号的数据，不关联场景」呈现真实用量——此处不再过滤
         //（管理区 addedAccounts 的 isPluginSelfRegisteredProvider 过滤不变）。
-        const total = accountTotalsById.get(entry.provider)
+        // FIX-031 D5（返工批 3）：宿主路由键例外——它是通路构件不是账号
+        //（凭据与 oauth 通路同源，用量经服务端 D6 归并到订阅账号），roster
+        // 行不再为其出卡；回落态（账号未知）由统计行单卡承载，杜绝同键
+        // 双卡。取数键经显示层单点（accountDisplayKeyOf）——与统计行同键空间。
+        if (isHostManagedRoute(entry.provider)) continue
+        const total = accountTotalsById.get(accountDisplayKeyOf(entry.provider))
         if (entry.active !== true && !total) continue
         statsAccountRows.push({
           provider: entry.provider,
@@ -2632,11 +2646,20 @@ window.__ModuleLoader__.load({
         // 需求「统计所有经过当前账号的数据，不关联场景」）都进统计行。
         // FIX-031：provider 已是归一化后的规范账号键（无 `-router` 伪实体、无
         // 内部标记），displayName 经配置面 roster 单点解析。
-        if (statsAccountRows.some((row) => row.provider === total.provider && (row.accountKind ?? 'provider') === (total.accountKind ?? 'provider'))) continue
+        // D5（返工批 3）：身份去重按**归一账号键跨 accountKind**——旧判据
+        // provider+kind 双等时，宿主路由 roster 行（provider 形态）与统计行
+        //（host-route 形态）同键不同 kind 双双渲染、读同一份 totals 数字重复。
+        if (statsAccountRows.some((row) => accountDisplayKeyOf(row.provider) === accountDisplayKeyOf(total.provider))) continue
+        const rowKind = total.accountKind ?? 'provider'
         statsAccountRows.push({
           provider: total.provider,
-          accountKind: total.accountKind ?? 'provider',
-          displayName: rosterDisplayName(accountNames, total.accountKind ?? 'provider', accountDisplayKeyOf(total.provider)) ?? total.provider,
+          accountKind: rowKind,
+          // D6 回落诚实标签：宿主路由通路行无 roster 名时不冒充实体键——
+          // displayName 留空，标题经 statsProviderLabelOf 出「宿主路由
+          //（账号未知）」；其余 kind 维持 roster 名 → 清洁键回落。
+          displayName: rowKind === 'host-route'
+            ? rosterDisplayName(accountNames, 'host-route', accountDisplayKeyOf(total.provider))
+            : (rosterDisplayName(accountNames, rowKind, accountDisplayKeyOf(total.provider)) ?? total.provider),
           active: true,
           calls: total.calls,
           errors: total.errors,
@@ -3425,7 +3448,9 @@ window.__ModuleLoader__.load({
             // 只给可配置 provider 账号（oauth/pool/cli 身份键不外显）。
             ...statsAccountRows.map((row) => {
               const statKey = `acct:${row.accountKind ?? 'provider'}:${row.provider}`
-              const accountTotal = accountTotalsByKindId.get(accountKindKey(row.accountKind, row.provider)) ?? accountTotalsById.get(row.provider)
+              // FIX-031 D5：明细取数与身份去重同键空间（归一账号键）——roster
+              // 行的原始 provider 键与统计行清洁键滚动期共存时展开卡不空挂。
+              const accountTotal = accountTotalsByKindId.get(accountKindKey(row.accountKind, row.provider)) ?? accountTotalsById.get(accountDisplayKeyOf(row.provider))
               const models = accountTotal && accountTotal.models ? accountTotal.models : []
               return el(GroupStatsCard, {
                 key: statKey,
@@ -3433,8 +3458,8 @@ window.__ModuleLoader__.load({
                 badge: (row.accountKind ?? 'provider') === 'provider' ? row.provider : '',
                 summaryText: `${t('statsCalls')} ${row.calls} · ${t('statsErrors')} ${row.errors} · ${fmtTokens(row.inputTokens)}/${fmtTokens(row.outputTokens)}`,
                 totals: { calls: row.calls, errors: row.errors, inputTokens: row.inputTokens, outputTokens: row.outputTokens, totalMs: row.totalMs, lastAt: row.lastAt },
-                days: accountDaysById.get(row.provider) ?? [],
-                recent: recentByAccountId.get(row.provider) ?? [],
+                days: accountDaysById.get(accountDisplayKeyOf(row.provider)) ?? [],
+                recent: recentByAccountId.get(accountDisplayKeyOf(row.provider)) ?? [],
                 models,
                 accountNames,
                 expanded: expandedStats[statKey] === true,
