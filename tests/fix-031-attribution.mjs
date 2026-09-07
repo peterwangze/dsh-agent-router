@@ -41,6 +41,8 @@
  * 微批 5（D8 启动时序竞态）：D17① 竞态复现（resolver 未就绪 load → 回落
  * 固化）/ D17b 维护完成 reload 重放归并 / D17c 重载窗口并发恰一次 /
  * D17d-g service 触发点行为与挂载位（幂等、未就绪不触发、persist 门控）。
+ * 微批 6（R3 保留项 N2）：D18/D18b reload 转换链后 persist 复检——与在途
+ * setPersist(false) 真实交错时内存聚合不被清空（复检早退）。
  * @module dsh-agent-router/tests/fix-031-attribution
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -454,6 +456,26 @@ console.log('FIX-031 统计归因单点 + 路由透明性判别组：')
   callTrigger(svcNoPersist)
   check('D17f: stats 未启用持久化 → 不触发且不消费旗标（persist 启用后的下一维护 pass 再触发）', reloadCalls.length === 1 && svcNoPersist.hostRouteStatsReloaded === false)
   check('D17g: 触发点挂在维护队列完成位（queueHostRouteSync → syncHostRoute 后探测——boot/settings/tick 同链全覆盖）', /\.then\(\(result\) => \{ this\.maybeReloadStatsAfterHostRouteSync\(\); return result \}\)/.test(serviceSource))
+}
+{
+  // D18（微批 6，R3 保留项 N2）：reload 转换链后的 persist 复检。真实交错——
+  // setPersist(false) 同步段停在首个 await（flush 落盘）→ 转换在途；reload
+  // 同步段入口 persist 仍 true → 捕获在途转换排队其后；前驱落定（persist=
+  // false）后 reload 恢复——无复检旧代码此时清空全部内存聚合而 load() 因
+  // persist=false 早退不重放（persist-off 会话期统计归零）；复检后早退保聚合。
+  const work = mkdtempSync(join(tmpdir(), 'fix031-d18-'))
+  const store = new StatsStore({ dir: join(work, 'stats'), now: NOW_AT })
+  for (let i = 0; i < 3; i++) store.record({ agentId: 'vision', provider: 'glm-local', model: 'glm-5.3', ok: true, ms: 10, inputTokens: 1, outputTokens: 1, at: T0 + i })
+  store.recordScope({ preset: 'standard', origin: 'main', provider: 'glm-local', model: 'glm-5.3', at: T0 + 5 })
+  let reloadError = null
+  const off = store.setPersist(false)
+  const reloadDuringOff = store.reload().catch((error) => { reloadError = error })
+  await Promise.all([off, reloadDuringOff])
+  const snap = store.snapshot()
+  check('D18: 与在途 setPersist(false) 交错 → reload 复检早退，call 侧内存聚合不被清空（persist-off 会话期统计不归零）', reloadError === null && snap.totals.length === 1 && snap.totals[0].calls === 3 && snap.recent.length === 3, { error: reloadError && String(reloadError), totals: snap.totals.map((row) => `${row.agentId}:${row.calls}`) })
+  check('D18b: scope 侧聚合同样保持（accountTotals/presetStats 不清空——合并视图与预设卡不消失）', snap.accountTotals.length === 1 && snap.accountTotals[0].calls === 4 && snap.presetStats.length === 1 && snap.presetStats[0].main.calls === 1, { accounts: snap.accountTotals.map((row) => `${row.provider}:${row.calls}`), presets: snap.presetStats.map((row) => row.preset) })
+  await store.close()
+  rmSync(work, { recursive: true, force: true })
 }
 {
   // D13（D5 双卡，源码契约 + 浏览器包值级——旧代码 roster 行与统计行双渲染）。
