@@ -38,6 +38,9 @@
  * 门控解除源码契约）。
  * 微批 4（R2 保留项 N1）：D12d 宿主路由 **scope 行**（D6 生产主路径——插件
  * 在宿主路由通路无 call 记录位点）全链判别 + resolver 未激活回落对照。
+ * 微批 5（D8 启动时序竞态）：D17① 竞态复现（resolver 未就绪 load → 回落
+ * 固化）/ D17b 维护完成 reload 重放归并 / D17c 重载窗口并发恰一次 /
+ * D17d-g service 触发点行为与挂载位（幂等、未就绪不触发、persist 门控）。
  * @module dsh-agent-router/tests/fix-031-attribution
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -389,6 +392,68 @@ console.log('FIX-031 统计归因单点 + 路由透明性判别组：')
   store.close()
   scopeStore.close()
   rmSync(work, { recursive: true, force: true })
+}
+{
+  // D17（微批 5，D8 启动时序竞态——用户最终复验：2 次宿主路由调用固化回落卡）。
+  // 竞态链：StatsStore 启动即 load()（setPersist memoryEmpty 路径）→ 此刻
+  // syncHostRoute 维护未完成 → resolver null → 历史 host-route 行折叠进回落
+  // 独立实体且不再重折。修复 = 维护完成后 stats.reload() 安全重放。
+  const work = mkdtempSync(join(tmpdir(), 'fix031-d17-'))
+  const dir = join(work, 'stats')
+  let routeAccount = ''
+  // 跨进程盘面：启动前已有历史行（2 条宿主路由 scope + 5 条 oauth call）。
+  const boot = new StatsStore({ dir, now: NOW_AT })
+  for (let i = 0; i < 2; i++) boot.recordScope({ preset: '', origin: 'main', provider: 'openai-codex', model: 'gpt-5.6-sol', at: T0 + i })
+  for (let i = 0; i < 5; i++) boot.record({ agentId: 'vision', provider: 'oauth:chatgpt', model: 'gpt-5.6-sol', ok: true, ms: 100, inputTokens: 10, outputTokens: 2, at: T0 + 10 + i })
+  await boot.flush()
+  await boot.close()
+  // reload 缺失容忍（RED 复跑旧代码时 TypeError 记为失败而非崩掉整组）。
+  const reloadQuiet = async (target) => { try { await target.reload(); return null } catch (error) { return error } }
+  // ① 启动竞态复现：resolver 未就绪（accountId=''）→ load → 回落实体固化。
+  const store = new StatsStore({ dir, now: NOW_AT, hostRouteAccountKeyOf: () => (routeAccount ? `oauth:${routeAccount}` : null) })
+  await store.load()
+  const raceSnap = store.snapshot()
+  check('D17: 启动竞态复现——resolver 未就绪时 load，host-route 历史行落回落实体（独立卡固化）', raceSnap.accountTotals.length === 2 && raceSnap.accountTotals.find((row) => row.provider === 'openai-codex')?.calls === 2 && raceSnap.accountTotals.find((row) => row.provider === 'chatgpt')?.calls === 5, raceSnap.accountTotals.map((row) => `${row.provider}/${row.accountKind}:${row.calls}`))
+  // ② 维护完成（accountId ''→id 迁移）→ reload 全量重放 → 归并、回落消失。
+  routeAccount = 'chatgpt'
+  const reloadError = await reloadQuiet(store)
+  const mergedSnap = store.snapshot()
+  const mergedRow = mergedSnap.accountTotals.find((row) => row.provider === 'chatgpt')
+  check('D17b: 维护完成 → reload 重放归并（oauth 账号格合计 7 = 5 call + 2 scope；回落实体消失——单一实体）', reloadError === null && mergedSnap.accountTotals.length === 1 && !!mergedRow && mergedRow.calls === 7 && mergedRow.requestCalls === 2 && mergedRow.callRows === 5, { error: reloadError && String(reloadError), snap: mergedSnap.accountTotals.map((row) => `${row.provider}/${row.accountKind}:${row.calls}/${row.requestCalls}/${row.callRows}`) })
+  // ③ 重载窗口并发：reload 进行中 record → 恰出现一次（在途快照回补——不丢不双）。
+  const reloadRun = reloadQuiet(store)
+  store.record({ agentId: 'vision', provider: 'oauth:chatgpt', model: 'gpt-5.6-sol', ok: true, ms: 30, inputTokens: 4, outputTokens: 1, at: T0 + 99 })
+  await reloadRun
+  const concurrentSnap = store.snapshot()
+  check('D17c: 重载窗口内 record 恰出现一次（快照回补不丢失、不双计 → 合计 8）', concurrentSnap.accountTotals.length === 1 && concurrentSnap.accountTotals.find((row) => row.provider === 'chatgpt')?.calls === 8, concurrentSnap.accountTotals.map((row) => `${row.provider}:${row.calls}`))
+  await store.close()
+  rmSync(work, { recursive: true, force: true })
+  // ④⑤⑥ service 触发点行为（真实 RouterService.prototype + 最小 fake this——
+  // 幂等 / 未就绪不触发 / persist 未启用不消费旗标）。
+  const { RouterService } = await import('../lib/service.js')
+  const { HOST_ROUTE_REF } = await import('../lib/host-route.js')
+  const reloadCalls = []
+  const fakeSettings = { get: () => ({ providers: { 'openai-codex': { apiKeyEnv: HOST_ROUTE_REF } } }) }
+  const makeFakeService = (state, persist = true) => ({
+    hostRouteStatsReloaded: false,
+    hostRouteState: state,
+    ctx: { get: () => fakeSettings },
+    stats: { persist, reload: () => { reloadCalls.push(1); return Promise.resolve() } },
+  })
+  const callTrigger = (fake) => { try { RouterService.prototype.maybeReloadStatsAfterHostRouteSync.call(fake); return true } catch { return false } }
+  const readyState = { maintained: true, accountId: 'chatgpt', tokenInjected: 'ok', degraded: false, failures: 0 }
+  const unknownState = { maintained: false, accountId: '', tokenInjected: 'off', degraded: false, failures: 0 }
+  const svcReady = makeFakeService(readyState)
+  callTrigger(svcReady)
+  callTrigger(svcReady)
+  check('D17d: 维护就绪 → 触发一次性 reload（重复探测幂等——恰一次 + 旗标置位）', reloadCalls.length === 1 && svcReady.hostRouteStatsReloaded === true, { calls: reloadCalls.length, flag: svcReady.hostRouteStatsReloaded })
+  const svcUnknown = makeFakeService(unknownState)
+  callTrigger(svcUnknown)
+  check('D17e: 路由未激活/账号未知 → 不触发（回落语义保持诚实；旗标不消费）', reloadCalls.length === 1 && svcUnknown.hostRouteStatsReloaded === false)
+  const svcNoPersist = makeFakeService(readyState, false)
+  callTrigger(svcNoPersist)
+  check('D17f: stats 未启用持久化 → 不触发且不消费旗标（persist 启用后的下一维护 pass 再触发）', reloadCalls.length === 1 && svcNoPersist.hostRouteStatsReloaded === false)
+  check('D17g: 触发点挂在维护队列完成位（queueHostRouteSync → syncHostRoute 后探测——boot/settings/tick 同链全覆盖）', /\.then\(\(result\) => \{ this\.maybeReloadStatsAfterHostRouteSync\(\); return result \}\)/.test(serviceSource))
 }
 {
   // D13（D5 双卡，源码契约 + 浏览器包值级——旧代码 roster 行与统计行双渲染）。
