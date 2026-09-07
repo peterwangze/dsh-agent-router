@@ -1,15 +1,15 @@
 {
   "version": 1,
-  "generated_at": "2026-09-05T11:20:53",
+  "generated_at": "2026-09-06T14:48:03",
   "packets": {
-    "REL-010": {
-      "task_id": "REL-010",
-      "priority": "P1",
-      "status": "**执行中**——E-1 完成（0.4.3→0.4.4 + CHANGELOG v0.4.4 节 + README 8 处校对，零残留待提交）；E-2~E-6 随链执行",
-      "goal": "REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+    "FIX-030": {
+      "task_id": "FIX-030",
+      "priority": "P0",
+      "status": "**已实现（待用户真机复验）**——RCA 宿主源码三方实证（apiProxy 全包零注册 / sessionController 新面 / parentAgentOptionsForDelegation 基线变更 + 子代理不经 installModelSelection 取证）；修复 = A sessionSelectFaceOf 双形态适配 + B inheritedRouteOf 同构基线（显式覆盖仍尊重）+ C presetDiag 诊断环形（64 条）+ router/presetDiagnostics RPC + 设置页预设卡生效诊断面板；判别组 K1-K7（stash 实证旧代码 K1/K2/K3/K4/K6 必败 RED→GREEN）+ D5/D6/G1 断言对齐；门控 20/20 全绿 + 镜像同步；commit 3b1013e；**用户复验 = 重启 DSH → ①配置预设模型后新会话/空白会话切预设 → 模型跟随 ②起 subagent（预设配置了 subagent 模型）→ LLM 侧统计确认 ③设置页预设卡看「生效诊断」面板**",
+      "goal": "FIX-030 宿主 0.1.2-rc.1 预设链双断裂 + 生效观测面（报障三连 2026-09-05）：①预设调整/切换后模型不跟随（回归——新宿主无 apiProxy 服务，seed 预检恒 fail 静默跳过）②subagent 模型配置未生效（LLM 侧统计实证——新宿主子继承基线改「父最近请求头路由」，旧显式覆盖判别恒误判 → fixup 全量跳过）③配置生效缺统计观测",
       "product_success_contract": {
-        "user": "TO_BE_DEFINED: impacted persona for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
-        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+        "user": "TO_BE_DEFINED: impacted persona for FIX-030 宿主 0.1.2-rc.1 预设链双断裂 + 生效观测面（报障三连 2026-09-05）：①预设调整/切换后模型不跟随（回归——新宿主无 apiProxy 服务，seed 预检恒 fail 静默跳过）②subagent 模型配置未生效（LLM 侧统计实证——新宿主子继承基线改「父最近请求头路由」，旧显式覆盖判别恒误判 → fixup 全量跳过）③配置生效缺统计观测",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for FIX-030 宿主 0.1.2-rc.1 预设链双断裂 + 生效观测面（报障三连 2026-09-05）：①预设调整/切换后模型不跟随（回归——新宿主无 apiProxy 服务，seed 预检恒 fail 静默跳过）②subagent 模型配置未生效（LLM 侧统计实证——新宿主子继承基线改「父最近请求头路由」，旧显式覆盖判别恒误判 → fixup 全量跳过）③配置生效缺统计观测",
         "non_goals": [
           "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
           "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
@@ -25,7 +25,7 @@
         ]
       },
       "acceptance_contract": {
-        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for FIX-030 宿主 0.1.2-rc.1 预设链双断裂 + 生效观测面（报障三连 2026-09-05）：①预设调整/切换后模型不跟随（回归——新宿主无 apiProxy 服务，seed 预检恒 fail 静默跳过）②subagent 模型配置未生效（LLM 侧统计实证——新宿主子继承基线改「父最近请求头路由」，旧显式覆盖判别恒误判 → fixup 全量跳过）③配置生效缺统计观测",
         "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
         "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
         "last_run": {
@@ -38,42 +38,42 @@
       "quality_budget": {
         "dimensions": {
           "performance": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for FIX-030 宿主 0.1.2-rc.1 预设链双断裂 + 生效观测面（报障三连 2026-09-05）：①预设调整/切换后模型不跟随（回归——新宿主无 apiProxy 服务，seed 预检恒 fail 静默跳过）②subagent 模型配置未生效（LLM 侧统计实证——新宿主子继承基线改「父最近请求头路由」，旧显式覆盖判别恒误判 → fixup 全量跳过）③配置生效缺统计观测",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
             "exception": ""
           },
           "reliability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for FIX-030 宿主 0.1.2-rc.1 预设链双断裂 + 生效观测面（报障三连 2026-09-05）：①预设调整/切换后模型不跟随（回归——新宿主无 apiProxy 服务，seed 预检恒 fail 静默跳过）②subagent 模型配置未生效（LLM 侧统计实证——新宿主子继承基线改「父最近请求头路由」，旧显式覆盖判别恒误判 → fixup 全量跳过）③配置生效缺统计观测",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
             "exception": ""
           },
           "security": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for FIX-030 宿主 0.1.2-rc.1 预设链双断裂 + 生效观测面（报障三连 2026-09-05）：①预设调整/切换后模型不跟随（回归——新宿主无 apiProxy 服务，seed 预检恒 fail 静默跳过）②subagent 模型配置未生效（LLM 侧统计实证——新宿主子继承基线改「父最近请求头路由」，旧显式覆盖判别恒误判 → fixup 全量跳过）③配置生效缺统计观测",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
             "exception": ""
           },
           "accessibility": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for FIX-030 宿主 0.1.2-rc.1 预设链双断裂 + 生效观测面（报障三连 2026-09-05）：①预设调整/切换后模型不跟随（回归——新宿主无 apiProxy 服务，seed 预检恒 fail 静默跳过）②subagent 模型配置未生效（LLM 侧统计实证——新宿主子继承基线改「父最近请求头路由」，旧显式覆盖判别恒误判 → fixup 全量跳过）③配置生效缺统计观测",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
             "exception": ""
           },
           "ux": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for FIX-030 宿主 0.1.2-rc.1 预设链双断裂 + 生效观测面（报障三连 2026-09-05）：①预设调整/切换后模型不跟随（回归——新宿主无 apiProxy 服务，seed 预检恒 fail 静默跳过）②subagent 模型配置未生效（LLM 侧统计实证——新宿主子继承基线改「父最近请求头路由」，旧显式覆盖判别恒误判 → fixup 全量跳过）③配置生效缺统计观测",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
             "exception": ""
           },
           "maintainability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for FIX-030 宿主 0.1.2-rc.1 预设链双断裂 + 生效观测面（报障三连 2026-09-05）：①预设调整/切换后模型不跟随（回归——新宿主无 apiProxy 服务，seed 预检恒 fail 静默跳过）②subagent 模型配置未生效（LLM 侧统计实证——新宿主子继承基线改「父最近请求头路由」，旧显式覆盖判别恒误判 → fixup 全量跳过）③配置生效缺统计观测",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
@@ -82,9 +82,9 @@
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for REL-010 v0.4.4 发布链——FIX-028 宿主演进兼容热修承载：E-1 bump/CHANGELOG/README 校对 → E-2 门控十八面复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 push main + tag v0.4.4 + GitHub Release → E-6 归档检查",
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for FIX-030 宿主 0.1.2-rc.1 预设链双断裂 + 生效观测面（报障三连 2026-09-05）：①预设调整/切换后模型不跟随（回归——新宿主无 apiProxy 服务，seed 预检恒 fail 静默跳过）②subagent 模型配置未生效（LLM 侧统计实证——新宿主子继承基线改「父最近请求头路由」，旧显式覆盖判别恒误判 → fixup 全量跳过）③配置生效缺统计观测",
         "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
-        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**执行中**——E-1 完成（0.4.3→0.4.4 + CHANGELOG v0.4.4 节 + README 8 处校对，零残留待提交）；E-2~E-6 随链执行)",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**已实现（待用户真机复验）**——RCA 宿主源码三方实证（apiProxy 全包零注册 / sessionController 新面 / parentAgentOptionsForDelegation 基线变更 + 子代理不经 installModelSelection 取证）；修复 = A sessionSelectFaceOf 双形态适配 + B inheritedRouteOf 同构基线（显式覆盖仍尊重）+ C presetDiag 诊断环形（64 条）+ router/presetDiagnostics RPC + 设置页预设卡生效诊断面板；判别组 K1-K7（stash 实证旧代码 K1/K2/K3/K4/K6 必败 RED→GREEN）+ D5/D6/G1 断言对齐；门控 20/20 全绿 + 镜像同步；commit 3b1013e；**用户复验 = 重启 DSH → ①配置预设模型后新会话/空白会话切预设 → 模型跟随 ②起 subagent（预设配置了 subagent 模型）→ LLM 侧统计确认 ③设置页预设卡看「生效诊断」面板**)",
         "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
         "status": "TO_BE_DEFINED",
         "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
@@ -110,7 +110,7 @@
         "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "Only change files required by this task row: **执行中**——E-1 完成（0.4.3→0.4.4 + CHANGELOG v0.4.4 节 + README 8 处校对，零残留待提交）；E-2~E-6 随链执行",
+        "Only change files required by this task row: **已实现（待用户真机复验）**——RCA 宿主源码三方实证（apiProxy 全包零注册 / sessionController 新面 / parentAgentOptionsForDelegation 基线变更 + 子代理不经 installModelSelection 取证）；修复 = A sessionSelectFaceOf 双形态适配 + B inheritedRouteOf 同构基线（显式覆盖仍尊重）+ C presetDiag 诊断环形（64 条）+ router/presetDiagnostics RPC + 设置页预设卡生效诊断面板；判别组 K1-K7（stash 实证旧代码 K1/K2/K3/K4/K6 必败 RED→GREEN）+ D5/D6/G1 断言对齐；门控 20/20 全绿 + 镜像同步；commit 3b1013e；**用户复验 = 重启 DSH → ①配置预设模型后新会话/空白会话切预设 → 模型跟随 ②起 subagent（预设配置了 subagent 模型）→ LLM 侧统计确认 ③设置页预设卡看「生效诊断」面板**",
         "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
       ],
       "required_evidence": [
@@ -123,7 +123,388 @@
         "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
       ],
       "done_definition": [
-        "**执行中**——E-1 完成（0.4.3→0.4.4 + CHANGELOG v0.4.4 节 + README 8 处校对，零残留待提交）；E-2~E-6 随链执行",
+        "**已实现（待用户真机复验）**——RCA 宿主源码三方实证（apiProxy 全包零注册 / sessionController 新面 / parentAgentOptionsForDelegation 基线变更 + 子代理不经 installModelSelection 取证）；修复 = A sessionSelectFaceOf 双形态适配 + B inheritedRouteOf 同构基线（显式覆盖仍尊重）+ C presetDiag 诊断环形（64 条）+ router/presetDiagnostics RPC + 设置页预设卡生效诊断面板；判别组 K1-K7（stash 实证旧代码 K1/K2/K3/K4/K6 必败 RED→GREEN）+ D5/D6/G1 断言对齐；门控 20/20 全绿 + 镜像同步；commit 3b1013e；**用户复验 = 重启 DSH → ①配置预设模型后新会话/空白会话切预设 → 模型跟随 ②起 subagent（预设配置了 subagent 模型）→ LLM 侧统计确认 ③设置页预设卡看「生效诊断」面板**",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
+    "FIX-031": {
+      "task_id": "FIX-031",
+      "priority": "P0",
+      "status": "agentId 回退显 twin）；修复方向 = 归一化单点 + 双权威源（计数=遥测 scope / token=call 行）+ 显示层内部键不可见——**架构裁决待用户**（ask 已呈）",
+      "goal": "FIX-031 统计归因单点化 + 路由透明性（用户报障第三轮 2026-09-06 + DEC-029 新原则「用户不应感知路由导致的分化与实现路径」）：①账号伪实体——`glm-local-router` 独立账号卡 16 调用/1.3M tok 而 `glm-local` 恒 0（twin 行 provider=wrapRoute 内部路由键）②内部键外显——服务商列 `twin/glm-5.3`、账号名 `oauth:chatgpt` 前缀、`-router` 后缀③非包裹 provider 零覆盖——scope 行 158 vs call 行 32（83% 请求无 token 精确行）：`opencode-go-local` 26 请求账号卡 0、`glm-local` 19 请求账号卡 0④归因记录四站点各自私有键空间（tool.js ×2 / oauth-llm ×2 / wrapper onCall / telemetry recordScope）——P5 违反形态",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for FIX-031 统计归因单点化 + 路由透明性（用户报障第三轮 2026-09-06 + DEC-029 新原则「用户不应感知路由导致的分化与实现路径」）：①账号伪实体——`glm-local-router` 独立账号卡 16 调用/1.3M tok 而 `glm-local` 恒 0（twin 行 provider=wrapRoute 内部路由键）②内部键外显——服务商列 `twin/glm-5.3`、账号名 `oauth:chatgpt` 前缀、`-router` 后缀③非包裹 provider 零覆盖——scope 行 158 vs call 行 32（83% 请求无 token 精确行）：`opencode-go-local` 26 请求账号卡 0、`glm-local` 19 请求账号卡 0④归因记录四站点各自私有键空间（tool.js ×2 / oauth-llm ×2 / wrapper onCall / telemetry recordScope）——P5 违反形态",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for FIX-031 统计归因单点化 + 路由透明性（用户报障第三轮 2026-09-06 + DEC-029 新原则「用户不应感知路由导致的分化与实现路径」）：①账号伪实体——`glm-local-router` 独立账号卡 16 调用/1.3M tok 而 `glm-local` 恒 0（twin 行 provider=wrapRoute 内部路由键）②内部键外显——服务商列 `twin/glm-5.3`、账号名 `oauth:chatgpt` 前缀、`-router` 后缀③非包裹 provider 零覆盖——scope 行 158 vs call 行 32（83% 请求无 token 精确行）：`opencode-go-local` 26 请求账号卡 0、`glm-local` 19 请求账号卡 0④归因记录四站点各自私有键空间（tool.js ×2 / oauth-llm ×2 / wrapper onCall / telemetry recordScope）——P5 违反形态",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for FIX-031 统计归因单点化 + 路由透明性（用户报障第三轮 2026-09-06 + DEC-029 新原则「用户不应感知路由导致的分化与实现路径」）：①账号伪实体——`glm-local-router` 独立账号卡 16 调用/1.3M tok 而 `glm-local` 恒 0（twin 行 provider=wrapRoute 内部路由键）②内部键外显——服务商列 `twin/glm-5.3`、账号名 `oauth:chatgpt` 前缀、`-router` 后缀③非包裹 provider 零覆盖——scope 行 158 vs call 行 32（83% 请求无 token 精确行）：`opencode-go-local` 26 请求账号卡 0、`glm-local` 19 请求账号卡 0④归因记录四站点各自私有键空间（tool.js ×2 / oauth-llm ×2 / wrapper onCall / telemetry recordScope）——P5 违反形态",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for FIX-031 统计归因单点化 + 路由透明性（用户报障第三轮 2026-09-06 + DEC-029 新原则「用户不应感知路由导致的分化与实现路径」）：①账号伪实体——`glm-local-router` 独立账号卡 16 调用/1.3M tok 而 `glm-local` 恒 0（twin 行 provider=wrapRoute 内部路由键）②内部键外显——服务商列 `twin/glm-5.3`、账号名 `oauth:chatgpt` 前缀、`-router` 后缀③非包裹 provider 零覆盖——scope 行 158 vs call 行 32（83% 请求无 token 精确行）：`opencode-go-local` 26 请求账号卡 0、`glm-local` 19 请求账号卡 0④归因记录四站点各自私有键空间（tool.js ×2 / oauth-llm ×2 / wrapper onCall / telemetry recordScope）——P5 违反形态",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for FIX-031 统计归因单点化 + 路由透明性（用户报障第三轮 2026-09-06 + DEC-029 新原则「用户不应感知路由导致的分化与实现路径」）：①账号伪实体——`glm-local-router` 独立账号卡 16 调用/1.3M tok 而 `glm-local` 恒 0（twin 行 provider=wrapRoute 内部路由键）②内部键外显——服务商列 `twin/glm-5.3`、账号名 `oauth:chatgpt` 前缀、`-router` 后缀③非包裹 provider 零覆盖——scope 行 158 vs call 行 32（83% 请求无 token 精确行）：`opencode-go-local` 26 请求账号卡 0、`glm-local` 19 请求账号卡 0④归因记录四站点各自私有键空间（tool.js ×2 / oauth-llm ×2 / wrapper onCall / telemetry recordScope）——P5 违反形态",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for FIX-031 统计归因单点化 + 路由透明性（用户报障第三轮 2026-09-06 + DEC-029 新原则「用户不应感知路由导致的分化与实现路径」）：①账号伪实体——`glm-local-router` 独立账号卡 16 调用/1.3M tok 而 `glm-local` 恒 0（twin 行 provider=wrapRoute 内部路由键）②内部键外显——服务商列 `twin/glm-5.3`、账号名 `oauth:chatgpt` 前缀、`-router` 后缀③非包裹 provider 零覆盖——scope 行 158 vs call 行 32（83% 请求无 token 精确行）：`opencode-go-local` 26 请求账号卡 0、`glm-local` 19 请求账号卡 0④归因记录四站点各自私有键空间（tool.js ×2 / oauth-llm ×2 / wrapper onCall / telemetry recordScope）——P5 违反形态",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for FIX-031 统计归因单点化 + 路由透明性（用户报障第三轮 2026-09-06 + DEC-029 新原则「用户不应感知路由导致的分化与实现路径」）：①账号伪实体——`glm-local-router` 独立账号卡 16 调用/1.3M tok 而 `glm-local` 恒 0（twin 行 provider=wrapRoute 内部路由键）②内部键外显——服务商列 `twin/glm-5.3`、账号名 `oauth:chatgpt` 前缀、`-router` 后缀③非包裹 provider 零覆盖——scope 行 158 vs call 行 32（83% 请求无 token 精确行）：`opencode-go-local` 26 请求账号卡 0、`glm-local` 19 请求账号卡 0④归因记录四站点各自私有键空间（tool.js ×2 / oauth-llm ×2 / wrapper onCall / telemetry recordScope）——P5 违反形态",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for FIX-031 统计归因单点化 + 路由透明性（用户报障第三轮 2026-09-06 + DEC-029 新原则「用户不应感知路由导致的分化与实现路径」）：①账号伪实体——`glm-local-router` 独立账号卡 16 调用/1.3M tok 而 `glm-local` 恒 0（twin 行 provider=wrapRoute 内部路由键）②内部键外显——服务商列 `twin/glm-5.3`、账号名 `oauth:chatgpt` 前缀、`-router` 后缀③非包裹 provider 零覆盖——scope 行 158 vs call 行 32（83% 请求无 token 精确行）：`opencode-go-local` 26 请求账号卡 0、`glm-local` 19 请求账号卡 0④归因记录四站点各自私有键空间（tool.js ×2 / oauth-llm ×2 / wrapper onCall / telemetry recordScope）——P5 违反形态",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for FIX-031 统计归因单点化 + 路由透明性（用户报障第三轮 2026-09-06 + DEC-029 新原则「用户不应感知路由导致的分化与实现路径」）：①账号伪实体——`glm-local-router` 独立账号卡 16 调用/1.3M tok 而 `glm-local` 恒 0（twin 行 provider=wrapRoute 内部路由键）②内部键外显——服务商列 `twin/glm-5.3`、账号名 `oauth:chatgpt` 前缀、`-router` 后缀③非包裹 provider 零覆盖——scope 行 158 vs call 行 32（83% 请求无 token 精确行）：`opencode-go-local` 26 请求账号卡 0、`glm-local` 19 请求账号卡 0④归因记录四站点各自私有键空间（tool.js ×2 / oauth-llm ×2 / wrapper onCall / telemetry recordScope）——P5 违反形态",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for FIX-031 统计归因单点化 + 路由透明性（用户报障第三轮 2026-09-06 + DEC-029 新原则「用户不应感知路由导致的分化与实现路径」）：①账号伪实体——`glm-local-router` 独立账号卡 16 调用/1.3M tok 而 `glm-local` 恒 0（twin 行 provider=wrapRoute 内部路由键）②内部键外显——服务商列 `twin/glm-5.3`、账号名 `oauth:chatgpt` 前缀、`-router` 后缀③非包裹 provider 零覆盖——scope 行 158 vs call 行 32（83% 请求无 token 精确行）：`opencode-go-local` 26 请求账号卡 0、`glm-local` 19 请求账号卡 0④归因记录四站点各自私有键空间（tool.js ×2 / oauth-llm ×2 / wrapper onCall / telemetry recordScope）——P5 违反形态",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**RCA 完成（机器实证）**——磁盘 JSONL（daily-2026-09-06：190 行 = 158 scope + 32 call）+ 代码行锚（wrapper.js:383 provider=wrapRoute / stats.js #fold 按 rec.provider 分账号 / client.js:1313 provider)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: **RCA 完成（机器实证）**——磁盘 JSONL（daily-2026-09-06：190 行 = 158 scope + 32 call）+ 代码行锚（wrapper.js:383 provider=wrapRoute / stats.js #fold 按 rec.provider 分账号 / client.js:1313 provider",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "**RCA 完成（机器实证）**——磁盘 JSONL（daily-2026-09-06：190 行 = 158 scope + 32 call）+ 代码行锚（wrapper.js:383 provider=wrapRoute / stats.js #fold 按 rec.provider 分账号 / client.js:1313 provider",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
+    "EVO-017": {
+      "task_id": "EVO-017",
+      "priority": "P0",
+      "status": "**主体完成 + 遗留开放**——3 产品 commits（4b19d31 全链 + 8a81c3d Rework 布局/预设归属 + 384058c R2 账号补源）+ 3 治理 commits（19ce903/11755ab/a0ff3c4）；EV-158~160 三轮用户复验驱动；**遗留：归因键空间未单点化——第三轮报障（伪实体/内部键外显/零覆盖）转 FIX-031 承载**",
+      "goal": "EVO-017 统计信息分级重构（用户规格五条 2026-09-05）：预设/专业/账号三面 + 预设作用域请求遥测 + 持久化导出（补录 2026-09-06——前序会话漏入账）",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for EVO-017 统计信息分级重构（用户规格五条 2026-09-05）：预设/专业/账号三面 + 预设作用域请求遥测 + 持久化导出（补录 2026-09-06——前序会话漏入账）",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for EVO-017 统计信息分级重构（用户规格五条 2026-09-05）：预设/专业/账号三面 + 预设作用域请求遥测 + 持久化导出（补录 2026-09-06——前序会话漏入账）",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for EVO-017 统计信息分级重构（用户规格五条 2026-09-05）：预设/专业/账号三面 + 预设作用域请求遥测 + 持久化导出（补录 2026-09-06——前序会话漏入账）",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for EVO-017 统计信息分级重构（用户规格五条 2026-09-05）：预设/专业/账号三面 + 预设作用域请求遥测 + 持久化导出（补录 2026-09-06——前序会话漏入账）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for EVO-017 统计信息分级重构（用户规格五条 2026-09-05）：预设/专业/账号三面 + 预设作用域请求遥测 + 持久化导出（补录 2026-09-06——前序会话漏入账）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for EVO-017 统计信息分级重构（用户规格五条 2026-09-05）：预设/专业/账号三面 + 预设作用域请求遥测 + 持久化导出（补录 2026-09-06——前序会话漏入账）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for EVO-017 统计信息分级重构（用户规格五条 2026-09-05）：预设/专业/账号三面 + 预设作用域请求遥测 + 持久化导出（补录 2026-09-06——前序会话漏入账）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for EVO-017 统计信息分级重构（用户规格五条 2026-09-05）：预设/专业/账号三面 + 预设作用域请求遥测 + 持久化导出（补录 2026-09-06——前序会话漏入账）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for EVO-017 统计信息分级重构（用户规格五条 2026-09-05）：预设/专业/账号三面 + 预设作用域请求遥测 + 持久化导出（补录 2026-09-06——前序会话漏入账）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for EVO-017 统计信息分级重构（用户规格五条 2026-09-05）：预设/专业/账号三面 + 预设作用域请求遥测 + 持久化导出（补录 2026-09-06——前序会话漏入账）",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**主体完成 + 遗留开放**——3 产品 commits（4b19d31 全链 + 8a81c3d Rework 布局/预设归属 + 384058c R2 账号补源）+ 3 治理 commits（19ce903/11755ab/a0ff3c4）；EV-158~160 三轮用户复验驱动；**遗留：归因键空间未单点化——第三轮报障（伪实体/内部键外显/零覆盖）转 FIX-031 承载**)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: **主体完成 + 遗留开放**——3 产品 commits（4b19d31 全链 + 8a81c3d Rework 布局/预设归属 + 384058c R2 账号补源）+ 3 治理 commits（19ce903/11755ab/a0ff3c4）；EV-158~160 三轮用户复验驱动；**遗留：归因键空间未单点化——第三轮报障（伪实体/内部键外显/零覆盖）转 FIX-031 承载**",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "**主体完成 + 遗留开放**——3 产品 commits（4b19d31 全链 + 8a81c3d Rework 布局/预设归属 + 384058c R2 账号补源）+ 3 治理 commits（19ce903/11755ab/a0ff3c4）；EV-158~160 三轮用户复验驱动；**遗留：归因键空间未单点化——第三轮报障（伪实体/内部键外显/零覆盖）转 FIX-031 承载**",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
+    "FIX-029": {
+      "task_id": "FIX-029",
+      "priority": "P0",
+      "status": "**已完成（终态）——用户复验通过（2026-09-05「这次好了」）**——修复 A（prestep pending 优先层，宿主 selectionFor 同序 + 旧宿主回落兼容）+ 修复 B（ModelTakeover useInput 面 + **装配点透传 eda320f**——真根因：装配层短路组件内修复，探针实测三联证据闭环）+ P8 遥测（afe0548）+ served-client 镜像同步；判别组 fix-029 19 断言（A/B 组件级 + C 装配点契约守卫——mock 保真度第六次同型堵口）；门控全绿；EV-150~155；复验链：问题②（图片保真，EV-152 日志层）+ 问题①（自动接管，EV-155 用户确认）双闭环；诊断插曲：probe-2/pkg-3 ctx.logger 崩溃事故（EV-154 教训入档）+ probe-1 安全探针实测定位（已停用）",
+      "goal": "FIX-029 宿主 0.1.2-rc.1 适配双回归（FIX-028 同源漏网面）：①贴图不自动接管（conversation.input.right standardProps 不再提供 input 快照 prop，只提供 useInput hook——ModelTakeover imageCount 恒 0）②手切 +多模态 后首图轮被逃生组改写成标记文本（prestep 判定链缺 durable model/selection pending 优先层，stale header 误判 onWrapperRoute=false——会话 94adf09f [94184→94190→94192] 实证判定与实际路由分裂）",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for FIX-029 宿主 0.1.2-rc.1 适配双回归（FIX-028 同源漏网面）：①贴图不自动接管（conversation.input.right standardProps 不再提供 input 快照 prop，只提供 useInput hook——ModelTakeover imageCount 恒 0）②手切 +多模态 后首图轮被逃生组改写成标记文本（prestep 判定链缺 durable model/selection pending 优先层，stale header 误判 onWrapperRoute=false——会话 94adf09f [94184→94190→94192] 实证判定与实际路由分裂）",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for FIX-029 宿主 0.1.2-rc.1 适配双回归（FIX-028 同源漏网面）：①贴图不自动接管（conversation.input.right standardProps 不再提供 input 快照 prop，只提供 useInput hook——ModelTakeover imageCount 恒 0）②手切 +多模态 后首图轮被逃生组改写成标记文本（prestep 判定链缺 durable model/selection pending 优先层，stale header 误判 onWrapperRoute=false——会话 94adf09f [94184→94190→94192] 实证判定与实际路由分裂）",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for FIX-029 宿主 0.1.2-rc.1 适配双回归（FIX-028 同源漏网面）：①贴图不自动接管（conversation.input.right standardProps 不再提供 input 快照 prop，只提供 useInput hook——ModelTakeover imageCount 恒 0）②手切 +多模态 后首图轮被逃生组改写成标记文本（prestep 判定链缺 durable model/selection pending 优先层，stale header 误判 onWrapperRoute=false——会话 94adf09f [94184→94190→94192] 实证判定与实际路由分裂）",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for FIX-029 宿主 0.1.2-rc.1 适配双回归（FIX-028 同源漏网面）：①贴图不自动接管（conversation.input.right standardProps 不再提供 input 快照 prop，只提供 useInput hook——ModelTakeover imageCount 恒 0）②手切 +多模态 后首图轮被逃生组改写成标记文本（prestep 判定链缺 durable model/selection pending 优先层，stale header 误判 onWrapperRoute=false——会话 94adf09f [94184→94190→94192] 实证判定与实际路由分裂）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for FIX-029 宿主 0.1.2-rc.1 适配双回归（FIX-028 同源漏网面）：①贴图不自动接管（conversation.input.right standardProps 不再提供 input 快照 prop，只提供 useInput hook——ModelTakeover imageCount 恒 0）②手切 +多模态 后首图轮被逃生组改写成标记文本（prestep 判定链缺 durable model/selection pending 优先层，stale header 误判 onWrapperRoute=false——会话 94adf09f [94184→94190→94192] 实证判定与实际路由分裂）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for FIX-029 宿主 0.1.2-rc.1 适配双回归（FIX-028 同源漏网面）：①贴图不自动接管（conversation.input.right standardProps 不再提供 input 快照 prop，只提供 useInput hook——ModelTakeover imageCount 恒 0）②手切 +多模态 后首图轮被逃生组改写成标记文本（prestep 判定链缺 durable model/selection pending 优先层，stale header 误判 onWrapperRoute=false——会话 94adf09f [94184→94190→94192] 实证判定与实际路由分裂）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for FIX-029 宿主 0.1.2-rc.1 适配双回归（FIX-028 同源漏网面）：①贴图不自动接管（conversation.input.right standardProps 不再提供 input 快照 prop，只提供 useInput hook——ModelTakeover imageCount 恒 0）②手切 +多模态 后首图轮被逃生组改写成标记文本（prestep 判定链缺 durable model/selection pending 优先层，stale header 误判 onWrapperRoute=false——会话 94adf09f [94184→94190→94192] 实证判定与实际路由分裂）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for FIX-029 宿主 0.1.2-rc.1 适配双回归（FIX-028 同源漏网面）：①贴图不自动接管（conversation.input.right standardProps 不再提供 input 快照 prop，只提供 useInput hook——ModelTakeover imageCount 恒 0）②手切 +多模态 后首图轮被逃生组改写成标记文本（prestep 判定链缺 durable model/selection pending 优先层，stale header 误判 onWrapperRoute=false——会话 94adf09f [94184→94190→94192] 实证判定与实际路由分裂）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for FIX-029 宿主 0.1.2-rc.1 适配双回归（FIX-028 同源漏网面）：①贴图不自动接管（conversation.input.right standardProps 不再提供 input 快照 prop，只提供 useInput hook——ModelTakeover imageCount 恒 0）②手切 +多模态 后首图轮被逃生组改写成标记文本（prestep 判定链缺 durable model/selection pending 优先层，stale header 误判 onWrapperRoute=false——会话 94adf09f [94184→94190→94192] 实证判定与实际路由分裂）",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for FIX-029 宿主 0.1.2-rc.1 适配双回归（FIX-028 同源漏网面）：①贴图不自动接管（conversation.input.right standardProps 不再提供 input 快照 prop，只提供 useInput hook——ModelTakeover imageCount 恒 0）②手切 +多模态 后首图轮被逃生组改写成标记文本（prestep 判定链缺 durable model/selection pending 优先层，stale header 误判 onWrapperRoute=false——会话 94adf09f [94184→94190→94192] 实证判定与实际路由分裂）",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**已完成（终态）——用户复验通过（2026-09-05「这次好了」）**——修复 A（prestep pending 优先层，宿主 selectionFor 同序 + 旧宿主回落兼容）+ 修复 B（ModelTakeover useInput 面 + **装配点透传 eda320f**——真根因：装配层短路组件内修复，探针实测三联证据闭环）+ P8 遥测（afe0548）+ served-client 镜像同步；判别组 fix-029 19 断言（A/B 组件级 + C 装配点契约守卫——mock 保真度第六次同型堵口）；门控全绿；EV-150~155；复验链：问题②（图片保真，EV-152 日志层）+ 问题①（自动接管，EV-155 用户确认）双闭环；诊断插曲：probe-2/pkg-3 ctx.logger 崩溃事故（EV-154 教训入档）+ probe-1 安全探针实测定位（已停用）)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: **已完成（终态）——用户复验通过（2026-09-05「这次好了」）**——修复 A（prestep pending 优先层，宿主 selectionFor 同序 + 旧宿主回落兼容）+ 修复 B（ModelTakeover useInput 面 + **装配点透传 eda320f**——真根因：装配层短路组件内修复，探针实测三联证据闭环）+ P8 遥测（afe0548）+ served-client 镜像同步；判别组 fix-029 19 断言（A/B 组件级 + C 装配点契约守卫——mock 保真度第六次同型堵口）；门控全绿；EV-150~155；复验链：问题②（图片保真，EV-152 日志层）+ 问题①（自动接管，EV-155 用户确认）双闭环；诊断插曲：probe-2/pkg-3 ctx.logger 崩溃事故（EV-154 教训入档）+ probe-1 安全探针实测定位（已停用）",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "**已完成（终态）——用户复验通过（2026-09-05「这次好了」）**——修复 A（prestep pending 优先层，宿主 selectionFor 同序 + 旧宿主回落兼容）+ 修复 B（ModelTakeover useInput 面 + **装配点透传 eda320f**——真根因：装配层短路组件内修复，探针实测三联证据闭环）+ P8 遥测（afe0548）+ served-client 镜像同步；判别组 fix-029 19 断言（A/B 组件级 + C 装配点契约守卫——mock 保真度第六次同型堵口）；门控全绿；EV-150~155；复验链：问题②（图片保真，EV-152 日志层）+ 问题①（自动接管，EV-155 用户确认）双闭环；诊断插曲：probe-2/pkg-3 ctx.logger 崩溃事故（EV-154 教训入档）+ probe-1 安全探针实测定位（已停用）",
         "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
         "Commit and push are completed for this single task."
       ],

@@ -2,7 +2,7 @@
 
 - **session_id**: 20260830-V031-V032-DOUBLE-RELEASE
 - **session_date**: 2026-08-30
-- **agent**: glm @ DeepSeek Harness + software-project-governance v0.78.0
+- **agent**: glm @ DeepSeek Harness + software-project-governance v0.78.1
 - **mode**: always-on × maximum-autonomy
 
 ## 当前状态
