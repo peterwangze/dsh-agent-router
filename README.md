@@ -4,7 +4,7 @@
 >
 > DeepSeek Harness（DSH）多模型路由插件：为任意 DSH 主 agent 挂载专业 agent 目录——**Agent 预设与 subagent 默认模型**、**专业 Agent 配置与自动路由**、**ChatGPT 订阅登录 + 主模型调用**三大主要功能，按任务自动路由到带独立模型的视觉、图片生成、翻译、语音、子代理等专业 agent，扩展主 agent 的能力边界。
 
-[![version](https://img.shields.io/badge/version-v0.4.4-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
+[![version](https://img.shields.io/badge/version-v0.4.5-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## 项目目标
@@ -20,7 +20,7 @@
 - 💬 **对话框图片能力**：启用视觉类专业 agent（能力标签含 `image`）后，输入框出现「添加图片」按钮——附件图片进入原生草稿栏随消息原生发送，会话日志保留原件（界面原生显示）；插件在 system 层注入路由提示，主 agent 按需调用 route_agent（`includeImages` 把最近消息的图片转发给视觉 agent，自动附带主会话最近上下文，截图真正成为对话上下文的一部分）；生成图片经插件同源画布直达显示（v0.4.1 起：`/router-assets/` 内容寻址同源路由，不再依赖宿主附件通道；route_agent 工具卡默认折叠、输入区 🖼 按钮汇总会话产物；纯插件机制：带图轮始终由主模型应答，纯文本主模型全程不接触图片字节）
 - 🤖 **无头 CLI 子代理（Codex / Claude / Gemini）**：把 `codex` / `claude` / `gemini` 等外部 agent 工具作为子代理接入——无头模式（`codex exec --json` / `claude -p` / `gemini -p`）在工作区内自动执行多步任务，图片与文件按工作区路径注入；CLI 使用自身登录态（各自终端登录一次），插件零 OAuth 对接
 - 💳 **多模态账号与账号池**：任意服务商 API Key 配置式添加（官方/中转/本地部署同一条路径，无预设无登录）；账号池按健康/用量/轮询策略自动选号与失败切换（官方 API 不提供 OAuth——v0.3.2 起已移除不可用的「OAuth 官方登录」入口）
-- 📊 **实时用量统计**：Agent 级与账号级两级明细（调用/失败/tokens/耗时）、分钟级 tokens 分布、最近调用记录；用量按天持久化（缺省落盘 `$DSH_HOME`、保留 90 天，重启不清零；`router.stats.persist=false` 可关闭）、按天视图与 CSV 导出
+- 📊 **实时用量统计（分级视图）**：统计信息卡内四张二级卡——预设统计（按预设 × 主/subagent 口径）、专业 Agent 统计（含「主模型」归组对账）、账号级统计（按真实账号聚合，请求口径计数覆盖全部路由形态）、全局统计；每卡总用量 / 每日 / 实时三段 + 最近调用记录；用量按天持久化（缺省落盘 `$DSH_HOME`、保留 90 天，重启不清零；`router.stats.persist=false` 可关闭）、CSV 导出（agent / account / preset 三级）
 - 🔌 **零配置接入**：宿主平面注册 `route_agent` 工具与路由提示段，内置与自定义的任意 agent 预设自动获得路由能力
 
 ## 安装
@@ -38,19 +38,19 @@
 
 **离线安装**（发行包为 npm pack 形态——解压出 `package/` 目录）：
 
-1. 下载发行包：[dsh-agent-router-0.4.4.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.4.4/dsh-agent-router-0.4.4.tar.gz)
+1. 下载发行包：[dsh-agent-router-0.4.5.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.4.5/dsh-agent-router-0.4.5.tar.gz)
 2. 解压并进入包目录：
 
 ```powershell
 # Windows（PowerShell）
-tar -xzf dsh-agent-router-0.4.4.tar.gz
+tar -xzf dsh-agent-router-0.4.5.tar.gz
 cd package
 dsh plugin --profile web add file:./
 ```
 
 ```sh
 # macOS / Linux
-tar -xzf dsh-agent-router-0.4.4.tar.gz
+tar -xzf dsh-agent-router-0.4.5.tar.gz
 cd package
 npx @deepseek-ai/dsh plugin --profile web add file:./
 ```
@@ -79,23 +79,23 @@ npx @deepseek-ai/dsh plugin --profile web add file:./
 
 安装脚本自动完成：克隆源码 → 链接到 `~/.dsh/profiles/node_modules/` → 在 `profiles/web/cordis.patch.yml` 写入宿主行（幂等，可重复执行）。完成后**重启 DSH** 即可。
 
-固定版本：把命令中的 `main` 换成版本号，如 `v0.4.4`。
+固定版本：把命令中的 `main` 换成版本号，如 `v0.4.5`。
 
 #### 离线安装
 
-1. 下载发行包：[dsh-agent-router-0.4.4.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.4.4/dsh-agent-router-0.4.4.tar.gz)
+1. 下载发行包：[dsh-agent-router-0.4.5.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.4.5/dsh-agent-router-0.4.5.tar.gz)
 2. 解压并进入包目录（npm pack 形态，目录名为 `package`）：
 
 ```powershell
 # Windows
-tar -xzf dsh-agent-router-0.4.4.tar.gz
+tar -xzf dsh-agent-router-0.4.5.tar.gz
 cd package
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -LocalPath .
 ```
 
 ```sh
 # macOS / Linux
-tar -xzf dsh-agent-router-0.4.4.tar.gz
+tar -xzf dsh-agent-router-0.4.5.tar.gz
 cd package
 ./install.sh --local .
 ```
@@ -144,11 +144,11 @@ cd package
 ![插件总览界面](docs/images/overview.png)
 
 - 顶部**总开关**：启用多模型路由（关闭后 route_agent 拒绝调用、统计暂停）
-- 四个**分级分类卡片**，点击标题展开/收起：
-  - **预设 Agent**（第一张，默认折叠）：按 DSH 预设粒度配置默认模型
-  - **专业 Agent**（核心区，默认展开）：维护自定义专业 agent
+- 四个**分级分类卡片**（v0.4.5 起全部默认折叠），点击标题展开/收起：
+  - **预设 Agent**（第一张，默认折叠）：按 DSH 预设粒度配置默认模型；预设卡内含生效诊断面板（生效/未生效可观测）
+  - **专业 Agent**（核心区，默认折叠）：维护自定义专业 agent
   - **多模态账号**（默认折叠）：API Key 账号、ChatGPT 订阅登录、子代理（无头 CLI）与账号池
-  - **统计信息**（默认折叠）：实时用量明细
+  - **统计信息**（默认折叠）：分级用量明细——内含四张二级卡（预设 / 专业 Agent / 账号级 / 全局）
 - 分类头实时显示摘要（预设数量、agent 数量、账号数量、调用统计），无需展开即可掌握概况
 
 ### 2. 预设 Agent 默认模型
@@ -197,10 +197,13 @@ cd package
 
 ![统计信息](docs/images/stats.png)
 
-- 全局汇总：调用数 / 失败数 / 入出 tokens，一键清空（每 2 秒自动刷新）
-- **Agent 级明细**：每个 agent 的调用、失败、平均耗时与分钟级 tokens 柱状图
-- **账号级明细**：按服务商聚合，展开查看模型细分表与 tokens 分布
-- 最近调用记录：时间、agent、服务商/模型、状态、耗时
+- 四张二级卡（每卡统一三段：总用量 / 每日用量 / 实时 tokens 分布 + 最近调用记录）：
+  - **预设统计**：按 DSH 预设聚合，主 Agent / subagent 两口径分开计数
+  - **专业 Agent 统计**：每个专业 agent 一卡，外加「主模型」分组卡（主 agent 含 subagent 经插件通路的用量归组对账）
+  - **账号级统计**：按真实账号聚合（同一账号的多通路用量归并一卡——含包装路由与宿主官方路由），模型细分表与 tokens 分布展开查看
+  - **全局统计**：全局调用数 / 失败数 / 入出 tokens 汇总
+- **计数口径**：账号级调用数 = 请求口径（每次 LLM 请求恰记一条，覆盖全部路由形态）；token / 耗时 / 失败数 = 调用明细口径——插件自有流才有 token，直连 provider 端点无 token 上报时显示 0
+- CSV 导出三级（agent / account / preset），一键清空统计，每 2 秒自动刷新
 
 ## 常见问题
 
