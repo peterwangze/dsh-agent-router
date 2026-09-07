@@ -117,6 +117,49 @@ window.__ModuleLoader__.load({
       return rosterDisplayName(names, 'agent', agentKey) ?? agentKey
     }
 
+    /**
+     * FIX-031 显示名单点（配置面 roster → 用户可见名）的**构建函数**（D10
+     * 微批 8 提取为真函数——浏览器包 exports 面可测，G9-G12 先例）。建键
+     * 形态 `${kind}|${清洁键}`——kind 参与键空间，provider 账号与同名 OAuth
+     * 账号/池/子代理条目不会互相顶掉。
+     *
+     * D10（第三轮复验）：包装路由 twin 目录条目（provider 以
+     * WRAP_ROUTE_SUFFIX 结尾——多模态接管变体，宿主目录 displayName 带
+     * 「+ 多模态」类标记）是路由构件不是账号：剥后缀后与真实条目同键，
+     * 后写入会顶掉真实显示名（用户实证「DeepSeek + 多模态」污染账号卡标题，
+     * DEC-029② 实现路径不可见）——**排除而非覆盖序技巧**（twin 根本不入
+     * roster，顺序无关）。宿主模型选择器里 twin 条目自身的「+ 多模态」标记
+     * 是宿主 UX 功能指示（用户已认可），不经本函数、不受影响。
+     * @param {Array} providers 宿主 llm providers 目录条目
+     * @param {object} catalog 配置面目录（oauthAccounts/pools/cliAgents/agents）
+     * @param {object} configuredAgents 设置草稿中的 agents 映射（agent 名兜底）
+     * @returns {Map<string, string>} `${kind}|${清洁键}` → 显示名
+     */
+    function buildAccountNames(providers, catalog, configuredAgents) {
+      const names = new Map()
+      for (const entry of providers ?? []) {
+        if (!entry || typeof entry.provider !== 'string' || !entry.displayName) continue
+        if (entry.provider.endsWith(WRAP_ROUTE_SUFFIX)) continue
+        names.set(`provider|${accountDisplayKeyOf(entry.provider)}`, entry.displayName)
+      }
+      for (const entry of catalog?.oauthAccounts ?? []) {
+        if (entry && entry.id && entry.name) names.set(`oauth|${accountDisplayKeyOf(`oauth:${entry.id}`)}`, entry.name)
+      }
+      for (const entry of catalog?.pools ?? []) {
+        if (entry && entry.id && entry.name) names.set(`pool|${accountDisplayKeyOf(`oauth:pool:${entry.id}`)}`, entry.name)
+      }
+      for (const entry of catalog?.cliAgents ?? []) {
+        if (entry && entry.id && entry.name) names.set(`cli|${accountDisplayKeyOf(`cli:${entry.id}`)}`, entry.name)
+      }
+      for (const entry of catalog?.agents ?? []) {
+        if (entry && entry.id && entry.name) names.set(`agent|${entry.id}`, entry.name)
+      }
+      for (const [id, agent] of Object.entries(configuredAgents ?? {})) {
+        if (agent && agent.name && !names.has(`agent|${id}`)) names.set(`agent|${id}`, agent.name)
+      }
+      return names
+    }
+
 
     // ── wire codecs（与宿主 lib/schemas.js 同形状的轻量校验器）──────────────
     function wireCheck(spec, value, path) {
@@ -2405,28 +2448,10 @@ window.__ModuleLoader__.load({
       // kind 参与键空间：provider 账号与同名 OAuth 账号/池/子代理条目互不顶掉。
       const accountKindKey = (kind, key) => `${kind ?? 'provider'}|${key}`
       const accountTotalsByKindId = stats ? new Map((stats.accountTotals ?? []).map((entry) => [accountKindKey(entry.accountKind, accountDisplayKeyOf(entry.provider)), entry])) : new Map()
-      // FIX-031 显示名单点（配置面 roster → 用户可见名）：建键形态
-      // `${kind}|${清洁键}`——kind 参与键空间，provider 账号与同名 OAuth 账号/
-      // 池/子代理条目不会互相顶掉；统计面所有键→名映射经此一处（P5）。
-      const accountNames = new Map()
-      for (const entry of providers) {
-        if (entry && typeof entry.provider === 'string' && entry.displayName) accountNames.set(`provider|${accountDisplayKeyOf(entry.provider)}`, entry.displayName)
-      }
-      for (const entry of (state.catalog?.oauthAccounts ?? [])) {
-        if (entry && entry.id && entry.name) accountNames.set(`oauth|${accountDisplayKeyOf(`oauth:${entry.id}`)}`, entry.name)
-      }
-      for (const entry of (state.catalog?.pools ?? [])) {
-        if (entry && entry.id && entry.name) accountNames.set(`pool|${accountDisplayKeyOf(`oauth:pool:${entry.id}`)}`, entry.name)
-      }
-      for (const entry of (state.catalog?.cliAgents ?? [])) {
-        if (entry && entry.id && entry.name) accountNames.set(`cli|${accountDisplayKeyOf(`cli:${entry.id}`)}`, entry.name)
-      }
-      for (const entry of (state.catalog?.agents ?? [])) {
-        if (entry && entry.id && entry.name) accountNames.set(`agent|${entry.id}`, entry.name)
-      }
-      for (const [id, agent] of Object.entries(value.agents ?? {})) {
-        if (agent && agent.name && !accountNames.has(`agent|${id}`)) accountNames.set(`agent|${id}`, agent.name)
-      }
+      // FIX-031 显示名单点（配置面 roster → 用户可见名）：构建经
+      // buildAccountNames 单点（D10 提取为真函数——含 twin 目录条目排除），
+      // 统计面所有键→名映射经此一处（P5）。
+      const accountNames = buildAccountNames(providers, state.catalog, value.agents)
       // FIX-031：专业 Agent 分组行 = 配置的专业 agent + 「主模型」统一实体
       // （twin/oauth 两条内部记录路径归一后只此一行；无数据不出卡）。
       const agentStatsRows = [
@@ -5232,6 +5257,9 @@ window.__ModuleLoader__.load({
     exports.accountDisplayKeyOf = accountDisplayKeyOf
     exports.agentDisplayKeyOf = agentDisplayKeyOf
     exports.statsProviderLabelOf = statsProviderLabelOf
+    // D10（微批 8）：roster 构建真函数导出（判别测试直驱——twin 目录条目
+    // 排除的行为锁；产品运行零额外占用）。
+    exports.buildAccountNames = buildAccountNames
     // EVO-012 批二 C 判别测试钩子：清空会话产物表（渲染测试跨块隔离；产品
     // 运行零占用——模块级状态只被 addSessionProduct/SessionGallery 读写）。
     exports.resetSessionGallery = () => {

@@ -46,6 +46,8 @@
  * 微批 7（D9 第二轮复验）：D19/D19a resolver 身份与路由健康度解耦（真实
  * RouterService + 真实 resolver 闭包——降级态配置推导兜底归并）/ D19b-d
  * maybeReload 门槛 = 身份就绪（降级触发、真未知不触发不消费）。
+ * 微批 8（D10 第三轮复验）：D20/D20b/D20c twin 目录条目不入 roster（真实
+ * buildAccountNames 函数驱动 + 源码契约——显示名不被「+ 多模态」标记污染）。
  * @module dsh-agent-router/tests/fix-031-attribution
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -506,6 +508,32 @@ console.log('FIX-031 统计归因单点 + 路由透明性判别组：')
   service.stats.close()
   emptyService.stats.close()
   rmSync(work, { recursive: true, force: true })
+}
+{
+  // D20（微批 8，D10 第三轮复验）：twin 目录条目污染账号显示名。根因：宿主
+  // 目录 providers 含包装路由 twin 条目（provider 带 -router 后缀、
+  // displayName 带接管变体标记「+ 多模态」），旧 roster 构建剥后缀后与真实
+  // 条目同键 → 后写入顶掉真实显示名（DEC-029② 实现路径不可见）。修复 =
+  // twin 条目不入 roster（排除而非覆盖序技巧，顺序无关）。真实
+  // buildAccountNames（浏览器包 exports——G9-G12 先例）驱动。
+  const bundle20 = await loadBrowserBundle()
+  const catalog20 = { oauthAccounts: [{ id: 'chatgpt', name: 'ChatGPT 订阅' }], pools: [], cliAgents: [], agents: [{ id: 'vision', name: '视觉' }] }
+  // twin 条目后置——最大化复现旧代码「后写入顶掉」的覆盖条件。
+  const providers20 = [
+    { provider: 'deepseek-official', displayName: 'DeepSeek' },
+    { provider: 'glm-local', displayName: 'GLM 本地' },
+    { provider: 'deepseek-official-router', displayName: 'DeepSeek + 多模态' },
+    { provider: 'glm-local-router', displayName: 'GLM 本地 + 多模态' },
+  ]
+  const names20 = bundle20?.buildAccountNames?.(providers20, catalog20, {})
+  check('D20: twin 目录条目不入 roster（真实构建函数：twin 后置序下真实显示名不被「+ 多模态」标记污染）', !!names20 && names20.get('provider|deepseek-official') === 'DeepSeek' && names20.get('provider|glm-local') === 'GLM 本地' && !names20.has('provider|deepseek-official-router'), names20 && [...names20.entries()])
+  check('D20b: 对照组——无 twin 条目时 roster 不变（真实条目 + oauth 账号名 + agent 名照常；configuredAgents 兜底）', (() => {
+    const clean = bundle20?.buildAccountNames?.([providers20[0], providers20[1]], catalog20, { draw: { name: '绘图' } })
+    return !!clean && clean.get('provider|deepseek-official') === 'DeepSeek' && clean.get('oauth|chatgpt') === 'ChatGPT 订阅' && clean.get('agent|vision') === '视觉' && clean.get('agent|draw') === '绘图'
+  })())
+  // 源码契约（RED 锚定）：构建函数含 twin 排除行（旧代码无此行——该断言在
+  // 基线上亦红，与 D20/D20b 的 exports 缺失失败形态互补）。
+  check('D20c: roster 构建含 twin 排除行（endsWith(WRAP_ROUTE_SUFFIX) 跳过——排除而非覆盖序技巧）', /for \(const entry of providers \?\? \[\]\) \{\s*if \(!entry \|\| typeof entry\.provider !== 'string' \|\| !entry\.displayName\) continue\s*if \(entry\.provider\.endsWith\(WRAP_ROUTE_SUFFIX\)\) continue/.test(clientSource) && !/for \(const entry of providers\) \{\s*if \(entry && typeof entry\.provider === 'string' && entry\.displayName\) accountNames\.set/.test(clientSource))
 }
 {
   // D18（微批 6，R3 保留项 N2）：reload 转换链后的 persist 复检。真实交错——
