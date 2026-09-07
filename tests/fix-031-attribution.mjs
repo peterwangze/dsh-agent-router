@@ -36,6 +36,8 @@
  * 纯函数非法 resolver 全形态 D14/D14b）；D7 账号级计数解除 preset 门控
  * （D15/D15b/D15c 账号视图 + 盘面/导出兼容；D16/D16b 预设视图分流 + 站点
  * 门控解除源码契约）。
+ * 微批 4（R2 保留项 N1）：D12d 宿主路由 **scope 行**（D6 生产主路径——插件
+ * 在宿主路由通路无 call 记录位点）全链判别 + resolver 未激活回落对照。
  * @module dsh-agent-router/tests/fix-031-attribution
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -370,7 +372,22 @@ console.log('FIX-031 统计归因单点 + 路由透明性判别组：')
   store.record({ agentId: MAIN_MODEL_AGENT_ID, provider: 'openai-codex', model: 'gpt-5.6-sol', ok: true, ms: 50, at: T0 + 200 })
   const after = store.snapshot()
   check('D12c: resolver 动态失效（路由未激活/账号未知）→ 新行回落独立实体（不伪装进已知账号；已归并不回滚）', after.accountTotals.length === 2 && after.accountTotals.find((row) => row.provider === 'chatgpt').calls === 21 && !!after.accountTotals.find((row) => row.provider === 'openai-codex' && row.accountKind === 'host-route' && row.calls === 1), after.accountTotals.map((row) => `${row.provider}/${row.accountKind}:${row.calls}`))
+  // D12d（微批 4，R2 保留项 N1）：D6 的**生产主路径**是 scope 行——宿主官方
+  // 路由请求经宿主 pi-ai 适配器，插件在该通路无 call 记录位点（用户实证的
+  // openai-codex 用量即请求口径 scope 行形态）。真实 recordScope →
+  // #foldScope → #accountView 全链驱动（不经手搓中间态）。
+  routeAccount = 'chatgpt'
+  const scopeStore = new StatsStore({ dir: join(work, 's-scope'), persist: false, now: NOW_AT, hostRouteAccountKeyOf: () => (routeAccount ? `oauth:${routeAccount}` : null) })
+  for (let i = 0; i < 3; i++) scopeStore.recordScope({ preset: '', origin: 'main', provider: 'openai-codex', model: 'gpt-5.6-sol', at: T0 + 300 + i })
+  const scopeMergedSnap = scopeStore.snapshot()
+  const scopeMergedRow = scopeMergedSnap.accountTotals.find((row) => row.provider === 'chatgpt')
+  check('D12d: 宿主路由 scope 行（生产主路径）全链归并——accountScope 权威键落 oauth:<accountId>、快照单卡计数含该请求', scopeMergedSnap.accountTotals.length === 1 && !!scopeMergedRow && scopeMergedRow.accountKind === 'oauth' && scopeMergedRow.calls === 3 && scopeMergedRow.requestCalls === 3 && scopeStore.accountScope.get('oauth:chatgpt')?.calls === 3 && scopeStore.accountScope.get('openai-codex') === undefined, { snap: scopeMergedSnap.accountTotals, scopeKeys: [...scopeStore.accountScope.keys()] })
+  routeAccount = ''
+  scopeStore.recordScope({ preset: '', origin: 'main', provider: 'openai-codex', model: 'gpt-5.6-sol', at: T0 + 400 })
+  const scopeFallbackSnap = scopeStore.snapshot()
+  check('D12d 对照：同 scope 形态 resolver 未激活 → 落入独立 host-route 实体（回落对照——不并进已知账号，已归并不回滚）', scopeFallbackSnap.accountTotals.length === 2 && scopeFallbackSnap.accountTotals.find((row) => row.provider === 'chatgpt').calls === 3 && !!scopeFallbackSnap.accountTotals.find((row) => row.provider === 'openai-codex' && row.accountKind === 'host-route' && row.calls === 1) && scopeStore.accountScope.get('openai-codex')?.calls === 1, { snap: scopeFallbackSnap.accountTotals.map((row) => `${row.provider}/${row.accountKind}:${row.calls}`), scopeKeys: [...scopeStore.accountScope.keys()] })
   store.close()
+  scopeStore.close()
   rmSync(work, { recursive: true, force: true })
 }
 {
