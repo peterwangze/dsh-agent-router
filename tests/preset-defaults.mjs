@@ -413,13 +413,17 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     return agent.options.provider === SUB_MODEL.provider && agent.options.model === SUB_MODEL.model
       && apiProxy.calls.length === 0 && defaults.state.saveCalls.length === 0
   })
-  await dcheck('B2 subagent 未配 subagent、配 main → child.options=main（继承）', async () => {
+  // FIX-032 语义修订（原断言锁定「child.options=main（继承）」= 固化预设配置值
+  // ——报障 2026-09-07 主诉）：subagent 留空 = 跟随主 agent **当前**模型——父在
+  // NATIVE 上运行（即主 agent 当前模型），child 保持宿主继承值，不被拉回
+  // cfg.main。旧实现（cfg.main 回落）对本断言必败（RED）。
+  await dcheck('B2 subagent 未配 subagent、配 main → 零 fixup：child 保持宿主继承的父当前路由（FIX-032；旧实现固化为 cfg.main 必败）', async () => {
     const apiProxy = makeApiProxy({ defaults: makeDefaults() })
     const agent = makeAgent({ id: 'child-2', header: subHeader(), options: { ...NATIVE }, requestHeader: () => null })
     const parent = { options: { ...NATIVE } }
     await fireCreated(makeCtx({ apiProxy, agents: { get: () => parent } }),
       makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
-    return agent.options.provider === MAIN_MODEL.provider && agent.options.model === MAIN_MODEL.model && apiProxy.calls.length === 0
+    return agent.options.provider === NATIVE.provider && agent.options.model === NATIVE.model && apiProxy.calls.length === 0
   })
   await dcheck('B3 subagent 全未配置 → 零动作（天然继承 parent.options）', async () => {
     const apiProxy = makeApiProxy({ defaults: makeDefaults() })
@@ -436,20 +440,26 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
       makeService({ governance: presetConfig({ main: MAIN_MODEL, subagent: SUB_MODEL }) }), agent)
     return agent.options.model === 'claude-explicit' && apiProxy.calls.length === 0
   })
-  await dcheck('B5 parent 不在注册表（父创建早于配置等边缘）→ fixup 仍生效', async () => {
+  // FIX-032 语义修订：subagent 未配置时不再 fixup（零动作），保护降级路径
+  //（父查不到时对**已配置 subagent 模型**的 fixup 仍生效）由 subagent 显式
+  // 配置承载——原 main-only 形态在新语义下为天然零动作（见 M 节）。
+  await dcheck('B5 parent 不在注册表（父创建早于配置等边缘）→ 保护降级：subagent 显式配置 fixup 仍生效', async () => {
     const apiProxy = makeApiProxy({ defaults: makeDefaults() })
     const agent = makeAgent({ id: 'child-5', header: subHeader(), options: { ...NATIVE }, requestHeader: () => null })
     await fireCreated(makeCtx({ apiProxy, agents: { get: () => undefined } }),
-      makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
-    return agent.options.provider === MAIN_MODEL.provider && apiProxy.calls.length === 0
+      makeService({ governance: presetConfig({ main: MAIN_MODEL, subagent: SUB_MODEL }) }), agent)
+    return agent.options.provider === SUB_MODEL.provider && agent.options.model === SUB_MODEL.model && apiProxy.calls.length === 0
   })
-  await dcheck('B6 options 冻结形态（Object.freeze）→ warn 不炸、无 selectModel', async () => {
+  // FIX-032 语义修订：options 冻结防御仅在**存在写目标**（cfg.subagent 已
+  // 配置）时可达——subagent 未配置 = 零动作零触碰，不产生 warn（新语义下
+  // main-only 形态在 target 判空处早退）。守卫改为 subagent 显式配置形态。
+  await dcheck('B6 options 冻结形态（Object.freeze）→ warn 不炸、无 selectModel（FIX-032：以 subagent 显式配置承载冻结防御路径）', async () => {
     const apiProxy = makeApiProxy({ defaults: makeDefaults() })
     const agent = makeAgent({ id: 'child-6', header: subHeader(), options: Object.freeze({ ...NATIVE }), requestHeader: () => null })
     const ctx = makeCtx({ apiProxy, agents: { get: () => ({ options: { ...NATIVE } }) } })
     let rejected = null
     try {
-      await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+      await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL, subagent: SUB_MODEL }) }), agent)
     } catch (error) { rejected = error }
     return rejected === null && apiProxy.calls.length === 0
       && ctx.logger.warnCalls.some((line) => line.includes('preset default') || line.includes('frozen') || line.includes('options'))
@@ -1031,6 +1041,102 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     await fireCreated(ctxB, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
     const faceHit = presetDiagnostics().entries.find((entry) => entry.session === 'sess-k7b' && entry.skip === 'face-unavailable')
     return !!producedHit && !!faceHit
+  })
+}
+
+// ── M. FIX-032 判别：subagent 未配置 → 跟随主 agent 当前（会话实际）模型 ──
+// 报障（用户 2026-09-07）：预设 subagent 未设置模型时，会话内手动切换主
+// agent 模型后，新派生 subagent 仍走预设配置的模型，不跟随用户切换。
+// 根因：subagentFixup 的 target 链在 cfg.subagent 未设置时回落 cfg.main
+//（预设配置的静态值）——把 README L158「留空 = 继承主 Agent 模型」实现成
+// 「固化到配置时写入的值」。宿主继承基线 parentAgentOptionsForDelegation
+//（dsh-subagent lib/index.js L603-613）本已把**父最近请求头路由**（会话
+// 实际模型——含手动切换后的请求路由；首请求前回落 parent.options）传给
+// child；fixup 再改写为 cfg.main = 主动覆盖宿主继承——「会话内手动选择
+// 永远优先（用户主权）」（README L16）被子代理路径击穿。
+// 判别：M1 复刻报障主诉（父头路由 ≠ cfg.main，旧实现必败 RED）；M2-M5 =
+// 语义四态守卫（README L16/L158/L165 承诺）。夹具与 K 节同形（宿主面：
+// parent.session.requestHeader() → {config} 即「最近请求头路由」事实源）。
+{
+  const makeParentM = ({ options, headerRoute }) => ({
+    options,
+    session: {
+      id: 'parent-m',
+      requestHeader: headerRoute ? () => ({ config: headerRoute }) : undefined,
+    },
+  })
+  const subChildM = ({ id, options, parentSession = 'parent-m' }) => ({
+    options,
+    session: { id, header: { origin: 'subagent', agentPreset: PRESET_ID, parentSession, delegationDepth: 1 } },
+  })
+
+  // M1 核心判别（报障主诉）：主会话播种 P.main（parent.options 快照）→
+  // 用户会话内手动切换（宿主原生 selectModel，主权面）→ 主 agent 下一请求
+  // 头路由 = 切换后模型 → 派生 subagent 经宿主基线继承该路由 → 断言
+  // subagent 停留在主 agent 当前模型。旧实现（fixup 改写为 cfg.main）必败。
+  await dcheck('M1 主会话手动切换后（父头路由 ≠ cfg.main）→ subagent 留空 = 跟随主 agent 当前模型（旧实现固化 cfg.main 必败 RED）', async () => {
+    const apiProxy = makeApiProxy({ defaults: makeDefaults() })
+    const SWITCHED = { provider: 'anthropic', model: 'user-switched-mid-session' }
+    const parent = makeParentM({ options: { ...MAIN_MODEL }, headerRoute: SWITCHED }) // options=播种快照（=cfg.main）；头路由=切换后实际模型
+    const child = subChildM({ id: 'child-m1', options: { ...SWITCHED } }) // 宿主 parentAgentOptionsForDelegation：子继承父头路由
+    const ctx = makeCtx({ apiProxy, agents: { get: (id) => (id === 'parent-m' ? parent : undefined) } })
+    await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), child)
+    return child.options.provider === SWITCHED.provider && child.options.model === SWITCHED.model
+      && apiProxy.calls.length === 0 // 零 selectModel / 零全局写（纯 options 路径不动）
+  })
+
+  // M2 守卫（跟随当前 = 未切换时即播种值）：父无请求头（未发请求）→ 宿主
+  // 回落 parent.options（=播种写入的 cfg.main）→ child 继承之并保持——
+  // 「跟随主 agent 当前模型」在未切换场景与播种值一致（新旧实现同绿，
+  // 防「跟随当前」被误读为「回落全局默认」）。
+  await dcheck('M2 未切换（父无请求头，options=播种值）→ child 继承并保持 cfg.main 值（跟随当前的未切换形态）', async () => {
+    const apiProxy = makeApiProxy({ defaults: makeDefaults() })
+    const parent = makeParentM({ options: { ...MAIN_MODEL } })
+    const child = subChildM({ id: 'child-m2', options: { ...MAIN_MODEL } }) // 旧宿主形态：child = parent.options 副本
+    const ctx = makeCtx({ apiProxy, agents: { get: () => parent } })
+    await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), child)
+    return child.options.provider === MAIN_MODEL.provider && child.options.model === MAIN_MODEL.model
+      && apiProxy.calls.length === 0
+  })
+
+  // M3 守卫（验收②）：subagent 显式配置 → 不被主会话切换拖走——父当前
+  // 路由已切换（头路由），fixup 仍落 cfg.subagent（显式配置优先）。
+  await dcheck('M3 subagent 显式配置 + 主会话已切换 → 仍落 cfg.subagent（不被主当前模型覆盖）', async () => {
+    const apiProxy = makeApiProxy({ defaults: makeDefaults() })
+    const SWITCHED = { provider: 'anthropic', model: 'user-switched-mid-session' }
+    const parent = makeParentM({ options: { ...MAIN_MODEL }, headerRoute: SWITCHED })
+    const child = subChildM({ id: 'child-m3', options: { ...SWITCHED } })
+    const ctx = makeCtx({ apiProxy, agents: { get: () => parent } })
+    await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL, subagent: SUB_MODEL }) }), child)
+    return child.options.provider === SUB_MODEL.provider && child.options.model === SUB_MODEL.model
+      && apiProxy.calls.length === 0
+  })
+
+  // M4 守卫（验收③）：预设未配置 → 零行为变化——不做任何 fixup（宿主同构
+  // 基线路径不动），child 保持继承值，零 selectModel 零全局写。
+  await dcheck('M4 预设未配置（不在字典）→ 零动作：child 保持宿主继承路由（零行为变化）', async () => {
+    const apiProxy = makeApiProxy({ defaults: makeDefaults() })
+    const SWITCHED = { provider: 'anthropic', model: 'user-switched-mid-session' }
+    const parent = makeParentM({ options: { ...MAIN_MODEL }, headerRoute: SWITCHED })
+    const child = subChildM({ id: 'child-m4', options: { ...SWITCHED } })
+    const ctx = makeCtx({ apiProxy, agents: { get: () => parent } })
+    await fireCreated(ctx, makeService({}), child)
+    return child.options.provider === SWITCHED.provider && child.options.model === SWITCHED.model
+      && apiProxy.calls.length === 0
+  })
+
+  // M5 守卫（验收④）：显式指定模型的子代理（专业 agent 委派 agentOptions /
+  // workflow model 覆盖）——child ≠ 继承基线 → 不碰（subagent 未配置时
+  // 零动作天然不碰；显式值原样保留）。
+  await dcheck('M5 child 显式覆盖（≠ 继承基线，专业 agent/workflow 指定模型）→ 不受影响（原样保留）', async () => {
+    const apiProxy = makeApiProxy({ defaults: makeDefaults() })
+    const SWITCHED = { provider: 'anthropic', model: 'user-switched-mid-session' }
+    const parent = makeParentM({ options: { ...MAIN_MODEL }, headerRoute: SWITCHED })
+    const child = subChildM({ id: 'child-m5', options: { provider: 'openai-codex', model: 'gpt-5.6-terra' } }) // 显式指定 ≠ 基线
+    const ctx = makeCtx({ apiProxy, agents: { get: () => parent } })
+    await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), child)
+    return child.options.provider === 'openai-codex' && child.options.model === 'gpt-5.6-terra'
+      && apiProxy.calls.length === 0
   })
 }
 
