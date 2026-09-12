@@ -13,11 +13,18 @@
 //   抽象声明不在运行时原型，静态补集（纯枚举会漏检）。
 // - F3：test 3 marker 断言增强（system 含 MARKER 才是改写路径核心证据）。
 //
+// FIX-034：守卫扩展——契约枚举校验从 twin 单覆盖扩展为 twin + oauth-llm 双
+// 适配器（EVO-009 createOauthAdapter 同为手工对象字面量，宿主消费点
+// :1996-1998 直调缺方法即同型断裂）；7b 夹具勘正为宿主 schema 实形
+// （LlmImageRequestPricing 方法式，lib/types/types.d.ts:171-178）；7c 补
+// wrapper 取价抛错 fail-safe 判别（FIX-033 R0 P2×2 归并）。
+//
 // 本文件独立可跑（node tests/adapter-parity.mjs），并导出 runner 供 smoke
 // 接线（接线由后续任务统一执行）。
 import { pathToFileURL } from 'node:url'
 import { LlmAdapter } from '@deepseek-ai/dsh-llm'
 import { createWrapAdapter, WRAP_SUFFIX } from '../lib/wrapper.js'
+import { createOauthAdapter, OAUTH_PROVIDER } from '../lib/oauth-llm.js'
 
 /**
  * 宿主 LlmAdapter 契约方法清单 = 动态枚举并集：
@@ -91,6 +98,32 @@ export async function runAdapterParityTests(check) {
     for (const method of ADAPTER_CONTRACT) {
       check(`twin implements adapter contract method: ${method}`, typeof twin[method] === 'function')
     }
+  }
+
+  // 1b. FIX-034：oauth-llm 适配器接口奇偶——同一契约清单（ADAPTER_CONTRACT
+  //     动态枚举宿主 LlmAdapter.prototype 六方法）对 createOauthAdapter 产出
+  //     对象同构校验：EVO-009 适配器同为手工对象字面量（无基类默认可继承），
+  //     宿主 LlmRuntime.imageRequestPricing 消费点（lib/index.js:1996-1998）
+  //     经 adapters.get(provider).adapter.imageRequestPricing 直调——缺任一
+  //     契约方法即同型 "adapter.imageRequestPricing is not a function" 断裂
+  //     （FIX-033 Developer 上报的 twin 同缺口在本适配器的镜像形状）。
+  //     工厂构造期零依赖（ctx/service 仅在方法体内消费）——契约面校验传
+  //     null 即可，不引 service 夹具（EVO-009 内联夹具形态按现状适配，test 5
+  //     形状直传组维持不动）。
+  {
+    const oauthAdapter = createOauthAdapter(null, null)
+    for (const method of ADAPTER_CONTRACT) {
+      check(`oauth-llm adapter implements adapter contract method: ${method}`, typeof oauthAdapter[method] === 'function')
+    }
+    // 行为判别：chatgpt-oauth 路由未声明图片定价（端点无公开按图计价表，
+    // 不虚构数字）→ undefined（宿主 :1645 默认语义 "declares none"，消费者
+    // 回落中性估算）；同步零 I/O、不抛。误声明默认定价 / 异步化 / 抛错均红。
+    // 缺方法时降级为 'not-a-function' 哨兵而非崩溃调用（TDD RED 期可读失败）。
+    let oauthPricing = 'not-a-function'
+    if (typeof oauthAdapter.imageRequestPricing === 'function') {
+      oauthPricing = oauthAdapter.imageRequestPricing(OAUTH_PROVIDER, 'gpt-x')
+    }
+    check('oauth-llm: imageRequestPricing 未声明定价 → undefined（宿主 :1645 默认语义，同步零 I/O）', oauthPricing === undefined)
   }
 
   // 2. prepareCall 行为：返回 {model, stream}；model 经 twin resolveModel
@@ -257,8 +290,19 @@ export async function runAdapterParityTests(check) {
     }
 
     // 7b 原适配器声明定价：twin 同步透传同形返回 + 以原 provider id 委托。
+    //    FIX-034 F2-1（P10-④ 勘正）：夹具形状锚定宿主 schema 实形——
+    //    LlmImageRequestPricing = 方法式 `{ priceImages(images) }`（宿主
+    //    lib/types/types.d.ts:171-178：对一次请求投影的全部图片逐 occurrence
+    //    计价，返回与 images 索引对齐；单价形态 LlmImageRequestPrice
+    //    {visualTokens, text}，:159-164）。旧夹具 {perImageTokens,
+    //    perRequestImages} 系按心智模型伪造的字段式形状，宿主消费面零此
+    //    字段。勘正后 twin 透传语义断言不变（同形返回 + 原 provider 委托）。
     {
-      const PRICING = { perImageTokens: 85, perRequestImages: 1 }
+      const PRICING = {
+        priceImages(images) {
+          return images.map((ref) => ({ visualTokens: 85, text: `image:${ref.attachmentId}` }))
+        },
+      }
       const seenArgs = []
       const llmPriced = {
         registration: () => ({
@@ -275,6 +319,28 @@ export async function runAdapterParityTests(check) {
       const twinPriced = createWrapAdapter(llmPriced, 'fake-priced', [])
       const returned = twinPriced.imageRequestPricing('fake-priced' + WRAP_SUFFIX, 'm1')
       check('FIX-033: 原适配器声明定价 → twin 同步透传同形返回（宿主 :1996 消费面同构）', returned === PRICING && seenArgs.length === 1 && seenArgs[0].provider === 'fake-priced' && seenArgs[0].model === 'm1')
+    }
+
+    // 7c FIX-034 F2-2：原适配器取价抛错 → twin 回落 undefined 且不抛
+    //    （wrapper fail-safe 分支判别——计量元数据缺陷不击穿 token meter，
+    //    与 providerRetryPolicy 抛错回落同构方向）。红/绿演示：临时删
+    //    wrapper imageRequestPricing 的 try/catch fail-safe → 抛错上击 →
+    //    本断言红（判别力证明，非形式化用例）。
+    {
+      const llmThrowing = {
+        registration: () => ({
+          adapter: {
+            resolveModel: async (p, m) => ({ provider: p, id: m, name: m, inputModalities: ['text'] }),
+            imageRequestPricing() { throw new Error('pricing boom') },
+          },
+        }),
+        stream: async function* () { yield { type: 'text', text: 'ok' } },
+      }
+      const twinThrowing = createWrapAdapter(llmThrowing, 'fake-throw', [])
+      let threw = false
+      let returnedThrowing
+      try { returnedThrowing = twinThrowing.imageRequestPricing('fake-throw' + WRAP_SUFFIX, 'm1') } catch { threw = true }
+      check('FIX-034: 原适配器取价抛错 → twin 回落 undefined 且不抛（fail-safe 判别）', threw === false && returnedThrowing === undefined)
     }
   }
 }
