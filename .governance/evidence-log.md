@@ -606,3 +606,11 @@
 | REVIEW-FIX-036-R0 | FIX-036 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-FIX-036-R0-input.md; review-FIX-036-R0.md | Code Reviewer | 2026-09-12 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
 
 | TRIAGE-FIX-037 | FIX-037 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/FIX-037.json） | FIX-037.json | change-triage | 2026-09-12 | G11 | TRIAGED |
+
+| REVIEW-FIX-037-R0 | FIX-037 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-FIX-037-R0-input.md; review-FIX-037-R0.md | Code Reviewer | 2026-09-12 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| REVIEW-FIX-037-R1 | FIX-037 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 1） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-FIX-037-R1-input.md; review-FIX-037-R1.md | Code Reviewer | 2026-09-12 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| REVIEW-FIX-037-R2 | FIX-037 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 2） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-FIX-037-R2-input.md; review-FIX-037-R2.md | Code Reviewer | 2026-09-12 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| EV-183 | FIX-037 | development | **终批收账全链闭环（ARCH-004 演进链最后一批）**：投递链 a9e06da（六项收账 7 文件：skip 可观测三层/双向守卫 20-20 零假红〔stripComments 强化〕/S7 版本一致性判据〔7 包 + 告警+note 裁决〕/smoke 三死守卫〔真实数据 RED :: ["nav"]〕/镜像 detail+白名单截断〔SHA256 全等 B027C5A8…〕/措辞如实化）→ df96ddf（R0 P2 返工 4 文件：基线副本机器锁定双向 RED + 刷新点三处→四处 + S3 两包补集 + CI skip 文档化）→ c99b4cf（R1 文档精度 2 文件：环境化 skip 口径 ubuntu #SKIP 3 / Windows #SKIP 1 + 相对基线增量判据 + 71/82 计数）；**复审链 R0 0/0/3/7 → R1 0/0/1/1 → R2 0/0/0/0 三机录 APPROVED_WITH_NOTES/0**（R2「本链可终态通过」零新发现）；Coordinator 逐段门控复跑（ALL 20 SUITES + 4 RUNNER MODULES，`#SKIP 1` 与文档逐字对应）；两项授权锁扩展留痕（host-version-snapshot = R0 P2-1 第 4 刷新点）；台账保留 open：R0 P3×7 + CI 首跑回填两项 | 事实依据：REVIEW-FIX-037-R0/R1/R2 三机录行 + Coordinator 门控输出（26.4s exit 0 @c99b4cf）+ Developer 三段投递证据（双向 RED/假 runner 负向/skip 聚合实跑/镜像探针 9-9） | review-FIX-037-R{0,1,2}-input.md; review-FIX-037-R{0,1,2}.md; commits a9e06da/df96ddf/c99b4cf | Developer + Code Reviewer（R0/R1/R2 同一 Reviewer 连续复审）+ Coordinator 机录 | 2026-09-12 | G6 | **已完成（复审链终态通过）** | **ARCH-004 兼容性架构演进闭环达成**：分析→双审→B0-B6→契约对齐→收口→终批，15 任务全终态 |
