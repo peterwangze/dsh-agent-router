@@ -574,3 +574,7 @@
 | EV-178 | EVO-020 | 事故记录 | **D-4 worktree 清理误伤 pnpm store（已自愈）**：Developer 隔离 worktree 验证清理时 `git worktree remove --force` 穿越指向主仓库 node_modules 的 junction，误删 pnpm store 内 5+ 包内容（cordis/dsh-llm/schemastery 等）；处置 = 删除 node_modules 全量重建（pnpm install --frozen-lockfile，锁文件与跟踪文件零变化）+ 全量网复验 23/23 绿；**防再发规矩成立：后续任何 Agent 做 worktree 隔离验证，清理前 MUST 先删 junction 再 git worktree remove**（入维护手册候选） | 事实依据：Developer 自报完整链（命令/影响面/处置/复验输出）+ pnpm-lock.yaml git diff 为空 + 重建后全量网输出 | 本行即留痕；pnpm-lock 零变化实证 | Developer 自报 + Coordinator 机录 | 2026-09-12 | G6 | 已闭环（自愈+规矩成立） | 根因 = git worktree remove 对 junction 的穿越语义；候选入 README 维护段或 AGENTS.md |
 
 | REVIEW-EVO-020-R0 | EVO-020 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-EVO-020-R0-input.md; review-EVO-020-R0.md | Code Reviewer | 2026-09-12 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| REVIEW-EVO-021-R0 | EVO-021 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-EVO-021-R0-input.md; review-EVO-021-R0.md | Code Reviewer | 2026-09-12 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| TRIAGE-EVO-022 | EVO-022 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/EVO-022.json） | EVO-022.json | change-triage | 2026-09-12 | G11 | TRIAGED |
