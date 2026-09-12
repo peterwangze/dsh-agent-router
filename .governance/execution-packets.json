@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "generated_at": "2026-09-12T09:33:03",
+  "generated_at": "2026-09-12T21:17:16",
   "packets": {
     "ARCH-004": {
       "task_id": "ARCH-004",
       "priority": "P0",
-      "status": "**已启动**——2026-09-12 Coordinator 入账（.governance 快速通道：纯分析零产品代码修改，无 change-triage 义务）；过期锁清理（FIX-032/REL-012 TTL 均已过）；并行派发 Analyst（arch-004-dependency-inventory.md）+ Architect（arch-004-compatibility-design.md）；**用户预授权（2026-09-12）：分析完成后按推荐自动推进至兼容性架构演进闭环（发布/范围变更等关键决策点仍走 ask）**；**分析+双审+修订终态（2026-09-12）**——双产出（依赖清单 415 行 R1 冻结版 + 兼容性设计 468 行 R0 修订版）+ Design Reviewer R0 APPROVED_WITH_NOTES/0（锚点 37/37 零编造）+ Requirement Reviewer R1 APPROVED_WITH_NOTES/0（零 P-violation）+ 修订轮 W×7/S-5 全闭合（机录 REVIEW-ARCH-004-R0/R1；commits 9692ccb/3557298）；**实施链展开：EVO-018（B0）→ B1 → [B2∥B3] → B4 → B5 → B6 承载，批次定义 = 设计 §10**",
+      "status": "**已启动**——2026-09-12 Coordinator 入账（.governance 快速通道：纯分析零产品代码修改，无 change-triage 义务）；过期锁清理（FIX-032/REL-012 TTL 均已过）；并行派发 Analyst（arch-004-dependency-inventory.md）+ Architect（arch-004-compatibility-design.md）；**用户预授权（2026-09-12）：分析完成后按推荐自动推进至兼容性架构演进闭环（发布/范围变更等关键决策点仍走 ask）**；**分析+双审+修订终态（2026-09-12）**——双产出（依赖清单 415 行 R1 冻结版 + 兼容性设计 468 行 R0 修订版）+ Design Reviewer R0 APPROVED_WITH_NOTES/0（锚点 37/37 零编造）+ Requirement Reviewer R1 APPROVED_WITH_NOTES/0（零 P-violation）+ 修订轮 W×7/S-5 全闭合（机录 REVIEW-ARCH-004-R0/R1；commits 9692ccb/3557298）；**实施链终态（2026-09-12）：EVO-018(B0)/EVO-019(B1)/EVO-020(B2)/EVO-021(B3)/EVO-022(B4)/EVO-023(B5)/EVO-024(B6) + FIX-033/034/035/036/037 全部审查通过 + Coordinator 门控逐批独立复跑（终态 ALL 20 SUITES + 4 RUNNER MODULES PASSED）——兼容性架构演进闭环达成**；台账保留 open：R0/R1/R2 各级 P3 项 + CI 首跑回填 + 真机复验项",
       "goal": "ARCH-004 DSH 宿主升级兼容性设计系统性分析（用户指令 2026-09-12 四维：D1 依赖最小化 / D2 必需接口字段依赖解耦+单独维护 / D3 依赖严格校验与看护 / D4 依赖边界可调测性——早发现+低代价适配）；症状驱动 = ①部分 plugin 设置页崩溃 ②DSH 整体异常卡顿（插件已卸载止损——真机取证不可行，归因走代码级对照：插件宿主面期望 vs 升级后宿主源码）；执行 = Analyst 依赖全量清单+两症状归因域（change-impact-checklist）∥ Architect 四维兼容性架构设计（stage-architecture，ADR 候选+蓝军 ≥3）→ Design Reviewer + Requirement Reviewer 双审 → 用户实施裁决",
       "product_success_contract": {
         "user": "TO_BE_DEFINED: impacted persona for ARCH-004 DSH 宿主升级兼容性设计系统性分析（用户指令 2026-09-12 四维：D1 依赖最小化 / D2 必需接口字段依赖解耦+单独维护 / D3 依赖严格校验与看护 / D4 依赖边界可调测性——早发现+低代价适配）；症状驱动 = ①部分 plugin 设置页崩溃 ②DSH 整体异常卡顿（插件已卸载止损——真机取证不可行，归因走代码级对照：插件宿主面期望 vs 升级后宿主源码）；执行 = Analyst 依赖全量清单+两症状归因域（change-impact-checklist）∥ Architect 四维兼容性架构设计（stage-architecture，ADR 候选+蓝军 ≥3）→ Design Reviewer + Requirement Reviewer 双审 → 用户实施裁决",
@@ -129,14 +129,14 @@
       ],
       "source": "plan-tracker.md##当前活跃事项"
     },
-    "EVO-019": {
-      "task_id": "EVO-019",
+    "REL-012": {
+      "task_id": "REL-012",
       "priority": "P1",
-      "status": "**开发完成待审**——TRIAGE-EVO-018 机录；commit `3344f0d`（3 文件 +162/−12：死行删除 + peerDeps 8 项/deps 3 项 ^0.1.5-rc.2 实测基线 + README 兼容小节 + tests/host-version-snapshot.mjs 145 行 24 断言）；TDD 自然红 20 FAILURE→绿 + 判别红 12 FAILURE（9.9.9-FAKE）→复原 24/24；全量网 21/21→**22/22 零回退**；hooks 全过；上报 3 项额外发现（门控命令 glob 展开留 B6 / pnpm-lock 陈旧候选 / 真机复验后置）；**R0 Code Reviewer APPROVED_WITH_NOTES/unresolved_blockers=0 机录（REVIEW-EVO-018-R0）**——5 维+AI 专项全过、声称核验 4 核实+1 静态吻合、Coordinator 门控独立复跑 22/22 实测；**P1-1 裁决（禁止沉默搁置已落实）**：pnpm-lock 脱同步 → 绑定 EVO-019 批刷新+全量网复跑；P2-1 真机验收 → 显式延后用户复验批次；**终态（审查通过）——复验项台账：重装后设置页可打开（B0 声明面排除）**",
-      "goal": "EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
+      "status": "**E-4 R1（扩范围重审）NEEDS_CHANGE 机录**（REVIEW-REL-012-R1，revisit_required=true → next_round=REVIEW-REL-012-R2；审查员独立只读对象级复核〔自实现 zlib+tree diff、零命令执行〕：41 三分账复算吻合〔产品 16 + 治理 20 + E-1 5〕、schemas.js 行级纯增 35 行零删改、host-abi 全域零落盘 → **本版不产生新降级边界**、16 条审查记录全文在档）：**唯一 BLOCKING = F-1 版本位**（重划后含新增能力面〔host-abi 8 文件 + hostFaceDiagnostics RPC + 设置页健康面板〕+ 支持面收窄 → PATCH 不成立；前置「小版本」授权成立于旧范围、重划未重述）→ **用户 2026-09-12 ask 裁决 A 升位 0.5.0**（DEC-032 入册）；W×5（F-2 L14「零探测」不实〔实为条件式读时复检——空快照或含非 ok 面触发探针〕/ F-3 账目 40 vs 41〔裁定可接受：冻结锚点 + 兜底条款，收口 EV 回填终值〕/ F-4 收口 EV 覆盖 E-1~E-6 = MUST / F-5 回滚段须含数据备份与「插件回退 ≠ 宿主回退」限定 + 未验证组合如实标注〔E-5c 执行〕/ F-6 README 前置口径〔已由增补 1/2 消歧〕）；S×4（F-7 snapshot 断言计数须实测回填 / F-8 llm-selection 注释过度断言〔台账——涉产品代码注释，不随版动〕/ F-9 tracker 总览陈旧〔**本轮已修**〕/ F-10 降级段点判据记收口 EV）；**返工派发**（package.json + README + CHANGELOG：升位 0.5.0 + F-2 措辞如实 + F-7 计数实测 + 范围账目重算）→ 落地后 **E-2 门控与 E-3 隔离冷装须重跑** → **R2 复审**（同一 Release Reviewer，注入 R1 报告路径 + DEC-032 留痕）",
+      "goal": "REL-012 v0.4.6 发布链——FIX-032（预设 subagent 留空跟随主 agent 当前模型）承载：E-1 bump/CHANGELOG/README → E-2 门控全量复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 治理入仓 + push main + tag v0.4.6 + GitHub Release → E-6 归档检查；E-7 用户复验后置（用户裁决 2026-09-10「先提交修改并推送小版本承载修改」——重启受限，复验后告知）",
       "product_success_contract": {
-        "user": "TO_BE_DEFINED: impacted persona for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
-        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
+        "user": "TO_BE_DEFINED: impacted persona for REL-012 v0.4.6 发布链——FIX-032（预设 subagent 留空跟随主 agent 当前模型）承载：E-1 bump/CHANGELOG/README → E-2 门控全量复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 治理入仓 + push main + tag v0.4.6 + GitHub Release → E-6 归档检查；E-7 用户复验后置（用户裁决 2026-09-10「先提交修改并推送小版本承载修改」——重启受限，复验后告知）",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for REL-012 v0.4.6 发布链——FIX-032（预设 subagent 留空跟随主 agent 当前模型）承载：E-1 bump/CHANGELOG/README → E-2 门控全量复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 治理入仓 + push main + tag v0.4.6 + GitHub Release → E-6 归档检查；E-7 用户复验后置（用户裁决 2026-09-10「先提交修改并推送小版本承载修改」——重启受限，复验后告知）",
         "non_goals": [
           "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
           "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
@@ -152,7 +152,7 @@
         ]
       },
       "acceptance_contract": {
-        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for REL-012 v0.4.6 发布链——FIX-032（预设 subagent 留空跟随主 agent 当前模型）承载：E-1 bump/CHANGELOG/README → E-2 门控全量复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 治理入仓 + push main + tag v0.4.6 + GitHub Release → E-6 归档检查；E-7 用户复验后置（用户裁决 2026-09-10「先提交修改并推送小版本承载修改」——重启受限，复验后告知）",
         "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
         "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
         "last_run": {
@@ -165,42 +165,42 @@
       "quality_budget": {
         "dimensions": {
           "performance": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for REL-012 v0.4.6 发布链——FIX-032（预设 subagent 留空跟随主 agent 当前模型）承载：E-1 bump/CHANGELOG/README → E-2 门控全量复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 治理入仓 + push main + tag v0.4.6 + GitHub Release → E-6 归档检查；E-7 用户复验后置（用户裁决 2026-09-10「先提交修改并推送小版本承载修改」——重启受限，复验后告知）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
             "exception": ""
           },
           "reliability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for REL-012 v0.4.6 发布链——FIX-032（预设 subagent 留空跟随主 agent 当前模型）承载：E-1 bump/CHANGELOG/README → E-2 门控全量复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 治理入仓 + push main + tag v0.4.6 + GitHub Release → E-6 归档检查；E-7 用户复验后置（用户裁决 2026-09-10「先提交修改并推送小版本承载修改」——重启受限，复验后告知）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
             "exception": ""
           },
           "security": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for REL-012 v0.4.6 发布链——FIX-032（预设 subagent 留空跟随主 agent 当前模型）承载：E-1 bump/CHANGELOG/README → E-2 门控全量复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 治理入仓 + push main + tag v0.4.6 + GitHub Release → E-6 归档检查；E-7 用户复验后置（用户裁决 2026-09-10「先提交修改并推送小版本承载修改」——重启受限，复验后告知）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
             "exception": ""
           },
           "accessibility": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for REL-012 v0.4.6 发布链——FIX-032（预设 subagent 留空跟随主 agent 当前模型）承载：E-1 bump/CHANGELOG/README → E-2 门控全量复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 治理入仓 + push main + tag v0.4.6 + GitHub Release → E-6 归档检查；E-7 用户复验后置（用户裁决 2026-09-10「先提交修改并推送小版本承载修改」——重启受限，复验后告知）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
             "exception": ""
           },
           "ux": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for REL-012 v0.4.6 发布链——FIX-032（预设 subagent 留空跟随主 agent 当前模型）承载：E-1 bump/CHANGELOG/README → E-2 门控全量复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 治理入仓 + push main + tag v0.4.6 + GitHub Release → E-6 归档检查；E-7 用户复验后置（用户裁决 2026-09-10「先提交修改并推送小版本承载修改」——重启受限，复验后告知）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
             "exception": ""
           },
           "maintainability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for REL-012 v0.4.6 发布链——FIX-032（预设 subagent 留空跟随主 agent 当前模型）承载：E-1 bump/CHANGELOG/README → E-2 门控全量复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 治理入仓 + push main + tag v0.4.6 + GitHub Release → E-6 归档检查；E-7 用户复验后置（用户裁决 2026-09-10「先提交修改并推送小版本承载修改」——重启受限，复验后告知）",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
@@ -209,9 +209,9 @@
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for REL-012 v0.4.6 发布链——FIX-032（预设 subagent 留空跟随主 agent 当前模型）承载：E-1 bump/CHANGELOG/README → E-2 门控全量复跑 → E-3 tarball 隔离冷装 → E-4 发布审查（Release Reviewer 独立）→ E-5 治理入仓 + push main + tag v0.4.6 + GitHub Release → E-6 归档检查；E-7 用户复验后置（用户裁决 2026-09-10「先提交修改并推送小版本承载修改」——重启受限，复验后告知）",
         "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
-        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**已 triage（TRIAGE-EVO-019 机录：unblocked/无新环）**——派发 Developer；验收 = 环形有界判别（>64）+ render 期零 probe 判别 + 全量网绿 + 锁文件同步；真机徽章截图 = 用户复验项)",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**E-4 终态 + E-5a 本地就绪（push 被凭据阻塞）**——E-1 `65201ad`（bump+CHANGELOG +33 + README 8 处；smoke 两跑 exit 0；tag 目标勘正 79d67c7）→ E-2 门控 **21/21 套件 exit 0**（Coordinator @65201ad）→ E-3 隔离冷装（重定向：pack **1,637,114B**/安装 exit 0/version 0.4.6/lib 15 模块/IMPORT OK keys=5；tarball 已暂存）→ E-4 Release Reviewer R0 **APPROVED_WITH_NOTES/unresolved_blockers=0** 机录（REVIEW-REL-012-R0：git reflog 直读对账/清单 13 项 100%/破坏性独立裁决非 breaking 四证/semver PATCH 合规/复验后置零预填；**W-1** 资产名逐字 `dsh-agent-router-0.4.6.tar.gz` + curl 200/1,637,114 终验=MUST、**W-2** 收口 EV 覆盖 E-1~E-6=MUST、S-1/S-2 建议）；**S-1 裁定留痕：遗留边缘（切换后未发请求即派生）台账候选、不随版披露**（README L165 措辞未超界 + EV-170 已机录）；**凭据阻塞实证（2026-09-10）**：gh token 失效 + GCM 无 github 存量（push --dry-run 无 TTY 崩）+ 无 GH_TOKEN/GITHUB_TOKEN → push/tag/Release 待凭据恢复；**用户裁决暂缓（2026-09-10 ask 面板「暂缓，保持就绪态」）——恢复程序 = gh auth login 后续链 E-5b push main + tag v0.4.6@续链时点 HEAD（≥5c7d321，含暂缓留痕——tag 目标随续链时点取最终推送头，REL-011 先例 tag 治理入仓 commit） → E-5c Release（资产名逐字 dsh-agent-router-0.4.6.tar.gz + curl 200/1,637,114 终验）→ E-6 归档 → W-2 收口合账 EV（E-1~E-6）**；E-5a 治理入仓本地完成（bc7533d）)",
         "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
         "status": "TO_BE_DEFINED",
         "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
@@ -237,7 +237,7 @@
         "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "Only change files required by this task row: **已 triage（TRIAGE-EVO-019 机录：unblocked/无新环）**——派发 Developer；验收 = 环形有界判别（>64）+ render 期零 probe 判别 + 全量网绿 + 锁文件同步；真机徽章截图 = 用户复验项",
+        "Only change files required by this task row: **E-4 终态 + E-5a 本地就绪（push 被凭据阻塞）**——E-1 `65201ad`（bump+CHANGELOG +33 + README 8 处；smoke 两跑 exit 0；tag 目标勘正 79d67c7）→ E-2 门控 **21/21 套件 exit 0**（Coordinator @65201ad）→ E-3 隔离冷装（重定向：pack **1,637,114B**/安装 exit 0/version 0.4.6/lib 15 模块/IMPORT OK keys=5；tarball 已暂存）→ E-4 Release Reviewer R0 **APPROVED_WITH_NOTES/unresolved_blockers=0** 机录（REVIEW-REL-012-R0：git reflog 直读对账/清单 13 项 100%/破坏性独立裁决非 breaking 四证/semver PATCH 合规/复验后置零预填；**W-1** 资产名逐字 `dsh-agent-router-0.4.6.tar.gz` + curl 200/1,637,114 终验=MUST、**W-2** 收口 EV 覆盖 E-1~E-6=MUST、S-1/S-2 建议）；**S-1 裁定留痕：遗留边缘（切换后未发请求即派生）台账候选、不随版披露**（README L165 措辞未超界 + EV-170 已机录）；**凭据阻塞实证（2026-09-10）**：gh token 失效 + GCM 无 github 存量（push --dry-run 无 TTY 崩）+ 无 GH_TOKEN/GITHUB_TOKEN → push/tag/Release 待凭据恢复；**用户裁决暂缓（2026-09-10 ask 面板「暂缓，保持就绪态」）——恢复程序 = gh auth login 后续链 E-5b push main + tag v0.4.6@续链时点 HEAD（≥5c7d321，含暂缓留痕——tag 目标随续链时点取最终推送头，REL-011 先例 tag 治理入仓 commit） → E-5c Release（资产名逐字 dsh-agent-router-0.4.6.tar.gz + curl 200/1,637,114 终验）→ E-6 归档 → W-2 收口合账 EV（E-1~E-6）**；E-5a 治理入仓本地完成（bc7533d）",
         "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
       ],
       "required_evidence": [
@@ -250,7 +250,7 @@
         "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
       ],
       "done_definition": [
-        "**已 triage（TRIAGE-EVO-019 机录：unblocked/无新环）**——派发 Developer；验收 = 环形有界判别（>64）+ render 期零 probe 判别 + 全量网绿 + 锁文件同步；真机徽章截图 = 用户复验项",
+        "**E-4 终态 + E-5a 本地就绪（push 被凭据阻塞）**——E-1 `65201ad`（bump+CHANGELOG +33 + README 8 处；smoke 两跑 exit 0；tag 目标勘正 79d67c7）→ E-2 门控 **21/21 套件 exit 0**（Coordinator @65201ad）→ E-3 隔离冷装（重定向：pack **1,637,114B**/安装 exit 0/version 0.4.6/lib 15 模块/IMPORT OK keys=5；tarball 已暂存）→ E-4 Release Reviewer R0 **APPROVED_WITH_NOTES/unresolved_blockers=0** 机录（REVIEW-REL-012-R0：git reflog 直读对账/清单 13 项 100%/破坏性独立裁决非 breaking 四证/semver PATCH 合规/复验后置零预填；**W-1** 资产名逐字 `dsh-agent-router-0.4.6.tar.gz` + curl 200/1,637,114 终验=MUST、**W-2** 收口 EV 覆盖 E-1~E-6=MUST、S-1/S-2 建议）；**S-1 裁定留痕：遗留边缘（切换后未发请求即派生）台账候选、不随版披露**（README L165 措辞未超界 + EV-170 已机录）；**凭据阻塞实证（2026-09-10）**：gh token 失效 + GCM 无 github 存量（push --dry-run 无 TTY 崩）+ 无 GH_TOKEN/GITHUB_TOKEN → push/tag/Release 待凭据恢复；**用户裁决暂缓（2026-09-10 ask 面板「暂缓，保持就绪态」）——恢复程序 = gh auth login 后续链 E-5b push main + tag v0.4.6@续链时点 HEAD（≥5c7d321，含暂缓留痕——tag 目标随续链时点取最终推送头，REL-011 先例 tag 治理入仓 commit） → E-5c Release（资产名逐字 dsh-agent-router-0.4.6.tar.gz + curl 200/1,637,114 终验）→ E-6 归档 → W-2 收口合账 EV（E-1~E-6）**；E-5a 治理入仓本地完成（bc7533d）",
         "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
         "Commit and push are completed for this single task."
       ],
