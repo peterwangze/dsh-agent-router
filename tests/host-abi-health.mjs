@@ -815,17 +815,19 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
       selfSatisfied.identical.length === 0 && selfSatisfied.objectInsideAnchor.length === 0 && selfSatisfied.foreignSourceHits.length === 0,
       { ...selfSatisfied, tableSize: ANCHOR_OBJECTS_3.length })
     // 9h-3（FIX-040 R0 P1-1-B / P2-1 收口）：**入表完备性自检**——metrics.mjs 内出现的
-    //   每个「…」候选锚名（逐行抽取，兼容跨行注释被折行/截断的形态）MUST **精确**登记在
-    //   ANCHOR_OBJECTS 首列（或锚串的子串，见下）⇒ **新增锚未入表即红**——把「完备性」由
-    //   人工改为机器看护（本批 P1-1 的失效链 = 新写死锚 + 表未收 + 声称「死锚即红」）。
-    //   判据强度（R1 P2-1(new) 收口）：用**精确匹配**而非子串包含式 `key.includes(label)`
-    //   ——后者会让「新标签恰为既有键子串」的笔误形态（漏字/截断）静默通过。仍允许的两种
-    //   合法形态：① label 本身即表键（精确）② 表键**包含** label 且 label 是**完整引号对**
-    //   内容（即 `${anchor}」` 形态——表键可以是「前缀 + 「label」」的更长锚串）。为此改判
-    //   为「表键以 `「label」` 结尾或等于 label」的双向精确判据，不再接受任意子串包含。
+    //   每个「…」候选锚名（逐行抽取，兼容跨行注释被折行/截断的形态）MUST 登记在
+    //   ANCHOR_OBJECTS 首列 ⇒ **新增锚未入表即红**——把「完备性」由人工改为机器看护
+    //   （本批 P1-1 的失效链 = 新写死锚 + 表未收 + 声称「死锚即红」）。
+    //   判据强度（R1 P2-1(new) 收口）：用**双向精确判据**而非子串包含式 `key.includes(label)`
+    //   ——后者会让「新标签恰为既有键子串」的笔误形态（漏字/截断）静默通过。允许的两种
+    //   合法形态：① label 精确等于某表键；② 某表键以 `「label」` 结尾（表键为「前缀 +
+    //   「label」」的更长锚串，如 `smoke.mjs「wrapper takes over default model」`）。
+    //   注（P2-1(new) 代码卫生）：早期用于兼容 `+「…」` 片段键的显式分支已随 P3-6（片段键
+    //   改整串键）删除——该形态现由上述判据②覆盖（表键以 `「label」` 结尾），无遗留分支。
     //   已知漏判面（P3-1(new) 如实披露）：`<12 字符` 的短名不参与本项（避免把普通中文
     //   引号文本误纳）⇒ **短名死锚不会被本项捕获**（当前 metrics.mjs 无 <12 字符的「…」段，
-    //   最短 22 字符；该阈值是显式保留的已知盲区，非声称无漏判）。
+    //   最短 22 字符；该阈值是显式保留的已知盲区，非声称无漏判；如需收紧可改为形态判据
+    //   或对短名加显式白名单）。
     {
       const metricsLines = metricsSource.split('\n')
       const tableKeys = ANCHOR_OBJECTS_3.map(([anchor]) => anchor)
