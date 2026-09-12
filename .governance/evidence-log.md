@@ -562,3 +562,9 @@
 | REVIEW-EVO-019-R0 | EVO-019 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-EVO-019-R0-input.md; review-EVO-019-R0.md | Code Reviewer | 2026-09-12 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
 
 | TRIAGE-EVO-020 | EVO-020 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/EVO-020.json） | EVO-020.json | change-triage | 2026-09-12 | G11 | TRIAGED |
+
+| EV-176 | FIX-034 | development | oauth-llm 契约补齐 + 守卫扩展 + R0 P2 归并（开发完成待审待提交）：工作区 diff lib/oauth-llm.js +31/−4（imageRequestPricing 镜像语义——恒 undefined 不虚构定价，宿主锚 :1645/:1639/:1996-1998 + types.d.ts:171-178 入注释；createOauthAdapter 工厂导出）+ tests/adapter-parity.mjs +68/−1（test 1b oauth-llm 六方法枚举同构 + F2-1 七b 夹具勘正为宿主 {priceImages(images)→{visualTokens,text}} 方法式 + F2-2 七c 抛错→undefined fail-safe 判别）；TDD 双级 RED（导入级→断言级恰 2 FAIL）→ GREEN 32 断言 + 7c 红绿演示；全量网 23/23 | 事实依据：Developer 结构化结论（本会话）+ git diff 工作区实测 + FIX-033 R0 台账（F2-1/F2-2）；目标对齐：补齐宿主 0.1.5-rc.2 LlmAdapter 契约面在第二适配器（oauth-llm）的最后缺口并使守卫覆盖双适配器，配合 FIX-033 恢复契约面全量看护，直接服务 RISK-003 宿主演进防御；用户影响: 获得=随版本发布自动生效（无需手动操作）, 感知=CHANGELOG, 体验变化=否-内部重构（token meter 取价路径防断裂）, 迁移指南=不需要 | 工作区 diff（commit 待审查后落盘）; TRIAGE-FIX-034 | Developer + Coordinator 机录 | 2026-09-12 | G6 | 开发完成待审 | REVIEW-FIX-034-R0 审查中（工作区 diff 评审）；插曲留痕：staged 误入 80df0c6 已 soft-reset 分割（faefd82） |
+
+| REVIEW-FIX-034-R0 | FIX-034 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-FIX-034-R0-input.md; review-FIX-034-R0.md | Code Reviewer | 2026-09-12 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| TRIAGE-EVO-021 | EVO-021 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/EVO-021.json） | EVO-021.json | change-triage | 2026-09-12 | G11 | TRIAGED |
