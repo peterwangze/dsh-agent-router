@@ -135,6 +135,12 @@ cd package
 5. 重启后打开「设置 → Agent 路由」，用预设模板添加专业 Agent（如视觉识别）。
 ```
 
+### 宿主兼容性（实测基线）
+
+- **实测基线**：DSH 宿主 `dsh 0.1.5-rc.1` · 全系 `@deepseek-ai/dsh-* 0.1.5-rc.2` · `cordis 4.0.2` · `schemastery 3.18.2`（宿主环境各 package.json 实读，2026-09-12）。本插件的适配与测试以该基线为准。
+- `package.json` 的 `peerDependencies`（8 项）与 dsh 包 `dependencies` 版本范围（`^0.1.5-rc.2`）为**记录性声明**——只记录实测通过的宿主版本，不做安装期 enforcement 依赖（宿主 runner/cordis 不校验 peerDeps、安装器不告警）。兼容性判定的权威防护 = `tests/host-version-snapshot.mjs` 版本快照测试 + 本矩阵：声明面与基线不一致（版本范围漂移 / 注入清单引用已消亡包）时全量测试网即红。
+- 宿主升级后请同步刷新基线：更新 package.json 版本范围、本矩阵数值与快照测试中的基线常量（测试文件头注释含刷新步骤）。
+
 ## 使用指南
 
 安装并重启后，在 DSH 的「设置 → Agent 路由」打开配置页。
