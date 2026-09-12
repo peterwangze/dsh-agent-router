@@ -623,6 +623,7 @@ window.__ModuleLoader__.load({
       hostHealthTitle: '宿主面健康',
       hostHealthOk: '✓ 宿主面正常',
       hostHealthWarn: (n) => `⚠ ${n} 个宿主面降级/缺失`,
+      faceDegraded: (list) => `宿主面降级（对应分区只读，其余功能正常）：${list}`,
       hostHealthVersions: (v) => `宿主版本：dsh-llm ${v.llm} · dsh-tools ${v.tools} · typert-protocol ${v.typertProtocol}`,
       hostHealthFacesTitle: '面探针：',
       hostHealthNoProbes: '尚无已注册面探针（B2-B5 迁移批次接入后自动覆盖宿主依赖面）',
@@ -951,6 +952,7 @@ window.__ModuleLoader__.load({
       hostHealthTitle: 'Host face health',
       hostHealthOk: '✓ host faces healthy',
       hostHealthWarn: (n) => `⚠ ${n} host face(s) degraded/missing`,
+      faceDegraded: (list) => `Host faces degraded (affected sections read-only, rest unaffected): ${list}`,
       hostHealthVersions: (v) => `Host versions: dsh-llm ${v.llm} · dsh-tools ${v.tools} · typert-protocol ${v.typertProtocol}`,
       hostHealthFacesTitle: 'Face probes: ',
       hostHealthNoProbes: 'No face probes registered yet (host dependency faces are covered automatically once the B2-B5 migration batches land)',
@@ -1940,7 +1942,7 @@ window.__ModuleLoader__.load({
 
     // ── 页面 ────────────────────────────────────────────────────────────────
     function AgentsPage(props) {
-      const { api, remote, remoteReady, t, $on } = props
+      const { api, health, remote, remoteReady, t, $on } = props
       const [ready, setReady] = useState(false)
       const [state, setState] = useState({ status: 'idle' })
       const [drafts, setDrafts] = useState({})
@@ -2001,6 +2003,11 @@ window.__ModuleLoader__.load({
       // 缓存 + 诊断环形——router/hostFaceDiagnostics RPC；render 期零 probe，
       // §7.1 惰性纪律：渲染只读本快照缓存）。
       const [hostHealth, setHostHealth] = useState(null)
+      // ARCH-004 B2（§4.3 域 1）：本地 client 面健康快照（createClientRemotes
+      // health() ——一次性 effect 探测后缓存，render 期零 probe，§7.1 惰性
+      // 纪律）+ 面·code 降级表（load() 消费路径实测的降级短码——面级降级行）。
+      const [faceHealth, setFaceHealth] = useState(null)
+      const [faceFailures, setFaceFailures] = useState({})
       // 分级分类卡片：预设 Agent 与专业 Agent 核心区前置（预设默认折叠）；
       // 账号与统计默认折叠。
       // EVO-015 后调整（用户指令 2026-09-05）：专业 Agent 默认折叠——四张
@@ -2031,6 +2038,9 @@ window.__ModuleLoader__.load({
         const providers = providersResponse.result.ok ? providersResponse.result.value.providers : []
         const catalog = catalogResponse.ok ? catalogResponse.value : null
         const llmPiAi = settingsResponse.result.ok ? viewOf(settingsResponse.result.value.namespaces, 'llm-pi-ai') : null
+        // ARCH-004 B2：面·code 降级表（load() 消费路径实测——降级信封短码
+        // 入页面数据面；非降级信封（无 code）= 空串，不影响旧路径）。
+        const faceFailuresNow = { llm: hostFaceCodeOf(providersResponse), settings: hostFaceCodeOf(settingsResponse), session: '' }
         setState({
           status: 'ready',
           error: null,
@@ -2043,11 +2053,16 @@ window.__ModuleLoader__.load({
           models: [],
           modelsFailure: null,
           llmPiAi,
+          faceFailures: faceFailuresNow,
         })
         const groupResponse = await api.llm.models({})
-        if (groupResponse.result.ok) {
-          setState((current) => ({ ...current, models: groupResponse.result.value.groups ?? [], modelsFailure: groupResponse.result.value.failures ?? [] }))
-        }
+        setState((current) => ({
+          ...current,
+          models: groupResponse.result.ok ? groupResponse.result.value.groups ?? [] : current.models,
+          modelsFailure: groupResponse.result.ok ? groupResponse.result.value.failures ?? [] : current.modelsFailure,
+          // B2：session 面（modelCatalog）降级短码并入面·code 表。
+          faceFailures: { ...(current.faceFailures ?? {}), session: hostFaceCodeOf(groupResponse) },
+        }))
         // EVO-013：宿主预设罗盘（wire 方法 agentPreset.list）——独立失败面：罗盘
         // 不可达不阻塞整页（卡片显示错误提示 + 空列表，添加下拉为空），P8 可观测。
         // FIX-022：宿主客户端 api 面方法组名是复数 agentPresets（wire 方法名保持
@@ -2066,6 +2081,7 @@ window.__ModuleLoader__.load({
             setPresetRoster({ status: 'ready', items: presetRosterItemsOf(presetValue), failure: '' })
           } else {
             setPresetRoster({ status: 'error', items: [], failure: presetResponse?.result?.error?.message ?? '' })
+            setFaceFailures((current) => ({ ...current, agentPresets: presetResponse?.result?.error?.code ?? '' }))
           }
         } catch (error) {
           setPresetRoster({ status: 'error', items: [], failure: messageOf(error) })
@@ -2092,6 +2108,9 @@ window.__ModuleLoader__.load({
         const response = await api.credentials.describe({ refs })
         if (response.result.ok) {
           setOauthTokenStates((current) => ({ ...current, ...Object.fromEntries(Object.entries(response.result.value.credentials ?? {}).map(([ref, info]) => [ref, info])) }))
+        } else if (hostFaceCodeOf(response)) {
+          // ARCH-004 B2：credentials 面降级短码并入面·code 表（P8 可观测）。
+          setFaceFailures((current) => ({ ...current, credentials: hostFaceCodeOf(response) }))
         }
       }, [api, oauthRefsKey])
 
@@ -2147,6 +2166,14 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         if (!ready) return
         let alive = true
+        // ARCH-004 B2（§7.1「健康面板打开」时机——一次性本地探测，绝不进
+        // 2s 轮询）：client remote 五面存在性/形状快照（徽章 ⚠ 数据源——
+        // remote.* 客户端 fiber 面 Node 侧注册表不可见，故页面本地探测并入
+        // HostHealthCard；B1 的 RPC 面快照保留不变）。
+        if (typeof health === 'function') {
+          const localFaces = health()
+          if (alive && localFaces && typeof localFaces === 'object') setFaceHealth(localFaces)
+        }
         const routerRemote = remote()
         if (routerRemote && typeof routerRemote.hostFaceDiagnostics === 'function') {
           routerRemote.hostFaceDiagnostics({}).then((response) => {
@@ -2154,7 +2181,7 @@ window.__ModuleLoader__.load({
           }, () => undefined)
         }
         return () => { alive = false }
-      }, [ready, remote])
+      }, [ready, remote, health])
 
       const clearStats = async () => {
         const routerRemote = remote()
@@ -3237,6 +3264,8 @@ window.__ModuleLoader__.load({
       }
 
       // ── 分级分类卡片组装：专业 Agent 前置且默认展开，账号与统计默认折叠 ──
+      // ARCH-004 B2：面·code 降级表 → 单面降级行数据（面级短码，见 sectionHead）。
+      const degradedFaceList = Object.entries(state.faceFailures ?? {}).filter(([, code]) => typeof code === 'string' && code)
       const sectionHead = [
         el('h2', { className: 'dshrouter-title' }, t('title')),
         el('p', { className: 'dshrouter-intro' }, t('intro')),
@@ -3248,8 +3277,14 @@ window.__ModuleLoader__.load({
           el('p', { className: 'dshrouter-hint' }, t('masterHint')),
           !enabled ? el('p', { className: 'dshrouter-error' }, t('routeDisabled')) : null),
         // ARCH-004 B1（§6.1）：宿主面健康徽章 + 面板（一次性快照；
-        // render 期零 probe——纯 HostHealthCard 缓存渲染）。
-        el(HostHealthCard, { hostHealth, t }),
+        // render 期零 probe——纯 HostHealthCard 缓存渲染）。B2 起并入本地
+        // client 面健康（faceHealth——createClientRemotes health() 快照）。
+        el(HostHealthCard, { hostHealth, faceHealth, t }),
+        // ARCH-004 B2（§4.3 域 1 降级行为）：单面降级行——面级短码入页面
+        // （对比 FIX-028 时代 throw → 整页「加载失败」行：此处仅该面分区
+        // 降级只读，其余面照常工作，永不整页崩）。
+        degradedFaceList.length > 0 ? el('p', { className: 'dshrouter-error', style: { margin: '0', fontSize: '12px', wordBreak: 'break-all' } },
+          t('faceDegraded')(degradedFaceList.map(([face, code]) => `${face}:${code}`).join(' · '))) : null,
       ]
       // ── 多模态账号（API Key → ChatGPT 订阅登录 → 子代理 → 高级扩展[账号池，默认折叠]）──
       const accountsBody = [
@@ -3696,12 +3731,23 @@ window.__ModuleLoader__.load({
      * （details/summary 折叠行）；徽章语义：✓ 全绿 / ⚠ n 面降级或缺失。
      */
     function HostHealthCard(props) {
-      const { hostHealth, t } = props
-      if (!hostHealth || typeof hostHealth !== 'object') return null
-      const faces = Array.isArray(hostHealth.faces) ? hostHealth.faces : []
-      const diag = Array.isArray(hostHealth.diag) ? hostHealth.diag : []
+      const { hostHealth, faceHealth, t } = props
+      // ARCH-004 B2：faces/diag = RPC 面（hostFaceDiagnostics——Node 侧注册表
+      // 快照）∪ 本地 client 面（faceHealth——createClientRemotes health()
+      // 一次性探测快照；remote.* 客户端 fiber 面 Node 侧不可见故本地并入）。
+      // 纯 props 读——render 期零 probe（§7.1 判别锚点 tests/host-abi-health
+      // §3）。任一数据源在场即渲染（旧服务端无 RPC 面时本地徽章仍可见）。
+      if ((!hostHealth || typeof hostHealth !== 'object') && (!faceHealth || typeof faceHealth !== 'object')) return null
+      const faces = [
+        ...(hostHealth && Array.isArray(hostHealth.faces) ? hostHealth.faces : []),
+        ...(faceHealth && Array.isArray(faceHealth.faces) ? faceHealth.faces : []),
+      ]
+      const diag = [
+        ...(faceHealth && Array.isArray(faceHealth.diag) ? faceHealth.diag : []),
+        ...(hostHealth && Array.isArray(hostHealth.diag) ? hostHealth.diag : []),
+      ]
       const degraded = faces.filter((face) => face && face.state !== 'ok').length
-      const versions = hostHealth.hostVersions && typeof hostHealth.hostVersions === 'object'
+      const versions = hostHealth && hostHealth.hostVersions && typeof hostHealth.hostVersions === 'object'
         ? hostHealth.hostVersions
         : { llm: '?', tools: '?', typertProtocol: '?' }
       return el('details', { className: 'dshrouter-notice', style: { margin: '0' } },
@@ -4954,7 +5000,7 @@ window.__ModuleLoader__.load({
       }
       return rows
     }
-    /** 本包消费面兼容适配（FIX-028）：把 hostApiFace 的 {ok,value|error}
+    /** 本包消费面兼容适配（FIX-028）：把宿主 remote.* 的 {ok,value|error}
      *  直面响应包装成旧信封 {result:{ok,value?,error?}}——本包全部消费点
      *  （probeProviderModels / load() / 账号卡 / 预设卡 / ModelTakeover /
      *  refreshSessionDirectory 保底）以旧信封判定，包装在单点完成。 */
@@ -4971,153 +5017,246 @@ window.__ModuleLoader__.load({
       }
       return { result: { ok: false, error: { message: `dsh-agent-router: host remote answered ${String(response)}` } } }
     }
-    /** FIX-028 适配层主体：构造旧信封 api 面（消费点零改动）。
+    /** ARCH-004 B2（§4.3 域 1）浏览器镜像诊断环形——lib/host-abi/health.js
+     *  noteHostDiag/HOST_DIAG_LIMIT=64 同构（浏览器包无法 import Node ESM）；
+     *  face-degraded / inject-face-missing 事件的唯一数据面（createClientRemotes
+     *  health().diag——健康徽章面板可观测，P8 禁无观测吞错）。 */
+    const HOST_FACE_DIAG_LIMIT = 64
+    const hostFaceDiagEntries = []
+    function noteHostFaceDiag(entry) {
+      try {
+        hostFaceDiagEntries.push(entry)
+        if (hostFaceDiagEntries.length > HOST_FACE_DIAG_LIMIT) hostFaceDiagEntries.splice(0, hostFaceDiagEntries.length - HOST_FACE_DIAG_LIMIT)
+      } catch { /* 诊断失败绝不影响主链（presetDiag 同款纪律） */ }
+    }
+
+    /** 客户端 remote.* 五命名空间方法形状契约——lib/host-abi/client-remotes.js
+     *  CLIENT_REMOTE_FACES 的浏览器镜像（B2 随 createClientRemotes 一并镜像；
+     *  行为 parity 由 tests/host-abi-health.mjs §7 判别锁定，漂移即红）。 */
+    const CLIENT_REMOTE_FACES = {
+      llm: ['listProviders', 'listConfigurableProviders', 'discoverModels'],
+      settings: ['describe', 'mutate'],
+      credentials: ['describe', 'set', 'unset'],
+      agentPresets: ['list'],
+      session: ['modelCatalog', 'selectModel'],
+    }
+
+    /** 单面能力探测（§4.3 域 1，probeRemoteFace 镜像）：存在性（ctx.get 优先 +
+     *  ctx.remote.<ns> 属性面兜底——FIX-027 双形态）+ 方法形状校验。 */
+    function probeRemoteFace(ctx, name) {
+      const requiredMethods = CLIENT_REMOTE_FACES[name] ?? []
+      let face
+      try {
+        const viaGet = ctx && typeof ctx.get === 'function' ? ctx.get(`remote.${name}`) : undefined
+        face = viaGet !== undefined ? viaGet : (ctx && ctx.remote ? ctx.remote[name] : undefined)
+      } catch (error) {
+        return { name, state: 'missing', detail: `host-face-missing: ${String(error && error.message ? error.message : error).slice(0, 80)}` }
+      }
+      if (!face || typeof face !== 'object') return { name, state: 'missing', detail: 'host-face-missing' }
+      const missingMethods = requiredMethods.filter((method) => typeof face[method] !== 'function')
+      if (missingMethods.length > 0) return { name, state: 'degraded', detail: `host-face-shape: ${missingMethods.join(',')}` }
+      return { name, state: 'ok' }
+    }
+
+    /** 客户端宿主面健康快照（clientRemotesHealth 镜像）：五命名空间逐面探测。 */
+    function clientRemotesHealth(ctx) {
+      return Object.keys(CLIENT_REMOTE_FACES).map((name) => probeRemoteFace(ctx, name))
+    }
+
+    /** ARCH-004 B2（§4.3 域 1 唯一入口）createClientRemotes——FIX-028 旧
+     *  适配层本体迁域更名（→ lib/host-abi/client-remotes.js 权威单点 +
+     *  本浏览器镜像，OAUTH_ROUTE_PROVIDER :36 镜像先例；envelope/health 行为
+     *  parity 由 tests/host-abi-health.mjs §7 判别锁定，漂移即红；P5：旧
+     *  实现已删除，grep 零残留）。
      *  面按调用时延迟解析（get 优先 + ctx.remote.<ns> 属性面兜底——FIX-027
-     *  双形态防御先例；服务卸载/重挂后取最新，不缓存旧引用）。命名空间
-     *  缺失 = 宿主版本不兼容 → 结构化失败（P8：禁裸 TypeError 击穿面板，
-     *  错误文本直入页面「加载失败」行 + 可观测原因）。
+     *  双形态防御先例；服务卸载/重挂后取最新，不缓存旧引用）。
+     *  B2 语义变更（对比 FIX-028 throw）：命名空间缺失/方法形状漂移 → 降级
+     *  信封（host-face-missing/host-face-shape）+ face-degraded 诊断事件；
+     *  宿主调用被拒 → host-face-call 信封（透传宿主错误，绝不外泄击穿）——
+     *  单面卡片降级 + 健康徽章，其余面照常，永不整页崩（§4.3「降级行为」）。
      *  @param ctx - 客户端 fiber ctx（命名空间声明见模块 inject 列表）。
-     *  @returns 旧信封面（{result:{ok,value?,error?}}）。 */
-    function hostApiFace(ctx) {
+     *  @returns { api, health() }——api 与旧适配层同形旧信封面
+     *  （{result:{ok,value?,error?}}，消费点零改动）；health() → 徽章数据源
+     *  （faces 探测快照 + diag 降级事件环形，惰性——仅显式调用时探测）。 */
+    function createClientRemotes(ctx) {
+      const noteDegraded = (face, code, detail) => noteHostFaceDiag({ at: Date.now(), kind: 'face-degraded', face, code, ...(detail ? { detail } : {}) })
+      const degradedEnvelope = (face, code, message, detail) => {
+        noteDegraded(face, code, detail)
+        return { result: { ok: false, error: { code, message } } }
+      }
       const faceOf = (name) => {
         const viaGet = ctx.get(`remote.${name}`)
         return viaGet !== undefined ? viaGet : (ctx.remote ? ctx.remote[name] : undefined)
       }
-      // 命名空间缺失 = 宿主版本不兼容 → fail-loud（P8 可观测：清晰原因进页面
-      // 「加载失败」行，禁静默空目录/裸 TypeError；用户可据此报告版本组合）。
-      const unavailable = (name) => {
-        throw new Error(`dsh-agent-router: host remote face "${name}" 不可用——宿主 ${name} 命名空间未挂载或插件版本与宿主不兼容`)
+      const directoryFace = () => {
+        const viaGet = ctx.get('modelDirectories')
+        return viaGet !== undefined ? viaGet : ctx.modelDirectories
+      }
+      // 命名空间缺失 = 降级信封（B2：原 throw 语义已废——单面降级，永不整页崩）。
+      const unavailable = (name) => degradedEnvelope(`remote.${name}`, 'host-face-missing', `dsh-agent-router: host remote face "${name}" 不可用——宿主 ${name} 命名空间未挂载或插件版本与宿主不兼容`)
+      const misshapen = (name, methods) => degradedEnvelope(`remote.${name}`, 'host-face-shape', `dsh-agent-router: host remote face "${name}" 形状漂移——方法缺失: ${methods.join(',')}`, methods.join(','))
+      // 面解析 + 形状守卫（缺面 → missing 信封；面在方法缺 → shape 信封；就绪 → null 放行）。
+      const resolveFace = (name, face, methods) => {
+        if (!face) return unavailable(name)
+        const missing = methods.filter((method) => typeof face[method] !== 'function')
+        if (missing.length > 0) return misshapen(name, missing)
+        return null
       }
       const okValue = (value) => ({ result: { ok: true, value } })
       const failureOf = (error) => ({ result: { ok: false, error: error && error.message ? error : { message: String(error) } } })
+      // 调用守卫（host-face-call）：宿主调用 throw → 降级信封（透传宿主错误，
+      // 绝不外泄击穿调用方整页——§4.3「永不整页崩」的调用期防线）。
+      const guard = (face, fn) => async (...args) => {
+        try {
+          return await fn(...args)
+        } catch (error) {
+          noteDegraded(face, 'host-face-call')
+          return failureOf({ code: 'host-face-call', message: `dsh-agent-router: host face "${face}" 调用被拒: ${error && error.message ? error.message : String(error)}` })
+        }
+      }
       const llmFace = () => faceOf('llm')
       const settingsFace = () => faceOf('settings')
       const credentialsFace = () => faceOf('credentials')
       const agentPresetsFace = () => faceOf('agentPresets')
       const sessionFace = () => faceOf('session')
-      const directoryFace = () => {
-        const viaGet = ctx.get('modelDirectories')
-        return viaGet !== undefined ? viaGet : ctx.modelDirectories
-      }
       return {
-        llm: {
-          providers: async () => {
-            const llm = llmFace()
-            if (!llm || typeof llm.listProviders !== 'function' || typeof llm.listConfigurableProviders !== 'function') return unavailable('llm')
-            const [registered, declared] = await Promise.all([llm.listProviders(), llm.listConfigurableProviders()])
-            if (!registered.ok) return failureOf(registered.error)
-            if (!declared.ok) return failureOf(declared.error)
-            return okValue({ providers: joinProviderDirectoryHost(registered.value, declared.value) })
+        api: {
+          llm: {
+            providers: guard('remote.llm', async () => {
+              const llm = llmFace()
+              const bad = resolveFace('llm', llm, ['listProviders', 'listConfigurableProviders'])
+              if (bad) return bad
+              const [registered, declared] = await Promise.all([llm.listProviders(), llm.listConfigurableProviders()])
+              if (!registered.ok) return failureOf(registered.error)
+              if (!declared.ok) return failureOf(declared.error)
+              return okValue({ providers: joinProviderDirectoryHost(registered.value, declared.value) })
+            }),
+            models: guard('remote.session', async () => {
+              const session = sessionFace()
+              const bad = resolveFace('session', session, ['modelCatalog'])
+              if (bad) return bad
+              const response = await session.modelCatalog()
+              if (!response.ok) return failureOf(response.error)
+              const catalog = response.value ?? {}
+              return okValue({ groups: Array.isArray(catalog.groups) ? catalog.groups : [], failures: Array.isArray(catalog.failures) ? catalog.failures : [] })
+            }),
+            discoverModels: guard('remote.llm', async (payload) => {
+              const llm = llmFace()
+              const bad = resolveFace('llm', llm, ['discoverModels'])
+              if (bad) return bad
+              const input = payload && typeof payload === 'object' ? payload : {}
+              const response = await llm.discoverModels(input.settingsNs, {
+                ...(input.provider !== undefined ? { provider: input.provider } : {}),
+                ...(input.baseURL !== undefined ? { baseURL: input.baseURL } : {}),
+                ...(input.api !== undefined ? { api: input.api } : {}),
+                ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
+              })
+              if (!response.ok) return failureOf(response.error)
+              return okValue({ models: Array.isArray(response.value) ? response.value : [] })
+            }),
           },
-          models: async () => {
-            const session = sessionFace()
-            if (!session || typeof session.modelCatalog !== 'function') return unavailable('session')
-            const response = await session.modelCatalog()
-            if (!response.ok) return failureOf(response.error)
-            const catalog = response.value ?? {}
-            return okValue({ groups: Array.isArray(catalog.groups) ? catalog.groups : [], failures: Array.isArray(catalog.failures) ? catalog.failures : [] })
+          settings: {
+            describe: guard('remote.settings', async () => {
+              const settings = settingsFace()
+              const bad = resolveFace('settings', settings, ['describe'])
+              if (bad) return bad
+              const response = await settings.describe()
+              if (!response.ok) return failureOf(response.error)
+              const value = response.value ?? {}
+              return okValue({
+                writable: value.writable === true,
+                hasDocument: value.hasDocument === true,
+                namespaces: Array.isArray(value.namespaces) ? value.namespaces : [],
+              })
+            }),
+            mutate: guard('remote.settings', async (payload) => {
+              const settings = settingsFace()
+              const bad = resolveFace('settings', settings, ['mutate'])
+              if (bad) return bad
+              const input = payload && typeof payload === 'object' ? payload : {}
+              const response = await settings.mutate(input.ns, Array.isArray(input.ops) ? input.ops : [])
+              return envelopeOf(response)
+            }),
           },
-          discoverModels: async (payload) => {
-            const llm = llmFace()
-            if (!llm || typeof llm.discoverModels !== 'function') return unavailable('llm')
-            const input = payload && typeof payload === 'object' ? payload : {}
-            const response = await llm.discoverModels(input.settingsNs, {
-              ...(input.provider !== undefined ? { provider: input.provider } : {}),
-              ...(input.baseURL !== undefined ? { baseURL: input.baseURL } : {}),
-              ...(input.api !== undefined ? { api: input.api } : {}),
-              ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
-            })
-            if (!response.ok) return failureOf(response.error)
-            return okValue({ models: Array.isArray(response.value) ? response.value : [] })
+          credentials: {
+            describe: guard('remote.credentials', async (payload) => {
+              const credentials = credentialsFace()
+              const bad = resolveFace('credentials', credentials, ['describe'])
+              if (bad) return bad
+              const input = payload && typeof payload === 'object' ? payload : {}
+              const response = await credentials.describe(Array.isArray(input.refs) ? input.refs : [])
+              if (!response.ok) return failureOf(response.error)
+              return okValue({ credentials: response.value ?? {} })
+            }),
+            set: guard('remote.credentials', async (payload) => {
+              const credentials = credentialsFace()
+              const bad = resolveFace('credentials', credentials, ['set'])
+              if (bad) return bad
+              const input = payload && typeof payload === 'object' ? payload : {}
+              return envelopeOf(await credentials.set(input.ref, input.value))
+            }),
+            unset: guard('remote.credentials', async (payload) => {
+              const credentials = credentialsFace()
+              const bad = resolveFace('credentials', credentials, ['unset'])
+              if (bad) return bad
+              const input = payload && typeof payload === 'object' ? payload : {}
+              return envelopeOf(await credentials.unset(input.ref))
+            }),
+          },
+          agentPresets: {
+            list: guard('remote.agentPresets', async () => {
+              const presets = agentPresetsFace()
+              const bad = resolveFace('agentPresets', presets, ['list'])
+              if (bad) return bad
+              const response = await presets.list()
+              if (!response.ok) return failureOf(response.error)
+              return okValue(response.value ?? { presets: [] })
+            }),
+          },
+          sessions: {
+            // 宿主 0.1.2-rc.1 客户端面无 per-session 模型 wire RPC（api-remotes
+            // session 命名空间只有 modelCatalog——全局目录，非会话选择）；
+            // 等价读 = ctx.modelDirectories.directoryFor(sessionId).load()
+            // （ModelDirectory 快照 {current,routable,groups,failures} 与旧
+            // sessions.models 值同形——FIX-026 直驱路径同一机制）。
+            models: guard('modelDirectories', async (payload) => {
+              const input = payload && typeof payload === 'object' ? payload : {}
+              const directoryService = directoryFace()
+              if (!directoryService || typeof directoryService.directoryFor !== 'function' || !input.sessionId) {
+                return failureOf(new Error('dsh-agent-router: modelDirectories 服务不可用（宿主旧版本？）'))
+              }
+              let directory
+              try {
+                directory = directoryService.directoryFor(input.sessionId)
+              } catch (error) {
+                return failureOf(error)
+              }
+              if (!directory || typeof directory.load !== 'function') {
+                return failureOf(new Error('dsh-agent-router: 会话模型目录不可用'))
+              }
+              try {
+                return okValue(await directory.load())
+              } catch (error) {
+                return failureOf(error)
+              }
+            }),
+            selectModel: guard('remote.session', async (payload) => {
+              const session = sessionFace()
+              const bad = resolveFace('session', session, ['selectModel'])
+              if (bad) return bad
+              return envelopeOf(await session.selectModel(payload))
+            }),
           },
         },
-        settings: {
-          describe: async () => {
-            const settings = settingsFace()
-            if (!settings || typeof settings.describe !== 'function') return unavailable('settings')
-            const response = await settings.describe()
-            if (!response.ok) return failureOf(response.error)
-            const value = response.value ?? {}
-            return okValue({
-              writable: value.writable === true,
-              hasDocument: value.hasDocument === true,
-              namespaces: Array.isArray(value.namespaces) ? value.namespaces : [],
-            })
-          },
-          mutate: async (payload) => {
-            const settings = settingsFace()
-            if (!settings || typeof settings.mutate !== 'function') return unavailable('settings')
-            const input = payload && typeof payload === 'object' ? payload : {}
-            const response = await settings.mutate(input.ns, Array.isArray(input.ops) ? input.ops : [])
-            return envelopeOf(response)
-          },
-        },
-        credentials: {
-          describe: async (payload) => {
-            const credentials = credentialsFace()
-            if (!credentials || typeof credentials.describe !== 'function') return unavailable('credentials')
-            const input = payload && typeof payload === 'object' ? payload : {}
-            const response = await credentials.describe(Array.isArray(input.refs) ? input.refs : [])
-            if (!response.ok) return failureOf(response.error)
-            return okValue({ credentials: response.value ?? {} })
-          },
-          set: async (payload) => {
-            const credentials = credentialsFace()
-            if (!credentials || typeof credentials.set !== 'function') return unavailable('credentials')
-            const input = payload && typeof payload === 'object' ? payload : {}
-            return envelopeOf(await credentials.set(input.ref, input.value))
-          },
-          unset: async (payload) => {
-            const credentials = credentialsFace()
-            if (!credentials || typeof credentials.unset !== 'function') return unavailable('credentials')
-            const input = payload && typeof payload === 'object' ? payload : {}
-            return envelopeOf(await credentials.unset(input.ref))
-          },
-        },
-        agentPresets: {
-          list: async () => {
-            const presets = agentPresetsFace()
-            if (!presets || typeof presets.list !== 'function') return unavailable('agentPresets')
-            const response = await presets.list()
-            if (!response.ok) return failureOf(response.error)
-            return okValue(response.value ?? { presets: [] })
-          },
-        },
-        sessions: {
-          // 宿主 0.1.2-rc.1 客户端面无 per-session 模型 wire RPC（api-remotes
-          // session 命名空间只有 modelCatalog——全局目录，非会话选择）；
-          // 等价读 = ctx.modelDirectories.directoryFor(sessionId).load()
-          // （ModelDirectory 快照 {current,routable,groups,failures} 与旧
-          // sessions.models 值同形——FIX-026 直驱路径同一机制）。
-          models: async (payload) => {
-            const input = payload && typeof payload === 'object' ? payload : {}
-            const directoryService = directoryFace()
-            if (!directoryService || typeof directoryService.directoryFor !== 'function' || !input.sessionId) {
-              return failureOf(new Error('dsh-agent-router: modelDirectories 服务不可用（宿主旧版本？）'))
-            }
-            let directory
-            try {
-              directory = directoryService.directoryFor(input.sessionId)
-            } catch (error) {
-              return failureOf(error)
-            }
-            if (!directory || typeof directory.load !== 'function') {
-              return failureOf(new Error('dsh-agent-router: 会话模型目录不可用'))
-            }
-            try {
-              return okValue(await directory.load())
-            } catch (error) {
-              return failureOf(error)
-            }
-          },
-          selectModel: async (payload) => {
-            const session = sessionFace()
-            if (!session || typeof session.selectModel !== 'function') return unavailable('session')
-            return envelopeOf(await session.selectModel(payload))
-          },
+        health() {
+          return { faces: clientRemotesHealth(ctx), diag: hostFaceDiagEntries.slice() }
         },
       }
     }
+
+    /** ARCH-004 B2：降级信封错误码提取（load() 面·code 数据面——面级降级
+     *  短码入页面降级行；非降级信封（无 code）返回空串不影响旧路径）。 */
+    const hostFaceCodeOf = (envelope) => envelope && envelope.result && envelope.result.ok === false && envelope.result.error && typeof envelope.result.error.code === 'string' ? envelope.result.error.code : ''
 
     // ── 插件装配 ────────────────────────────────────────────────────────────
     const NS = 'router'
@@ -5140,9 +5279,25 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-agent-router: locale')
       // FIX-028：宿主 0.1.2-rc.1 起 connection.api 已移除——统一经 remote.*
-      // 命名空间适配（hostApiFace 单点）。旧实现 `ctx.get('connection').api`
-      // 在升级后恒 undefined → 页面加载失败（用户截图实证），已删除。
-      const api = hostApiFace(ctx)
+      // 命名空间适配（EVO-020/ARCH-004 B2：FIX-028 旧适配层迁域更名
+      // createClientRemotes——lib/host-abi/client-remotes.js 权威单点 + 本包
+      // 浏览器镜像，P5 旧实现已删除，grep 零残留）。旧实现
+      // `ctx.get('connection').api` 在升级后恒 undefined → 页面加载失败
+      // （用户截图实证），已删除。
+      const remotes = createClientRemotes(ctx)
+      const api = remotes.api
+      // ARCH-004 域 5（§4.3 域 5 ②，B2 接线）：apply 时 fiber 面存在性自检
+      // ——缺面记 inject-face-missing 诊断（lib/host-abi/inject-manifest.js
+      // noteInjectFaceGaps 的浏览器镜像：本包无法 import Node ESM，
+      // OAUTH_ROUTE_PROVIDER :36 镜像先例；FIBER_INJECT 单一事实源 ↔ 模块
+      // inject 数组镜像锁定 tests/host-abi-health.mjs 6e）。不 throw 不阻断
+      // apply——宿主 runner waitingFor 门控下用户无从得知卡在哪一面，本自检
+      // 让「等待面」页面打开后立即可见（健康徽章数据源）。
+      for (const name of inject) {
+        let resolved
+        try { resolved = typeof ctx.get === 'function' ? ctx.get(name) : undefined } catch { resolved = undefined }
+        if (resolved === undefined) noteHostFaceDiag({ at: Date.now(), kind: 'inject-face-missing', face: name, code: 'missing' })
+      }
       const t = ctx.locale.bind(NS)
       const remoteReady = ctx.remote.$mount(ROUTER_REMOTE).catch((error) => {
         console.error('dsh-agent-router: remote mount failed', error)
@@ -5168,7 +5323,7 @@ window.__ModuleLoader__.load({
         } catch { /* 静默：不影响页面加载 */ }
       })
       const $on = (event, listener) => ctx.remote.$on(event, listener)
-      const injected = () => ({ api, remote: () => ctx.get('remote.router') ?? null, remoteReady, t, $on })
+      const injected = () => ({ api, health: remotes.health, remote: () => ctx.get('remote.router') ?? null, remoteReady, t, $on })
       ctx.slots.inject('settings.section', () => ctx.slots.register({
         name: 'settings.section',
         id: 'router-agents',
@@ -5177,6 +5332,7 @@ window.__ModuleLoader__.load({
         inject: injected,
       }, (props) => el(AgentsPage, {
         api: props.api,
+        health: props.health,
         remote: props.remote,
         remoteReady: props.remoteReady,
         t: props.t,
@@ -5327,6 +5483,10 @@ window.__ModuleLoader__.load({
     // 仅消费 apply/inject；tests/fix-012-image-takeover.mjs 经 setRouterCatalog
     // 模拟 catalog 快照变化并渲染组件断言接管/还原行为）。
     exports.ModelTakeover = ModelTakeover
+    // ARCH-004 B2 判别测试钩子：createClientRemotes 浏览器镜像直驱（宿主运行
+    // 时仅消费 apply/inject；tests/host-abi-health.mjs §7 经本导出与权威单点
+    // lib/host-abi/client-remotes.js 做行为 parity 断言——镜像漂移即红）。
+    exports.createClientRemotes = createClientRemotes
     exports.setRouterCatalog = setRouterCatalog
     exports.mergePresetModels = mergePresetModels
     // FIX-031 判别钩子：统计显示层单点（浏览器面归一化镜像）。宿主运行时只消费

@@ -430,7 +430,9 @@ export async function runClientRender(check) {
     },
   }
   // FIX-028：宿主 0.1.2-rc.1 客户端面夹具（dsh-api-remotes typed remote
-  // 直面形状——作为 apply() 里 hostApiFace 适配层的宿主面输入；数据与上方
+  // 直面形状——作为 apply() 里 createClientRemotes 适配层（EVO-020/B2 起
+  // hostApiFace 迁域更名：lib/host-abi/client-remotes.js 权威单点 + 本包
+  // 浏览器镜像）的宿主面输入；数据与上方
   // 旧 apiMock 语义等价（providers=registered∪declared 连接 / models=
   // session.modelCatalog / discover 返回裸数组 / settings+credentials 位置
   // 参数）。形状锚定宿主 schema（dsh-api-remotes lib/client.js）：
@@ -1920,7 +1922,8 @@ export async function runClientRender(check) {
       sessionModelsCalls.length = 0
       const fallbackTelemetry = captureTelemetry(() => dispatch('sess-fallback', 'minimal'))
       await new Promise((resolve) => setImmediate(resolve))
-      // FIX-028：保底 RPC 现经 hostApiFace 适配层的 sessions.models（旧
+      // FIX-028：保底 RPC 现经 createClientRemotes 适配层（EVO-020/B2 起
+      // hostApiFace 迁域更名）的 sessions.models（旧
       // connection.api 面已随宿主 0.1.2-rc.1 删除——旧连接面 fixture 一并
       // 移除）；服务面不可达的降级信封 = 适配层单点结果，经
       // settingsReg.inject()（宿主等同的注入路径）取的适配 api 直断言
@@ -1964,14 +1967,16 @@ export async function runClientRender(check) {
   // lib/client.js:4754-4825 无 api 字段）→ 旧 apply() `connection.api` 恒
   // undefined → 设置页整页「加载失败: Cannot read properties of undefined
   // (reading 'llm')」（用户截图 sha256:61a445ce…）。修复 = hostApiFace 适配层
-  // （remote.* → 旧信封）+ 模块 inject 声明命名空间面（宿主官方先例
+  // （remote.* → 旧信封；EVO-020/B2 起迁域更名 createClientRemotes 并翻转
+  // 为降级语义）+ 模块 inject 声明命名空间面（宿主官方先例
   // dsh-client-ui-settings-models lib/client.js:2842-2848）。判定矩阵：
   //  F28-S 结构守卫：inject 含五个 remote.* 命名空间声明且不含 connection；
   //  F28-B 行为全链：经 settingsReg.inject()（宿主等同注入路径，非直塞旧
   //     apiMock）渲染整页 → 无「加载失败」错误面板 + 适配 api 数据面正确
   //     （providers join / models / discover 信封）；
   //  F28-F 失败可观测（P8+宿主面 Parity P9）：命名空间缺失 → 明确原因信封
-  //     （禁裸 TypeError 击穿面板）。
+  //     （禁裸 TypeError 击穿面板）——EVO-020（B2）起语义翻转为单面降级
+  //     （面级降级行 + 徽章 ⚠，永不整页崩；见文末 B2 判别块）。
   {
     check('FIX-028: 模块 inject 声明 remote.llm/settings/credentials/agentPresets/session（runner 激活门控前提）', ['remote.llm', 'remote.settings', 'remote.credentials', 'remote.agentPresets', 'remote.session'].every((name) => Array.isArray(bundleExports.inject) && bundleExports.inject.includes(name)))
     check('FIX-028: 模块 inject 不再声明 connection（旧面已删除——P5 被取代路径禁止并存）', Array.isArray(bundleExports.inject) && !bundleExports.inject.includes('connection'))
@@ -2006,12 +2011,49 @@ export async function runClientRender(check) {
     hostFaces.llm.listProviders = rawListProviders
     const fix028ErrorNodes = findAll(fix028Tree, (node) => Array.isArray(node.props?.children) && node.props.children.some((child) => typeof child === 'string' && child.includes('加载失败')))
     check('FIX-028: 宿主注入路径整页渲染零「加载失败」+ load 数据源经适配层（旧 connection.api 代码在此 fixture 下必败）', fix028ErrorNodes.length === 0 && adapterProviderCalls > 0)
-    // F28-F：命名空间缺失 → 适配层结构化原因（不击穿，页面显示可诊断错误）。
+    // F28-F → EVO-020（ARCH-004 B2）语义翻转：命名空间缺失从「throw →
+    // 整页『加载失败』行」升级为「单面降级」（§4.3 域 1 降级行为）。同
+    // fixture（stub 掉 remote.llm）下旧 throw 代码必现整页失败（上方 F28-B
+    // 判别锚点的对照面——RED 演示锚点），B2 起必须：① 整页零「加载失败」；
+    // ② 该面卡片降级短码入页面（面级降级行）；③ 徽章 ⚠（本地 face health
+    // 进 HostHealthCard——B1 徽章数据源接通）；④ 其余面照常；⑤ apply 时
+    // inject 自检记 inject-face-missing（域 5，不 throw 不阻断 apply）。
     missingFaces.add('remote.llm')
-    await renderInto(settingsReg.render(settingsReg.inject()), 'fix028-missing')
-    const fix028MissingTree = await settle()
-    const fix028MissingError = findAll(fix028MissingTree, (node) => Array.isArray(node.props?.children) && node.props.children.some((child) => typeof child === 'string' && child.startsWith('加载失败:') && child.includes('host remote face "llm" 不可用')))
-    check('FIX-028: 命名空间缺失 → 结构化原因进页面（P8 可观测 + P9 Parity，禁裸 TypeError）', fix028MissingError.length > 0)
+    await renderInto(settingsReg.render(settingsReg.inject()), 'b2-face-missing')
+    const b2Tree = await settle()
+    const b2WholePageErrors = findAll(b2Tree, (node) => Array.isArray(node.props?.children) && node.props.children.some((child) => typeof child === 'string' && child.startsWith('加载失败')))
+    check('B2: remote.llm 缺失 → 整页零「加载失败」行（旧 throw 语义此 fixture 必红）', b2WholePageErrors.length === 0)
+    check('B2: llm 面卡片降级短码入页面（面级降级行 llm:host-face-missing）', textOf(b2Tree).includes('llm:host-face-missing'))
+    check('B2: 健康徽章 ⚠ + 缺失面行（本地 face health 进 HostHealthCard：⚠ 1 面 + ✗ llm）', textOf(b2Tree).includes(zh.hostHealthWarn(1)) && textOf(b2Tree).includes('✗ llm'))
+    const b2PresetsHead = findAll(b2Tree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.presetsTitle))
+    if (b2PresetsHead) {
+      b2PresetsHead.props.onClick()
+      currentTree = await settle()
+    }
+    // agentPresets 面（罗盘）渲染级锚点：添加预设展开 → roster 名入下拉
+    // （数据源 = remote.agentPresets.list——与缺失的 llm 面零耦合）。
+    const b2AddPreset = findAll(currentTree, (node) => hasClass(node, 'dshrouter-add')).find((node) => textOf(node).includes(zh.presetsAdd))
+    if (b2AddPreset) {
+      b2AddPreset.props.onClick()
+      currentTree = await settle()
+    }
+    check('B2: 其余面正常——agentPresets 罗盘照常（添加预设下拉含 Governance 预设）', textOf(currentTree).includes('Governance 预设'))
+    // settings/session/credentials 面（适配器级锚点，同一注入路径 ctx）：llm
+    // 降级信封与兄弟面 ok 信封并存（渲染级锚点受 llm 耦合数据源限制——账号
+    // 卡/模型下拉均以 llm.providers 为前置，适配器级断言为「其余面正常」的
+    // 完备补面；宿主注入路径 = settingsReg.inject()）。
+    const b2Settings = await settingsReg.inject().api.settings.describe({})
+    const b2Session = await settingsReg.inject().api.llm.models({})
+    const b2Credentials = await settingsReg.inject().api.credentials.describe({ refs: [] })
+    const b2Llm = await settingsReg.inject().api.llm.providers({})
+    check('B2: 其余面正常——settings/session/credentials ok 而 llm 降级（同 ctx 单面隔离）', b2Settings.result.ok === true && b2Session.result.ok === true && b2Credentials.result.ok === true && b2Llm.result.ok === false && b2Llm.result.error.code === 'host-face-missing')
+    // 域 5 apply 自检：remote.llm 缺失下重新 apply → inject-face-missing 记入
+    // 诊断环形（模块级共享——settingsReg.inject().health().diag 可见），
+    // apply 本身不 throw 不阻断（§4.3 域 5 降级行为）。
+    let b2ReapplyBlocked = false
+    try { bundleExports.apply(ctx) } catch { b2ReapplyBlocked = true }
+    const b2InjectDiag = settingsReg.inject().health().diag
+    check('B2: apply 时 inject 自检记 inject-face-missing（remote.llm 缺面可视化，apply 不阻断）', !b2ReapplyBlocked && b2InjectDiag.some((entry) => entry.kind === 'inject-face-missing' && entry.face === 'remote.llm'))
     missingFaces.clear()
   }
 }

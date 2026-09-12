@@ -16,6 +16,11 @@
  *    strict wire codec 通过 + FaceHealth 形状）。
  * 6. 域骨架 probe 真实性抽样（client-remotes / llm-selection / ctx-services /
  *    events / inject-manifest——骨架纪律：真实探测行为，禁 TODO 存根）。
+ * 7. EVO-020（ARCH-004 B2 域批）：createClientRemotes 降级语义（面缺失 →
+ *    host-face-missing 降级信封 / 形状漂移 → host-face-shape / 调用被拒 →
+ *    host-face-call；throw 语义已废）+ 浏览器包镜像行为 parity（client.js
+ *    无法 import Node ESM——镜像纪律，漂移即红）+ P5 残留 grep + 域 5
+ *    noteInjectFaceGaps（apply 时 inject 缺面诊断）。
  *
  * 红演示证据（任务验收 2）：实现前自然红（模块缺失套件失败）+ 绿后判别红
  * （R1：HOST_DIAG_LIMIT 临时 64→128 → 环形有界断言红；R2：HostHealthCard
@@ -38,11 +43,11 @@ const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
 const {
   HOST_DIAG_LIMIT, noteHostDiag, hostDiagnostics, registerFaceProbes, faceHealthSnapshot, runFaceProbes,
   packageVersionOf, hostVersionsOf,
-  CLIENT_REMOTE_FACES, probeRemoteFace, clientRemotesHealth,
+  CLIENT_REMOTE_FACES, probeRemoteFace, clientRemotesHealth, createClientRemotes,
   probeLlmAdapterFace, probeSessionSelectFace,
   serviceFaceOf, agentsRegistryOf,
   FORWARDED_EVENT_ALLOWLIST, subscribeEvents, armEventGate,
-  FIBER_INJECT, CLIENT_PACKAGE_INJECT, probeFiberInjectFaces,
+  FIBER_INJECT, CLIENT_PACKAGE_INJECT, probeFiberInjectFaces, noteInjectFaceGaps,
 } = hostAbi
 
 let failures = 0
@@ -204,6 +209,84 @@ console.log('domain skeleton probes (real probing behavior):')
   check('probeFiberInjectFaces probes every FIBER_INJECT face (ok/missing per resolution)', fiberHealth.length === FIBER_INJECT.length && fiberHealth.find((face) => face.name === 'remote.llm').state === 'ok' && fiberHealth.find((face) => face.name === 'modelDirectories').state === 'missing')
   // 6f. 桶：消费者统一入口可达（空桶零逻辑，§4.1）。
   check('host-abi barrel re-exports the domain surface (single consumer entry)', typeof noteHostDiag === 'function' && typeof hostVersionsOf === 'function' && typeof probeRemoteFace === 'function' && typeof subscribeEvents === 'function' && typeof serviceFaceOf === 'function' && Array.isArray(FIBER_INJECT))
+}
+
+// ── 7. EVO-020 B2：createClientRemotes 降级语义 + 浏览器镜像 parity（§4.3 域 1）──
+console.log('B2 client-remotes domain (degraded semantics + browser mirror parity):')
+{
+  // 7a. 权威单点（lib/host-abi/client-remotes.js）：throw 语义 → 降级信封。
+  const okLlm = {
+    listProviders: async () => ({ ok: true, value: [{ id: 'gateway', name: 'Gateway' }] }),
+    listConfigurableProviders: async () => ({ ok: true, value: [{ provider: 'gateway', displayName: 'Gateway', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'gateway'], declared: true }] }),
+    discoverModels: async () => ({ ok: true, value: [{ id: 'm-a' }] }),
+  }
+  const okSession = {
+    modelCatalog: async () => ({ ok: true, value: { default: { provider: 'deepseek-official', model: 'deepseek-v4-pro' }, routableProviders: ['gateway'], groups: [{ id: 'gateway', models: [{ id: 'old-m', name: 'Old M' }] }], failures: [] } }),
+    selectModel: async (payload) => ({ ok: true, value: { selected: { provider: payload.provider } } }),
+  }
+  const okSettings = { describe: async () => ({ ok: true, value: { writable: true, hasDocument: true, namespaces: [] } }), mutate: async () => ({ ok: true, value: { ns: 'llm-pi-ai' } }) }
+  const okCredentials = { describe: async (refs) => ({ ok: true, value: Object.fromEntries((refs ?? []).map((ref) => [ref, { configured: false }])) }), set: async () => ({ ok: true, value: undefined }), unset: async () => ({ ok: true, value: undefined }) }
+  const okPresets = { list: async () => ({ ok: true, value: { presets: [], authorable: true } }) }
+  const fullCtx = { get: (name) => (name === 'remote.llm' ? okLlm : name === 'remote.session' ? okSession : name === 'remote.settings' ? okSettings : name === 'remote.credentials' ? okCredentials : name === 'remote.agentPresets' ? okPresets : undefined), remote: {} }
+  const remotes = createClientRemotes(fullCtx)
+  check('B2: createClientRemotes(ctx) → { api, health() }（§4.3 唯一入口签名）', !!remotes && typeof remotes.api === 'object' && remotes.api !== null && typeof remotes.health === 'function')
+  const providersEnvelope = await remotes.api.llm.providers({})
+  check('B2: ok 路径信封与 FIX-028 旧形状逐字一致（{result:{ok,value}}——消费点零改动承诺）', providersEnvelope.result.ok === true && Array.isArray(providersEnvelope.result.value.providers) && providersEnvelope.result.value.providers.length === 1 && providersEnvelope.result.value.providers[0].provider === 'gateway' && providersEnvelope.result.value.providers[0].active === true && providersEnvelope.result.value.providers[0].declared === true)
+  const modelsEnvelope = await remotes.api.llm.models({})
+  check('B2: llm.models 映射 session.modelCatalog groups/failures（行为零回退）', modelsEnvelope.result.ok === true && modelsEnvelope.result.value.groups[0].id === 'gateway' && modelsEnvelope.result.value.failures.length === 0)
+  const selectEnvelope = await remotes.api.sessions.selectModel({ sessionId: 's1', provider: 'gateway', model: 'old-m' })
+  check('B2: sessions.selectModel 直通信封（envelopeOf 路径零回退）', selectEnvelope.result.ok === true && selectEnvelope.result.value.selected.provider === 'gateway')
+  // 面缺失（任务验收场景：stub 掉 remote.llm）——同 fixture 其余四面在。
+  const mixedCtx = { get: (name) => ({ 'remote.settings': okSettings, 'remote.credentials': okCredentials, 'remote.agentPresets': okPresets, 'remote.session': okSession })[name], remote: {} }
+  const mixedRemotes = createClientRemotes(mixedCtx)
+  const degradedProviders = await mixedRemotes.api.llm.providers({})
+  check('B2: 面缺失 → 降级信封 {ok:false, error.code:host-face-missing}（throw 语义已废）', degradedProviders.result.ok === false && degradedProviders.result.error.code === 'host-face-missing' && typeof degradedProviders.result.error.message === 'string' && degradedProviders.result.error.message.includes('llm'))
+  const degradedDiscover = await mixedRemotes.api.llm.discoverModels({ settingsNs: 'llm-pi-ai' })
+  check('B2: 缺失面的每个方法都返回降级信封（degraded face——非单方法特例）', degradedDiscover.result.ok === false && degradedDiscover.result.error.code === 'host-face-missing')
+  const siblingSettings = await mixedRemotes.api.settings.describe({})
+  const siblingPresets = await mixedRemotes.api.agentPresets.list({})
+  check('B2: 单面降级不波及兄弟面——settings/agentPresets 照常 ok（其余面正常）', siblingSettings.result.ok === true && siblingPresets.result.ok === true)
+  // 形状漂移：面在而方法缺 → host-face-shape（BR-02 第一层防线语义化）。
+  const shapeCtx = { get: (name) => (name === 'remote.llm' ? { listProviders: async () => ({ ok: true, value: [] }) } : name === 'remote.session' ? okSession : undefined), remote: {} }
+  const shapeEnvelope = await createClientRemotes(shapeCtx).api.llm.providers({})
+  check('B2: 形状漂移 → host-face-shape（error.message 列缺失方法名）', shapeEnvelope.result.ok === false && shapeEnvelope.result.error.code === 'host-face-shape' && shapeEnvelope.result.error.message.includes('listConfigurableProviders'))
+  // 调用被拒 → host-face-call（透传宿主错误消息，绝不外泄击穿）。
+  const rejectCtx = { get: (name) => (name === 'remote.llm' ? { listProviders: async () => { throw new Error('gateway exploded') }, listConfigurableProviders: async () => ({ ok: true, value: [] }) } : undefined), remote: {} }
+  const rejectEnvelope = await createClientRemotes(rejectCtx).api.llm.providers({})
+  check('B2: 宿主调用被拒 → host-face-call 信封（透传宿主错误消息）', rejectEnvelope.result.ok === false && rejectEnvelope.result.error.code === 'host-face-call' && rejectEnvelope.result.error.message.includes('gateway exploded'))
+  // health()：徽章数据源（五面探测快照）+ face-degraded 诊断轨迹（P8）。
+  const mixedHealth = mixedRemotes.health()
+  check('B2: health().faces 探测五命名空间——llm missing 且兄弟四面 ok（徽章数据源）', mixedHealth.faces.length === Object.keys(CLIENT_REMOTE_FACES).length && mixedHealth.faces.find((face) => face.name === 'llm').state === 'missing' && mixedHealth.faces.filter((face) => face.state === 'ok').length === 4)
+  check('B2: 降级调用记 face-degraded 诊断事件（health().diag 可观测，P8）', mixedHealth.diag.some((entry) => entry.kind === 'face-degraded' && entry.face === 'remote.llm' && entry.code === 'host-face-missing' && typeof entry.at === 'number'))
+  check('B2: 权威单点降级事件同步上行全局环形（noteHostDiag——RPC 可见面）', hostDiagnostics().entries.some((entry) => entry.kind === 'face-degraded' && entry.face === 'remote.llm' && entry.code === 'host-face-missing'))
+  // 7b. 浏览器包镜像 parity（lib/client.js 无法 import Node ESM——镜像纪律，
+  //     OAUTH_ROUTE_PROVIDER 先例；envelope/health 行为逐字段相等，漂移即红）。
+  const reactStub = { createElement: () => null, useState: () => [null, () => {}], useEffect: () => {}, useCallback: (fn) => fn, useRef: () => ({ current: null }) }
+  let bundlePayload = null
+  new Function('window', readFileSync(join(ROOT_DIR, 'lib', 'client.js'), 'utf8'))({ __ModuleLoader__: { load: (payload) => { bundlePayload = payload } } })
+  const bundleExports = bundlePayload.factory((name) => (name === 'react' ? reactStub : null))
+  check('B2: 浏览器包导出 createClientRemotes 镜像（判别测试钩子先例 ModelTakeover）', typeof bundleExports.createClientRemotes === 'function')
+  const mirror = bundleExports.createClientRemotes(mixedCtx)
+  const mirrorProviders = await mirror.api.llm.providers({})
+  check('B2 镜像 parity: 面缺失降级信封与权威单点逐字相等（JSON 级）', JSON.stringify(mirrorProviders) === JSON.stringify(degradedProviders))
+  const mirrorSettings = await mirror.api.settings.describe({})
+  check('B2 镜像 parity: ok 路径信封与权威单点逐字相等（消费点零改动双面锁定）', JSON.stringify(mirrorSettings) === JSON.stringify(siblingSettings))
+  check('B2 镜像 parity: health().faces 与权威单点相等（探测表面同步锁定）', JSON.stringify(mirror.health().faces) === JSON.stringify(mixedRemotes.health().faces))
+  const diagTrailOf = (entries) => entries.map((entry) => `${entry.kind}:${entry.face}:${entry.code ?? ''}`).join('|')
+  const parityCanonical = createClientRemotes(mixedCtx)
+  await parityCanonical.api.llm.providers({})
+  check('B2 镜像 parity: health().diag 降级轨迹相等（kind:face:code 序列——同调用序列对照实例）', diagTrailOf(mirror.health().diag) === diagTrailOf(parityCanonical.health().diag))
+  // 7c. P5：lib/client.js 内 hostApiFace 本体零残留 + 调用点已切换。
+  const clientSource = readFileSync(join(ROOT_DIR, 'lib', 'client.js'), 'utf8')
+  check('B2/P5: lib/client.js 内 hostApiFace 零残留（被取代路径禁止并存）', !clientSource.includes('hostApiFace'))
+  check('B2/P5: apply() 调用点已切换 createClientRemotes(ctx)（api = remotes.api）', /const remotes = createClientRemotes\(ctx\)/.test(clientSource) && /const api = remotes\.api/.test(clientSource))
+  check('B2/P5: 镜像实现唯一（function createClientRemotes 恰一处）', (clientSource.match(/function createClientRemotes\(/g) ?? []).length === 1)
+  // 7d. 域 5：noteInjectFaceGaps——apply 时 inject 缺面诊断（不 throw 不阻断）。
+  const gapCtx = { get: (name) => (name === 'remote.llm' ? {} : undefined) }
+  const gapsBefore = hostDiagnostics().entries.filter((entry) => entry.kind === 'inject-face-missing').length
+  const gapFaces = noteInjectFaceGaps(gapCtx)
+  check('B2: noteInjectFaceGaps 探测全部 FIBER_INJECT 面并返回 FaceHealth[]', gapFaces.length === FIBER_INJECT.length && gapFaces.find((face) => face.name === 'remote.llm').state === 'ok' && gapFaces.find((face) => face.name === 'slots').state === 'missing')
+  check('B2: 缺面记 inject-face-missing 入环形（apply 自检权威单点，不 throw）', hostDiagnostics().entries.filter((entry) => entry.kind === 'inject-face-missing').length === gapsBefore + (FIBER_INJECT.length - 1))
 }
 
 console.log(failures === 0 ? `\nALL HOST ABI HEALTH TESTS PASSED (${passed} assertions)` : `\n${failures} FAILURE(S) (${passed} passed)`)
