@@ -365,5 +365,34 @@ console.log('fix-029 C: assembly prop wiring (RED if wiring dropped):')
   const servedMount = served.indexOf('el(ModelTakeover, {')
   const servedWiring = servedMount > 0 ? served.slice(servedMount, served.indexOf('}))', servedMount)) : ''
   check('C4: served-client 镜像装配同步透传 useInput', servedMount > 0 && /useInput:\s*props\.useInput/.test(servedWiring))
-}console.log(failures === 0 ? '\nALL FIX-029 DISCRIMINANT TESTS PASSED' : `\n${failures} FIX-029 ASSERTION(S) FAILED (RED — fix pending)`)
+}
+
+// ── D 组：EVO-021（ARCH-004 B3 / 设计 §3 D1-2 + ADR-ARCH-004-B）负向守卫：
+// apiProxy 旧会话选择面防复活（源码级）+ llmFaceOf 三方法并集判别（P2-1
+// 拆半：功能性门控半项落 llmFaceOf；probe 半项随 host-abi-health.mjs 桩
+// 同步，Coordinator 已绑定 EVO-020 收口）。任务原文「A4 旧面回落」系错位
+// 引用（本文件 A4 = prestep sessionProjections 回落，与 apiProxy 无关且
+// 保持不变）——apiProxy 正向用例真身在 tests/preset-defaults.mjs 播种夹具
+// （A-J 节），行为级防复活守卫在该文件 N 节；本组补源码级守卫与域接口判别。
+console.log('fix-029 D: D1-2 legacy apiProxy face stays dead + llmFaceOf union gate:')
+{
+  const domainSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'host-abi', 'llm-selection.js'), 'utf8')
+  check('D1: llm-selection 域源码零 apiProxy 解析（D1-2 旧面删除——复活即红）', !/get\(['"]apiProxy['"]\)/.test(domainSource))
+  check('D2: sessionSelectFaceOf 域内单形态（sessionController 解析；宿主锚 dsh-api-session-controller index.js:605,2502）', /sessionSelectFaceOf/.test(domainSource) && /get\('sessionController'\)/.test(domainSource))
+  check('D3: 域接口 §4.3 域 2 五函数齐备（llmFaceOf/sessionSelectFaceOf/inheritedRouteOf/liveDefaultSelection/sessionNeverProduced）',
+    ['llmFaceOf', 'sessionSelectFaceOf', 'inheritedRouteOf', 'liveDefaultSelection', 'sessionNeverProduced']
+      .every((name) => new RegExp(`export function ${name}\\b`).test(domainSource)))
+  let llmSelection = null
+  try { llmSelection = await import('../lib/host-abi/llm-selection.js') } catch { /* RED：导出缺失 */ }
+  const fullFace = { registerAdapter: () => {}, registration: () => {}, listModels: async () => [] }
+  const missingListModels = { registerAdapter: () => {}, registration: () => {} }
+  check('D4: llmFaceOf 三方法并集门控（缺 listModels → null；三方法齐 → 面本体；宿主 LlmRuntime 0.1.5-rc.2 三方法齐备实证 dsh-llm lib/index.js:1698/1780/2177/2018——零回退）',
+    typeof llmSelection?.llmFaceOf === 'function'
+    && llmSelection.llmFaceOf({ get: (name) => (name === 'llm' ? missingListModels : undefined) }) === null
+    && llmSelection.llmFaceOf({ get: (name) => (name === 'llm' ? fullFace : undefined) }) === fullFace)
+  const consumerSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'preset-defaults.js'), 'utf8')
+  check('D5: preset-defaults 本地实现已删（六函数 import 切换自 host-abi——P5 源码面零残留）',
+    !/function (sessionSelectFaceOf|liveDefaultSelection|inheritedRouteOf|sessionNeverProduced|agentPresetsServiceOf|agentsRegistryOf)\s*\(/.test(consumerSource))
+}
+console.log(failures === 0 ? '\nALL FIX-029 DISCRIMINANT TESTS PASSED' : `\n${failures} FIX-029 ASSERTION(S) FAILED (RED — fix pending)`)
 process.exit(failures === 0 ? 0 : 1)

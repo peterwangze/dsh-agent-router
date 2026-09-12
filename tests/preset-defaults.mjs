@@ -71,6 +71,18 @@
 //   - I 节由 emit 正向判别改为**零 emit 负向守卫**（防复活）：I1/I3/I4 对
 //     旧实现（有 emit）必败（RED）；I2/I5 原负向语义保留（失败零副作用 /
 //     subagent 边界）；fixture 的 emit 记录面保留专供本组判别。
+// Rework（EVO-021，ARCH-004 B3 / 设计 §10 B3 + §3 D1-2，2026-09-12）：
+//   - 播种面函数族迁 host-abi llm-selection 域（sessionSelectFaceOf 唯一
+//     实现）且 **apiProxy 旧面回落删除**（单形态 sessionController）→
+//     全套播种夹具由 makeApiProxy（payload/result 双信封）翻转为
+//     makeSessionController（直接参数，K 节先例夹具）；断言由
+//     calls[0].payload.* 改为 calls[0].*。
+//   - N 节 = apiProxy 防复活负向守卫（行为级 N1 + 源码级 N2，先例 I 节
+//     零信号负向模式）：仅旧面在场 → 播种零动作（复活实现必败 RED）；
+//     makeApiProxy 夹具保留专供 N1/零调用类断言。
+//   - G1 拒绝注入键随实现前移为 'sessionController'（面解析 try/catch
+//     判据不变）；D6 转义为「apiProxy 残面不被采信」守卫。
+import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -298,16 +310,18 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
 // ── A. agent/created 主会话播种 ──────────────────────────────────────────
 {
   // A1-A3 空白主会话 + 已配置 → selectModel 播种 + options 突变 + 全局写回恢复。
+  // EVO-021（D1-2）：播种面夹具 = sessionController 单形态（直接参数；apiProxy
+  // 旧面夹具退役至 N 节负向守卫专用）。
   const defaults = makeDefaults()
-  const apiProxy = makeApiProxy({ defaults })
-  const ctx = makeCtx({ defaults, apiProxy })
+  const controller = makeSessionController({ defaults })
+  const ctx = makeCtx({ defaults, sessionController: controller })
   const agent = mainBlankAgent({ id: 'sess-a1' })
-  await dcheck('A1 空白主会话+已配置 → selectModel({payload:{sessionId,provider,model}}) 精确 envelope', async () => {
+  await dcheck('A1 空白主会话+已配置 → selectModel({sessionId,provider,model}) 直接参数精确命中', async () => {
     await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
-    return apiProxy.calls.length === 1
-      && apiProxy.calls[0].payload.sessionId === 'sess-a1'
-      && apiProxy.calls[0].payload.provider === MAIN_MODEL.provider
-      && apiProxy.calls[0].payload.model === MAIN_MODEL.model
+    return controller.calls.length === 1
+      && controller.calls[0].sessionId === 'sess-a1'
+      && controller.calls[0].provider === MAIN_MODEL.provider
+      && controller.calls[0].model === MAIN_MODEL.model
   })
   check('A2 options 突变为预设主模型（seedConfig 一致性 + subagent 继承载体）',
     agent.options.provider === MAIN_MODEL.provider && agent.options.model === MAIN_MODEL.model)
@@ -355,10 +369,10 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   // A7 preset 解析兜底链（EVO-013 composedPreset live + header 兜底保留）。
   await dcheck('A7 header 无 agentPreset → composedPreset live 解析兜底生效', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = makeAgent({ id: 'sess-a7', header: { origin: 'main' }, options: { ...NATIVE }, requestHeader: () => null, agentCtx: {} })
-    await fireCreated(makeCtx({ defaults, apiProxy, agentPresets: { composedPreset: () => PRESET_ID } }), makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
-    return apiProxy.calls.length === 1 && agent.options.provider === MAIN_MODEL.provider
+    await fireCreated(makeCtx({ defaults, sessionController: controller, agentPresets: { composedPreset: () => PRESET_ID } }), makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    return controller.calls.length === 1 && agent.options.provider === MAIN_MODEL.provider
   })
   await dcheck('A8 无 preset 可解析（服务缺失+header 空）→ 零动作', async () => {
     const defaults = makeDefaults()
@@ -377,13 +391,12 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
 {
   // A10 fail-closed：globalBefore 不可读 → 无法保证写回 → 跳过播种 + 可观测。
   await dcheck('A10 全局默认 live 读取失败（服务缺失）→ 跳过播种 + warn（fail-closed）', async () => {
-    const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
-    const ctx = makeCtx({ apiProxy })
-    ctx.get = (key) => (key === 'apiProxy' ? apiProxy : undefined)
+    const controller = makeSessionController({})
+    const ctx = makeCtx({ sessionController: controller })
+    ctx.get = (key) => (key === 'sessionController' ? controller : undefined)
     const agent = mainBlankAgent()
     await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
-    return apiProxy.calls.length === 0 && agent.options.provider === NATIVE.provider
+    return controller.calls.length === 0 && agent.options.provider === NATIVE.provider
       && ctx.logger.warnCalls.some((line) => line.includes('fail-closed') || line.includes('unreadable'))
   })
 }
@@ -391,11 +404,11 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   // A11 selectModel 错误分支（模型不可用）→ options 回滚 + warn + 零全局写。
   await dcheck('A11 selectModel 错误（model-unavailable）→ options 回滚 + warn + 零全局写', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults, unavailable: (provider, model) => model === MAIN_MODEL.model })
+    const controller = makeSessionController({ defaults, unavailable: (provider, model) => model === MAIN_MODEL.model })
     const agent = mainBlankAgent()
-    const ctx = makeCtx({ defaults, apiProxy })
+    const ctx = makeCtx({ defaults, sessionController: controller })
     await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
-    return apiProxy.calls.length === 1 && defaults.state.saveCalls.length === 0
+    return controller.calls.length === 1 && defaults.state.saveCalls.length === 0
       && agent.options.provider === NATIVE.provider && agent.options.model === NATIVE.model
       && ctx.logger.warnCalls.some((line) => line.includes('model-unavailable') || line.includes('selectModel') || line.includes('preset default'))
   })
@@ -470,25 +483,25 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
 {
   await dcheck('C1 空白切换到已配置预设 → 重播新配置（selectModel+options+恢复）', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent({ id: 'sess-c1', header: { origin: 'main' } })
-    const ctx = makeCtx({ defaults, apiProxy, agents: { get: (id) => (id === 'sess-c1' ? agent : undefined) } })
+    const ctx = makeCtx({ defaults, sessionController: controller, agents: { get: (id) => (id === 'sess-c1' ? agent : undefined) } })
     await firePresetSelected(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), 'sess-c1', PRESET_ID)
-    return apiProxy.calls.length === 1 && apiProxy.calls[0].payload.provider === MAIN_MODEL.provider
+    return controller.calls.length === 1 && controller.calls[0].provider === MAIN_MODEL.provider
       && agent.options.provider === MAIN_MODEL.provider
       && defaults.state.current.provider === NATIVE.provider
   })
   await dcheck('C2 切到无配置预设 → selectModel(全局默认) 且全局净变化为零', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent({ id: 'sess-c2', header: { origin: 'main' } })
-    const ctx = makeCtx({ defaults, apiProxy, agents: { get: (id) => (id === 'sess-c2' ? agent : undefined) } })
+    const ctx = makeCtx({ defaults, sessionController: controller, agents: { get: (id) => (id === 'sess-c2' ? agent : undefined) } })
     const service = makeService({ governance: presetConfig({ main: MAIN_MODEL }) })
     await firePresetSelected(ctx, service, 'sess-c2', PRESET_ID)
     const afterFirst = { ...defaults.state.current }
     await firePresetSelected(ctx, service, 'sess-c2', OTHER_PRESET)
     return afterFirst.provider === NATIVE.provider
-      && apiProxy.calls.length === 2 && apiProxy.calls[1].payload.provider === NATIVE.provider && apiProxy.calls[1].payload.model === NATIVE.model
+      && controller.calls.length === 2 && controller.calls[1].provider === NATIVE.provider && controller.calls[1].model === NATIVE.model
       && agent.options.provider === NATIVE.provider
       && defaults.state.current.provider === NATIVE.provider && defaults.state.current.model === NATIVE.model
       && defaults.state.saveCalls.length === 3 // P.main 瞬态 + 恢复 + G→G 同值写（无第二次恢复）
@@ -532,9 +545,9 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   })
   await dcheck('D3 恢复失败 → 重试一次成功 → 全局已恢复，无高声告警', async () => {
     const defaults = makeDefaults({ failIndexes: [1] }) // #0 瞬态写成功 → #1 恢复失败（抛错不入账）→ #2 重试成功
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent()
-    const ctx = makeCtx({ defaults, apiProxy })
+    const ctx = makeCtx({ defaults, sessionController: controller })
     await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
     return defaults.state.saveCalls.length === 2 // 成功落账 = 瞬态写 + 重试恢复
       && defaults.state.current.provider === NATIVE.provider
@@ -542,9 +555,9 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   })
   await dcheck('D4 恢复重试仍失败 → 高声告警（含手动改回指引与原全局值）', async () => {
     const defaults = makeDefaults({ failIndexes: [1, 2] })
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent()
-    const ctx = makeCtx({ defaults, apiProxy })
+    const ctx = makeCtx({ defaults, sessionController: controller })
     await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
     const loud = ctx.logger.warnCalls.find((line) => line.includes('手动改回') || line.includes('manually'))
     return !!loud && loud.includes(NATIVE.provider) && loud.includes(NATIVE.model)
@@ -559,12 +572,13 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
       && agent.options.provider === NATIVE.provider && agent.options.model === NATIVE.model
       && ctx.logger.warnCalls.some((line) => line.includes('select face') || line.includes('apiProxy'))
   })
-  await dcheck('D6 sessions.selectModel 非函数（面形态漂移）→ 同 D5 降级不炸', async () => {
+  await dcheck('D6 apiProxy 残面（sessions.selectModel 非函数）不被采信（D1-2 单形态）→ 同 D5 降级不炸', async () => {
     const agent = mainBlankAgent()
     const ctx = makeCtx({ apiProxy: { sessions: {} }, defaults: makeDefaults() })
     let rejected = null
     try { await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent) } catch (error) { rejected = error }
-    // FIX-030-A：双形态适配后降级 warn 文案 = 「no session select face」。
+    // EVO-021（D1-2）：单形态化后降级 warn 文案 = 「no session select face」
+    //（sessionController 不可用——apiProxy 残面不再参与解析）。
     return rejected === null && ctx.logger.warnCalls.some((line) => line.includes('select face') || line.includes('selectModel'))
   })
   await dcheck('D7 handler 内部异常（presetDefaults 抛错）→ fail-safe warn，不 reject', async () => {
@@ -589,10 +603,10 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   })
   await dcheck('D10 配置热更新（事件间改 presets 字典）→ 现读生效', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const store = { governance: presetConfig({ main: MAIN_MODEL }) }
     const agent = mainBlankAgent()
-    const ctx = makeCtx({ defaults, apiProxy })
+    const ctx = makeCtx({ defaults, sessionController: controller })
     await fireCreated(ctx, makeService(store), agent)
     const firstModel = agent.options.model
     store.governance = presetConfig({ main: SUB_MODEL })
@@ -601,9 +615,9 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   })
   await dcheck('D11 观测去重有界：同 (preset, session) 重复事件只打一条 info', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent()
-    const ctx = makeCtx({ defaults, apiProxy })
+    const ctx = makeCtx({ defaults, sessionController: controller })
     const service = makeService({ governance: presetConfig({ main: MAIN_MODEL }) })
     await fireCreated(ctx, service, agent)
     await fireCreated(ctx, service, agent)
@@ -620,8 +634,8 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   // globalBefore 读到的是 h1 完成恢复后的稳定值 G，全局终态 = G。
   await dcheck('E1 并发播种串行化（agent/created ×2 交错）→ h2 读到恢复后的稳定全局值，终态=G 非中间值', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
-    const ctx = makeCtx({ defaults, apiProxy })
+    const controller = makeSessionController({ defaults })
+    const ctx = makeCtx({ defaults, sessionController: controller })
     setup(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }))
     const handler = (ctx.listeners['agent/created'] ?? [])[0]
     const agent1 = mainBlankAgent({ id: 'sess-e1a' })
@@ -629,7 +643,7 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     const first = handler({ agent: agent1 }) // 不 await——并发时序复刻
     const second = handler({ agent: agent2 })
     await Promise.all([first, second])
-    return apiProxy.calls.length === 2
+    return controller.calls.length === 2
       && agent1.options.provider === MAIN_MODEL.provider && agent1.options.model === MAIN_MODEL.model
       && agent2.options.provider === MAIN_MODEL.provider && agent2.options.model === MAIN_MODEL.model
       && defaults.state.current.provider === NATIVE.provider
@@ -638,17 +652,17 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   })
   await dcheck('E2 跨事件面并发（agent/created + agent-preset/selected 同窗）→ 同一队列串行化，终态=G', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent1 = mainBlankAgent({ id: 'sess-e2a' })
     const agent2 = mainBlankAgent({ id: 'sess-e2b', header: { origin: 'main' } })
-    const ctx = makeCtx({ defaults, apiProxy, agents: { get: (id) => (id === 'sess-e2b' ? agent2 : undefined) } })
+    const ctx = makeCtx({ defaults, sessionController: controller, agents: { get: (id) => (id === 'sess-e2b' ? agent2 : undefined) } })
     setup(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }))
     const created = (ctx.listeners['agent/created'] ?? [])[0]
     const selected = (ctx.listeners['agent-preset/selected'] ?? [])[0]
     const first = created({ agent: agent1 })
     const second = selected('sess-e2b', PRESET_ID)
     await Promise.all([first, second])
-    return apiProxy.calls.length === 2
+    return controller.calls.length === 2
       && agent1.options.provider === MAIN_MODEL.provider && agent1.options.model === MAIN_MODEL.model
       && agent2.options.provider === MAIN_MODEL.provider && agent2.options.model === MAIN_MODEL.model
       && defaults.state.current.provider === NATIVE.provider
@@ -658,45 +672,45 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
 
 // ── F. reasoningEffort 路径断言（R0 F-2：透传 / 漂移判据 / 重置透传） ─────
 {
-  await dcheck('F1 配置 main 带 reasoningEffort → selectModel payload 透传（空串归一=不带）', async () => {
+  await dcheck('F1 配置 main 带 reasoningEffort → selectModel 直接参数透传（空串归一=不带）', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent({ id: 'sess-f1' })
-    await fireCreated(makeCtx({ defaults, apiProxy }),
+    await fireCreated(makeCtx({ defaults, sessionController: controller }),
       makeService({ governance: presetConfig({ main: { ...MAIN_MODEL, reasoningEffort: 'high' } }) }), agent)
-    const passthrough = apiProxy.calls.length === 1 && apiProxy.calls[0].payload.reasoningEffort === 'high'
-    // effortOf 归一：空串 = 未设置 → envelope 不含该键。
+    const passthrough = controller.calls.length === 1 && controller.calls[0].reasoningEffort === 'high'
+    // effortOf 归一：空串 = 未设置 → 参数不含该键。
     const defaults2 = makeDefaults()
-    const apiProxy2 = makeApiProxy({ defaults: defaults2 })
+    const controller2 = makeSessionController({ defaults: defaults2 })
     const agent2 = mainBlankAgent({ id: 'sess-f1b' })
-    await fireCreated(makeCtx({ defaults: defaults2, apiProxy: apiProxy2 }),
+    await fireCreated(makeCtx({ defaults: defaults2, sessionController: controller2 }),
       makeService({ governance: presetConfig({ main: { ...MAIN_MODEL, reasoningEffort: '' } }) }), agent2)
     return passthrough
-      && apiProxy2.calls.length === 1
-      && !('reasoningEffort' in apiProxy2.calls[0].payload)
+      && controller2.calls.length === 1
+      && !('reasoningEffort' in controller2.calls[0])
   })
   await dcheck('F2 仅 effort 漂移（provider/model 同值）→ drifted 命中 → 恢复且恢复 payload 含原 effort', async () => {
     const defaults = makeDefaults({ initial: { ...NATIVE, reasoningEffort: 'medium' } })
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent({ id: 'sess-f2' })
-    await fireCreated(makeCtx({ defaults, apiProxy }),
+    await fireCreated(makeCtx({ defaults, sessionController: controller }),
       makeService({ governance: presetConfig({ main: { provider: NATIVE.provider, model: NATIVE.model, reasoningEffort: 'high' } }) }), agent)
-    return apiProxy.calls.length === 1
+    return controller.calls.length === 1
       && defaults.state.saveCalls.length === 2 // 瞬态写 + 恢复（drifted 不含 effort 判据则不恢复）
       && defaults.state.saveCalls[0].reasoningEffort === 'high'
       && defaults.state.saveCalls[1].reasoningEffort === 'medium'
       && defaults.state.current.reasoningEffort === 'medium'
   })
-  await dcheck('F3 重置路径（切无配置预设）→ selectModel payload 透传全局默认的 effort', async () => {
+  await dcheck('F3 重置路径（切无配置预设）→ selectModel 直接参数透传全局默认的 effort', async () => {
     const defaults = makeDefaults({ initial: { ...NATIVE, reasoningEffort: 'low' } })
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent({ id: 'sess-f3', header: { origin: 'main' } })
-    const ctx = makeCtx({ defaults, apiProxy, agents: { get: (id) => (id === 'sess-f3' ? agent : undefined) } })
+    const ctx = makeCtx({ defaults, sessionController: controller, agents: { get: (id) => (id === 'sess-f3' ? agent : undefined) } })
     const service = makeService({ governance: presetConfig({ main: MAIN_MODEL }) })
     await firePresetSelected(ctx, service, 'sess-f3', PRESET_ID)
     await firePresetSelected(ctx, service, 'sess-f3', OTHER_PRESET)
-    return apiProxy.calls.length === 2
-      && apiProxy.calls[1].payload.reasoningEffort === 'low'
+    return controller.calls.length === 2
+      && controller.calls[1].reasoningEffort === 'low'
       && defaults.state.current.reasoningEffort === 'low'
       && agent.options.provider === NATIVE.provider && agent.options.model === NATIVE.model
   })
@@ -706,22 +720,24 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
 {
   // 事实链复刻：① try 内 bare return promise ≠ await——run 拒绝时 catch 不
   // 执行，async handler 直接拒绝；② 现实拒绝源 = seed 面可用性预检的
-  // ctx.get('apiProxy')（唯一未包 try/catch 的逃逸）；③ 宿主 cordis emit
-  // fire-and-forget 丢弃返回值 → unhandledRejection。旧实现必败（RED），
+  // ctx.get('sessionController')（唯一未包 try/catch 的逃逸）；③ 宿主 cordis
+  // emit fire-and-forget 丢弃返回值 → unhandledRejection。旧实现必败（RED），
   // return await 后 catch 兜底 warn、零外泄（GREEN）。
-  // FIX-030-A 更新：注入点从 seed 调用中段前移到面解析——ctx.get('apiProxy')
-  // 抛错被 sessionSelectFaceOf 内 try/catch 捕获 → face=null → 降级 warn
-  // （观测语义保持：面不可用可观测）+ 零 unhandledRejection（外泄判据不变）。
+  // FIX-030-A 更新：注入点从 seed 调用中段前移到面解析——面查找抛错被
+  // sessionSelectFaceOf 内 try/catch 捕获 → face=null → 降级 warn（观测语义
+  // 保持：面不可用可观测）+ 零 unhandledRejection（外泄判据不变）。
+  // EVO-021（D1-2）：注入键随单形态化前移为 'sessionController'（apiProxy
+  // 已不在解析链上）。
   await dcheck('G1 选择面解析拒绝（ctx.get 抛错注入）→ face 降级 warn 可观测 + 零 unhandledRejection 外泄', async () => {
     const defaults = makeDefaults()
     const agent = mainBlankAgent({ id: 'sess-g1', header: { origin: 'main' } })
-    const ctx = makeCtx({ defaults, apiProxy: makeApiProxy({ defaults }), agents: { get: (id) => (id === 'sess-g1' ? agent : undefined) } })
+    const ctx = makeCtx({ defaults, agents: { get: (id) => (id === 'sess-g1' ? agent : undefined) } })
     setup(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }))
     const handler = (ctx.listeners['agent-preset/selected'] ?? [])[0]
-    // 拒绝注入：仅 ctx.get('apiProxy') 抛错（其余键原样放行——liveDefaultSelection 等不受影响）。
+    // 拒绝注入：仅 ctx.get('sessionController') 抛错（其余键原样放行——liveDefaultSelection 等不受影响）。
     const realGet = ctx.get
     ctx.get = (key) => {
-      if (key === 'apiProxy') throw new Error('injected apiProxy face failure')
+      if (key === 'sessionController') throw new Error('injected sessionController face failure')
       return realGet(key)
     }
     // process 级 unhandledRejection 捕获器（外泄判据——RED 复现点）。
@@ -757,11 +773,11 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   // （无 agents 属性）——旧实现（属性访问）必败（RED）。
   await dcheck('H1 切换事件 handler 经 ctx.get(\'agents\') 查到 agent 并播种（旧实现属性面 undefined → 静默 skip → 必败）', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent({ id: 'sess-h1', header: { origin: 'main' } })
-    const ctx = makeCtx({ defaults, apiProxy, agents: { get: (id) => (id === 'sess-h1' ? agent : undefined) } })
+    const ctx = makeCtx({ defaults, sessionController: controller, agents: { get: (id) => (id === 'sess-h1' ? agent : undefined) } })
     await firePresetSelected(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), 'sess-h1', PRESET_ID)
-    return apiProxy.calls.length === 1 && apiProxy.calls[0].payload.provider === MAIN_MODEL.provider
+    return controller.calls.length === 1 && controller.calls[0].provider === MAIN_MODEL.provider
       && agent.options.provider === MAIN_MODEL.provider
       && defaults.state.current.provider === NATIVE.provider // 写回恢复完成
   })
@@ -794,45 +810,45 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   // （失败分支与 subagent 纯 options 路径零信号）。
   await dcheck('I1 种子成功 → 零 llm/adapters-updated emit（服务端死路径已删——旧实现恰一次必败 RED）+ 播种照常生效', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent({ id: 'sess-i1' })
-    const ctx = makeCtx({ defaults, apiProxy })
+    const ctx = makeCtx({ defaults, sessionController: controller })
     await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
-    return apiProxy.calls.length === 1
+    return controller.calls.length === 1
       && agent.options.provider === MAIN_MODEL.provider && agent.options.model === MAIN_MODEL.model
       && ctx.emitted.filter((entry) => entry.event === 'llm/adapters-updated').length === 0
   })
-  await dcheck('I2 种子失败分支（selectModel err 信封）→ 零 emit（失败零副作用零信号——原负向语义保留）', async () => {
+  await dcheck('I2 种子失败分支（selectModel 抛错形态）→ 零 emit（失败零副作用零信号——原负向语义保留）', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults, unavailable: (provider, model) => model === MAIN_MODEL.model })
+    const controller = makeSessionController({ defaults, unavailable: () => true })
     const agent = mainBlankAgent({ id: 'sess-i2' })
-    const ctx = makeCtx({ defaults, apiProxy })
+    const ctx = makeCtx({ defaults, sessionController: controller })
     await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
-    return apiProxy.calls.length === 1 && ctx.emitted.length === 0
+    return controller.calls.length === 1 && ctx.emitted.length === 0
       && agent.options.provider === NATIVE.provider && agent.options.model === NATIVE.model // 回滚成立
   })
   await dcheck('I3 重置路径（切无配置预设 → selectModel(全局默认) 成功）→ 同样零 emit（旧实现恰一次必败 RED）', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent({ id: 'sess-i3', header: { origin: 'main' } })
-    const ctx = makeCtx({ defaults, apiProxy, agents: { get: (id) => (id === 'sess-i3' ? agent : undefined) } })
+    const ctx = makeCtx({ defaults, sessionController: controller, agents: { get: (id) => (id === 'sess-i3' ? agent : undefined) } })
     const service = makeService({ governance: presetConfig({ main: MAIN_MODEL }) })
     await firePresetSelected(ctx, service, 'sess-i3', OTHER_PRESET) // OTHER_PRESET 无配置 → 重置回全局默认
-    return apiProxy.calls.length === 1 && apiProxy.calls[0].payload.provider === NATIVE.provider
+    return controller.calls.length === 1 && controller.calls[0].provider === NATIVE.provider
       && agent.options.provider === NATIVE.provider
       && ctx.emitted.filter((entry) => entry.event === 'llm/adapters-updated').length === 0
   })
   await dcheck('I4 emit 面零接触守卫（抛错注入也不可达）→ 零记录 + 零目录刷新告警 + 种子照常生效（旧实现 emit→记录+warn 必败 RED）', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent({ id: 'sess-i4' })
-    const ctx = makeCtx({ defaults, apiProxy })
+    const ctx = makeCtx({ defaults, sessionController: controller })
     // 注入「记录 + 抛错」emit：无论复活实现是否自带 try/catch 吞错，只要
     // 触碰 emit 面就会留下记录（判别面比单纯的恰一次断言更强）。
     ctx.emit = (event, ...args) => { ctx.emitted.push({ event, args }); throw new Error('injected emit failure') }
     let rejected = null
     try { await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent) } catch (error) { rejected = error }
-    return rejected === null && apiProxy.calls.length === 1
+    return rejected === null && controller.calls.length === 1
       && agent.options.provider === MAIN_MODEL.provider && agent.options.model === MAIN_MODEL.model
       && ctx.emitted.length === 0
       && !ctx.logger.warnCalls.some((line) => line.includes('adapters-updated') || line.includes('directory refresh'))
@@ -862,29 +878,29 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   // 同构判据无 turn/start → 播种（GREEN）。
   await dcheck('J1 老无消息会话（独立事件无 turn/start + 陈旧 requestHeader）切换预设 → 播种执行（旧实现 requestHeader 判据必败 RED）', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent({
       id: 'sess-j1',
       header: { origin: 'main' },
       requestHeader: () => ({ config: { provider: 'anthropic', model: 'stale-header' } }), // 老会话陈旧 header（宿主不据此判非空白）
       events: [{ type: 'agent-preset/selected' }, { type: 'session/title' }, { type: 'session/plan-mode' }], // 独立事件：不开启 turn
     })
-    const ctx = makeCtx({ defaults, apiProxy, agents: { get: (id) => (id === 'sess-j1' ? agent : undefined) } })
+    const ctx = makeCtx({ defaults, sessionController: controller, agents: { get: (id) => (id === 'sess-j1' ? agent : undefined) } })
     await firePresetSelected(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), 'sess-j1', PRESET_ID)
-    return apiProxy.calls.length === 1 && apiProxy.calls[0].payload.provider === MAIN_MODEL.provider
+    return controller.calls.length === 1 && controller.calls[0].provider === MAIN_MODEL.provider
       && agent.options.provider === MAIN_MODEL.provider
       && defaults.state.current.provider === NATIVE.provider // 写回恢复完成
   })
   await dcheck('J2 同形态老会话 resume（agent/created 面）→ 播种执行（旧实现必败 RED）', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent({
       id: 'sess-j2',
       requestHeader: () => ({ config: { provider: 'anthropic', model: 'stale-header' } }),
       events: [{ type: 'session/title' }],
     })
-    await fireCreated(makeCtx({ defaults, apiProxy }), makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
-    return apiProxy.calls.length === 1 && agent.options.provider === MAIN_MODEL.provider
+    await fireCreated(makeCtx({ defaults, sessionController: controller }), makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    return controller.calls.length === 1 && agent.options.provider === MAIN_MODEL.provider
   })
   // 回落链（events 不可读 = 形态防御）：Session 恒带 events（宿主实证），
   // 读不到视为形态漂移——回落 requestHeader 反演，保守方向宁漏播（空白会话
@@ -908,10 +924,10 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   // events 含 null/非对象元素不炸，按「无 turn/start」处理。
   await dcheck('J5 events 含 null/非对象元素 → 不炸，同构判据按无 turn/start 处理 → 播种', async () => {
     const defaults = makeDefaults()
-    const apiProxy = makeApiProxy({ defaults })
+    const controller = makeSessionController({ defaults })
     const agent = mainBlankAgent({ id: 'sess-j5', events: [null, 'garbage', { noType: true }] })
-    await fireCreated(makeCtx({ defaults, apiProxy }), makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
-    return apiProxy.calls.length === 1 && agent.options.provider === MAIN_MODEL.provider
+    await fireCreated(makeCtx({ defaults, sessionController: controller }), makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    return controller.calls.length === 1 && agent.options.provider === MAIN_MODEL.provider
   })
 }
 
@@ -1292,6 +1308,33 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     const out = await handler({ agent: scopeAgent({ preset: 'governance', origin: 'main', id: 's-l11' }) }, async () => ({ provider: 'p', model: 'm' }))
     return scopes.length === 1 && scopes[0].preset === 'governance' && out.provider === 'p'
   })
+}
+
+// ── N. EVO-021（ARCH-004 B3 / 设计 §3 D1-2 + ADR-ARCH-004-B）负向守卫：
+// apiProxy 旧会话选择面防复活（先例 I 节零信号负向模式）──────────────────
+// 事实链：apiProxy 旧面自宿主 0.1.2-rc.1 起全包零注册（FIX-030 取证），
+// 用户唯一环境 0.1.5-rc.2 亦无；sessionSelectFaceOf 单形态化
+// （sessionController）后旧面回落分支删除（P5 被取代路径删除纪律）。
+// 本节行为级判别：仅旧面在场的 ctx 绝不播种（旧实现/复活实现必败 RED）；
+// N2 源码级守卫：域与消费者零 apiProxy 解析。加回旧形态的成本 = 域内
+// 1 分支 + 1 组判别测试（设计 §3 D1-2 取舍列原文）。
+{
+  await dcheck('N1 仅 apiProxy 旧面（无 sessionController）→ 播种零动作：零 selectModel 零全局写 + 降级 warn 可观测（复活实现必败 RED）', async () => {
+    const defaults = makeDefaults()
+    const apiProxy = makeApiProxy({ defaults })
+    const agent = mainBlankAgent({ id: 'sess-n1' })
+    const ctx = makeCtx({ defaults, apiProxy })
+    await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    return apiProxy.calls.length === 0 && defaults.state.saveCalls.length === 0
+      && agent.options.provider === NATIVE.provider && agent.options.model === NATIVE.model
+      && ctx.logger.warnCalls.some((line) => line.includes('select face'))
+  })
+  check('N2 源码防复活：lib/host-abi/llm-selection.js 与 lib/preset-defaults.js 零 apiProxy 解析', (() => {
+    const read = (...rel) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', ...rel), 'utf8')
+    const domain = read('lib', 'host-abi', 'llm-selection.js')
+    const consumer = read('lib', 'preset-defaults.js')
+    return !/get\(['"]apiProxy['"]\)/.test(domain) && !/get\(['"]apiProxy['"]\)/.test(consumer)
+  })())
 }
 
 console.log(failures === 0 ? '\nALL EVO-014 DISCRIMINANT TESTS PASSED' : `\n${failures} EVO-014 ASSERTION(S) FAILED`)
