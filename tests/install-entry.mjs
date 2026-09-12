@@ -49,9 +49,10 @@ const SPAWN_TIMEOUT_MS = 30000
  * `POSIX online checks` skip 行可辨）；§6d（自带真实 `node_modules` 不得改动）**无 POSIX
  * 对照臂**——install.sh 的「源码自带依赖目录：…（跳过依赖链接）」分支与 `LINKED=0`
  * 拷贝回退护栏（「只移除本脚本创建的符号链接（绝不对真实目录 rm -rf）」）同载该数据
- * 保护语义却零判别测试（已知覆盖缺口，
- * 台账候选）。**锚形 = 符号名 / 代码串 + 文件**（FIX-040：行号锚实测漂移族，不再写死行号；
- * 锚点为 install.sh 的 `step` 文案与 `LINKED` 守卫变量，按串检索即可定位）。非适用平台分支均先打印可见 skip 再空循环，不静默丢弃。
+ * 保护语义却零判别测试（已知覆盖缺口，台账候选）。**锚形 = 符号名 / 代码串 + 文件**
+ * （FIX-040：行号锚实测漂移族，不再写死行号；锚点为 install.sh 的 `step` 文案与
+ * `LINKED` 守卫变量，按串检索即可定位）。非适用平台分支均先打印可见 skip 再空循环，
+ * 不静默丢弃。
  */
 const PS1_OFFLINE_APPLICABLE = process.platform === 'win32'
 
