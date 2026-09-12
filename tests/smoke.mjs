@@ -1259,6 +1259,11 @@ console.log('RouterService:')
       check('device flow persists full credential quad via EVO-002 store', savedDoc5.version === 1 && savedDoc5.credential.type === 'oauth' && savedDoc5.credential.access === deviceAccess && savedDoc5.credential.refresh === 'REFRESH-E5-1' && savedDoc5.credential.accountId === 'acct-device-1')
       if (process.platform !== 'win32') {
         check('device credential file is owner-only (0o600, POSIX)', (statSync(deviceCredFile).mode & 0o777) === 0o600)
+      } else {
+        // FIX-040（FIX-037 ① 同族）：win32 侧此前为 `if (!win32)` 静默消失（断言零痕迹：
+        // 既不执行也不打印）——改为可见 skip，与套件其余平台不适用臂同口径，计入
+        // `#SKIP n` 汇总（Windows 本地正常态计数随之 +1，ci.yml / README 已同步）。
+        skip('device credential file is owner-only (0o600, POSIX)', `Windows-only 例外：本平台 ${process.platform} 的 statSync 不提供 POSIX 权限位，该断言不可判定（POSIX 侧照常执行）`)
       }
       check('device session cleared after terminal state', deviceService.oauthDevicePending.size === 0)
       check('device login visible on account card (presetLoggedIn)', (await deviceService.presetLoggedInOf(deviceService.getOAuthAccount('cgpt'))) === true)
@@ -1618,21 +1623,19 @@ console.log('RouterService:')
   check('cli spec gemini boolean sandbox', cliSpecGemini.sandbox === '' && cliSpecGeminiSbx.sandbox === 'on' && cliSpecGeminiSbx.args.includes('--yolo') === false)
   const cliSpecGeminiLongSbx = service.resolveCliSpec({ command: 'gemini', args: '-p --output-format json --sandbox' }, 'win32')
   check('cli spec gemini long boolean sandbox', cliSpecGeminiLongSbx.sandbox === 'on')
-  // 平台适用性（FIX-038，CI 首跑 run 34696694673 实证）：`.cmd`/`.bat` shim 经
-  // cmd.exe 执行与 `/d /s /c` 引号包裹是 **Windows 专属实现分支**
-  // （resolveCliInvocation 的 `win &&` 门控；非 win32 恒走「直接 spawn」形态）
-  // ——该断言在非 Windows 平台不可判定（executable 恒为原 command、argv 长度恒为
-  // 原始参数数）。按 FIX-037 ① 纪律：打印可见 skip（run-all 回显 `#SKIP | …` 并
-  // 计入 `#SKIP n`），**不得**用 `if (win) { … }` 静默包住（那会让非 Windows 侧
-  // 无声通过、断言被静默丢弃）。
-  if (process.platform === 'win32') {
-    const cmdInv = service.resolveCliInvocation('codex.cmd', ['-p', 'a b'])
-    check('cli invocation cmd shim', cmdInv.executable.toLowerCase().includes('cmd.exe') && cmdInv.argv.length === 4 && cmdInv.argv[3].includes('"-p"') && cmdInv.argv[3].includes('"a b"'))
-    const wrappedCmd = wrapCmdLine(cmdInv.argv)
-    check('wrapCmdLine outer quotes', wrappedCmd[3] === `"${cmdInv.argv[3]}"` && wrappedCmd.slice(0, 3).join('|') === '/d|/s|/c')
-  } else {
-    skip('cli invocation cmd shim + wrapCmdLine outer quotes', `Windows-only: .cmd shim 经 cmd.exe 执行 + /d /s /c 引号包裹（本平台 ${process.platform} 无该实现分支）——两条断言在本平台不可判定`)
-  }
+  // 平台判据注入（FIX-040 P2-2，先例 resolveCliSpec(agent, platform)）：`.cmd`/`.bat`
+  // shim 经 cmd.exe 执行与 `/d /s /c` 引号包裹是 **Windows 专属实现分支**
+  // （resolveCliInvocation 内 `win &&` 门控；非 win32 恒走「直接 spawn」形态）。此前该
+  // 分支只能由 win32 真机覆盖（FIX-038 以可见 skip 如实呈现，CI 零覆盖）；现
+  // resolveCliInvocation 增加可选第三参 platform（默认 = 实机平台，行为零变化）⇒
+  // 显式传 'win32' 驱动，**全平台恒跑**（断言未删除）。反向臂同批补齐：注入 'linux'
+  // 断言同一实参在非 win32 不进入 shim 分支（该分支被正确旁路）。
+  const cmdInv = service.resolveCliInvocation('codex.cmd', ['-p', 'a b'], 'win32')
+  check('cli invocation cmd shim', cmdInv.executable.toLowerCase().includes('cmd.exe') && cmdInv.argv.length === 4 && cmdInv.argv[3].includes('"-p"') && cmdInv.argv[3].includes('"a b"'))
+  const wrappedCmd = wrapCmdLine(cmdInv.argv)
+  check('wrapCmdLine outer quotes', wrappedCmd[3] === `"${cmdInv.argv[3]}"` && wrappedCmd.slice(0, 3).join('|') === '/d|/s|/c')
+  const cmdInvPosix = service.resolveCliInvocation('codex.cmd', ['-p', 'a b'], 'linux')
+  check('cli invocation cmd shim bypassed on non-win32 (injected platform)', cmdInvPosix.executable === 'codex.cmd' && cmdInvPosix.argv.length === 2 && cmdInvPosix.argv[0] === '-p' && cmdInvPosix.argv[1] === 'a b')
   // 平台中立（纯函数形态：无 /d /s /c 前导时零改写）——恒跑，不随上一条 skip。
   check('wrapCmdLine passthrough', wrapCmdLine(['-p', 'x']).join('|') === '-p|x' && wrapCmdLine(['/d', '/s', '/c', 'plain'])[3] === 'plain')
   const jsInv = service.resolveCliInvocation('./tool.mjs', ['x'])
