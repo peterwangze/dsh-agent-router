@@ -74,7 +74,8 @@ console.log('syntax:')
     // 平台容错（FIX-036 P1-1）：install.ps1 面向 Windows PowerShell 5.1，但解析器
     // 守卫不得硬依赖 powershell.exe——Linux/macOS 只提供 PowerShell 7（pwsh），
     // CI（ubuntu-latest）即此类环境；硬编码 spawn 会 ENOENT → status null →
-    // 断言假红。先探测可用宿主（install-entry.mjs:74-77 先例），逐个执行；
+    // 断言假红。先探测可用宿主（`powerShellHosts` 探针先例：tests/install-entry.mjs——
+    // 符号名式锚；原写死 install-entry.mjs:74-77 已随该文件本批行数变动漂移），逐个执行；
     // 两者皆无 → 打印可见 skip——该断言在无 PS 解析器环境不可判定，静默「通过」
     // 会用假绿掩盖 install.ps1 语法回归（P4：看护不得静默降级）。
     const psHosts = ['powershell', 'pwsh'].filter((exe) => {
@@ -260,7 +261,8 @@ console.log('rpc contribution:')
   const contribution = createHostContribution()
   check('face host', contribution.face === 'host')
   // ARCH-004 B1（EVO-019）：+router/hostFaceDiagnostics（19 项——新增 RPC 面
-  // 时同步更新本计数三处：本行 / 下一行 / :2213 typert contribution registered）。
+  // 时同步更新本计数三处：本行 / 下一行 / `typert contribution registered` 断言行
+  // （符号名式锚；原写死行号已随本文件行数变动漂移））。
   check('19 invocations', contribution.invocations.length === 19)
   check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 19 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
   check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))
