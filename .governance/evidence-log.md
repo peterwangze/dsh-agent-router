@@ -542,3 +542,9 @@
 | REVIEW-ARCH-004-R0 | ARCH-004 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-ARCH-004-DESIGN-R0-input.md; review-ARCH-004-R0.md | Design Reviewer | 2026-09-12 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
 
 | REVIEW-ARCH-004-R1 | ARCH-004 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 1） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-ARCH-004-REQ-R0-input.md; review-ARCH-004-R1.md | Requirement Reviewer | 2026-09-12 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| TRIAGE-EVO-018 | EVO-018 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/EVO-018.json） | EVO-018.json | change-triage | 2026-09-12 | G11 | TRIAGED |
+
+| REVIEW-EVO-018-R0 | EVO-018 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-EVO-018-R0-input.md; review-EVO-018-R0.md | Code Reviewer | 2026-09-12 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| EV-174 | EVO-018 | development | B0 止损批全链闭环：commit 3344f0d（3 文件 +162/−12：inject 死行删除 + peerDeps 8 项/deps 3 项 ^0.1.5-rc.2 实测基线 + README 兼容小节 + host-version-snapshot 145 行 24 断言）+ Coordinator 独立门控复跑 22 PASS/0 FAIL 实测 + Code Reviewer R0 APPROVED_WITH_NOTES/unresolved_blockers=0 机录（REVIEW-EVO-018-R0；5 维+AI 专项五查全过；声称核验 4 核实 + 1 静态推演精确吻合；TDD 自然红 20 FAILURE 逐项吻合） | 事实依据：REVIEW-EVO-018-R0 机录行 + Coordinator 门控输出（22 PASS/0 FAIL @3344f0d，本会话独立复跑）+ git log 单 commit + Developer RED 三重证据（自然红 20/判别红 12/复原 24-24） | review-EVO-018-R0-input.md; review-EVO-018-R0.md; commit 3344f0d | Developer + Code Reviewer + Coordinator 机录 | 2026-09-12 | G6 | **已完成（审查通过终态）** | P1-1 裁决：pnpm-lock 脱同步绑定 EVO-019 刷新+全量网复跑（禁止沉默搁置已落实）；P2-1 真机验收显式延后——复验项台账：重装后宿主实机设置页可打开（B0 声明面排除验证） |
