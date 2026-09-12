@@ -2129,15 +2129,30 @@ window.__ModuleLoader__.load({
           setOauthNotice((current) => ({ ...current, [tokenBack]: t('oauthTokenBack') }))
           refreshOauthTokens()
         }
-        const offSettings = $on('settings/document-updated', (ns) => {
-          if (ns === 'router' || ns === 'llm-pi-ai' || ns === 'llm-deepseek' || ns === 'agent-default-model') loadRef.current()
-        })
-        const offCred = $on('credentials/updated', () => loadRef.current())
-        const offLlm = $on('llm/adapters-updated', () => loadRef.current())
-        return () => { offSettings(); offCred(); offLlm() }
+        // ARCH-004 B5（§4.3 域 4 / W-4）：页面三条转发订阅收敛 events 域镜像
+        // ——共享 listener（与 apply 级 settings/document-updated 订阅聚合）+
+        // 白名单拒绝外名 + 卸载聚合。
+        // Analyst D-2 死订阅修复：旧 `credentials/updated` 不在宿主转发白名单
+        // （dsh-api-remotes/lib/types/remote-events.js 全表无此名 → 宿主从未转发
+        // → 凭据变化不触发刷新，死订阅实证）；正名 `credentials/reference-updated`
+        // （同表 :21，凭据引用变化转发事件）。
+        const disposeEvents = subscribeClientEvents($on, [
+          { event: 'settings/document-updated', consumer: 'settings-page-reload', handler: (ns) => {
+            if (ns === 'router' || ns === 'llm-pi-ai' || ns === 'llm-deepseek' || ns === 'agent-default-model') loadRef.current()
+          } },
+          { event: 'credentials/reference-updated', consumer: 'settings-page-credentials', handler: () => loadRef.current() },
+          { event: 'llm/adapters-updated', consumer: 'settings-page-adapters', handler: () => loadRef.current() },
+        ])
+        return () => { disposeEvents() }
       }, [ready, $on, load, refreshOauthTokens])
 
       // 实时用量轮询（页签打开期间每 2 秒刷新一次）
+      // ARCH-004 B5（D1-10 / W-1 症状②治理，三措施）：① 页面隐藏暂停——tick 在
+      // document.hidden 期间直接返回（隐藏态零 RPC），visibilitychange 恢复可见
+      // 立即补拍一次（实时语义保留，不丢一轮）；② 双 RPC 同拍——stats +
+      // presetDiagnostics 由同一 tick 触发（单 2s timer，无相位拍击/突发密集）；
+      // ③ 不新增常驻 timer（判别断言见 tests/client-render.mjs B5 组：隐藏态 0
+      // RPC / 每拍恰 2 RPC / ≤1 RPC/s 量级 / timer census 不变）。
       useEffect(() => {
         if (!ready) return
         let alive = true
@@ -2154,9 +2169,17 @@ window.__ModuleLoader__.load({
             }, () => undefined)
           }
         }
-        poll()
-        const timer = window.setInterval(poll, 2000)
-        return () => { alive = false; window.clearInterval(timer) }
+        const visible = () => !(window.document && window.document.hidden === true)
+        const tick = () => { if (alive && visible()) poll() }
+        tick()
+        const timer = window.setInterval(tick, 2000)
+        const onVisibilityChange = () => { tick() }
+        try { window.document?.addEventListener?.('visibilitychange', onVisibilityChange) } catch { /* 无 document 面（测试/异构宿主）→ 仅 timer 面 */ }
+        return () => {
+          alive = false
+          window.clearInterval(timer)
+          try { window.document?.removeEventListener?.('visibilitychange', onVisibilityChange) } catch { /* 卸载尽力而为 */ }
+        }
       }, [ready, remote])
 
       // ARCH-004 B1（§6.1/D4）：宿主面健康一次性快照——打开期仅取一次，
@@ -5042,6 +5065,121 @@ window.__ModuleLoader__.load({
       } catch { /* 诊断失败绝不影响主链（presetDiag 同款纪律） */ }
     }
 
+    /** ARCH-004 域 4（§4.3 域 4 / W-4，EVO-023 B5）events 域浏览器镜像——
+     *  lib/host-abi/events.js 的转发事件白名单 + 共享订阅单点的镜像（本包经
+     *  __ModuleLoader__ 仅 require('react')，无 ESM 模块面：OAUTH_ROUTE_PROVIDER
+     *  / createClientRemotes 同款镜像纪律）。白名单单一声明源 = 宿主
+     *  dsh-api-remotes/lib/types/remote-events.js:12-32（19 项转发事件）；
+     *  权威侧 = lib/host-abi/events.js `FORWARDED_EVENT_ALLOWLIST`，值级 parity
+     *  由 tests/host-abi-health.mjs §9e 判别锁定，漂移即红。
+     *  运行时半边（W-4 双检②）：白名单外事件名**订阅即拒绝** + 诊断——
+     *  Analyst D-2 死订阅（旧 `credentials/updated` 不在表，宿主从未转发）的
+     *  机器防线（静态半边 = 插件 `$on` 字面量 ⊆ 白名单比对测试）。 */
+    const FORWARDED_EVENT_ALLOWLIST = [
+      'agent-preset/selected',
+      'approval/request',
+      'api-session/activity',
+      'api-session/added',
+      'api-session/error',
+      'api-session/removed',
+      'api-session/status',
+      'commands/change',
+      'credentials/reference-updated',
+      'goal/activation-changed',
+      'cordis/request-run',
+      'cordis/request-run-resolved',
+      'cordis/dynamic-package',
+      'cordis/dynamic-retract',
+      'cordis/inspect-query',
+      'cordis/inspect-query-resolved',
+      'llm/adapters-updated',
+      'settings/document-updated',
+      'user-questions/request',
+    ]
+    /** 转发事件可达性判定（权威侧 isForwardedEvent 镜像）。 */
+    const isForwardedEvent = (event) => typeof event === 'string' && FORWARDED_EVENT_ALLOWLIST.includes(event)
+    /** 同目标（$on 闭包）共享 listener 注册表——同事件名多次订阅收敛单宿主
+     *  listener（Node 侧 events 域 sharedListeners 同构）。 */
+    const sharedClientListeners = new WeakMap()
+    /**
+     * 共享转发事件订阅（权威侧 subscribeEvents 的浏览器镜像）：同事件名多
+     *  consumer 共享单 $on listener + 按名分发 + 卸载聚合（最后一个消费者摘除
+     * 才真 dispose）；白名单外事件名拒绝 + noteHostFaceDiag 诊断；handler 抛错
+     *  fail-safe 吞并记诊断（绝不外泄击穿宿主事件总线）。
+     * @param on - `$on`（ctx.remote.$on 包装）。
+     * @param subscriptions - [{ event, consumer?, handler(args…) }]
+     * @returns disposeAll。
+     */
+    function subscribeClientEvents(on, subscriptions) {
+      if (typeof on !== 'function') return () => {}
+      const perEvent = new Map()
+      for (const sub of Array.isArray(subscriptions) ? subscriptions : []) {
+        if (!sub || typeof sub.event !== 'string' || !sub.event || typeof sub.handler !== 'function') {
+          noteHostFaceDiag({ at: Date.now(), kind: 'event-subscribe-rejected', code: 'invalid-shape' })
+          continue
+        }
+        const consumer = typeof sub.consumer === 'string' && sub.consumer ? sub.consumer : ''
+        if (!isForwardedEvent(sub.event)) {
+          noteHostFaceDiag({ at: Date.now(), kind: 'event-subscribe-rejected', face: sub.event.slice(0, 64), consumer, code: 'not-forwarded', detail: 'event absent from API_REMOTE_FORWARDED_EVENTS mirror (dead subscription)' })
+          continue
+        }
+        const consumers = perEvent.get(sub.event) ?? []
+        consumers.push({ consumer, handler: sub.handler })
+        perEvent.set(sub.event, consumers)
+      }
+      let table = sharedClientListeners.get(on)
+      if (!table) {
+        table = new Map()
+        sharedClientListeners.set(on, table)
+      }
+      const disposeAll = []
+      for (const [event, consumers] of perEvent) {
+        let entry = table.get(event)
+        if (!entry) {
+          const created = { consumers: [], dispose: null }
+          const sharedListener = (...args) => {
+            // 返回值语义与权威侧同构：单 consumer 的 thenable 原样透传（调用方
+            // await 可用），多 consumer 合并 Promise.all；无 thenable 零分配。
+            const pending = []
+            for (const consumer of created.consumers.slice()) {
+              try {
+                const outcome = consumer.handler(...args)
+                if (outcome && typeof outcome.then === 'function') pending.push(outcome)
+              } catch (error) {
+                noteHostFaceDiag({ at: Date.now(), kind: 'event-handler-error', face: event, consumer: consumer.consumer, detail: String(error && error.message ? error.message : error).slice(0, 120) })
+              }
+            }
+            if (pending.length === 0) return undefined
+            return pending.length === 1 ? pending[0] : Promise.all(pending)
+          }
+          try {
+            const dispose = on(event, sharedListener)
+            created.dispose = typeof dispose === 'function' ? dispose : null
+          } catch (error) {
+            noteHostFaceDiag({ at: Date.now(), kind: 'event-subscribe-failed', face: event, detail: String(error && error.message ? error.message : error).slice(0, 120) })
+          }
+          entry = created
+          table.set(event, created)
+        }
+        entry.consumers.push(...consumers)
+        disposeAll.push(() => {
+          for (const consumer of consumers) {
+            const index = entry.consumers.indexOf(consumer)
+            if (index >= 0) entry.consumers.splice(index, 1)
+          }
+          if (entry.consumers.length === 0) {
+            try { entry.dispose?.() } catch { /* 卸载尽力而为 */ }
+            if (table.get(event) === entry) table.delete(event)
+          }
+        })
+      }
+      return () => {
+        for (const dispose of disposeAll.splice(0)) {
+          try { dispose() } catch { /* 卸载尽力而为 */ }
+        }
+      }
+    }
+
     /** 客户端 remote.* 五命名空间方法形状契约——lib/host-abi/client-remotes.js
      *  CLIENT_REMOTE_FACES 的浏览器镜像（B2 随 createClientRemotes 一并镜像；
      *  行为 parity 由 tests/host-abi-health.mjs §7 判别锁定，漂移即红）。 */
@@ -5372,10 +5510,13 @@ window.__ModuleLoader__.load({
       }
       refreshCatalog()
       remoteReady.then(() => refreshCatalog(), () => undefined)
-      const offSettingsForCatalog = $on('settings/document-updated', () => refreshCatalog())
+      // ARCH-004 B5（D1-8 / §4.3 域 4）：事件订阅挂 events 域镜像（与设置页
+      // settings/document-updated 订阅聚合同一共享 listener）；30s timer 保留
+      // 为兜底（单 timer，D1-8 裁决——事件驱动 + 兜底轮询）。
+      const disposeCatalogEvents = subscribeClientEvents($on, [{ event: 'settings/document-updated', consumer: 'composer-catalog', handler: () => refreshCatalog() }])
       const catalogTimer = window.setInterval(refreshCatalog, 30000)
       ctx.effect(() => () => {
-        offSettingsForCatalog()
+        disposeCatalogEvents()
         window.clearInterval(catalogTimer)
       }, 'dsh-agent-router: composer catalog polling')
       // ── FIX-026：预设切换显示刷新——客户端直驱模型目录重载 ────────────
@@ -5434,9 +5575,9 @@ window.__ModuleLoader__.load({
           telemetry('error', `caught ${error && error.message ? error.message : String(error)}`)
         }
       }
-      const offPresetSelected = $on('agent-preset/selected', (sessionId, agentPreset) => refreshSessionDirectory(sessionId, agentPreset))
+      const disposePresetSelected = subscribeClientEvents($on, [{ event: 'agent-preset/selected', consumer: 'preset-switch-directory-refresh', handler: (sessionId, agentPreset) => refreshSessionDirectory(sessionId, agentPreset) }])
       ctx.effect(() => () => {
-        offPresetSelected()
+        disposePresetSelected()
       }, 'dsh-agent-router: preset switch directory refresh')
       // conversation 插槽由 ui-conversation 声明：声明存在才注册，注册失败
       // （如 key 冲突）只记录、绝不击穿插件其余功能（settings 页等不受影响）。
@@ -5508,6 +5649,13 @@ window.__ModuleLoader__.load({
     // 时仅消费 apply/inject；tests/host-abi-health.mjs §7 经本导出与权威单点
     // lib/host-abi/client-remotes.js 做行为 parity 断言——镜像漂移即红）。
     exports.createClientRemotes = createClientRemotes
+    // ARCH-004 B5 判别测试钩子：events 域浏览器镜像（转发白名单 + 共享订阅）
+    // 与 HostHealthCard 渲染面直驱（宿主运行时仅消费 apply/inject；tests/
+    // host-abi-health.mjs §9e/§9g 经本导出与权威单点做值/行为 parity 断言——
+    // 镜像漂移即红；HostHealthCard 导出兼供 F-6 faces 去重行为断言）。
+    exports.FORWARDED_EVENT_ALLOWLIST = FORWARDED_EVENT_ALLOWLIST
+    exports.subscribeClientEvents = subscribeClientEvents
+    exports.HostHealthCard = HostHealthCard
     exports.setRouterCatalog = setRouterCatalog
     exports.mergePresetModels = mergePresetModels
     // FIX-031 判别钩子：统计显示层单点（浏览器面归一化镜像）。宿主运行时只消费

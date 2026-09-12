@@ -29,7 +29,8 @@
  * 对照组 + D10/D11 源码契约；旧代码 stash 复跑 D9/D9b/D10/D11 必红）。
  * 返工批（REVIEW-FIX-031-R0 保留项 F-2）：注释虚指 → G13/G14 权威常量值级
  * 交叉锚定（ACCOUNT_KEY_ALIASES ↔ oauth-llm.js OAUTH_PROVIDER；
- * HOST_ROUTE_ACCOUNT_KEY ↔ host-route.js HOST_ROUTE_PROVIDER）。
+ * HOST_ROUTE_ACCOUNT_KEY ↔ host-abi/version.js HOST_ROUTE_PROVIDER——EVO-022
+ * B4 ①权威翻转后的单点定义，host-route.js 侧仅 re-export）。
  * 返工批 3（用户复验 D5/D6 + 追问 D7）：D6 宿主官方路由归并到路由选中
  * 订阅账号（resolver 注入，D12/D12b/D12c 含动态失效回落）；D5 roster 行
  * 排除宿主路由键 + 身份去重跨 accountKind（D13/D13b，回落诚实标签 D13c/e、

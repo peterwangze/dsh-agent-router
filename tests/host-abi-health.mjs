@@ -28,12 +28,24 @@
  *    F-1 agentPresetsServiceOf 归 ctx-services 归并单点 / F-2 形状降级
  *    边缘显式降级 + noteHostDiag / F-3 modelDirectories 缺面短码 + 诊断 /
  *    F-6 HostHealthCard faces 按名去重 / probeLlmAdapterFace 三方法并集）。
+ * 9. EVO-023（ARCH-004 B5 events 域批）：域管五事件清单（MANAGED_EVENTS，
+ *    W-3 收窄——scoped 钩子保留直订）+ 转发事件白名单双检（静态：插件订阅
+ *    事件名字面量 ⊆ FORWARDED_EVENT_ALLOWLIST；运行时：白名单外订阅即拒绝 +
+ *    诊断——D-2 死订阅机器防线）+ 共享 listener 聚合（跨调用同事件名单宿主
+ *    listener / 单模块卸载摘除自身 consumer / 异步 consumer await 语义）+
+ *    浏览器镜像值级 parity + R-5 Node 侧注册表接线（11 ctx 服务面 + 2
+ *    llm-selection 面 → faces 生产非空；面板打开复检规则：全绿纯缓存读、
+ *    非全绿一次失败驱动复检）+ R-3（F-6 HostHealthCard faces 去重行为断言）+
+ *    R-1 锚清扫复核（旧行号式锚零残留、函数名式锚在位）。
  *
  * 红演示证据（任务验收 2）：实现前自然红（模块缺失套件失败）+ 绿后判别红
  * （R1：HOST_DIAG_LIMIT 临时 64→128 → 环形有界断言红；R2：HostHealthCard
  * 渲染体内临时注入第二处 .hostFaceDiagnostics( 调用 → render 期零 probe
  * 判别红）——复原后全绿。B4 追加：临时在 service.js 加一处裸
- * ctx.get('sessionController') → §8a 白名单快照红（分级放行越界）。
+ * ctx.get('sessionController') → §8a 白名单快照红（分级放行越界）。B5 追加：
+ * ① 临时把 client.js 页面订阅改回死名 credentials/updated → §9b 静态比对 +
+ * §9c 运行时拒绝红（复原双绿）；② 实现前 §9 组全红（MANAGED_EVENTS 未导出 /
+ * 白名单未启用 / faces 空注册表 / R-1 锚未清扫）——见任务结论 RED 记录。
  *
  * 独立入口：node tests/host-abi-health.mjs（exit 0/1）。
  */
@@ -55,8 +67,8 @@ const {
   packageVersionOf, hostVersionsOf,
   CLIENT_REMOTE_FACES, probeRemoteFace, clientRemotesHealth, createClientRemotes,
   probeLlmAdapterFace, probeSessionSelectFace,
-  serviceFaceOf, agentsRegistryOf, llmOf,
-  FORWARDED_EVENT_ALLOWLIST, subscribeEvents, armEventGate,
+  serviceFaceOf, agentsRegistryOf, llmOf, ctxServiceFaceProbes,
+  FORWARDED_EVENT_ALLOWLIST, MANAGED_EVENTS, isForwardedEvent, subscribeEvents, armEventGate,
   FIBER_INJECT, CLIENT_PACKAGE_INJECT, probeFiberInjectFaces, noteInjectFaceGaps,
 } = hostAbi
 
@@ -438,6 +450,254 @@ console.log('B4 ctx-services batch (scatter whitelist + cumulative bindings):')
     const dirsShape = await createClientRemotes(dirsShapeCtx).api.sessions.models({ sessionId: 's1' })
     check('F-3 边界: directoryFor 形状漂移/sessionId 缺失保持 failureOf 原语义（不误标 host-face-missing）', dirsShape.result.ok === false && dirsShape.result.error.code === undefined)
   }
+}
+
+// ── 9. EVO-023 B5：events 域批（域管事件共享订阅 + 转发白名单双检 + R-5 注册表接线）──
+console.log('B5 events domain batch (managed events + forwarded whitelist double-check + R-5 face registry):')
+{
+  const readLibB5 = (name) => readFileSync(join(ROOT_DIR, 'lib', name), 'utf8')
+  const readTestB5 = (name) => readFileSync(join(ROOT_DIR, 'tests', name), 'utf8')
+  const clientSourceB5 = readLibB5('client.js')
+  const eventsSourceB5 = readFileSync(join(ROOT_DIR, 'lib', 'host-abi', 'events.js'), 'utf8')
+
+  // 9a. 域管事件清单（§4.3 域 4 ① / W-3 收窄口径）。
+  const MANAGED_EXPECTED = ['settings/updated', 'llm/adapters-updated', 'settings/document-updated', 'agent-preset/selected', 'credentials/reference-updated']
+  check('B5 9a: MANAGED_EVENTS = §4.3 域 4 五事件清单（多消费者/跨面环境事件单点）',
+    Array.isArray(MANAGED_EVENTS) && JSON.stringify([...MANAGED_EVENTS].sort()) === JSON.stringify([...MANAGED_EXPECTED].sort()), MANAGED_EVENTS)
+  check('B5 9a: W-3 收窄——scoped 生命周期钩子（agent/pre-step、agent/created、agent/request）不在域管清单（veto 语义/热路径零介入）',
+    ['agent/pre-step', 'agent/created', 'agent/request'].every((name) => !MANAGED_EVENTS.includes(name)))
+  check('B5 9a: scoped 钩子在消费面保留直订不经域（preset-defaults/prestep 源码面 W-3 口径）',
+    /ctx\.on\('agent\/created'/.test(readLibB5('preset-defaults.js'))
+    && /ctx\.on\('agent\/request'/.test(readLibB5('preset-defaults.js'))
+    && /ctx\.on\('agent\/pre-step'/.test(readLibB5('prestep.js')))
+
+  // 9b. 转发白名单双检——静态：插件订阅事件名 ⊆ 宿主白名单映射（W-4）。
+  //     订阅点两种写法都扫：直订 `$on('name', …)`（scoped 合法面）与
+  //     events 域镜像 `subscribeClientEvents($on, [{ event: 'name' … }])`。
+  const onSites = [
+    ...[...clientSourceB5.matchAll(/\$on\(\s*'([^']+)'/g)].map((match) => match[1]),
+    ...[...clientSourceB5.matchAll(/\bevent:\s*'([^']+)'/g)].map((match) => match[1]),
+  ]
+  check('B5 9b 静态: client.js 全部订阅事件名字面量 ⊆ FORWARDED_EVENT_ALLOWLIST（≥5 站点——非空判别）',
+    onSites.length >= 5 && onSites.every((name) => FORWARDED_EVENT_ALLOWLIST.includes(name)), onSites)
+  check('B5 9b 静态: D-2 死订阅名 credentials/updated 零残留 + 正名 credentials/reference-updated 在位（白名单锚）',
+    !onSites.includes('credentials/updated') && onSites.includes('credentials/reference-updated'))
+  check('B5 9b 迁移: index.js/service.js 的 settings/updated 订阅收敛 events 域（旧裸 ctx.on 零残留，P5）',
+    /subscribeEvents\(ctx,/.test(readLibB5('index.js')) && /subscribeEvents\(this\.ctx,/.test(readLibB5('service.js'))
+    && !/ctx\.on\('settings\/updated'/.test(readLibB5('index.js')) && !/this\.ctx\.on\('settings\/updated'/.test(readLibB5('service.js')))
+  check('B5 9b 迁移: preset-defaults 的 agent-preset/selected（域管事件）经域；agent/created 保留直订（W-3）',
+    /subscribeEvents\(ctx,/.test(readLibB5('preset-defaults.js'))
+    && !/ctx\.on\('agent-preset\/selected'/.test(readLibB5('preset-defaults.js'))
+    && /ctx\.on\('agent\/created'/.test(readLibB5('preset-defaults.js')))
+
+  // 9c. 运行时可达性探测：转发面白名单外订阅拒绝 + 诊断（D-2 机器防线）。
+  const forwardedListeners = new Map()
+  const forwardedOn = (event, handler) => {
+    const list = forwardedListeners.get(event) ?? []
+    list.push(handler)
+    forwardedListeners.set(event, list)
+    return () => { forwardedListeners.set(event, (forwardedListeners.get(event) ?? []).filter((item) => item !== handler)) }
+  }
+  let forwardedCalls = 0
+  const disposeForwarded = subscribeEvents(forwardedOn, [
+    { event: 'credentials/updated', consumer: 'dead-subscription', handler: () => { forwardedCalls += 1 } },
+    { event: 'credentials/reference-updated', consumer: 'settings-page-reload', handler: () => { forwardedCalls += 1 } },
+  ])
+  check('B5 9c 运行时: 转发面白名单外事件名订阅被拒——零 listener 注册（credentials/updated 死订阅机器防线）',
+    !forwardedListeners.has('credentials/updated') && [...forwardedListeners.keys()].join('|') === 'credentials/reference-updated')
+  check('B5 9c 运行时: 拒绝记观测事件（P8：event-subscribe-rejected + code=not-forwarded + 面名）',
+    hostDiagnostics().entries.some((entry) => entry.kind === 'event-subscribe-rejected' && entry.face === 'credentials/updated' && entry.code === 'not-forwarded'))
+  for (const handler of forwardedListeners.get('credentials/reference-updated') ?? []) handler()
+  check('B5 9c 运行时: 白名单内事件名放行（正名订阅派发命中——死订阅修复后的刷新链路）', forwardedCalls === 1)
+  disposeForwarded()
+  check('B5 9c 运行时: isForwardedEvent 判定与白名单镜像一致（含空/非串防御）',
+    isForwardedEvent('credentials/reference-updated') === true && isForwardedEvent('credentials/updated') === false
+    && isForwardedEvent('') === false && isForwardedEvent(undefined) === false)
+  check('B5 9c 运行时: 宿主面（ctx.on）事件名不受转发白名单约束（settings/updated 非转发事件仍合法）',
+    (() => {
+      const seen = []
+      subscribeEvents({ on: (event, handler) => { seen.push(event); return () => {} } }, [{ event: 'settings/updated', consumer: 'stats-persistence', handler: () => {} }])
+      return seen.join('|') === 'settings/updated'
+    })())
+
+  // 9d. 共享 listener 聚合（D1-9：跨模块多次 subscribeEvents 收敛单 ctx.on listener）。
+  const hostListeners = new Map()
+  const hostTarget = {
+    on: (event, handler) => {
+      const list = hostListeners.get(event) ?? []
+      list.push(handler)
+      hostListeners.set(event, list)
+      return () => { hostListeners.set(event, (hostListeners.get(event) ?? []).filter((item) => item !== handler)) }
+    },
+  }
+  let statsApplies = 0
+  let routeSyncs = 0
+  const disposeConsumerA = subscribeEvents(hostTarget, [{ event: 'settings/updated', consumer: 'stats-persistence', handler: (ns) => { if (ns === 'router' || ns === undefined) statsApplies += 1 } }])
+  const disposeConsumerB = subscribeEvents(hostTarget, [{ event: 'settings/updated', consumer: 'host-route-router-ns', handler: (ns) => { if (ns === 'router') routeSyncs += 1 } }])
+  check('B5 9d 聚合: 同目标两次 subscribeEvents 共享单 ctx.on listener（4→3 订阅 census 的机制面）', (hostListeners.get('settings/updated') ?? []).length === 1)
+  for (const handler of hostListeners.get('settings/updated') ?? []) handler('router')
+  check('B5 9d 聚合: 共享 listener 按名分发到全部 consumer（同事件两模块消费者各得其份）', statsApplies === 1 && routeSyncs === 1)
+  disposeConsumerA()
+  for (const handler of hostListeners.get('settings/updated') ?? []) handler('router')
+  check('B5 9d 聚合: 单模块卸载只摘除自身 consumer（其余消费者不受影响——卸载聚合）', statsApplies === 1 && routeSyncs === 2)
+  disposeConsumerB()
+  check('B5 9d 聚合: 全量卸载后共享 listener 归零（无残留泄漏）', (hostListeners.get('settings/updated') ?? []).length === 0)
+  // 9d-2. 异步 consumer 的 await 语义（域分发不得降级为 fire-and-forget——
+  //   preset-defaults 播种串行队列测试与消费链均依赖 `await handler(...)` 与
+  //   直订等价；多 consumer 时合并 Promise.all）。
+  {
+    const asyncListeners = []
+    const asyncTarget = { on: (event, handler) => { asyncListeners.push(handler); return () => {} } }
+    const settled = []
+    subscribeEvents(asyncTarget, [{ event: 'agent-preset/selected', consumer: 'async-consumer', handler: async () => { await new Promise((resolve) => setImmediate(resolve)); settled.push('done'); return 'seeded' } }])
+    const outcome = asyncListeners[0]('sess-x', 'preset-x')
+    check('B5 9d 异步语义: 域分发表透传 async consumer 的 promise（await handler 与直订等价）', !!outcome && typeof outcome.then === 'function' && settled.length === 0)
+    await outcome
+    check('B5 9d 异步语义: await 后 handler 副作用可见（preset-defaults 播种队列回归锚）', settled.length === 1)
+  }
+
+  // 9e. 浏览器镜像 parity（client.js 无法 import Node ESM——镜像纪律，B2 先例）。
+  const reactStubB5 = {
+    createElement: (type, props, ...children) => ({ type, props: { ...(props ?? {}), ...(children.length > 0 ? { children: children.flat(Infinity) } : {}) } }),
+    useState: () => [null, () => {}],
+    useEffect: () => {},
+    useCallback: (fn) => fn,
+    useRef: () => ({ current: null }),
+  }
+  let bundleB5 = null
+  new Function('window', clientSourceB5)({ __ModuleLoader__: { load: (payload) => { bundleB5 = payload } } })
+  const bundleExportsB5 = bundleB5.factory((name) => (name === 'react' ? reactStubB5 : null))
+  check('B5 9e 镜像 parity: FORWARDED_EVENT_ALLOWLIST 浏览器镜像 === 权威单点（值级，漂移即红）',
+    JSON.stringify(bundleExportsB5.FORWARDED_EVENT_ALLOWLIST) === JSON.stringify(FORWARDED_EVENT_ALLOWLIST))
+  check('B5 9e 镜像 parity: subscribeClientEvents 镜像导出（判别测试钩子先例 createClientRemotes）', typeof bundleExportsB5.subscribeClientEvents === 'function')
+  const mirrorListeners = new Map()
+  const mirrorOn = (event, handler) => {
+    const list = mirrorListeners.get(event) ?? []
+    list.push(handler)
+    mirrorListeners.set(event, list)
+    return () => { mirrorListeners.set(event, (mirrorListeners.get(event) ?? []).filter((item) => item !== handler)) }
+  }
+  let mirrorCalls = 0
+  const disposeMirror = bundleExportsB5.subscribeClientEvents(mirrorOn, [
+    { event: 'credentials/updated', consumer: 'dead-subscription', handler: () => { mirrorCalls += 1 } },
+    { event: 'llm/adapters-updated', consumer: 'settings-page-reload', handler: () => { mirrorCalls += 1 } },
+  ])
+  check('B5 9e 镜像 parity: 白名单拒绝与权威同型（死名零 listener + 白名单内保留）',
+    !mirrorListeners.has('credentials/updated') && [...mirrorListeners.keys()].join('|') === 'llm/adapters-updated')
+  for (const handler of mirrorListeners.get('llm/adapters-updated') ?? []) handler()
+  check('B5 9e 镜像 parity: 放行面派发命中 + 拒绝记本地诊断环形（health().diag 可观测，P8）',
+    mirrorCalls === 1 && bundleExportsB5.createClientRemotes({ get: () => undefined, remote: {} }).health().diag.some((entry) => entry.kind === 'event-subscribe-rejected' && entry.face === 'credentials/updated' && entry.code === 'not-forwarded'))
+  disposeMirror()
+  check('B5 9e 镜像 parity: 卸载聚合归零（镜像与权威同语义）', (mirrorListeners.get('llm/adapters-updated') ?? []).length === 0)
+  // 9e-2. 镜像跨调用聚合：同一 `$on` 闭包上的两次订阅（设置页 + apply 级）→
+  //   宿主 listener 恒 1（客户端订阅 census 只减不增的机制面；生产路径上
+  //   页面经 inject 拿到与 apply 同一 $on 闭包）。
+  {
+    const dedupListeners = []
+    const dedupOn = (event, handler) => { dedupListeners.push({ event, handler }); return () => {} }
+    let dedupCalls = 0
+    const disposeDedupA = bundleExportsB5.subscribeClientEvents(dedupOn, [{ event: 'settings/document-updated', consumer: 'settings-page-reload', handler: () => { dedupCalls += 1 } }])
+    const disposeDedupB = bundleExportsB5.subscribeClientEvents(dedupOn, [{ event: 'settings/document-updated', consumer: 'composer-catalog', handler: () => { dedupCalls += 1 } }])
+    check('B5 9e 镜像 parity: 跨调用同 $on 同事件名共享单宿主 listener（设置页 + apply 级聚合）', dedupListeners.length === 1 && dedupListeners[0].event === 'settings/document-updated')
+    dedupListeners[0].handler()
+    check('B5 9e 镜像 parity: 共享 listener 分发给两消费者（聚合不丢消费者）', dedupCalls === 2)
+    disposeDedupA()
+    dedupListeners[0].handler()
+    check('B5 9e 镜像 parity: 单调用卸载只摘除自身 consumer（聚合卸载语义与权威一致）', dedupCalls === 3)
+    disposeDedupB()
+  }
+
+  // 9f. R-5：Node 侧注册表接线（faces 生产非空——B1 空注册表落地）+ 面板打开复检规则。
+  const fullFaces = {
+    llm: { registerAdapter: () => {}, registration: () => ({}), listModels: async () => [] },
+    credentials: { resolve: async () => undefined },
+    settings: { get: () => undefined, mutate: async () => {} },
+    fs: {},
+    attachments: {},
+    subagents: {},
+    agentDefaultModel: { currentSelection: () => null, saveSelection: () => {} },
+    sessionController: { selectModel: async () => ({}) },
+    sessionProjections: { stateOf: () => null },
+    agents: { get: () => ({}) },
+    agentPresets: { composedPreset: () => 'p' },
+  }
+  const probeCtxFull = { get: (name) => fullFaces[name] }
+  const nodeProbes = [
+    ...ctxServiceFaceProbes(),
+    { name: 'llm:adapter', probe: probeLlmAdapterFace },
+    { name: 'session:select', probe: probeSessionSelectFace },
+  ]
+  check('B5 9f R-5: ctxServiceFaceProbes = 11 ctx 服务面（CTX_SERVICES 单点派生，无手抄清单）',
+    nodeProbes.length === 13 && ctxServiceFaceProbes().length === Object.keys(hostAbi.CTX_SERVICES).length && ctxServiceFaceProbes().every((item) => typeof item.probe === 'function' && item.name.startsWith('ctx:')))
+  registerFaceProbes(nodeProbes)
+  // §2 桩面复原为 ok（同会话注册表按名幂等覆盖）——「全绿快照」判定需要。
+  registerFaceProbes(['stub:ok', 'stub:degraded', 'stub:throws'].map((name) => ({ name, probe: () => ({ state: 'ok' }) })))
+  const nodeFaces = runFaceProbes(probeCtxFull)
+  const FACE_NAMES_B5 = ['ctx:llm', 'ctx:credentials', 'ctx:settings', 'ctx:fs', 'ctx:attachments', 'ctx:subagents', 'ctx:agentDefaultModel', 'ctx:sessionController', 'ctx:sessionProjections', 'ctx:agents', 'ctx:agentPresets', 'llm:adapter', 'session:select']
+  check('B5 9f R-5: 注册表面真实探测——13 面全 ok（形状齐备 ctx，非占位/非 TODO）',
+    FACE_NAMES_B5.every((name) => nodeFaces.find((face) => face.name === name)?.state === 'ok'), nodeFaces.filter((face) => FACE_NAMES_B5.includes(face.name)))
+  const nodeFacesMissing = runFaceProbes({ get: () => undefined })
+  check('B5 9f R-5: 空 ctx → 13 面全 missing + host-face-missing 短码（探测真实性反向判别）',
+    FACE_NAMES_B5.every((name) => nodeFacesMissing.find((face) => face.name === name)?.state === 'missing' && String(nodeFacesMissing.find((face) => face.name === name)?.detail).includes('host-face-missing')))
+  // 面板打开复检规则（§7.1 三时机之「健康面板打开」）：全绿 → 纯缓存读；非全绿 → 一次复检。
+  runFaceProbes(probeCtxFull)
+  let r5ProbeRuns = 0
+  registerFaceProbes([{ name: 'b5:count', probe: () => { r5ProbeRuns += 1; return { state: 'ok' } } }])
+  runFaceProbes(probeCtxFull)
+  const r5BaselineRuns = r5ProbeRuns
+  const root9 = new Context()
+  for (const [name, value] of Object.entries(fullFaces)) root9.provide(name, value)
+  const service9 = new RouterService(root9)
+  const payload9 = service9.hostFaceDiagnostics()
+  check('B5 9f R-5: Node 消费面（RPC 三合一）faces 生产非空——13 面 + 计数桩全部在场且无缺失态',
+    FACE_NAMES_B5.every((name) => payload9.faces.some((face) => face.name === name && face.state === 'ok')) && payload9.faces.length >= 14)
+  check('B5 9f R-5: 全绿快照 → RPC 读零 probe（纯缓存读，§7.1 惰性纪律不破）', r5ProbeRuns === r5BaselineRuns)
+  const service9b = new RouterService(new Context())
+  // 非全绿快照制造：空 ctx 自检（13 面全 missing）→ 下一次 RPC 读触发复检。
+  runFaceProbes({ get: () => undefined })
+  const r5BeforeDegradedRead = r5ProbeRuns
+  const payload9b = service9b.hostFaceDiagnostics()
+  check('B5 9f R-5: 非全绿快照 → 面板打开一次复检（失败驱动复检；boot 期面未就绪的陈旧 missing 于打开时自愈）',
+    r5ProbeRuns === r5BeforeDegradedRead + 1 && payload9b.faces.filter((face) => FACE_NAMES_B5.includes(face.name) && face.state === 'ok').length === 0)
+
+  // 9g. R-3（F-6 行为断言）：HostHealthCard faces 合并按名去重（RPC 权威序在前）。
+  const tStubB5 = (key) => Object.assign((arg) => `${key}(${arg})`, { toString: () => key })
+  const cardTree = bundleExportsB5.HostHealthCard({
+    hostHealth: { hostVersions: { llm: '0.1.5-rc.2', tools: '0.1.5-rc.2', typertProtocol: '0.1.5-rc.2' }, faces: [{ name: 'llm', state: 'ok' }, { name: 'settings', state: 'ok' }] },
+    faceHealth: { faces: [{ name: 'llm', state: 'degraded', detail: 'host-face-shape: listProviders' }, { name: 'remote.llm', state: 'ok' }] },
+    t: tStubB5,
+  })
+  const cardTexts = []
+  const collectTextB5 = (node) => {
+    if (typeof node === 'string') { cardTexts.push(node); return }
+    if (typeof node === 'function') { cardTexts.push(String(node)); return }
+    if (typeof node === 'number' || typeof node === 'boolean') { cardTexts.push(String(node)); return }
+    if (!node || typeof node !== 'object') return
+    for (const child of Array.isArray(node.props?.children) ? node.props.children : []) collectTextB5(child)
+  }
+  collectTextB5(cardTree)
+  const faceRows = cardTexts.filter((text) => /^[✓⚠✗] /.test(text))
+  check('B5 9g F-6: faces 合并按名去重——同名 llm 仅一行且取 RPC 权威态（先到先留）',
+    faceRows.length === 3 && faceRows.includes('✓ llm') && !faceRows.some((row) => row.startsWith('⚠ llm') || row.startsWith('✗ llm')))
+  check('B5 9g F-6: 本地独有面照常渲染（remote.llm 非同名面不被去重丢弃）', faceRows.includes('✓ remote.llm') && faceRows.includes('✓ settings'))
+  check('B5 9g F-6: 徽章口径随去重结果（去重后零降级 → 全绿文案，不误报）', cardTexts.includes('hostHealthOk') && !cardTexts.includes('hostHealthWarn(1)'))
+
+  // 9h. R-1 锚清扫复核：旧行号式锚零残留（函数名+文件式锚替代，防行号再漂移）。
+  const ANCHOR_CASES = [
+    { file: ['lib', 'host-abi', 'ctx-services.js'], stale: ['preset-defaults.js:163', 'preset-defaults.js:194', 'preset-defaults.js:214', 'prestep.js:193', 'wrapper.js:516', 'oauth-llm.js:449', 'service.js:927', 'host-route.js:248'], fresh: ['safeListModels', 'sessionSelectFaceOf', 'agentsRegistryOf', 'agentPresetsServiceOf', 'llmFaceOf'] },
+    { file: ['lib', 'host-abi', 'events.js'], stale: ['host-route.js:263-270'], fresh: ['syncHostRoute'] },
+    { file: ['lib', 'stats.js'], stale: ['host-route.js:55'], fresh: ['host-abi/version.js'] },
+    { file: ['tests', 'fix-031-attribution.mjs'], stale: ['host-route.js HOST_ROUTE_PROVIDER'], fresh: ['host-abi/version.js HOST_ROUTE_PROVIDER'] },
+    { file: ['tests', 'client-render.mjs'], stale: ['lib/host-route.js HOST_ROUTE_PROVIDER'], fresh: ['lib/host-abi/version.js HOST_ROUTE_PROVIDER'] },
+  ]
+  for (const anchorCase of ANCHOR_CASES) {
+    const filePath = join(ROOT_DIR, ...anchorCase.file)
+    const source = readFileSync(filePath, 'utf8')
+    const staleHits = anchorCase.stale.filter((needle) => source.includes(needle))
+    const missingFresh = anchorCase.fresh.filter((needle) => !source.includes(needle))
+    check(`B5 9h R-1: ${anchorCase.file.join('/')} 行号式锚零残留 + 函数名式锚在位`, staleHits.length === 0 && missingFresh.length === 0, { staleHits, missingFresh })
+  }
+  void eventsSourceB5
 }
 
 console.log(failures === 0 ? `\nALL HOST ABI HEALTH TESTS PASSED (${passed} assertions)` : `\n${failures} FAILURE(S) (${passed} passed)`)

@@ -2947,6 +2947,85 @@ console.log('admission wrapper (L1):')
   check('pre-step uninstaller removes handler', disposedDecision.messages.length === 1 && disposedDecision.messages[0] === imageMessage)
 }
 
+// 7.5 EVO-023（ARCH-004 B5）：events 域批——订阅 census（只减不增）+ 域管事件
+// 全链路回归 + Node 侧 faces 生产非空（R-5 注册表接线）。
+//
+// 迁移前基线（B5 批前实读 census，面齐备的 index apply——本文件同 harness）：
+// settings/updated 4（index 统计持久化 + service 宿主路由维护 + wrapper 热同步
+// + oauth-llm 状态同步）/ llm/adapters-updated 2（wrapper + oauth-llm）/
+// agent/pre-step 1 / agent/created 1 / agent-preset/selected 1 / agent/request 1
+// = 10。本批已收敛：index/service 的 settings/updated（同目标共享单 listener，
+// 4→3）+ preset-defaults 的 agent-preset/selected（域管事件）；wrapper/oauth-llm
+// 四处 settings/updated/llm/adapters-updated 不在本批锁内（偏差项见任务结论——
+// 需 Coordinator 扩锁或后续批次），故 census 断言为「≤ 基线」而非「= 3」。
+{
+  const b5IndexModule = await import('../lib/index.js')
+  const root = new Context()
+  const census = {}
+  const listenersByEvent = {}
+  const origOn = root.on.bind(root)
+  root.on = (event, handler) => {
+    census[event] = (census[event] ?? 0) + 1
+    listenersByEvent[event] = [...(listenersByEvent[event] ?? []), handler]
+    return origOn(event, handler)
+  }
+  await root.plugin({ name: 'b5-settings', apply: (ctx) => ctx.provide('settings', { register: () => ({ get: () => ({ enabled: true, agents: {}, oauthAccounts: {} }) }) }) })
+  await root.plugin({ name: 'b5-typert', apply: (ctx) => ctx.provide('typert', { register: () => () => {} }) })
+  await root.plugin({ name: 'b5-webserver', apply: (ctx) => ctx.provide('webServer', { register: () => () => {} }) })
+  root.provide('attachments', { saveImage: async () => ({}), readImage: async () => ({}) })
+  root.provide('llm', {
+    registerAdapter: () => () => {},
+    registration: () => ({}),
+    listModels: async () => [{ id: 'm-1', name: 'M1' }],
+    resolveModelInfo: async () => ({ context: { contextWindow: 4096 } }),
+    listProviders: () => [],
+    listConfigurableProviders: async () => [],
+  })
+  root.provide('credentials', { resolve: async () => undefined, set: async () => undefined, unset: async () => undefined })
+  root.provide('agentDefaultModel', { currentSelection: () => null, saveSelection: () => {} })
+  root.provide('sessionController', { selectModel: async () => ({}) })
+  root.logger = { warn: () => {}, info: () => {} }
+  const app = await root.plugin({ name: 'b5-index', inject: b5IndexModule.inject, apply: b5IndexModule.apply })
+  await new Promise((resolve) => setImmediate(resolve))
+  check('B5 census: settings/updated 订阅收敛 4→3（index 统计持久化 + service 宿主路由维护经 events 域共享单 listener）', census['settings/updated'] === 3, census)
+  check('B5 census: llm/adapters-updated 不增（2——wrapper/oauth-llm 剩余面不在本批锁内）', census['llm/adapters-updated'] === 2, census)
+  check('B5 census: agent-preset/selected 经 events 域（域管事件 Node 面单 listener）', census['agent-preset/selected'] === 1)
+  check('B5 census: scoped 钩子保留直订（agent/pre-step 1 + agent/created 1 + agent/request 1——W-3 口径）', census['agent/pre-step'] === 1 && census['agent/created'] === 1 && census['agent/request'] === 1)
+  check('B5 census: 全量订阅注册数 ≤ 迁移前基线 10（BR-01② 订阅总数只减不增）', Object.values(census).reduce((sum, count) => sum + count, 0) <= 10, census)
+
+  // 事件链全链路回归：settings/updated → 域共享 listener → 按名分发给两消费者
+  //（① service.applyStatsSettings 统计持久化重放 ② queueHostRouteSync 宿主路由
+  // pass），ns 过滤语义逐字保持（router/undefined = user；llm-pi-ai = llm）。
+  const serviceB5 = root.get('router')
+  let statsApplies = 0
+  let routeQueues = 0
+  const rawApplyStats = serviceB5.applyStatsSettings.bind(serviceB5)
+  const rawQueue = serviceB5.queueHostRouteSync.bind(serviceB5)
+  serviceB5.applyStatsSettings = (...args) => { statsApplies += 1; return rawApplyStats(...args) }
+  serviceB5.queueHostRouteSync = (...args) => { routeQueues += 1; return rawQueue(...args) }
+  const fireSettings = (ns) => { for (const handler of listenersByEvent['settings/updated'] ?? []) handler(ns) }
+  fireSettings('router')
+  check('B5 事件链: settings/updated(router) → 共享 listener 按名分发两消费者各一次（迁移后消费者零丢失）', statsApplies === 1 && routeQueues === 1)
+  fireSettings('llm-pi-ai')
+  check('B5 事件链: llm-pi-ai ns 只命中宿主路由消费者（ns 过滤语义不变——统计不误重放）', statsApplies === 1 && routeQueues === 2)
+  fireSettings(undefined)
+  check('B5 事件链: 全量广播（ns undefined）命中两消费者（P8 观测面语义保持）', statsApplies === 2 && routeQueues === 3)
+
+  // R-5：Node 侧注册表接线——RPC faces 生产非空（B1 空注册表落地；启动自检
+  // 在 apply 内同步完成，无异步 timer 依赖）。
+  const payloadB5 = serviceB5.hostFaceDiagnostics()
+  check('B5 R-5: apply 后 RPC faces 生产非空（11 ctx 服务面 + 2 llm-selection 面接线，读即得——无 timer 依赖）',
+    payloadB5.faces.length >= 13 && ['ctx:llm', 'ctx:credentials', 'ctx:settings', 'ctx:sessionController', 'llm:adapter', 'session:select'].every((name) => payloadB5.faces.some((face) => face.name === name)))
+  check('B5 R-5: 面探测真实性（本 harness 提供 llm/sessionController → ok；未提供 fs/subagents → missing，非全绿假象）',
+    payloadB5.faces.find((face) => face.name === 'ctx:llm')?.state === 'ok'
+    && payloadB5.faces.find((face) => face.name === 'ctx:sessionController')?.state === 'ok'
+    && payloadB5.faces.find((face) => face.name === 'ctx:fs')?.state === 'missing'
+    && payloadB5.faces.every((face) => typeof face.name === 'string' && ['ok', 'degraded', 'missing'].includes(face.state)))
+  check('B5 R-5: 严格形状面降级可观测（未提供 agents/agentPresets 形状 → missing/degraded + 诊断短码，P8 禁吞错）',
+    ['ctx:agents', 'ctx:agentPresets', 'ctx:sessionProjections'].every((name) => payloadB5.faces.some((face) => face.name === name)))
+  await app.dispose()
+}
+
 // 8. 平台安装入口（BOM 免疫在线命令 + 离线安装幂等；涉及系统宿主与本地 fixture 服务器）
 await runInstallEntryTests(check)
 

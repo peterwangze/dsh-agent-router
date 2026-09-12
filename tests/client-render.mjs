@@ -171,14 +171,25 @@ export async function runClientRender(check) {
   }
 
   // ── 装配：评估浏览器包 → mock ctx → apply → 渲染 ─────────────────────
-  const captured = { registrations: [], listeners: [], effectCleanups: [], uploadFileCalls: [], readWorkspaceFileCalls: [], saveOps: [], oauthLogoutCalls: [], beginCalls: [], openCalls: [], statsExportCalls: [], credUnsetCalls: [] }
+  const captured = { registrations: [], listeners: [], effectCleanups: [], uploadFileCalls: [], readWorkspaceFileCalls: [], saveOps: [], oauthLogoutCalls: [], beginCalls: [], openCalls: [], statsExportCalls: [], credUnsetCalls: [], timers: [], documentListeners: [] }
+  // EVO-023（B5）轮询治理判别面：2s 轮询 tick 由 captured.timers 手动驱动
+  //（fakeWindow.setInterval 记录 fn/ms），document.hidden 可切换以判别
+  //「页面隐藏零 RPC」；pollRpc 计数 stats/presetDiag 双 RPC 同拍与频率。
+  const pollRpc = { stats: 0, presetDiagnostics: 0 }
   const fakeWindow = {
     __ModuleLoader__: { load: (payload) => { captured.bundle = payload } },
     location: { search: '', pathname: '/' },
     history: { replaceState: () => {} },
     sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
-    setInterval: () => 0,
-    clearInterval: () => {},
+    setInterval: (fn, ms) => { captured.timers.push({ fn, ms, cleared: false }); return captured.timers.length },
+    clearInterval: (id) => { const timer = captured.timers[id - 1]; if (timer) timer.cleared = true },
+    // D1-10 治理面：页面隐藏暂停经 window.document.hidden + visibilitychange
+    //（浏览器真实形态；宿主 bundle 只经 window 取面）。
+    document: {
+      hidden: false,
+      addEventListener: (type, handler) => { captured.documentListeners.push({ type, handler }) },
+      removeEventListener: () => {},
+    },
     // 登录轮询依赖 setTimeout 真正回调（忽略延迟立即排队），否则轮询挂死。
     setTimeout: (fn) => { setImmediate(fn); return 0 },
     clearTimeout: () => {},
@@ -307,13 +318,16 @@ export async function runClientRender(check) {
         codexentry: { name: 'Codex 子代理', enabled: true, command: 'codex', args: '', timeoutMs: 0, maxConcurrent: 1, loginArgs: '', statusArgs: '', modelsArgs: '' },
       },
     }, user: null } }),
-    stats: async () => ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [
+    stats: async () => { pollRpc.stats += 1; return ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [
       ...(oauthGhostMode ? [{ provider: 'oauth:chatgpt', name: 'ChatGPT 订阅', calls: 3, errors: 0, inputTokens: 13200, outputTokens: 4800, totalMs: 0, lastAt: undefined }] : []),
       ...(oauthRouteGhostMode ? [{ provider: 'chatgpt-oauth', name: 'ChatGPT 订阅', calls: 18, errors: 0, inputTokens: 119100, outputTokens: 1000, totalMs: 0, lastAt: undefined }] : []),
     ], accountSeries: [], days: {
       '2026-01-15': { calls: 3, errors: 1, inputTokens: 110, outputTokens: 50, tokens: 160, ms: 180, cost: 0.5 },
       '2026-01-16': { calls: 2, errors: 0, inputTokens: 20, outputTokens: 0, tokens: 20, ms: 60, cost: 0 },
-    } } }),
+    } } }) },
+    // EVO-023（B5）：presetDiag 随 2s 轮询同拍拉取（FIX-030-C 观测面）——
+    // 计数面供「双 RPC 同拍/隐藏态零 RPC」判别（既有用例零消费面）。
+    presetDiagnostics: async () => { pollRpc.presetDiagnostics += 1; return { ok: true, value: { ok: true, enabled: true, entries: [] } } },
     statsExport: async (request) => { captured.statsExportCalls.push(request); return { ok: true, value: { ok: true, message: '已导出 2 行', csv: 'date,agent,account,model,calls,errors,inputTokens,outputTokens,p50ms,p95ms,costEstimate\n2026-01-15,vision,openai,gpt-4o,3,1,110,50,60,180,0.5' } } },
     save: async (request) => { captured.saveOps.push(...((request && request.ops) ?? [])); return { ok: true, value: { ok: true, revision: 1 } } },
     oauthBegin: async (request) => { captured.beginCalls.push(request); return { ok: true, value: { ok: true, message: '授权 URL 已生成', authUrl: 'https://auth.openai.com/oauth/authorize?x=1', state: 'st-6' } } },
@@ -1629,7 +1643,8 @@ export async function runClientRender(check) {
 
   // ── FIX-019 追加：宿主路由 openai-codex 显式排除（真 provider 形态）────
   // EVO-010 起插件把 openai-codex 目录路由维护进 llm-pi-ai settings（
-  // lib/host-route.js HOST_ROUTE_PROVIDER）→ 宿主 llm 目录暴露为**真 provider**
+  // lib/host-abi/version.js HOST_ROUTE_PROVIDER——EVO-022 B4 ①权威翻转后的
+  // 单点定义，host-route.js 仅 re-export）→ 宿主 llm 目录暴露为**真 provider**
   // （active、7 个模型来自宿主官方目录、调用 0）；旧代码 addedAccounts 与
   // statsAccountRows 的 llm-pi-ai providers 来源不带任何过滤 → 渲染为假账号卡
   // （用户 ⑤ 确认截图 sha256:9fa0908e：已激活 · 7 个模型 · 调用 0 · 0/0）。
@@ -2055,5 +2070,67 @@ export async function runClientRender(check) {
     const b2InjectDiag = settingsReg.inject().health().diag
     check('B2: apply 时 inject 自检记 inject-face-missing（remote.llm 缺面可视化，apply 不阻断）', !b2ReapplyBlocked && b2InjectDiag.some((entry) => entry.kind === 'inject-face-missing' && entry.face === 'remote.llm'))
     missingFaces.clear()
+  }
+
+  // ── EVO-023（ARCH-004 B5）：客户端订阅面收敛 + 设置页轮询治理判别 ────────
+  // 1) D-2 死订阅修复判别（§0.5 Analyst D-2 / §4.3 域 4 能力探测）：旧代码
+  //    订 credentials/updated——该名不在宿主转发白名单（单一声明源
+  //    dsh-api-remotes/lib/types/remote-events.js 全表无此名），宿主从未转发
+  //    → 凭据变化不触发刷新（死订阅）。修复 = 正名 credentials/
+  //    reference-updated + 订阅经 events 域镜像白名单拒绝外名。判别：以真实
+  //    $on 捕获面渲染整页 → 旧名下零订阅（RED：旧代码此处页面订阅名 = 死名）
+  //    且派发正名事件必须触发刷新链路（load() 重跑 → catalog RPC）。
+  // 2) 设置页 2s 双 RPC 轮询治理（D1-10，症状②首要嫌疑面）：页面隐藏暂停
+  //    （隐藏态零 RPC）+ 双 RPC（stats/presetDiagnostics）同拍单 timer；判别
+  //    断言 = 隐藏态 0 RPC、可见态每拍恰 2 RPC（≤1 RPC/s 量级）、渲染期无
+  //    新增常驻 timer（timer census 与迁移前一致：2s 轮询 1 + 30s catalog 1）。
+  {
+    const pageSubs = []
+    const capturedOn = (event, listener) => {
+      const entry = { event, listener, active: true }
+      pageSubs.push(entry)
+      return () => { entry.active = false }
+    }
+    let catalogCalls = 0
+    const rawCatalog = remoteMock.catalog
+    remoteMock.catalog = async (...args) => { catalogCalls += 1; return rawCatalog(...args) }
+    const timerMark = captured.timers.length
+    const docListenerMark = captured.documentListeners.length
+    pollRpc.stats = 0
+    pollRpc.presetDiagnostics = 0
+    await renderInto(settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: tOf, $on: capturedOn }), 'b5-events')
+    await settle(60)
+    const deadSubs = pageSubs.filter((entry) => entry.event === 'credentials/updated')
+    const refSubs = pageSubs.filter((entry) => entry.event === 'credentials/reference-updated')
+    check('B5 D-2: 设置页订阅正名 credentials/reference-updated（白名单锚 remote-events.js:21）——死名 credentials/updated 零订阅', deadSubs.length === 0 && refSubs.length === 1)
+    check('B5 D-2: 页面其余转发订阅在位（settings/document-updated + llm/adapters-updated——域管事件清单内）', pageSubs.some((entry) => entry.event === 'settings/document-updated') && pageSubs.some((entry) => entry.event === 'llm/adapters-updated'))
+    const catalogBeforeCred = catalogCalls
+    for (const entry of refSubs) entry.listener()
+    await new Promise((resolve) => setImmediate(resolve))
+    check('B5 D-2 判别: 正名事件派发 → 账号卡刷新链路触发（load() 重跑 → catalog RPC；旧死名订阅在此必不触发 = RED）', catalogCalls > catalogBeforeCred)
+
+    // 轮询治理（D1-10）：单 2s timer 承载双 RPC 同拍；隐藏态零 RPC。
+    const b5Timers = captured.timers.slice(timerMark)
+    const pollTimers = b5Timers.filter((timer) => timer.ms === 2000 && !timer.cleared)
+    check('B5 D1-10: 设置页 2s 轮询为单 timer（双 RPC 同拍，非每 RPC 各起 timer）', pollTimers.length === 1 && b5Timers.filter((timer) => !timer.cleared).length === 1)
+    check('B5 D1-10: 渲染期无新增常驻 timer——本实例仅新增 1 个 2s 轮询 timer（无其他新 timer；30s catalog 兜底仍为 apply 单例）', b5Timers.filter((timer) => !timer.cleared).length === 1 && b5Timers.every((timer) => timer.ms === 2000) && captured.timers.filter((timer) => !timer.cleared && timer.ms === 30000).length === 1)
+    const pollTick = pollTimers[0]
+    fakeWindow.document.hidden = false
+    pollRpc.stats = 0
+    pollRpc.presetDiagnostics = 0
+    for (let index = 0; index < 5; index += 1) pollTick.fn()
+    await new Promise((resolve) => setImmediate(resolve))
+    check('B5 D1-10: 可见态 5 拍 → stats 5 + presetDiagnostics 5（双 RPC 同拍，每拍恰 2 RPC）', pollRpc.stats === 5 && pollRpc.presetDiagnostics === 5)
+    check('B5 D1-10: 稳态 RPC 频率 ≤1 RPC/s 量级（2 RPC / 2s = 1 RPC/s）', (pollRpc.stats + pollRpc.presetDiagnostics) / (5 * 2) <= 1)
+    fakeWindow.document.hidden = true
+    const hiddenStats = pollRpc.stats
+    const hiddenDiag = pollRpc.presetDiagnostics
+    for (let index = 0; index < 5; index += 1) pollTick.fn()
+    await new Promise((resolve) => setImmediate(resolve))
+    check('B5 D1-10: 隐藏态零 RPC（页面隐藏暂停——症状②防御判别；旧代码此断言必红）', pollRpc.stats === hiddenStats && pollRpc.presetDiagnostics === hiddenDiag)
+    fakeWindow.document.hidden = false
+    for (const entry of captured.documentListeners.slice(docListenerMark).filter((item) => item.type === 'visibilitychange')) entry.handler()
+    await new Promise((resolve) => setImmediate(resolve))
+    check('B5 D1-10: 恢复可见立即补拍一次（visibilitychange 唤醒——实时语义保留，不丢一轮）', pollRpc.stats === hiddenStats + 1 && pollRpc.presetDiagnostics === hiddenDiag + 1)
   }
 }
