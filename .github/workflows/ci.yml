@@ -40,13 +40,18 @@
 #      Windows 专属入口（install.ps1:1「Windows / PowerShell 5.1+」），其离线臂依赖
 #      junction / robocopy 拷贝回退 / 反斜杠子路径（'profiles\node_modules'），非 win32
 #      不可判定（首跑实证该臂失败 + 裸源码臂于 `lstatSync` ENOENT 裸抛致套件崩溃、其后
-#      断言与诊断全部丢失）；POSIX 侧同一断言面由 install.sh 臂承担（见下条），覆盖对称。
+#      断言与诊断全部丢失）；**POSIX 对偶覆盖按臂分列（仅陈述实际成立范围）**：§6（`-File`
+#      离线安装）与 §6c（裸源码依赖链接）在 sh 可用时由 install.sh 臂承担（见下条；sh 缺失
+#      时另有 `POSIX online checks` skip 行可辨）；**§6d（自带真实
+#      `node_modules` 不得改动）无 POSIX 对照臂**——install.sh:94-101 / :113-131 明载同一数据
+#      保护语义却零判别测试，属已知覆盖缺口（台账候选 · R0 P2-1-A 如实标注，不声称对称）。
 #      **预期内的 skip（非缺陷，FIX-037 P2-3/R1 口径 + FIX-038 扩表，按环境分列）**：
-#      ubuntu 正常态 = `#SKIP 7 (host-contract.mjs×2, smoke.mjs×5)`——host-contract 在 CI
+#      ubuntu 正常态 = `#SKIP 7 (host-contract.mjs×2, smoke.mjs×5)`（**预期值——修复后首跑
+#      前尚未实测，以首跑日志逐行复核**）——host-contract 在 CI
 #      必然无宿主（见上条）⇒ S3 半边 + S7 组 2 条；smoke 5 条 = `install.ps1 parses
 #      (powershell)` 臂 1 条（5.1 仅 Windows 存在，同一断言由 pwsh 臂完整执行，≠ 断言被
 #      跳过）+ 上述 FIX-038 新增来源 4 条（①1 + ②3）。**Windows 本地正常态 =
-#      `#SKIP 1 (smoke.mjs×1)`（install-entry 的 POSIX 臂）——FIX-038 平台判据在 win32
+#      `#SKIP 1 (smoke.mjs×1)`（本地实测；install-entry 的 POSIX 臂）——FIX-038 平台判据在 win32
 #      不产生新 skip（shim 臂与 `-File` 离线臂照跑）**。
 #      判据取**相对基线增量**：新增 skip 来源或断言数下降才需研判（绝对值随平台
 #      组合变化，不作告警依据）；
