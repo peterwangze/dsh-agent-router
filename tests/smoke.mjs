@@ -218,8 +218,10 @@ console.log('rpc contribution:')
 {
   const contribution = createHostContribution()
   check('face host', contribution.face === 'host')
-  check('18 invocations', contribution.invocations.length === 18)
-  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 18 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
+  // ARCH-004 B1（EVO-019）：+router/hostFaceDiagnostics（19 项——新增 RPC 面
+  // 时同步更新本计数三处：本行 / 下一行 / :2213 typert contribution registered）。
+  check('19 invocations', contribution.invocations.length === 19)
+  check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 19 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
   check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))
   check('image RPC descriptors present', contribution.invocations.some((d) => d.method === 'imageData'))
   check('uploadFile RPC descriptor present', contribution.invocations.some((d) => d.method === 'uploadFile' && d.id === 'dsh-agent-router#router/uploadFile'))
@@ -2210,7 +2212,7 @@ console.log('apply wiring:')
     const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
     await app
     check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
-    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 18 && registeredContribution.package === 'dsh-agent-router')
+    check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 19 && registeredContribution.package === 'dsh-agent-router')
     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
     check('oauth callback route registered', webRoutes.some((route) => route && route.kind === 'exact' && route.path === '/router-oauth/callback' && typeof route.handler === 'function'))
 

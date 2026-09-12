@@ -619,6 +619,15 @@ window.__ModuleLoader__.load({
       presetsSummary: (n) => `已配置 ${n} 个预设`,
       presetDiagTitle: '预设生效诊断（最近事件）',
       presetDiagHint: '✓ = 已应用；✗ = 跳过（括号内为原因：not-configured 未配置 / produced 会话已运行 / explicit-override 显式覆盖 / face-unavailable 选择面缺失 / select-rejected 模型不可用等）',
+      // ARCH-004 B1（§6.1）：宿主面健康徽章 + 面板（一次性快照数据源）。
+      hostHealthTitle: '宿主面健康',
+      hostHealthOk: '✓ 宿主面正常',
+      hostHealthWarn: (n) => `⚠ ${n} 个宿主面降级/缺失`,
+      hostHealthVersions: (v) => `宿主版本：dsh-llm ${v.llm} · dsh-tools ${v.tools} · typert-protocol ${v.typertProtocol}`,
+      hostHealthFacesTitle: '面探针：',
+      hostHealthNoProbes: '尚无已注册面探针（B2-B5 迁移批次接入后自动覆盖宿主依赖面）',
+      hostHealthDiagTitle: '最近宿主诊断事件：',
+      hostHealthNoDiag: '暂无诊断事件',
       presetsIntro: '以 DSH 预设为粒度配置默认模型：对应预设新开会话的主 Agent 与其派生的 subagent 将以配置模型为默认（subagent 留空 = 继承主 Agent 模型）。未配置的预设完全遵循 DSH 现行规则（零行为变化）；会话内手动选择的模型与已运行会话始终优先，不受此处影响。',
       presetsEmpty: '尚未配置预设默认模型——添加后，对应预设的新会话将以配置模型为默认模型。',
       presetsAdd: '添加预设配置',
@@ -938,6 +947,15 @@ window.__ModuleLoader__.load({
       presetsSummary: (n) => `${n} preset(s) configured`,
       presetDiagTitle: 'Preset effectiveness diagnostics (recent events)',
       presetDiagHint: '✓ = applied; ✗ = skipped (reason in parentheses: not-configured / produced / explicit-override / face-unavailable / select-rejected …)',
+      // ARCH-004 B1 (§6.1): host face health badge + panel (one-shot snapshot source).
+      hostHealthTitle: 'Host face health',
+      hostHealthOk: '✓ host faces healthy',
+      hostHealthWarn: (n) => `⚠ ${n} host face(s) degraded/missing`,
+      hostHealthVersions: (v) => `Host versions: dsh-llm ${v.llm} · dsh-tools ${v.tools} · typert-protocol ${v.typertProtocol}`,
+      hostHealthFacesTitle: 'Face probes: ',
+      hostHealthNoProbes: 'No face probes registered yet (host dependency faces are covered automatically once the B2-B5 migration batches land)',
+      hostHealthDiagTitle: 'Recent host diagnostics: ',
+      hostHealthNoDiag: 'No diagnostic events yet',
       presetsIntro: 'Configure default models per DSH preset: new sessions of the preset main agent and its subagents default to the configured model (empty subagent = inherit the main model). Unconfigured presets fully follow current DSH rules (zero behavior change); models picked manually in a session and already-running sessions always win.',
       presetsEmpty: 'No preset default models configured yet — once added, new sessions of the matching preset default to the configured model.',
       presetsAdd: 'Add preset configuration',
@@ -1979,6 +1997,10 @@ window.__ModuleLoader__.load({
       // FIX-030-C：预设播种/修正诊断（最近事件环形——观测面随统计轮询刷新；
       // 服务端旧版本无该 RPC 时静默空表，不破坏页面）。
       const [presetDiag, setPresetDiag] = useState([])
+      // ARCH-004 B1（§6.1）：宿主面健康一次性快照（hostVersions + FaceHealth
+      // 缓存 + 诊断环形——router/hostFaceDiagnostics RPC；render 期零 probe，
+      // §7.1 惰性纪律：渲染只读本快照缓存）。
+      const [hostHealth, setHostHealth] = useState(null)
       // 分级分类卡片：预设 Agent 与专业 Agent 核心区前置（预设默认折叠）；
       // 账号与统计默认折叠。
       // EVO-015 后调整（用户指令 2026-09-05）：专业 Agent 默认折叠——四张
@@ -2115,6 +2137,23 @@ window.__ModuleLoader__.load({
         poll()
         const timer = window.setInterval(poll, 2000)
         return () => { alive = false; window.clearInterval(timer) }
+      }, [ready, remote])
+
+      // ARCH-004 B1（§6.1/D4）：宿主面健康一次性快照——打开期仅取一次，
+      // 绝不进 2s 轮询（D1-10 治理纪律：设置页常驻 RPC 面不加码）；
+      // render 期零 probe 判别锚点（tests/host-abi-health.mjs §3——调用点
+      // 唯一且位于本 effect 内，面板只读 hostHealth 状态缓存）。方法缺失
+      // （旧服务端未重启）静默跳过（presetDiagnostics :2109 先例）。
+      useEffect(() => {
+        if (!ready) return
+        let alive = true
+        const routerRemote = remote()
+        if (routerRemote && typeof routerRemote.hostFaceDiagnostics === 'function') {
+          routerRemote.hostFaceDiagnostics({}).then((response) => {
+            if (alive && response.ok && response.value && typeof response.value === 'object') setHostHealth(response.value)
+          }, () => undefined)
+        }
+        return () => { alive = false }
       }, [ready, remote])
 
       const clearStats = async () => {
@@ -3208,6 +3247,9 @@ window.__ModuleLoader__.load({
             t('masterSwitch')),
           el('p', { className: 'dshrouter-hint' }, t('masterHint')),
           !enabled ? el('p', { className: 'dshrouter-error' }, t('routeDisabled')) : null),
+        // ARCH-004 B1（§6.1）：宿主面健康徽章 + 面板（一次性快照；
+        // render 期零 probe——纯 HostHealthCard 缓存渲染）。
+        el(HostHealthCard, { hostHealth, t }),
       ]
       // ── 多模态账号（API Key → ChatGPT 订阅登录 → 子代理 → 高级扩展[账号池，默认折叠]）──
       const accountsBody = [
@@ -3644,6 +3686,42 @@ window.__ModuleLoader__.load({
       return el('span', { className: 'dshrouter-meta' + (loggedOut ? ' dshrouter-error' : ''), title: cliState && cliState.statusMessage },
         el('span', { className: `dshrouter-dot ${chip.dot}`.trim(), style: { marginRight: 6 } }),
         chip.text)
+    }
+
+    /**
+     * ARCH-004 B1（§6.1）：宿主面健康徽章行 + 可展开面板。纯快照渲染：
+     * 只读 hostHealth 状态缓存（一次性 effect 取数），render 期零 probe/
+     * 零 RPC 调用（§7.1 探针惰性化的渲染面保证——判别锚点
+     * tests/host-abi-health.mjs §3）。布局参照 presetDiag 最近事件行先例
+     * （details/summary 折叠行）；徽章语义：✓ 全绿 / ⚠ n 面降级或缺失。
+     */
+    function HostHealthCard(props) {
+      const { hostHealth, t } = props
+      if (!hostHealth || typeof hostHealth !== 'object') return null
+      const faces = Array.isArray(hostHealth.faces) ? hostHealth.faces : []
+      const diag = Array.isArray(hostHealth.diag) ? hostHealth.diag : []
+      const degraded = faces.filter((face) => face && face.state !== 'ok').length
+      const versions = hostHealth.hostVersions && typeof hostHealth.hostVersions === 'object'
+        ? hostHealth.hostVersions
+        : { llm: '?', tools: '?', typertProtocol: '?' }
+      return el('details', { className: 'dshrouter-notice', style: { margin: '0' } },
+        el('summary', { style: { cursor: 'pointer', fontSize: '12px' } },
+          el('span', { className: degraded > 0 ? 'dshrouter-error' : 'dshrouter-ok' },
+            degraded > 0 ? t('hostHealthWarn')(degraded) : t('hostHealthOk')),
+          el('span', { className: 'dshrouter-meta', style: { marginLeft: 8 } },
+            ` ${t('hostHealthTitle')} · ${t('hostHealthVersions')(versions)}`)),
+        el('div', { style: { fontSize: '12px', lineHeight: 1.7, marginTop: '6px', wordBreak: 'break-all' } },
+          faces.length === 0
+            ? el('div', { style: { opacity: 0.6 } }, t('hostHealthNoProbes'))
+            : el('div', null, t('hostHealthFacesTitle'),
+              ...faces.map((face, index) => el('div', { key: `hface-${index}-${face.name}` },
+                `${face.state === 'ok' ? '✓' : face.state === 'degraded' ? '⚠' : '✗'} ${face.name}${face.detail ? ` (${face.detail})` : ''}`))),
+          el('div', { style: { marginTop: '4px' } }, t('hostHealthDiagTitle'),
+            diag.length === 0
+              ? el('div', { style: { opacity: 0.6 } }, t('hostHealthNoDiag'))
+              : el('div', null,
+                ...diag.slice(0, 8).map((entry, index) => el('div', { key: `hdiag-${index}-${entry.at}` },
+                  `${new Date(entry.at).toLocaleTimeString()} ${entry.kind}${entry.face ? ` ${entry.face}` : ''}${entry.code ? ` (${entry.code})` : ''}${entry.detail ? ` ${entry.detail}` : ''}`))))))
     }
 
     /** 子代理条目卡片（账号区的「子代理」区：命令/登录/模型/统计）。 */
