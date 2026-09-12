@@ -51,16 +51,21 @@
 #      （台账候选 · R0 P2-1-A 如实标注，不声称对称）。**锚形 = 符号名 / 代码串 + 文件**
 #      （FIX-040：install.sh 行号锚属实测漂移族，不再写死行号）。
 #      **预期内的 skip（非缺陷，FIX-037 P2-3/R1 口径 + FIX-038 扩表 + FIX-040 收口，按环境分列）**：
-#      ubuntu 正常态 = `#SKIP 7 (host-contract.mjs×2, smoke.mjs×5)`（**预期值——修复后首跑
+#      ubuntu 正常态 = `#SKIP 6 (host-contract.mjs×2, smoke.mjs×4)`（**预期值——修复后首跑
 #      前尚未实测，以首跑日志逐行复核**）——host-contract 在 CI
-#      必然无宿主（见上条）⇒ S3 半边 + S7 组 2 条；smoke 5 条 = `install.ps1 parses
-#      (powershell)` 臂 1 条（5.1 仅 Windows 存在，同一断言由 pwsh 臂完整执行，≠ 断言被
-#      跳过）+ FIX-038 新增来源 4 条（②install-entry 离线臂 3 条 + `POSIX online checks`
-#      1 条；①shim 臂已由 FIX-040 P2-2 平台中立化，不再计入，且 win32 侧旧 `0o600` 静默
-#      分支归位为可见 skip 而该断言在 ubuntu 照常执行 ⇒ ubuntu 计数不变）。
+#      必然无宿主（见上条）⇒ S3 半边 + S7 组 2 条；smoke 4 条 = `install.ps1 parses
+#      (powershell)` 探针臂 1（`tests/smoke.mjs` 探针循环：ubuntu 仅有 pwsh，`powershell`
+#      探针 ENOENT 打印 `skip install.ps1 parses (powershell) (probe failed: ENOENT)`；同一
+#      断言由 pwsh 臂完整执行，≠ 断言被跳过）+ FIX-038 遗留来源 3 条（`-File` 离线臂：
+#      offline install succeeds/idempotent 1 + bare-source 1 + 真实 node_modules 1——
+#      `!PS1_OFFLINE_APPLICABLE` 触发）。**不计入 ubuntu 的 Windows 侧来源**：`POSIX online
+#      checks`（其触发条件 = `posixShell()` 返回 null，即 `sh` 或 `curl` 均不可探——
+#      ubuntu 运行器自带 sh+curl ⇒ 该臂照跑不跳，实测本机 win32 的该 skip 即由此来）、
+#      win32 侧 `0o600` 可见 skip（ubuntu 照常执行）；`.cmd` shim 臂已由 FIX-040 P2-2
+#      平台中立化（全平台恒跑），亦不计入。
 #      **Windows 本地正常态 = `#SKIP 2 (smoke.mjs×2)`（本地实测，FIX-040 起由 1 升为 2；
-#      install-entry 的 POSIX 臂 1 条 + smoke 的 `0o600` 可见 skip 1 条——后者 FIX-040 前
-#      为 `if (!win32)` 静默消失，属 FIX-037 ① 同族收口）**。
+#      install-entry 的 `POSIX online checks` 1 条 + smoke 的 `0o600` 可见 skip 1 条——后者
+#      FIX-040 前为 `if (!win32)` 静默消失，属 FIX-037 ① 同族收口）**。
 #      判据取**相对基线增量**：新增 skip 来源或断言数下降才需研判（绝对值随平台
 #      组合变化，不作告警依据）；
 #   3) tests/install-entry.mjs：在线/离线命令臂按可用宿主择一——POSIX sh+curl 臂在
