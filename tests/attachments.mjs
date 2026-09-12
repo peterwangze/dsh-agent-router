@@ -39,6 +39,20 @@ function makeAttachments() {
   return service
 }
 
+/**
+ * 工作区路径归一判据（P5 单点，FIX-040 P2-3）：同一判据此前在 `makeFs.resolve`
+ * 与 LRU 夹具 `lruFs.resolve` 两处**逐字重复**，仅靠注释耦合对齐——本次缺陷根因
+ * （FIX-038：判据漏 POSIX 绝对路径 ⇒ 条目按自嵌套路径登记、`byPath(原路径)` 恒
+ * 未命中）正是同族判据漂移。判据：Windows 盘符（含 ':'）或 POSIX 绝对路径
+ * （以 '/' 开头）视为已是绝对路径原样使用；否则按 cwd 相对拼接。
+ * 注：不得改用 `path.resolve`——`join`/`resolve` 对绝对路径第二参语义不同，
+ * 本判据即回避该差异的平台中立形态。
+ */
+function resolveWorkspacePath(raw, cwd) {
+  const text = String(raw)
+  return text.includes(':') || text.startsWith('/') ? text : join(cwd ?? '', text)
+}
+
 /** 假文件服务：工作区沙箱 + 内容映射（与 smoke.mjs root.provide('fs') 同构）；
  *  映射外但位于真实 WORKSPACE 下的路径回退真实文件系统（URL 下载落盘后
  *  的读取路径）。 */
@@ -50,8 +64,7 @@ function makeFs(files) {
     resolve: async (path, options = {}) => {
       const raw = String(path)
       if (raw.includes('outside')) throw new Error('outside workspace')
-      const target = raw.includes(':') || raw.startsWith('/') ? raw : join(options.cwd ?? '', raw)
-      return { displayPath: target }
+      return { displayPath: resolveWorkspacePath(raw, options.cwd) }
     },
     stat: async (target) => {
       const raw = String(target?.displayPath ?? target ?? '')
@@ -238,18 +251,15 @@ export async function runAttachmentTests(check) {
     // lru-*.txt 均为虚构文件（不存在于真实工作区）：覆写 fs 面为"任何路径
     // 都是 1 字节文件"，专注注册表 LRU 语义。
     const lruFs = makeFs({})
-    // FIX-038（CI 首跑 run 34696694673 实证）：判据与 makeFs（本文件 :53）对齐——
-    // `includes(':')` 只识别 Windows 盘符，POSIX 绝对路径（以 '/' 开头、无冒号）
-    // 会落入 join(options.cwd, path) 分支；而 `path.join` 对**已是绝对路径**的
-    // 第二参不做重置（≠ `path.resolve`）→ 产出 WORKSPACE 自嵌套的重复路径
+    // FIX-038（CI 首跑 run 34696694673 实证）：判据与 makeFs **同点复用**
+    // resolveWorkspacePath（FIX-040 P2-3 提取单点）——`includes(':')` 只识别
+    // Windows 盘符，POSIX 绝对路径（以 '/' 开头、无冒号）会落入 join(cwd, path)
+    // 分支；而 `path.join` 对**已是绝对路径**的第二参不做重置（≠ `path.resolve`）
+    // → 产出 WORKSPACE 自嵌套的重复路径
     // （win32 的盘符分支恰好掩盖该缺陷）。后果：条目按重复路径登记，
     // `byPath(原路径)` 恒未命中 → 两条 LRU 断言在 ubuntu 上必败。修法 = 补齐
     // 平台中立判据，断言本身照跑（平台无关语义，不 skip、不删断言）。
-    lruFs.resolve = async (path, options = {}) => {
-      const raw = String(path)
-      const target = raw.includes(':') || raw.startsWith('/') ? raw : join(options.cwd ?? '', raw)
-      return { displayPath: target }
-    }
+    lruFs.resolve = async (path, options = {}) => ({ displayPath: resolveWorkspacePath(String(path), options.cwd) })
     lruFs.stat = async (target) => {
       const raw = String(target?.displayPath ?? target ?? '')
       return raw.endsWith('dir') ? { type: 'directory', version: 1 } : { type: 'file', version: 1, size: 1 }
