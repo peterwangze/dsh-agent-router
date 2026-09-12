@@ -21,22 +21,32 @@
  *    host-face-call；throw 语义已废）+ 浏览器包镜像行为 parity（client.js
  *    无法 import Node ESM——镜像纪律，漂移即红）+ P5 残留 grep + 域 5
  *    noteInjectFaceGaps（apply 时 inject 缺面诊断）。
+ * 8. EVO-022（ARCH-004 B4 ctx-services 域批）：service.js/host-route.js
+ *    24 处散点切换后的消费点分级白名单快照（lib/*.js 非 host-abi 的裸
+ *    ctx.get 精确计数——越界新增即红）+ 八项累积绑定判别（P2-2 常量权威
+ *    翻转 version.js 单点无环 / P3-5 RPC 供数平移 service.js 类方法 /
+ *    F-1 agentPresetsServiceOf 归 ctx-services 归并单点 / F-2 形状降级
+ *    边缘显式降级 + noteHostDiag / F-3 modelDirectories 缺面短码 + 诊断 /
+ *    F-6 HostHealthCard faces 按名去重 / probeLlmAdapterFace 三方法并集）。
  *
  * 红演示证据（任务验收 2）：实现前自然红（模块缺失套件失败）+ 绿后判别红
  * （R1：HOST_DIAG_LIMIT 临时 64→128 → 环形有界断言红；R2：HostHealthCard
  * 渲染体内临时注入第二处 .hostFaceDiagnostics( 调用 → render 期零 probe
- * 判别红）——复原后全绿。
+ * 判别红）——复原后全绿。B4 追加：临时在 service.js 加一处裸
+ * ctx.get('sessionController') → §8a 白名单快照红（分级放行越界）。
  *
  * 独立入口：node tests/host-abi-health.mjs（exit 0/1）。
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import { ROUTER_DESCRIPTORS } from '../lib/rpc.js'
 import { RouterService } from '../lib/service.js'
 import { wireCodecs } from '../lib/schemas.js'
-import { HOST_ROUTE_NS, HOST_ROUTE_PROVIDER, HOST_ROUTE_REF, HOST_ROUTE_TICK_MS } from '../lib/host-route.js'
+// B4 ①（P2-2）：HOST_ROUTE_* 权威源 = version.js 单点（host-route.js 改
+// re-export 消费面——本 import 锚定权威侧，host-route 侧 re-export 由 §8e 锁定）。
+import { HOST_ROUTE_NS, HOST_ROUTE_PROVIDER, HOST_ROUTE_REF, HOST_ROUTE_TICK_MS } from '../lib/host-abi/version.js'
 import * as hostAbi from '../lib/host-abi/index.js'
 
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -45,16 +55,16 @@ const {
   packageVersionOf, hostVersionsOf,
   CLIENT_REMOTE_FACES, probeRemoteFace, clientRemotesHealth, createClientRemotes,
   probeLlmAdapterFace, probeSessionSelectFace,
-  serviceFaceOf, agentsRegistryOf,
+  serviceFaceOf, agentsRegistryOf, llmOf,
   FORWARDED_EVENT_ALLOWLIST, subscribeEvents, armEventGate,
   FIBER_INJECT, CLIENT_PACKAGE_INJECT, probeFiberInjectFaces, noteInjectFaceGaps,
 } = hostAbi
 
 let failures = 0
 let passed = 0
-const check = (label, condition) => {
+const check = (label, condition, detail) => {
   if (condition) { passed++; console.log(`  ok  ${label}`) }
-  else { failures++; console.error(`FAIL  ${label}`) }
+  else { failures++; console.error(`FAIL  ${label}${detail !== undefined ? ` :: ${JSON.stringify(detail)}` : ''}`) }
 }
 const FACE_STATES = ['ok', 'degraded', 'missing']
 
@@ -131,7 +141,7 @@ console.log('host version telemetry:')
   const versions = hostVersionsOf()
   check('hostVersionsOf returns the three dependency keys as strings (env-agnostic values)', typeof versions.llm === 'string' && typeof versions.tools === 'string' && typeof versions.typertProtocol === 'string' && Object.keys(versions).length === 3)
   check('installed dev graph resolves real versions (lockfile-synced deps readable)', versions.llm !== 'unknown' && versions.tools !== 'unknown' && versions.typertProtocol !== 'unknown')
-  check('HOST_ROUTE_* re-exports stay value-anchored to lib/host-route.js authority (fix-031 G14 precedent)', hostAbi.HOST_ROUTE_NS === HOST_ROUTE_NS && hostAbi.HOST_ROUTE_PROVIDER === HOST_ROUTE_PROVIDER && hostAbi.HOST_ROUTE_REF === HOST_ROUTE_REF && hostAbi.HOST_ROUTE_TICK_MS === HOST_ROUTE_TICK_MS)
+  check('HOST_ROUTE_* stay value-anchored to the version.js single point (B4 authority flip; host-route re-export + barrel stay equal — fix-031 G14 precedent)', hostAbi.HOST_ROUTE_NS === HOST_ROUTE_NS && hostAbi.HOST_ROUTE_PROVIDER === HOST_ROUTE_PROVIDER && hostAbi.HOST_ROUTE_REF === HOST_ROUTE_REF && hostAbi.HOST_ROUTE_TICK_MS === HOST_ROUTE_TICK_MS)
 }
 
 // ── 5. router/hostFaceDiagnostics RPC 全链（§6.2 三合一形状）──────────────
@@ -168,7 +178,12 @@ console.log('domain skeleton probes (real probing behavior):')
   //     dsh-api-session-controller index.js:605 selectModel）。
   check('probeSessionSelectFace: sessionController.selectModel present → ok', probeSessionSelectFace({ get: (name) => (name === 'sessionController' ? { selectModel: async () => ({ selected: {} }) } : undefined) }).state === 'ok')
   check('probeSessionSelectFace: face absent → missing (B3 migration target stays single-form)', probeSessionSelectFace({ get: () => undefined }).state === 'missing')
-  check('probeLlmAdapterFace: registerAdapter/listModels shape checked', probeLlmAdapterFace({ get: (name) => (name === 'llm' ? { registerAdapter: () => {}, listModels: async () => [] } : undefined) }).state === 'ok' && probeLlmAdapterFace({ get: (name) => (name === 'llm' ? { registerAdapter: () => {} } : undefined) }).state === 'degraded')
+  // B4 ⑥（EVO-019 P2-1 终闭环）：probe 三方法并集（registerAdapter/
+  // registration/listModels——与 llmFaceOf LLM_FACE_METHODS 同锚 LlmRuntime）。
+  check('probeLlmAdapterFace: 三方法并集形状检查（缺 registration → degraded；桩同步收口）',
+    probeLlmAdapterFace({ get: (name) => (name === 'llm' ? { registerAdapter: () => {}, registration: () => {}, listModels: async () => [] } : undefined) }).state === 'ok'
+    && probeLlmAdapterFace({ get: (name) => (name === 'llm' ? { registerAdapter: () => {}, listModels: async () => [] } : undefined) }).state === 'degraded'
+    && probeLlmAdapterFace({ get: (name) => (name === 'llm' ? { registerAdapter: () => {} } : undefined) }).state === 'degraded')
   // 6c. ctx-services：通用 serviceFaceOf + 具名访问器（§4.3 域 3）。
   const agentsRegistry = { get: () => ({}) }
   const resolved = serviceFaceOf({ get: (name) => (name === 'agents' ? agentsRegistry : undefined) }, 'agents', ['get'])
@@ -287,6 +302,142 @@ console.log('B2 client-remotes domain (degraded semantics + browser mirror parit
   const gapFaces = noteInjectFaceGaps(gapCtx)
   check('B2: noteInjectFaceGaps 探测全部 FIBER_INJECT 面并返回 FaceHealth[]', gapFaces.length === FIBER_INJECT.length && gapFaces.find((face) => face.name === 'remote.llm').state === 'ok' && gapFaces.find((face) => face.name === 'slots').state === 'missing')
   check('B2: 缺面记 inject-face-missing 入环形（apply 自检权威单点，不 throw）', hostDiagnostics().entries.filter((entry) => entry.kind === 'inject-face-missing').length === gapsBefore + (FIBER_INJECT.length - 1))
+}
+
+// ── 8. EVO-022 B4：ctx-services 域批（24 散点切换分级白名单 + 八项累积绑定）──
+console.log('B4 ctx-services batch (scatter whitelist + cumulative bindings):')
+{
+  const readLib = (name) => readFileSync(join(ROOT_DIR, 'lib', name), 'utf8')
+  const serviceSource = readLib('service.js')
+  const hostRouteSource = readLib('host-route.js')
+  const rpcSource = readLib('rpc.js')
+  const clientSourceB4 = readLib('client.js')
+  const versionSource = readFileSync(join(ROOT_DIR, 'lib', 'host-abi', 'version.js'), 'utf8')
+  const llmSelectionSource = readFileSync(join(ROOT_DIR, 'lib', 'host-abi', 'llm-selection.js'), 'utf8')
+  const stripComments = (source) => source
+    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' '))
+    .replace(/(^|[^:])\/\/[^\n]*/g, (line) => line.replace(/[^\n]/g, ' '))
+
+  // 8a. 消费点散点分级白名单（设计 §10 B4 验收：lib/*.js（非 host-abi）内
+  //     裸 ctx.get 仅剩放行清单——精确计数快照，越界新增即红）。分级依据：
+  //     · service.js fs/settings = 低危面直用（设计 §10 B4 白名单明文）；
+  //     · wrapper/prestep/preset-defaults = B4 冻结切换范围（service.js/
+  //       host-route.js 24 处）之外的遗留消费点——后续批次候选，非放行扩张；
+  //     · tool.js router = 自管服务面（RouterService 为本插件注册的 ctx
+  //       key，非宿主 ABI 面）；
+  //     · client.js = 客户端 fiber ctx 面（B2 client-remotes/inject 域权威
+  //       的浏览器镜像 + FIX-026/027 装配——remote.*/modelDirectories/
+  //       conversation 不属 ctx-services 域 3 的 Node 侧服务群）。
+  {
+    const WHITELIST = {
+      'service.js': { fs: 5, settings: 2 },
+      'host-route.js': {},
+      'wrapper.js': { agentDefaultModel: 1 },
+      'prestep.js': { sessionProjections: 1, llm: 1 },
+      'tool.js': { router: 3 },
+      'preset-defaults.js': { agentDefaultModel: 1 },
+      'client.js': { 'remote.*': 2, 'dynamic-inject': 1, 'remote.router': 3, conversation: 1, modelDirectories: 2 },
+    }
+    const diffs = []
+    for (const file of readdirSync(join(ROOT_DIR, 'lib')).filter((name) => name.endsWith('.js'))) {
+      const found = {}
+      for (const match of stripComments(readLib(file)).matchAll(/ctx\.get\(([^)\n]*)\)/g)) {
+        const argument = match[1].trim()
+        const face = argument.startsWith('`remote.') ? 'remote.*' : argument === 'name' ? 'dynamic-inject' : argument.startsWith("'") ? argument.slice(1, -1) : argument
+        found[face] = (found[face] ?? 0) + 1
+      }
+      const expected = WHITELIST[file] ?? {}
+      for (const key of new Set([...Object.keys(found), ...Object.keys(expected)])) {
+        if ((found[key] ?? 0) !== (expected[key] ?? 0)) diffs.push(`${file}:${key} found=${found[key] ?? 0} expected=${expected[key] ?? 0}`)
+      }
+    }
+    check('B4 白名单: lib/*.js（非 host-abi）裸 ctx.get = 分级放行清单精确快照（24 散点已切换，越界新增即红）', diffs.length === 0, diffs.join(' | '))
+    check('B4 白名单: host-route.js 零裸消费（7 处散点已切换域访问器）', !/ctx\.get\(/.test(stripComments(hostRouteSource)))
+  }
+
+  // 8b. F-2（EVO-021 R0）：形状降级边缘显式化——严格访问器 + noteHostDiag。
+  {
+    const goodRegistry = { get: () => ({}) }
+    const shapeRegistry = { notGet: true }
+    check('F-2: agents 面形状降级（.get 非函数）→ 访问器 null（旧 TypeError 被 handler catch 吞掉 → 显式降级）', agentsRegistryOf({ get: (name) => (name === 'agents' ? shapeRegistry : undefined) }) === null)
+    check('F-2: 形状降级记 face-degraded 诊断事件（face=agents code=host-face-shape，P8 环形上行）', hostDiagnostics().entries.some((entry) => entry.kind === 'face-degraded' && entry.face === 'agents' && entry.code === 'host-face-shape'))
+    check('F-2: 完好面照常返回本体（preset-defaults 两消费点零回退）', agentsRegistryOf({ get: (name) => (name === 'agents' ? goodRegistry : undefined) }) === goodRegistry)
+    const llmPartial = { listModels: async () => [] }
+    check('F-2 锚定: llmOf 存在性解析（部分形状面透传给消费点自持守卫——smoke 桩最小形状零回退锚定）', llmOf({ get: (name) => (name === 'llm' ? llmPartial : undefined) }) === llmPartial && llmOf({ get: () => undefined }) === null)
+  }
+
+  // 8c. F-1（EVO-021 R0）：agentPresetsServiceOf 归属勘正——§4.3 域 3 为准。
+  {
+    const ctxServices = await import('../lib/host-abi/ctx-services.js')
+    const aps = ctxServices.agentPresetsServiceOf
+    const apo = ctxServices.agentPresetsOf
+    const presetsFace = { composedPreset: () => ({ id: 'p' }) }
+    check('F-1: agentPresetsServiceOf 迁 ctx-services 域（llm-selection 域内零残留导出）', typeof aps === 'function' && !/export function agentPresetsServiceOf/.test(llmSelectionSource))
+    check('F-1: 双形态解析原样（属性面优先 + ctx.get 回落 + composedPreset 函数门控 → undefined）',
+      typeof aps === 'function'
+      && aps({ agentPresets: presetsFace }) === presetsFace
+      && aps({ get: (name) => (name === 'agentPresets' ? presetsFace : undefined) }) === presetsFace
+      && aps({ agentPresets: {}, get: () => undefined }) === undefined)
+    check('F-1: 与 agentPresetsOf 归并单点（同一双形态解析；访问器语义 null / 服务语义 undefined——注释成文）', typeof apo === 'function' && apo({ get: () => undefined }) === null && apo({ agentPresets: presetsFace }) === presetsFace)
+    check('F-1: 桶导出面不变（消费者 preset-defaults 经桶 import 零改动）', typeof hostAbi.agentPresetsServiceOf === 'function' && hostAbi.agentPresetsServiceOf === aps)
+  }
+
+  // 8d. P3-5（EVO-019）：hostFaceDiagnostics 供数从 rpc.js 原型挂载平移
+  //     service.js 正式装配（类方法），原型挂载代码删除（P5 grep 零残留）。
+  {
+    check('P3-5: rpc.js 原型挂载零残留（RouterService 导入与 prototype 绑定双删——代码面，注释历史表述不计）', !/RouterService|prototype\.hostFaceDiagnostics/.test(stripComments(rpcSource)))
+    check('P3-5: service.js 类方法正式装配（hostFaceDiagnostics() + 三合一供数）', /hostFaceDiagnostics\(\) \{/.test(serviceSource) && /hostVersionsOf\(\)/.test(serviceSource) && /faceHealthSnapshot\(\)/.test(serviceSource) && /hostDiagnostics\(\)\.entries/.test(serviceSource))
+  }
+
+  // 8e. P2-2（EVO-019 MUST）：HOST_ROUTE_* 常量权威源翻转——version.js 自持
+  //     单点定义、host-route.js 从 version.js import（依赖方向按 §4.2 图，
+  //     防循环 import）。
+  {
+    const versionModule = await import('../lib/host-abi/version.js')
+    const hostRouteModule = await import('../lib/host-route.js')
+    check('P2-2: HOST_ROUTE_* 权威源 = version.js 单点定义（四常量字面量在域内声明）',
+      /export const HOST_ROUTE_NS = 'llm-pi-ai'/.test(versionSource)
+      && /export const HOST_ROUTE_PROVIDER = 'openai-codex'/.test(versionSource)
+      && /export const HOST_ROUTE_REF = 'DSH_ROUTER_OPENAI_CODEX'/.test(versionSource)
+      && /export const HOST_ROUTE_TICK_MS = 30_000/.test(versionSource))
+    check('P2-2: 反向依赖边已断（version.js 零 host-route import——依赖方向无环）', !/from ['"][^'"]*host-route/.test(versionSource))
+    check('P2-2: host-route.js 从桶 import + re-export（service.js/tests 消费面 import 零改动；本地零重复定义）',
+      /import \{ HOST_ROUTE_NS, HOST_ROUTE_PROVIDER, HOST_ROUTE_REF, HOST_ROUTE_TICK_MS,[^}]*\} from '\.\/host-abi\/index\.js'/.test(hostRouteSource)
+      && /export \{ HOST_ROUTE_NS, HOST_ROUTE_PROVIDER, HOST_ROUTE_REF, HOST_ROUTE_TICK_MS \}/.test(hostRouteSource)
+      && !/export const HOST_ROUTE_(NS|PROVIDER|REF|TICK_MS)/.test(hostRouteSource))
+    check('P2-2: 值级三面锚定（version 权威 === host-route re-export === 桶）',
+      versionModule.HOST_ROUTE_NS === hostRouteModule.HOST_ROUTE_NS
+      && versionModule.HOST_ROUTE_PROVIDER === hostAbi.HOST_ROUTE_PROVIDER
+      && versionModule.HOST_ROUTE_REF === hostRouteModule.HOST_ROUTE_REF
+      && versionModule.HOST_ROUTE_TICK_MS === hostAbi.HOST_ROUTE_TICK_MS
+      && versionModule.HOST_ROUTE_PROVIDER === 'openai-codex')
+  }
+
+  // 8f. F-6（EVO-020）：HostHealthCard faces 合并按名去重（防重复行）。
+  {
+    const cardPos = clientSourceB4.indexOf('function HostHealthCard')
+    const cardEnd = clientSourceB4.indexOf('\n    function ', cardPos + 1)
+    const cardBody = clientSourceB4.slice(cardPos, cardEnd === -1 ? undefined : cardEnd)
+    check('F-6: HostHealthCard faces 合并按名去重（先到先留——RPC 权威序在前，同名面不重复渲染）', /const mergedFaces = \[/.test(cardBody) && /seen\.has\(face\.name\)/.test(cardBody) && /= mergedFaces\.filter/.test(cardBody))
+  }
+
+  // 8g. F-3（EVO-020，绑定 ⑦）：modelDirectories 缺面路径补 code + 诊断事件
+  //     （host-face-missing 短码 + noteHostDiag——对齐三错误码降级体系）。
+  {
+    const reactStub2 = { createElement: () => null, useState: () => [null, () => {}], useEffect: () => {}, useCallback: (fn) => fn, useRef: () => ({ current: null }) }
+    let bundlePayload2 = null
+    new Function('window', clientSourceB4)({ __ModuleLoader__: { load: (payload) => { bundlePayload2 = payload } } })
+    const bundleExports2 = bundlePayload2.factory((name) => (name === 'react' ? reactStub2 : null))
+    const dirsMissingCtx = { get: () => undefined, remote: {} }
+    const dirsEnvelope = await createClientRemotes(dirsMissingCtx).api.sessions.models({ sessionId: 's1' })
+    check('F-3: modelDirectories 缺面 → host-face-missing 短码（对齐 :124-125 三错误码降级体系）', dirsEnvelope.result.ok === false && dirsEnvelope.result.error.code === 'host-face-missing')
+    check('F-3: 缺面记 face-degraded 诊断事件（noteHostDiag 上行，P8）', hostDiagnostics().entries.some((entry) => entry.kind === 'face-degraded' && entry.face === 'modelDirectories' && entry.code === 'host-face-missing'))
+    const dirsMirror = await bundleExports2.createClientRemotes(dirsMissingCtx).api.sessions.models({ sessionId: 's1' })
+    check('F-3 镜像 parity: 缺面降级信封与权威单点逐字相等（JSON 级）', JSON.stringify(dirsMirror) === JSON.stringify(dirsEnvelope))
+    const dirsShapeCtx = { get: (name) => (name === 'modelDirectories' ? {} : undefined), remote: {} }
+    const dirsShape = await createClientRemotes(dirsShapeCtx).api.sessions.models({ sessionId: 's1' })
+    check('F-3 边界: directoryFor 形状漂移/sessionId 缺失保持 failureOf 原语义（不误标 host-face-missing）', dirsShape.result.ok === false && dirsShape.result.error.code === undefined)
+  }
 }
 
 console.log(failures === 0 ? `\nALL HOST ABI HEALTH TESTS PASSED (${passed} assertions)` : `\n${failures} FAILURE(S) (${passed} passed)`)

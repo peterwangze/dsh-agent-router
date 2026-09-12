@@ -680,9 +680,12 @@ console.log('FIX-031 统计归因单点 + 路由透明性判别组：')
     const aliasDecl = /const ACCOUNT_KEY_ALIASES = new Map\(\[\['([^']+)', '([^']+)'\]\]\)/.exec(statsSource)
     const oauthDecl = /export const OAUTH_PROVIDER = '([^']+)'/.exec(oauthLlmSource)
     check('G13: ACCOUNT_KEY_ALIASES 键锚定权威常量（stats.js 别名键 === oauth-llm.js OAUTH_PROVIDER 值；目标键保持 oauth: 身份命名空间）', !!aliasDecl && !!oauthDecl && aliasDecl[1] === oauthDecl[1] && aliasDecl[2].startsWith('oauth:'), { aliasKey: aliasDecl?.[1], aliasTarget: aliasDecl?.[2], oauthProvider: oauthDecl?.[1] })
-    const hostDecl = /export const HOST_ROUTE_PROVIDER = '([^']+)'/.exec(hostRouteSource)
+    // EVO-022 B4 ①（P2-2 权威翻转）：HOST_ROUTE_PROVIDER 权威源迁
+    // lib/host-abi/version.js 单点——G14 权威读取点随迁（值级交叉锚定
+    // 机制不变；host-route.js 改 re-export，任一侧漂移断言即红语义保持）。
+    const hostDecl = /export const HOST_ROUTE_PROVIDER = '([^']+)'/.exec(readRepo('lib/host-abi/version.js'))
     const hostMirrorDecl = /const HOST_ROUTE_ACCOUNT_KEY = '([^']+)'/.exec(statsSource)
-    check('G14: HOST_ROUTE_ACCOUNT_KEY 锚定权威常量（stats.js 镜像 === host-route.js HOST_ROUTE_PROVIDER 值）', !!hostDecl && !!hostMirrorDecl && hostDecl[1] === hostMirrorDecl[1], { hostRoute: hostDecl?.[1], statsMirror: hostMirrorDecl?.[1] })
+    check('G14: HOST_ROUTE_ACCOUNT_KEY 锚定权威常量（stats.js 镜像 === version.js HOST_ROUTE_PROVIDER 值——EVO-022 B4 ①权威翻转后单点）', !!hostDecl && !!hostMirrorDecl && hostDecl[1] === hostMirrorDecl[1], { hostRoute: hostDecl?.[1], statsMirror: hostMirrorDecl?.[1] })
   }
   if (typeof statsModule.normalizeAttribution === 'function') {
     const { normalizeAttribution, accountDisplayLabel } = statsModule

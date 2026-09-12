@@ -34,8 +34,9 @@ window.__ModuleLoader__.load({
     // OAUTH_PROVIDER = 'chatgpt-oauth'` 同构——lib/oauth-llm.js 是权威单点，
     // 本镜像必须随其同步（EVO-010 起主模型经插件路由的调用统计即按此 id 记账）。
     const OAUTH_ROUTE_PROVIDER = 'chatgpt-oauth'
-    // FIX-019：宿主官方路由 provider id 单点镜像——lib/host-route.js:55
-    // `export const HOST_ROUTE_PROVIDER = 'openai-codex'` 是权威单点；EVO-010
+    // FIX-019：宿主官方路由 provider id 单点镜像——权威单点自 EVO-022 B4 ①
+    // 起为 lib/host-abi/version.js `export const HOST_ROUTE_PROVIDER =
+    // 'openai-codex'`（P2-2 权威翻转：host-route.js 改 re-export）；EVO-010
     // 起插件把该条目维护进 llm-pi-ai settings → 宿主 llm 目录暴露为**真
     // provider**（7 个模型来自宿主官方目录；调用随宿主路由走，账号管理区不
     // 计）——配置归「设置 → 模型」，不得在 Agent 路由账号管理区渲染（用户 ⑤
@@ -3738,10 +3739,21 @@ window.__ModuleLoader__.load({
       // 纯 props 读——render 期零 probe（§7.1 判别锚点 tests/host-abi-health
       // §3）。任一数据源在场即渲染（旧服务端无 RPC 面时本地徽章仍可见）。
       if ((!hostHealth || typeof hostHealth !== 'object') && (!faceHealth || typeof faceHealth !== 'object')) return null
-      const faces = [
+      const mergedFaces = [
         ...(hostHealth && Array.isArray(hostHealth.faces) ? hostHealth.faces : []),
         ...(faceHealth && Array.isArray(faceHealth.faces) ? faceHealth.faces : []),
       ]
+      // F-6（EVO-020 R0 台账，EVO-022 B4 ⑧收口）：faces 合并按名去重——
+      // 两数据源重叠时（Node 注册表与本地 client 面同名，如 remote.llm 双
+      // 登记）防重复行；先到先留（RPC 权威序在前）。无名面透传不丢弃
+      // （FaceHealth 形状保证 name 字符串，此处防御宿主漂移）。
+      const seen = new Set()
+      const faces = mergedFaces.filter((face) => {
+        if (!face || typeof face.name !== 'string') return true
+        if (seen.has(face.name)) return false
+        seen.add(face.name)
+        return true
+      })
       const diag = [
         ...(faceHealth && Array.isArray(faceHealth.diag) ? faceHealth.diag : []),
         ...(hostHealth && Array.isArray(hostHealth.diag) ? hostHealth.diag : []),
@@ -5222,7 +5234,15 @@ window.__ModuleLoader__.load({
             models: guard('modelDirectories', async (payload) => {
               const input = payload && typeof payload === 'object' ? payload : {}
               const directoryService = directoryFace()
-              if (!directoryService || typeof directoryService.directoryFor !== 'function' || !input.sessionId) {
+              // F-3（EVO-020 R0 台账，EVO-022 B4 ⑦收口）：缺面（命名空间未挂载）
+              // → host-face-missing 降级信封 + face-degraded 诊断事件——对齐
+              // 权威单点 :124-125 三错误码降级体系（原 FIX-028 failureOf 无短码
+              // 无环形事件）。directoryFor 形状漂移 / sessionId 缺失保持
+              // failureOf 原语义（非缺面形态不误标 missing）。
+              if (!directoryService) {
+                return degradedEnvelope('modelDirectories', 'host-face-missing', 'dsh-agent-router: modelDirectories 服务不可用（宿主旧版本？）')
+              }
+              if (typeof directoryService.directoryFor !== 'function' || !input.sessionId) {
                 return failureOf(new Error('dsh-agent-router: modelDirectories 服务不可用（宿主旧版本？）'))
               }
               let directory
@@ -5389,8 +5409,9 @@ window.__ModuleLoader__.load({
         try {
           // 主路径双形态解析（FIX-027）：规范 ctx.get 优先，属性面兜底——注入
           // 声明后两形态都应可用，双形态防御注册面差异（agentPresetsServiceOf
-          // 先例 lib/preset-defaults.js:100-108 属性面优先的镜像形态；宿主自身
-          // 经 scope.modelDirectories 属性面消费，model-selection lib/client.js:752）。
+          // 先例——EVO-022 B4 F-1 归属勘正后唯一实现在 host-abi ctx-services
+          // 域，属性面优先镜像形态；宿主自身经 scope.modelDirectories 属性面
+          // 消费，model-selection lib/client.js:752）。
           const viaGet = ctx.get('modelDirectories')
           const directoryService = viaGet !== undefined ? viaGet : ctx.modelDirectories
           const directory = directoryService?.directoryFor?.(sessionId)
