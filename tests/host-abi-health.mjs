@@ -37,6 +37,10 @@
  *    llm-selection 面 → faces 生产非空；面板打开复检规则：全绿纯缓存读、
  *    非全绿一次失败驱动复检）+ R-3（F-6 HostHealthCard faces 去重行为断言）+
  *    R-1 锚清扫复核（旧行号式锚零残留、函数名式锚在位）。
+ * 10. FIX-035（EVO-023 R0 P2-1 收口，§9i）：events 域 attach 失败条目**不入表**
+ *    （后续订阅重试 attach——静默死订阅消除）+ event-subscribe-failed 诊断
+ *    （code=attach-threw + consumer 标签 + 错误摘要，P8）+ 失败消费者 dispose
+ *    降级 no-op（不悬挂）+ 浏览器镜像同型 parity（失败零复用/重试自愈）。
  *
  * 红演示证据（任务验收 2）：实现前自然红（模块缺失套件失败）+ 绿后判别红
  * （R1：HOST_DIAG_LIMIT 临时 64→128 → 环形有界断言红；R2：HostHealthCard
@@ -46,6 +50,8 @@
  * ① 临时把 client.js 页面订阅改回死名 credentials/updated → §9b 静态比对 +
  * §9c 运行时拒绝红（复原双绿）；② 实现前 §9 组全红（MANAGED_EVENTS 未导出 /
  * 白名单未启用 / faces 空注册表 / R-1 锚未清扫）——见任务结论 RED 记录。
+ * FIX-035 追加：§9i attach 抛错用例在修复前红（死条目被缓存 → 二次订阅零
+ * attach + 误记 event-subscribed + 重试后零派发；镜像半边同型红）→ 修复后绿。
  *
  * 独立入口：node tests/host-abi-health.mjs（exit 0/1）。
  */
@@ -697,6 +703,93 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     const missingFresh = anchorCase.fresh.filter((needle) => !source.includes(needle))
     check(`B5 9h R-1: ${anchorCase.file.join('/')} 行号式锚零残留 + 函数名式锚在位`, staleHits.length === 0 && missingFresh.length === 0, { staleHits, missingFresh })
   }
+  // 9i. FIX-035（EVO-023 R0 P2-1 收口）：attach 抛错条目**绝不入表**——否则
+  //   后续订阅复用死条目（不再 attach）却记正向 event-subscribed = 静默死
+  //   订阅 + 观测误导（违反 P8 / §4.3 域 4 降级行为）。三重断言：①失败零
+  //   缓存（二次订阅重试 attach）②诊断落环形（code=attach-threw）③失败
+  //   消费者 dispose 降级 no-op（不悬挂）；镜像同型 parity（9i-2）。
+  {
+    const attemptEvents = []
+    const flakyListeners = new Map()
+    let failNext = true
+    const flakyCtx = {
+      on: (event, handler) => {
+        attemptEvents.push(event)
+        if (failNext) { failNext = false; throw new Error('ctx disposed: cannot attach') }
+        const list = flakyListeners.get(event) ?? []
+        list.push(handler)
+        flakyListeners.set(event, list)
+        return () => { flakyListeners.set(event, (flakyListeners.get(event) ?? []).filter((item) => item !== handler)) }
+      },
+    }
+    let degradedCalls = 0
+    const disposeFailed = subscribeEvents(flakyCtx, [{ event: 'settings/updated', consumer: 'degraded-consumer', handler: () => { degradedCalls += 1 } }])
+    check('FIX-035 9i: attach 抛错 → 条目不入表（零宿主 listener，无假订阅）',
+      attemptEvents.length === 1 && (flakyListeners.get('settings/updated') ?? []).length === 0)
+    check('FIX-035 9i: attach 抛错记 event-subscribe-failed（P8：面名 + code=attach-threw + consumer 标签 + 错误摘要截断）',
+      hostDiagnostics().entries.some((entry) => entry.kind === 'event-subscribe-failed' && entry.face === 'settings/updated'
+        && entry.code === 'attach-threw' && entry.consumer === 'degraded-consumer' && String(entry.detail).includes('ctx disposed')))
+    check('FIX-035 9i: 失败消费者不得记正向 event-subscribed（观测误导消除——诊断不再是「已订阅」的相反信号）',
+      !hostDiagnostics().entries.some((entry) => entry.kind === 'event-subscribed' && entry.face === 'settings/updated' && entry.consumer === 'degraded-consumer'))
+    // ① 失败条目未缓存 → 同目标同事件二次订阅**重新 attach** 并成功（自愈；
+    //   静默死订阅消除——P2-1 的核心判别锚，失败消费者仍在订阅态下测）。
+    let retryCalls = 0
+    const disposeRetry = subscribeEvents(flakyCtx, [{ event: 'settings/updated', consumer: 'retry-consumer', handler: () => { retryCalls += 1 } }])
+    check('FIX-035 9i: 失败条目未缓存 → 二次订阅重试 attach（零复用死条目）',
+      attemptEvents.length === 2 && (flakyListeners.get('settings/updated') ?? []).length === 1,
+      { attempts: attemptEvents, listeners: (flakyListeners.get('settings/updated') ?? []).length })
+    for (const handler of flakyListeners.get('settings/updated') ?? []) handler()
+    check('FIX-035 9i: 重试成功后消费者真正收到事件（零 host listener 的静默收不到已消除）',
+      retryCalls === 1 && degradedCalls === 0)
+    // ③ 入表后跨调用聚合语义不破（第三次订阅零 attach；卸载按 consumer 摘除）。
+    const disposeThird = subscribeEvents(flakyCtx, [{ event: 'settings/updated', consumer: 'third-consumer', handler: () => { retryCalls += 1 } }])
+    check('FIX-035 9i 非回归: attach 成功后入表 → 跨调用共享单 listener（零第三次 attach）',
+      attemptEvents.length === 2 && (flakyListeners.get('settings/updated') ?? []).length === 1)
+    for (const handler of flakyListeners.get('settings/updated') ?? []) handler()
+    check('FIX-035 9i 非回归: 共享 listener 分发给重试消费者 + 后到消费者（聚合不破）', retryCalls === 3)
+    // ② 失败消费者 dispose 为 no-op（幂等、不抛、不悬挂、零跨消费者误摘）。
+    check('FIX-035 9i: 失败路径 dispose 降级 no-op（幂等、不抛——活消费者不受影响）', (() => {
+      try { disposeFailed(); disposeFailed(); return retryCalls === 3 } catch { return false }
+    })())
+    for (const handler of flakyListeners.get('settings/updated') ?? []) handler()
+    check('FIX-035 9i: 失败消费者 dispose 后活消费者照常派发（无悬挂、无误摘）', retryCalls === 5)
+    disposeRetry()
+    disposeThird()
+    check('FIX-035 9i 非回归: 全量卸载后 listener 归零（无残留泄漏）', (flakyListeners.get('settings/updated') ?? []).length === 0)
+
+    // 9i-2. 镜像 parity（lib/client.js subscribeClientEvents 同型分支；§9e 先例）。
+    const mirrorAttempts = []
+    const mirrorFlaky = new Map()
+    let mirrorFailNext = true
+    const flakyOn = (event, handler) => {
+      mirrorAttempts.push(event)
+      if (mirrorFailNext) { mirrorFailNext = false; throw new Error('remote $on disposed: cannot attach') }
+      const list = mirrorFlaky.get(event) ?? []
+      list.push(handler)
+      mirrorFlaky.set(event, list)
+      return () => { mirrorFlaky.set(event, (mirrorFlaky.get(event) ?? []).filter((item) => item !== handler)) }
+    }
+    const mirrorDiagOf = () => bundleExportsB5.createClientRemotes({ get: () => undefined, remote: {} }).health().diag
+    let mirrorRetryCalls = 0
+    const disposeMirrorFailed = bundleExportsB5.subscribeClientEvents(flakyOn, [{ event: 'agent-preset/selected', consumer: 'degraded-mirror-consumer', handler: () => { mirrorRetryCalls += 1 } }])
+    check('FIX-035 9i-2 镜像 parity: attach 抛错条目不入表 + 本地诊断 event-subscribe-failed（code=attach-threw，与权威侧同语义）',
+      mirrorAttempts.length === 1 && (mirrorFlaky.get('agent-preset/selected') ?? []).length === 0
+      && mirrorDiagOf().some((entry) => entry.kind === 'event-subscribe-failed' && entry.face === 'agent-preset/selected' && entry.code === 'attach-threw' && entry.consumer === 'degraded-mirror-consumer'))
+    const disposeMirrorRetry = bundleExportsB5.subscribeClientEvents(flakyOn, [{ event: 'agent-preset/selected', consumer: 'mirror-retry-consumer', handler: () => { mirrorRetryCalls += 1 } }])
+    check('FIX-035 9i-2 镜像 parity: 二次订阅重试 attach（失败条目零复用——镜像与权威侧同判别）',
+      mirrorAttempts.length === 2 && (mirrorFlaky.get('agent-preset/selected') ?? []).length === 1,
+      { attempts: mirrorAttempts, listeners: (mirrorFlaky.get('agent-preset/selected') ?? []).length })
+    for (const handler of mirrorFlaky.get('agent-preset/selected') ?? []) handler()
+    check('FIX-035 9i-2 镜像 parity: 重试成功后消费者收到事件（镜像零静默死订阅）', mirrorRetryCalls === 1)
+    check('FIX-035 9i-2 镜像 parity: 失败路径 dispose 降级 no-op（幂等、不抛、活消费者不受影响）', (() => {
+      try { disposeMirrorFailed(); disposeMirrorFailed(); return mirrorRetryCalls === 1 } catch { return false }
+    })())
+    for (const handler of mirrorFlaky.get('agent-preset/selected') ?? []) handler()
+    check('FIX-035 9i-2 镜像 parity: 失败消费者 dispose 后活消费者照常派发', mirrorRetryCalls === 2)
+    disposeMirrorRetry()
+    check('FIX-035 9i-2 镜像 parity: 全量卸载后 listener 归零', (mirrorFlaky.get('agent-preset/selected') ?? []).length === 0)
+  }
+
   void eventsSourceB5
 }
 
