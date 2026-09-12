@@ -36,12 +36,12 @@
  *    浏览器镜像值级 parity + R-5 Node 侧注册表接线（11 ctx 服务面 + 2
  *    llm-selection 面 → faces 生产非空；面板打开复检规则：全绿纯缓存读、
  *    非全绿一次失败驱动复检）+ R-3（F-6 HostHealthCard faces 去重行为断言）+
- *    R-1 锚清扫复核（旧行号式锚零残留、函数名式锚在位）；FIX-040 扩面（R1 N4）：
+ *    R-1 锚清扫复核（**清单内**旧式锚零残留、替代式锚在位；限定语形态，见下）；FIX-040 扩面（R1 N4）：
  *    清扫面扩至 lib/host-abi/llm-selection.js / tests/metrics.mjs / tests/smoke.mjs /
  *    tests/install-entry.mjs / lib/preset-defaults.js / tests/preset-defaults.mjs +
  *    ci.yml / README.md 契约面（stale 零残留 + 符号/断言名式锚在位），并增设
- *    **跨文件对象核验**（9h-2：metrics 证据锚引用的 smoke.mjs 断言名 MUST 存在——
- *    死锚即红），使锚漂移成为机器看护而非人工巡检。
+ *    **跨文件对象核验**（9h-2：metrics 断言名式锚所指对象实存）+ **入表完备性自检**
+ *    （9h-3：metrics 候选锚名未入表即红），使锚漂移成为机器看护而非人工巡检。
  * 10. FIX-035（EVO-023 R0 P2-1 收口，§9i）：events 域 attach 失败条目**不入表**
  *    （后续订阅重试 attach——静默死订阅消除）+ event-subscribe-failed 诊断
  *    （code=attach-threw + consumer 标签 + 错误摘要，P8）+ 失败消费者 dispose
@@ -693,8 +693,9 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   check('B5 9g F-6: 本地独有面照常渲染（remote.llm 非同名面不被去重丢弃）', faceRows.includes('✓ remote.llm') && faceRows.includes('✓ settings'))
   check('B5 9g F-6: 徽章口径随去重结果（去重后零降级 → 全绿文案，不误报）', cardTexts.includes('hostHealthOk') && !cardTexts.includes('hostHealthWarn(1)'))
 
-  // 9h. R-1 锚清扫复核（FIX-039 S-2 起）：旧行号式锚零残留（函数名/符号名/断言名式锚替代，
-  //   防行号再漂移）。清单结构：
+  // 9h. R-1 锚清扫复核（FIX-039 S-2 起）：**清单内**旧式锚零残留（函数名/符号名/断言名式锚替代，
+  //   防行号再漂移；限定语见下条 check 标签——列清单式判据只覆盖清单本身，不声称「整文件无
+  //   行号锚」）。清单结构：
   //   - file   = 被守卫文件（相对 ROOT_DIR 的路径段）；
   //   - stale  = **不得残留**的旧行号式锚（或已被取代的旧式锚）；
   //   - fresh  = **必须在位**的新式锚（函数名 / 符号名 / 断言名 / 结构串）；
@@ -714,8 +715,9 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     // FIX-040 W8a：llm-selection.js 三处行号锚（R0 P3-3，:99/:179 已实测漂移）→ 符号名式。
     { file: ['lib', 'host-abi', 'llm-selection.js'], stale: ['preset-defaults.js:226-238', 'preset-defaults.js:209-240', 'preset-defaults.js:303-307'], fresh: ['lib/preset-defaults.js', 'sessionSelectFaceOf', 'sessionNeverProduced', 'inheritedRouteOf', 'LLM_FACE_METHODS'] },
     // FIX-040 W4：metrics.mjs 的 12 处 smoke.mjs:<行号> 证据锚（实测偏 ~1038~1200）→ 断言名式。
-    //   fresh 只列**连续**锚串（跨行/合并写作的形态由 9h-2 的对象核验覆盖，见下）。
-    { file: ['tests', 'metrics.mjs'], stale: ['smoke.mjs:1162-1177', 'smoke.mjs:1316-1326', 'smoke.mjs:816-820', 'smoke.mjs:1473-1480', 'smoke.mjs:1669-1682', 'smoke.mjs:1500-1507', 'smoke.mjs:1153-1157', 'smoke.mjs:846-868', 'smoke.mjs:1557-1569', 'smoke.mjs:848-867', 'smoke.mjs:1266'], fresh: ['smoke.mjs「image turn config passes through unchanged (no whole-turn routing)」', 'smoke.mjs「wrapper takes over default model」', 'smoke.mjs「vision call returns text without echoing injected images (B)」', 'smoke.mjs「native multimodal delegate sees raw image (preserveImageInput)」', 'smoke.mjs §7.7 pre-step「image turn on wrapper route injects plugin reminder」', 'smoke.mjs「collectMarkers dedupes by attachment」', 'smoke.mjs「tool parameters schema」', 'smoke.mjs「attachmentIds resolution (M2)」节', 'smoke.mjs「follow-up text turn injects memory segment into system」', 'smoke.mjs「wrapper delegate sees route_agent'] },
+    //   fresh 只列**连续**锚串（跨行/合并写作/片段键形态不在本项判别范围——由 9h-2 的对象
+    //   核验 + 9h-3 的入表完备性自检覆盖；本项标签为**限定语**形态：仅指本清单所列锚）。
+    { file: ['tests', 'metrics.mjs'], stale: ['smoke.mjs:1162-1177', 'smoke.mjs:1316-1326', 'smoke.mjs:816-820', 'smoke.mjs:1473-1480', 'smoke.mjs:1669-1682', 'smoke.mjs:1500-1507', 'smoke.mjs:1153-1157', 'smoke.mjs:846-868', 'smoke.mjs:1557-1569', 'smoke.mjs:848-867', 'smoke.mjs:1266', 'smoke.mjs:1680-1681'], fresh: ['smoke.mjs「image turn config passes through unchanged (no whole-turn routing)」', 'smoke.mjs「wrapper takes over default model」', 'smoke.mjs「vision call returns text without echoing injected images (B)」', 'smoke.mjs「native multimodal delegate sees raw image (preserveImageInput)」', 'smoke.mjs §7.7 pre-step「image turn on wrapper route injects plugin reminder」', 'smoke.mjs「collectMarkers dedupes by attachment」', 'smoke.mjs「tool parameters schema」', 'smoke.mjs「attachmentIds resolution (M2)」节', 'smoke.mjs「follow-up text turn injects memory segment into system」', 'smoke.mjs「wrapper delegate sees route_agent'] },
     // FIX-040 W2/W8b：smoke.mjs 的旧式锚（行号区间 / 自锚）→ 符号名或内容式指代。
     { file: ['tests', 'smoke.mjs'], stale: ['install-entry.mjs:74-77', 'typert contribution registered` 断言行\n  // （符号名式锚；原写死行号'], fresh: ['powerShellHosts', 'typert contribution registered', '紧随的 `19 invocations` 断言行'] },
     // FIX-040 W2/W3：install-entry.mjs 引用侧符号锚在位（其 install.sh 行号锚已符号化）。
@@ -733,38 +735,82 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     const source = readFileSync(filePath, 'utf8')
     const staleHits = anchorCase.stale.filter((needle) => source.includes(needle))
     const missingFresh = anchorCase.fresh.filter((needle) => !source.includes(needle))
-    check(`B5 9h R-1: ${anchorCase.file.join('/')} 行号式锚零残留 + 符号/断言名式锚在位`, staleHits.length === 0 && missingFresh.length === 0, { staleHits, missingFresh })
+    // P3-1 限定语：本项判的是「**本清单所列**旧式锚零残留」，不等于被守卫文件内无任何行号锚
+    //   （如 install-entry.mjs 的 `install.ps1:1` / `install.sh:2` 属宿主入口自述锚，现值准确、
+    //   刻意不入本清单——列清单式判据只覆盖清单）。
+    check(`B5 9h R-1: ${anchorCase.file.join('/')} 清单所列旧式锚零残留 + 替代式锚在位`, staleHits.length === 0 && missingFresh.length === 0, { staleHits, missingFresh })
     // notes（可选）：不可修 / 需产品语义裁决的项，以 note 形式登记（不参与判别，仅可见）。
     for (const note of anchorCase.notes ?? []) console.log(`  note  B5 9h R-1: ${anchorCase.file.join('/')} ${note}`)
   }
-  // 9h-2（FIX-040 W4）：跨文件对象核验——metrics.mjs 的断言名式锚（`smoke.mjs「<label>」`）
-  //   所引用的断言名 MUST 在 smoke.mjs 中确实存在。判据取**显式对照表**（锚日志原文标签
-  //   → smoke.mjs 侧 check 标签）：锚串在 metrics.mjs 中在位（失去锚即红）× 对象在
-  //   smoke.mjs 中在位（标签改名/断言被删即红）——两侧都判，避免「锚指向不存在对象」的
-  //   静默失效（本批收口的正是这种漂移）。
+  // 9h-2（FIX-040 W4；R0 P1-1 收口）：跨文件对象核验——metrics.mjs 的断言名式锚
+  //   （`smoke.mjs「<label>」`）所引用的断言名 MUST 在 smoke.mjs（或测试面）中确实存在。
+  //   判据取**显式对照表**（锚侧原文 → 对象侧原文）：锚串在 metrics.mjs 中在位（失去锚即红）
+  //   × 对象在位（标签改名/断言被删即红）——两侧都判，避免「锚指向不存在对象」的静默失效。
+  //   **本项覆盖面 = 下表所列锚**（≠ 全文件全部候选锚名）；表外候选名由 9h-3 完备性自检
+  //   强制入表 ⇒ 两项合起来才构成「metrics 全部候选锚名均有对象核验」的闭环
+  //   （R0 P1-1：此前表外死锚 + 「死锚即红」无条件声称 = 过度声称，已按限定语形态更正）。
   {
     const metricsSource = readFileSync(join(ROOT_DIR, 'tests', 'metrics.mjs'), 'utf8')
     const smokeSource = readFileSync(join(ROOT_DIR, 'tests', 'smoke.mjs'), 'utf8')
+    const paritySource = readFileSync(join(ROOT_DIR, 'tests', 'adapter-parity.mjs'), 'utf8')
+    const wrapperSource = readFileSync(join(ROOT_DIR, 'lib', 'wrapper.js'), 'utf8')
     const ANCHOR_OBJECTS = [
       ['smoke.mjs「image turn config passes through unchanged (no whole-turn routing)」', "check('image turn config passes through unchanged (no whole-turn routing)'"],
       ['smoke.mjs「wrapper takes over default model」', "check('wrapper takes over default model'"],
-      ['+「wrapper twin mirrors catalog」', "check('wrapper twin mirrors catalog'"],
+      ['wrapper twin mirrors catalog', "check('wrapper twin mirrors catalog'"],
       ['smoke.mjs「vision call returns text without echoing injected images (B)」', 'vision call returns text without echoing injected images (B)'],
       ['smoke.mjs「native multimodal delegate sees raw image (preserveImageInput)」', "check('native multimodal delegate sees raw image (preserveImageInput)'"],
       ['smoke.mjs §7.7 pre-step「image turn on wrapper route injects plugin reminder」', "check('image turn on wrapper route injects plugin reminder'"],
+      ['reminder carries attachment id + route_agent instruction', "check('reminder carries attachment id + route_agent instruction'"],
+      ['escape-group turn also injects reminder', "check('escape-group turn also injects reminder'"],
       ['smoke.mjs「collectMarkers dedupes by attachment」', "check('collectMarkers dedupes by attachment'"],
-      ['+「marker offers recognition and generation routes」', "check('marker offers recognition and generation routes'"],
+      ['marker offers recognition and generation routes', "check('marker offers recognition and generation routes'"],
       ['smoke.mjs「tool parameters schema」', "check('tool parameters schema'"],
+      ['attachmentIds resolution (M2)', 'attachmentIds resolution (M2)'],
       ['smoke.mjs「follow-up text turn injects memory segment into system」', "check('follow-up text turn injects memory segment into system'"],
-      ['+「memory segment carries id and untrust annotation」', 'memory segment carries id and untrust annotation'],
-      ['+「memory segments capped at recent 5」', "check('memory segments capped at recent 5'"],
-      ['+「current-turn image not double-injected as memory」', 'current-turn image not double-injected as memory'],
+      ['memory segment carries id and untrust annotation', 'memory segment carries id and untrust annotation'],
+      ['memory segments capped at recent 5', "check('memory segments capped at recent 5'"],
+      ['current-turn image not double-injected as memory', 'current-turn image not double-injected as memory'],
       ['smoke.mjs「wrapper delegate sees route_agent', "check('wrapper delegate sees route_agent marker in system'"],
+      ['log keeps original image block (F3)', "check('log keeps original image block (F3)'"],
+      // R0 P1-1：:118-119 的旧锚名（不存在的断言名）已改写为指向本条实存对象——按「实存
+      //   对象」形态登记（键 = metrics 侧连续原文；对象 = lib/wrapper.js 实现面）。
+      ['twin 实现保 id 仅改写 provider', 'return { ...resolved, provider: wrapRoute, inputModalities: modalities }'],
+      ['prepared model carries wrapRoute rewrite', "check('prepared model carries wrapRoute rewrite'"],
+      ['twin resolveModel 镜像模型身份（模型 id 不变）', 'twin resolveModel 镜像模型身份（模型 id 不变）'],
     ]
     const missingAnchors = ANCHOR_OBJECTS.filter(([anchor]) => !metricsSource.includes(anchor)).map(([anchor]) => anchor)
-    const deadAnchors = ANCHOR_OBJECTS.filter(([, assertion]) => !smokeSource.includes(assertion)).map(([, assertion]) => assertion)
-    check('B5 9h-2 R-1: metrics.mjs 断言名式锚全部有对象（锚在位 × smoke.mjs 断言名在位——死锚即红）',
+    // 对象可在四处之一实存：smoke.mjs（断言面）/ adapter-parity.mjs（对偶断言面）/
+    // lib/wrapper.js（实现面）/ metrics.mjs 自身 checks（本文件断言面）。
+    const deadAnchors = ANCHOR_OBJECTS.filter(([, assertion]) => !smokeSource.includes(assertion) && !paritySource.includes(assertion)
+      && !wrapperSource.includes(assertion) && !metricsSource.includes(assertion)).map(([, assertion]) => assertion)
+    // 标签取**限定语**形态：本项判别范围 = 本表所列锚（R0 P1-1-C：不得读作「全文件死锚即红」；
+    // 表外候选名的入表完备性由 9h-3 强制）。
+    check('B5 9h-2 R-1: metrics.mjs 本表所列断言名式锚全部有对象（锚在位 × 对象在位）',
       missingAnchors.length === 0 && deadAnchors.length === 0, { anchorCount: ANCHOR_OBJECTS.length, missingAnchors, deadAnchors })
+    // 9h-3（FIX-040 R0 P1-1-B / P2-1 收口）：**入表完备性自检**——metrics.mjs 内出现的
+    //   每个「…」候选锚名（逐行抽取，兼容跨行注释被折行/截断的形态：整串或 `+「…」` 片段键）
+    //   MUST 已登记在 ANCHOR_OBJECTS 首列 ⇒ **新增锚未入表即红**——把「完备性」由人工改为
+    //   机器看护（本批 P1-1 的失效链 = 新写死锚 + 表未收 + 声称「死锚即红」）。
+    //   限定：过短（<12 字符）者不参与（避免把普通中文引号文本误纳）；未闭合片段不入候选集。
+    {
+      const metricsLines = metricsSource.split('\n')
+      const tableKeys = ANCHOR_OBJECTS.map(([anchor]) => anchor)
+      const isKnown = (label) => tableKeys.some((key) => key.includes(label))
+      const unregistered = []
+      for (let index = 0; index < metricsLines.length; index++) {
+        for (const match of metricsLines[index].matchAll(/「([^」]+)」/g)) {
+          const label = match[1]
+          if (label.length < 12) continue
+          if (isKnown(label)) continue
+          // 片段键：`+「…」` 合并写作的后半片段——以「+「label」」形态登记亦视为已入表。
+          if (tableKeys.includes(`+「${label}」`)) continue
+          unregistered.push(`metrics.mjs:${index + 1} 「${label}」`)
+        }
+      }
+      check('B5 9h-3 R-1: metrics.mjs 候选锚名全部已入对象核验表（新增锚未入表即红）',
+        unregistered.length === 0, { candidates: tableKeys.length, unregistered })
+    }
   }
   // 9i. FIX-035（EVO-023 R0 P2-1 收口）：attach 抛错条目**绝不入表**——否则
   //   后续订阅复用死条目（不再 attach）却记正向 event-subscribed = 静默死
