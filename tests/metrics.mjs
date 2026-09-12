@@ -54,7 +54,8 @@ function record(metric) {
 // ── 观测 ①：D-1-1 恒主模型（可完全自动化）────────────────────────────────────
 // 定义（DEC-012/§11 D-1-1）：带图轮主会话 request/context 恒为主模型（100%，
 // 0% 出现专业 agent 的 provider/model）。整轮路由移除后插件不注册 agent/request
-// ——瀑布返回默认 config 即为正确行为（smoke.mjs:1162-1177 既有断言面，
+// ——瀑布返回默认 config 即为正确行为（smoke.mjs「image turn config passes
+// through unchanged (no whole-turn routing)」断言面，
 // 本观测轻量重演 + 判别性扩展）。
 async function observeMainModelConstancy() {
   const toolModule = await import('../lib/tool.js')
@@ -114,7 +115,8 @@ async function observeMainModelConstancy() {
   twinLlm.registerAdapter(['text-provider'], twinAdapter)
   const wrap = createWrapAdapter(twinLlm, 'text-provider', [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: () => 'm', rewrite: () => null }])
   const twinResolved = await wrap.resolveModel(`text-provider${WRAP_SUFFIX}`, MAIN_MODEL)
-  // 宿主 resolveModel 返回模型身份字段为 id（dsh-llm 契约，见 smoke.mjs:1266）；
+  // 宿主 resolveModel 返回模型身份字段为 id（dsh-llm 契约，见 smoke.mjs
+  // 「twin resolveModel mirrors model identity」断言）；
   // twin 镜像 = 原模型 id 不变，仅 provider 加包装后缀。
   checks.push(['twin resolveModel 镜像模型身份（模型 id 不变）', twinResolved.id === MAIN_MODEL && twinResolved.provider === `text-provider${WRAP_SUFFIX}`])
   await app.dispose()
@@ -128,8 +130,8 @@ async function observeMainModelConstancy() {
     value: `100%（${checks.length}/${checks.length} 场景）`,
     detail,
     evidence: [
-      'smoke.mjs:1162-1177（image turn config passes through unchanged）',
-      'smoke.mjs:1316-1326（twin 目录镜像 model 身份）',
+      'smoke.mjs「image turn config passes through unchanged (no whole-turn routing)」断言',
+      'smoke.mjs「wrapper takes over default model」+「wrapper twin mirrors catalog」（包装路由 twin 模型身份镜像）断言',
       'docs/architecture-v3.md §11 D-1-1 / DEC-012',
     ],
   })
@@ -241,8 +243,8 @@ async function observeImageArrival() {
     value: failed.length === 0 ? '机制面 100%（直传+改写两分支）' : '机制面 FAIL',
     detail,
     evidence: [
-      'smoke.mjs:816-820（vision call returns injected images）',
-      'smoke.mjs:1473-1480（native multimodal delegate sees raw image）',
+      'smoke.mjs「vision call returns text without echoing injected images (B)」断言（视觉调用请求 messages 含 image 块）',
+      'smoke.mjs「native multimodal delegate sees raw image (preserveImageInput)」断言（直传分支原图块到达）',
       'docs/architecture-v3.md §11 D-1-2 / §5.2.3 失败语义',
     ],
     // 端到端：真实视觉模型账号收图 —— 本环境无真实多模态账号，不可单机自动化。
@@ -323,9 +325,9 @@ async function observeTriggerRate() {
     value: failed.length === 0 ? '机制面 100%（三通道就位）' : '机制面 FAIL',
     detail,
     evidence: [
-      'smoke.mjs:1669-1682（reminder 注入 + 逃生组改写）',
-      'smoke.mjs:1500-1507（marker 分流 + 去重）',
-      'smoke.mjs:1153-1157（route_agent 参数 schema）',
+      'smoke.mjs §7.7 pre-step「image turn on wrapper route injects plugin reminder」+「reminder carries attachment id + route_agent instruction」+「escape-group turn also injects reminder」（reminder 注入 + 逃生组）断言',
+      'smoke.mjs「collectMarkers dedupes by attachment」+「marker offers recognition and generation routes」（marker 分流 + 去重）断言',
+      'smoke.mjs「tool parameters schema」（route_agent 参数 schema）断言',
       'docs/architecture-v3.md §11 D-1-3 / §13 V-DSH-5 / RES-001 §4.3 U-3',
     ],
     usage: {
@@ -434,7 +436,7 @@ async function observeAddressingRoundTrip() {
     detail,
     evidence: [
       'tests/attachments.mjs（三向映射往返/错误码/物化缓存，全量断言面）',
-      'smoke.mjs:846-868（attachmentIds resolution via M2）',
+      'smoke.mjs「attachmentIds resolution (M2)」节：resolve via M2 (lazy register) / dedupe within list / non-content-addressed rejected / unknown id rejected (ATTACHMENT_UNKNOWN) / resolve without exec (id-only) 断言',
       'docs/architecture-v3.md §11 D-1-4 / ADR-004（DEC-011）',
     ],
   })
@@ -498,8 +500,8 @@ async function observeCrossTurnReference() {
     value: failed.length === 0 ? '机制面 100%（记忆段注入 + attachmentIds 解析可达）' : '机制面 FAIL',
     detail,
     evidence: [
-      'smoke.mjs:1557-1569（follow-up text turn injects memory segment）',
-      'smoke.mjs:848-867（attachmentIds resolution via M2）',
+      'smoke.mjs「follow-up text turn injects memory segment into system」+「memory segment carries id and untrust annotation」+「memory segments capped at recent 5」+「current-turn image not double-injected as memory」（记忆段注入与去重）断言',
+      'smoke.mjs「attachmentIds resolution (M2)」节（记忆段附件 id 经 M2 解析可达）断言',
       'docs/architecture-v3.md §11 D-1-5 / DEC-007 修订⑤',
     ],
     success: {
@@ -518,7 +520,8 @@ function observeEscapeTradeoffs() {
   console.log('  F-05 user 层标记复述风险：逃生组改写把 route_agent 标记文本放 user 消息层（prestep.js')
   console.log('      rewriteImageTurnsToMarkers——最小改写标记 minimalImageRewrite 替换 user 层图块）；')
   console.log('      复述风险为设计内取舍（vision-router 同款，index.js:4832-4835）。观测点：逃生轮改写后')
-  console.log('      decision.messages 消息层含标记文本无裸图块（smoke.mjs:1680-1681 已断言）；复述行为需真实')
+  console.log('      decision.messages 消息层含标记文本无裸图块（smoke.mjs「wrapper delegate sees route_agent')
+  console.log('      marker in system」/「log keeps original image block (F3)」断言）；复述行为需真实')
   console.log('      模型观测（D-1-3 U-3 会话样本顺带检查）。')
   console.log('  F-06 逃生路径日志层原件缺失：逃生轮原图块在宿主 append 之前被改写（C-4 日志保留原件仅包装')
   console.log('      主路径成立）；影响仅逃生组手动切回原组场景。观测点：逃生轮改写时机（宿主 append 前）')
