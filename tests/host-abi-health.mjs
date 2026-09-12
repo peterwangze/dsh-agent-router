@@ -40,8 +40,8 @@
  *    清扫面扩至 lib/host-abi/llm-selection.js / tests/metrics.mjs / tests/smoke.mjs /
  *    tests/install-entry.mjs / lib/preset-defaults.js / tests/preset-defaults.mjs +
  *    ci.yml / README.md 契约面（stale 零残留 + 符号/断言名式锚在位），并增设
- *    **跨文件对象核验**（9h-2：metrics 断言名式锚所指对象实存）+ **入表完备性自检**
- *    （9h-3：metrics 候选锚名未入表即红），使锚漂移成为机器看护而非人工巡检。
+ *    **跨文件对象核验**（9h-2：metrics 断言名式锚所指对象按**声明单源**实存；9h-2b：零自满足）
+ *    + **入表完备性自检**（9h-3：metrics 候选锚名未入表即红），使锚漂移成为机器看护而非人工巡检。
  * 10. FIX-035（EVO-023 R0 P2-1 收口，§9i）：events 域 attach 失败条目**不入表**
  *    （后续订阅重试 attach——静默死订阅消除）+ event-subscribe-failed 诊断
  *    （code=attach-threw + consumer 标签 + 错误摘要，P8）+ 失败消费者 dispose
@@ -715,8 +715,9 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     // FIX-040 W8a：llm-selection.js 三处行号锚（R0 P3-3，:99/:179 已实测漂移）→ 符号名式。
     { file: ['lib', 'host-abi', 'llm-selection.js'], stale: ['preset-defaults.js:226-238', 'preset-defaults.js:209-240', 'preset-defaults.js:303-307'], fresh: ['lib/preset-defaults.js', 'sessionSelectFaceOf', 'sessionNeverProduced', 'inheritedRouteOf', 'LLM_FACE_METHODS'] },
     // FIX-040 W4：metrics.mjs 的 12 处 smoke.mjs:<行号> 证据锚（实测偏 ~1038~1200）→ 断言名式。
-    //   fresh 只列**连续**锚串（跨行/合并写作/片段键形态不在本项判别范围——由 9h-2 的对象
-    //   核验 + 9h-3 的入表完备性自检覆盖；本项标签为**限定语**形态：仅指本清单所列锚）。
+    //   fresh 只列**连续**锚串（本项判「清单内连续锚串」这一形态，不判跨行/合并写作/片段形态）。
+    //   如实界定（R1 P3-2(new)）：跨行/合并形态的**入表完备性**由 9h-3 覆盖；其**对象存活**是否
+    //   被核验取决于该名是否在 9h-2 表内（表内 = 按声明单源核验；表外 = 无核验）——不声称闭环。
     { file: ['tests', 'metrics.mjs'], stale: ['smoke.mjs:1162-1177', 'smoke.mjs:1316-1326', 'smoke.mjs:816-820', 'smoke.mjs:1473-1480', 'smoke.mjs:1669-1682', 'smoke.mjs:1500-1507', 'smoke.mjs:1153-1157', 'smoke.mjs:846-868', 'smoke.mjs:1557-1569', 'smoke.mjs:848-867', 'smoke.mjs:1266', 'smoke.mjs:1680-1681'], fresh: ['smoke.mjs「image turn config passes through unchanged (no whole-turn routing)」', 'smoke.mjs「wrapper takes over default model」', 'smoke.mjs「vision call returns text without echoing injected images (B)」', 'smoke.mjs「native multimodal delegate sees raw image (preserveImageInput)」', 'smoke.mjs §7.7 pre-step「image turn on wrapper route injects plugin reminder」', 'smoke.mjs「collectMarkers dedupes by attachment」', 'smoke.mjs「tool parameters schema」', 'smoke.mjs「attachmentIds resolution (M2)」节', 'smoke.mjs「follow-up text turn injects memory segment into system」', 'smoke.mjs「wrapper delegate sees route_agent'] },
     // FIX-040 W2/W8b：smoke.mjs 的旧式锚（行号区间 / 自锚）→ 符号名或内容式指代。
     { file: ['tests', 'smoke.mjs'], stale: ['install-entry.mjs:74-77', 'typert contribution registered` 断言行\n  // （符号名式锚；原写死行号'], fresh: ['powerShellHosts', 'typert contribution registered', '紧随的 `19 invocations` 断言行'] },
@@ -746,70 +747,100 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   //   （`smoke.mjs「<label>」`）所引用的断言名 MUST 在 smoke.mjs（或测试面）中确实存在。
   //   判据取**显式对照表**（锚侧原文 → 对象侧原文）：锚串在 metrics.mjs 中在位（失去锚即红）
   //   × 对象在位（标签改名/断言被删即红）——两侧都判，避免「锚指向不存在对象」的静默失效。
-  //   **本项覆盖面 = 下表所列锚**（≠ 全文件全部候选锚名）；表外候选名由 9h-3 完备性自检
-  //   强制入表 ⇒ 两项合起来才构成「metrics 全部候选锚名均有对象核验」的闭环
-  //   （R0 P1-1：此前表外死锚 + 「死锚即红」无条件声称 = 过度声称，已按限定语形态更正）。
+  //   **本项覆盖面 = 下表所列锚**（≠ 全文件全部候选锚名）；表外候选名的**入表完备性**由
+  //   9h-3 强制入表（新增候选名未入表即红）。**对象存活面的如实界定**（R1 P3-2(new)）：
+  //   9h-2 的 21 对各自按**声明的单源**核验其对象；9h-3 只保证"候选名已入表"，**不等于**
+  //   对象的存活已被覆盖（两者判据不同、不可互相替代），故不声称"全部候选锚名均有对象核验"。
+  //   表结构（R1 P1-1(new) 收口）：`[锚串, 对象串（带判别前缀）, 声明源]` 三元组，对象**只在
+  //   其声明源**内查找（禁止多源析取），并由 9h-2b 机器判据保证零自满足（见下）。
   {
     const metricsSource = readFileSync(join(ROOT_DIR, 'tests', 'metrics.mjs'), 'utf8')
     const smokeSource = readFileSync(join(ROOT_DIR, 'tests', 'smoke.mjs'), 'utf8')
     const paritySource = readFileSync(join(ROOT_DIR, 'tests', 'adapter-parity.mjs'), 'utf8')
     const wrapperSource = readFileSync(join(ROOT_DIR, 'lib', 'wrapper.js'), 'utf8')
-    const ANCHOR_OBJECTS = [
-      ['smoke.mjs「image turn config passes through unchanged (no whole-turn routing)」', "check('image turn config passes through unchanged (no whole-turn routing)'"],
-      ['smoke.mjs「wrapper takes over default model」', "check('wrapper takes over default model'"],
-      ['wrapper twin mirrors catalog', "check('wrapper twin mirrors catalog'"],
-      ['smoke.mjs「vision call returns text without echoing injected images (B)」', 'vision call returns text without echoing injected images (B)'],
-      ['smoke.mjs「native multimodal delegate sees raw image (preserveImageInput)」', "check('native multimodal delegate sees raw image (preserveImageInput)'"],
-      ['smoke.mjs §7.7 pre-step「image turn on wrapper route injects plugin reminder」', "check('image turn on wrapper route injects plugin reminder'"],
-      ['reminder carries attachment id + route_agent instruction', "check('reminder carries attachment id + route_agent instruction'"],
-      ['escape-group turn also injects reminder', "check('escape-group turn also injects reminder'"],
-      ['smoke.mjs「collectMarkers dedupes by attachment」', "check('collectMarkers dedupes by attachment'"],
-      ['marker offers recognition and generation routes', "check('marker offers recognition and generation routes'"],
-      ['smoke.mjs「tool parameters schema」', "check('tool parameters schema'"],
-      ['attachmentIds resolution (M2)', 'attachmentIds resolution (M2)'],
-      ['smoke.mjs「follow-up text turn injects memory segment into system」', "check('follow-up text turn injects memory segment into system'"],
-      ['memory segment carries id and untrust annotation', 'memory segment carries id and untrust annotation'],
-      ['memory segments capped at recent 5', "check('memory segments capped at recent 5'"],
-      ['current-turn image not double-injected as memory', 'current-turn image not double-injected as memory'],
-      ['smoke.mjs「wrapper delegate sees route_agent', "check('wrapper delegate sees route_agent marker in system'"],
-      ['log keeps original image block (F3)', "check('log keeps original image block (F3)'"],
-      // R0 P1-1：:118-119 的旧锚名（不存在的断言名）已改写为指向本条实存对象——按「实存
-      //   对象」形态登记（键 = metrics 侧连续原文；对象 = lib/wrapper.js 实现面）。
-      ['twin 实现保 id 仅改写 provider', 'return { ...resolved, provider: wrapRoute, inputModalities: modalities }'],
-      ['prepared model carries wrapRoute rewrite', "check('prepared model carries wrapRoute rewrite'"],
-      ['twin resolveModel 镜像模型身份（模型 id 不变）', 'twin resolveModel 镜像模型身份（模型 id 不变）'],
+    const ANCHOR_OBJECTS_3 = [
+      ['smoke.mjs「image turn config passes through unchanged (no whole-turn routing)」', "check('image turn config passes through unchanged (no whole-turn routing)'", 'smoke'],
+      ['smoke.mjs「wrapper takes over default model」', "check('wrapper takes over default model'", 'smoke'],
+      ['wrapper twin mirrors catalog', "check('wrapper twin mirrors catalog'", 'smoke'],
+      ['smoke.mjs「vision call returns text without echoing injected images (B)」', "check('vision call returns text without echoing injected images (B)'", 'smoke'],
+      ['smoke.mjs「native multimodal delegate sees raw image (preserveImageInput)」', "check('native multimodal delegate sees raw image (preserveImageInput)'", 'smoke'],
+      ['smoke.mjs §7.7 pre-step「image turn on wrapper route injects plugin reminder」', "check('image turn on wrapper route injects plugin reminder'", 'smoke'],
+      ['reminder carries attachment id + route_agent instruction', "check('reminder carries attachment id + route_agent instruction'", 'smoke'],
+      ['escape-group turn also injects reminder', "check('escape-group turn also injects reminder'", 'smoke'],
+      ['smoke.mjs「collectMarkers dedupes by attachment」', "check('collectMarkers dedupes by attachment'", 'smoke'],
+      ['marker offers recognition and generation routes', "check('marker offers recognition and generation routes'", 'smoke'],
+      ['smoke.mjs「tool parameters schema」', "check('tool parameters schema'", 'smoke'],
+      ['attachmentIds resolution (M2)', "console.log('attachmentIds resolution (M2):'", 'smoke'],
+      ['smoke.mjs「follow-up text turn injects memory segment into system」', "check('follow-up text turn injects memory segment into system'", 'smoke'],
+      ['memory segment carries id and untrust annotation', "check('memory segment carries id and untrust annotation'", 'smoke'],
+      ['memory segments capped at recent 5', "check('memory segments capped at recent 5'", 'smoke'],
+      ['current-turn image not double-injected as memory', "check('current-turn image not double-injected as memory'", 'smoke'],
+      ['smoke.mjs「wrapper delegate sees route_agent', "check('wrapper delegate sees route_agent marker in system'", 'smoke'],
+      ['log keeps original image block (F3)', "check('log keeps original image block (F3)'", 'smoke'],
+      // R0 P1-1：:118-119 的旧锚名（不存在的断言名）已改写为指向本条实存对象——实现面按
+      //   声明单源（wrapper）核验；对偶断言按声明单源（parity）核验。
+      ['twin 实现保 id 仅改写 provider', 'return { ...resolved, provider: wrapRoute, inputModalities: modalities }', 'wrapper'],
+      ['prepared model carries wrapRoute rewrite', "check('prepared model carries wrapRoute rewrite'", 'parity'],
+      ['twin resolveModel 镜像模型身份（模型 id 不变）', "checks.push(['twin resolveModel 镜像模型身份（模型 id 不变）'", 'metrics'],
     ]
-    const missingAnchors = ANCHOR_OBJECTS.filter(([anchor]) => !metricsSource.includes(anchor)).map(([anchor]) => anchor)
-    // 对象可在四处之一实存：smoke.mjs（断言面）/ adapter-parity.mjs（对偶断言面）/
-    // lib/wrapper.js（实现面）/ metrics.mjs 自身 checks（本文件断言面）。
-    const deadAnchors = ANCHOR_OBJECTS.filter(([, assertion]) => !smokeSource.includes(assertion) && !paritySource.includes(assertion)
-      && !wrapperSource.includes(assertion) && !metricsSource.includes(assertion)).map(([, assertion]) => assertion)
+    const missingAnchors = ANCHOR_OBJECTS_3.filter(([anchor]) => !metricsSource.includes(anchor)).map(([anchor]) => anchor)
+    // 对象核验 = **逐行声明的单源**（禁止四源析取）：每个对象串都带**判别前缀**（`check('` /
+    // `console.log('` / `checks.push(['`），且只在那一个声明源里找——否则会出现两类自满足
+    // 退化（R1 P1-1(new) 实测）：① `anchor === object`（同一谓词判两次 ⇒ X && X 恒真）
+    // ② 对象串被**被守卫文件自身**的注释/锚文本碰撞 ⇒ 目标源漂移也不判红。判别前缀使
+    // 对象只可能命中"真正的断言发射点"，杜绝与锚文本/注释碰撞。
+    const ANCHOR_SOURCES = {
+      smoke: smokeSource,
+      parity: paritySource,
+      wrapper: wrapperSource,
+      metrics: metricsSource,
+    }
+    const deadAnchors = ANCHOR_OBJECTS_3.filter(([, assertion, origin]) => !ANCHOR_SOURCES[origin].includes(assertion))
+      .map(([, assertion, origin]) => `${origin}: ${assertion}`)
+    // 自满足面核验（R1 P1-1(new) 的机器判据，三类恒 0）：
+    //   ① anchor === object（同一谓词判两次）② object ⊂ anchor（对象被锚文本包含）
+    //   ③ 对象串在**非声明源**里出现（碰撞/自引渠道）。
+    const selfSatisfied = {
+      identical: ANCHOR_OBJECTS_3.filter(([anchor, assertion]) => anchor === assertion).map(([anchor]) => anchor),
+      objectInsideAnchor: ANCHOR_OBJECTS_3.filter(([anchor, assertion]) => anchor !== assertion && anchor.includes(assertion)).map(([anchor, assertion]) => `${anchor} ⊃ ${assertion}`),
+      foreignSourceHits: ANCHOR_OBJECTS_3.filter(([, assertion, origin]) => Object.entries(ANCHOR_SOURCES)
+        .some(([otherSource, text]) => otherSource !== origin && text.includes(assertion)))
+        .map(([, assertion, origin]) => `${origin}: ${assertion}`),
+    }
     // 标签取**限定语**形态：本项判别范围 = 本表所列锚（R0 P1-1-C：不得读作「全文件死锚即红」；
     // 表外候选名的入表完备性由 9h-3 强制）。
-    check('B5 9h-2 R-1: metrics.mjs 本表所列断言名式锚全部有对象（锚在位 × 对象在位）',
-      missingAnchors.length === 0 && deadAnchors.length === 0, { anchorCount: ANCHOR_OBJECTS.length, missingAnchors, deadAnchors })
+    check('B5 9h-2 R-1: metrics.mjs 本表所列断言名式锚全部有对象（锚在位 × 对象在其声明单源在位）',
+      missingAnchors.length === 0 && deadAnchors.length === 0, { anchorCount: ANCHOR_OBJECTS_3.length, missingAnchors, deadAnchors })
+    check('B5 9h-2b R-1: 对象核验零自满足（anchor≠object × 对象不被锚文本包含 × 对象仅在其声明源出现）',
+      selfSatisfied.identical.length === 0 && selfSatisfied.objectInsideAnchor.length === 0 && selfSatisfied.foreignSourceHits.length === 0,
+      { ...selfSatisfied, tableSize: ANCHOR_OBJECTS_3.length })
     // 9h-3（FIX-040 R0 P1-1-B / P2-1 收口）：**入表完备性自检**——metrics.mjs 内出现的
-    //   每个「…」候选锚名（逐行抽取，兼容跨行注释被折行/截断的形态：整串或 `+「…」` 片段键）
-    //   MUST 已登记在 ANCHOR_OBJECTS 首列 ⇒ **新增锚未入表即红**——把「完备性」由人工改为
-    //   机器看护（本批 P1-1 的失效链 = 新写死锚 + 表未收 + 声称「死锚即红」）。
-    //   限定：过短（<12 字符）者不参与（避免把普通中文引号文本误纳）；未闭合片段不入候选集。
+    //   每个「…」候选锚名（逐行抽取，兼容跨行注释被折行/截断的形态）MUST **精确**登记在
+    //   ANCHOR_OBJECTS 首列（或锚串的子串，见下）⇒ **新增锚未入表即红**——把「完备性」由
+    //   人工改为机器看护（本批 P1-1 的失效链 = 新写死锚 + 表未收 + 声称「死锚即红」）。
+    //   判据强度（R1 P2-1(new) 收口）：用**精确匹配**而非子串包含式 `key.includes(label)`
+    //   ——后者会让「新标签恰为既有键子串」的笔误形态（漏字/截断）静默通过。仍允许的两种
+    //   合法形态：① label 本身即表键（精确）② 表键**包含** label 且 label 是**完整引号对**
+    //   内容（即 `${anchor}」` 形态——表键可以是「前缀 + 「label」」的更长锚串）。为此改判
+    //   为「表键以 `「label」` 结尾或等于 label」的双向精确判据，不再接受任意子串包含。
+    //   已知漏判面（P3-1(new) 如实披露）：`<12 字符` 的短名不参与本项（避免把普通中文
+    //   引号文本误纳）⇒ **短名死锚不会被本项捕获**（当前 metrics.mjs 无 <12 字符的「…」段，
+    //   最短 22 字符；该阈值是显式保留的已知盲区，非声称无漏判）。
     {
       const metricsLines = metricsSource.split('\n')
-      const tableKeys = ANCHOR_OBJECTS.map(([anchor]) => anchor)
-      const isKnown = (label) => tableKeys.some((key) => key.includes(label))
+      const tableKeys = ANCHOR_OBJECTS_3.map(([anchor]) => anchor)
+      const isKnown = (label) => tableKeys.some((key) => key === label || key.endsWith(`「${label}」`))
       const unregistered = []
       for (let index = 0; index < metricsLines.length; index++) {
         for (const match of metricsLines[index].matchAll(/「([^」]+)」/g)) {
           const label = match[1]
           if (label.length < 12) continue
           if (isKnown(label)) continue
-          // 片段键：`+「…」` 合并写作的后半片段——以「+「label」」形态登记亦视为已入表。
-          if (tableKeys.includes(`+「${label}」`)) continue
           unregistered.push(`metrics.mjs:${index + 1} 「${label}」`)
         }
       }
-      check('B5 9h-3 R-1: metrics.mjs 候选锚名全部已入对象核验表（新增锚未入表即红）',
-        unregistered.length === 0, { candidates: tableKeys.length, unregistered })
+      check('B5 9h-3 R-1: metrics.mjs 候选锚名全部已入对象核验表（精确匹配；新增锚未入表即红）',
+        unregistered.length === 0, { tableKeys: tableKeys.length, unregistered })
     }
   }
   // 9i. FIX-035（EVO-023 R0 P2-1 收口）：attach 抛错条目**绝不入表**——否则

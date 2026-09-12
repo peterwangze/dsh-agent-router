@@ -116,11 +116,13 @@ async function observeMainModelConstancy() {
   const wrap = createWrapAdapter(twinLlm, 'text-provider', [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: () => 'm', rewrite: () => null }])
   const twinResolved = await wrap.resolveModel(`text-provider${WRAP_SUFFIX}`, MAIN_MODEL)
   // 宿主 resolveModel 返回模型身份字段为 id（dsh-llm 契约）；twin 实现保 id 仅改写 provider
-  // ——实现面 = lib/wrapper.js 的 resolveModel：`return { ...resolved, provider: wrapRoute, inputModalities: modalities }`（id 未触碰）。
+  // ——实现面 = lib/wrapper.js 的 resolveModel（展开 resolved、只覆写 provider 与
+  // inputModalities 两字段，模型 id 原样保留；按函数名检索即可定位）。
   // 对偶对象 = tests/adapter-parity.mjs「prepared model carries wrapRoute rewrite」+ 本文件
   // 下条 checks「twin resolveModel 镜像模型身份（模型 id 不变）」。
   // FIX-040 R0 P1-1：原锚名为不存在的断言名（全库无对象）——已改为指向上述实存对象，
-  // 不再引用任何不存在的断言。
+  // 不再引用任何不存在的断言。R1 P1-1(new)：实现面对象由 9h-2 按**声明单源**（lib/wrapper.js）
+  // 核验；本注释不再逐字引用实现行，以免注释文本成为碰撞/自满足渠道。
   // twin 镜像 = 原模型 id 不变，仅 provider 加包装后缀。
   checks.push(['twin resolveModel 镜像模型身份（模型 id 不变）', twinResolved.id === MAIN_MODEL && twinResolved.provider === `text-provider${WRAP_SUFFIX}`])
   await app.dispose()
