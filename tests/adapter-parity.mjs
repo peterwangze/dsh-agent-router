@@ -24,11 +24,18 @@ import { createWrapAdapter, WRAP_SUFFIX } from '../lib/wrapper.js'
  * - `Object.getOwnPropertyNames(LlmAdapter.prototype)` 去掉 constructor——
  *   宿主基类的具体方法（宿主未来新增自动进入本清单，预警真实生效）；
  * - 静态补 `'stream'`——抽象声明（无运行时实现）不在原型上，纯枚举会漏检；
- * - 静态补 `'prepareCall'`（FIX-006 宿主漂移对齐）——rc.6 时代
- *   adapterStream 每次分发先调 adapter.prepareCall（FIX-001 实证）；rc.8
- *   基类原型已无该方法（移至 LlmRuntime 层，adapterStream 直接调
- *   adapter.stream）。twin 保留 prepareCall 作为跨 rc 兼容层（宿主 rc 系
- *   滚动漂移下两个入口都必须可用），故静态补入继续受看护。
+ * - 静态补 `'prepareCall'`（FIX-006 宿主漂移对齐，FIX-033 rc.2 复核）——该方法
+ *   在宿主 rc 系三次迁移：rc.6 原型（FIX-001 实证 adapterStream 每次分发先调
+ *   adapter.prepareCall）→ rc.8 移出原型（adapterStream 直接调
+ *   adapter.stream）→ **0.1.5-rc.2 回归原型**（宿主 lib/index.js:1681-1686，
+ *   adapterStream :2232 无 prepared 分支仍先调 adapter.prepareCall）。
+ *   twin 保留 prepareCall 作为跨 rc 兼容层，静态补入与原型枚举经 Set 去重——
+ *   任一侧漂移（再移出/再回归）清单恒覆盖，继续受看护。
+ *
+ * FIX-033 枚举 diff 全量审计（0.1.5-rc.2）：原型方法集 = providerInfo /
+ * providerRetryPolicy / **imageRequestPricing（新增，:1645）** / listModels /
+ * resolveModel / prepareCall（回归原型，:1681）。与 twin 既有方法集对比，
+ * 唯一缺口 = imageRequestPricing；其余零差异（stream 维持静态补集）。
  */
 const ADAPTER_CONTRACT = [
   ...new Set([
@@ -67,12 +74,13 @@ function makeFakeLlm({ inputModalities = ['text'] } = {}) {
 }
 
 export async function runAdapterParityTests(check) {
-  // 0. 契约清单健康自检（FIX-001b F2，FIX-006 漂移对齐）：动态枚举必须产出
-  //    ≥4 项核心方法（rc.8 基类形状：providerInfo/providerRetryPolicy/
-  //    listModels/resolveModel）且必含 resolveModel；stream 与 prepareCall
-  //    为静态补集（抽象声明/跨 rc 兼容层）恒在清单——宿主导出形状变化
-  //    （枚举失效）本身就要红。
-  check('ADAPTER_CONTRACT dynamic enum yields core methods (F2)', ADAPTER_CONTRACT.length >= 4 && ADAPTER_CONTRACT.includes('prepareCall') && ADAPTER_CONTRACT.includes('resolveModel') && ADAPTER_CONTRACT.includes('stream') && ADAPTER_CONTRACT.includes('providerInfo') && ADAPTER_CONTRACT.includes('listModels'))
+  // 0. 契约清单健康自检（FIX-001b F2，FIX-006 漂移对齐，FIX-033 rc.2 对齐）：
+  //    动态枚举必须产出 ≥6 项方法（rc.2 基类形状：providerInfo/
+  //    providerRetryPolicy/imageRequestPricing/listModels/resolveModel/
+  //    prepareCall 全在原型）且必含 resolveModel 与 imageRequestPricing
+  //    （rc.2 新增契约——枚举失效/宿主回退均红）；stream 为静态补集
+  //    （抽象声明）恒在清单——宿主导出形状变化（枚举失效）本身就要红。
+  check('ADAPTER_CONTRACT dynamic enum yields core methods (F2, rc.2)', ADAPTER_CONTRACT.length >= 6 && ADAPTER_CONTRACT.includes('prepareCall') && ADAPTER_CONTRACT.includes('resolveModel') && ADAPTER_CONTRACT.includes('stream') && ADAPTER_CONTRACT.includes('providerInfo') && ADAPTER_CONTRACT.includes('listModels') && ADAPTER_CONTRACT.includes('imageRequestPricing'))
 
   // 1. 接口奇偶（核心看护）：契约方法在 twin 上逐一 typeof === 'function'。
   //    宿主未来新增契约方法而 twin 未跟进 → 此处红 = RISK-003 预警。
@@ -226,6 +234,48 @@ export async function runAdapterParityTests(check) {
     let quietThrown = null
     try { for await (const chunk of twinQuiet.stream({ provider: 'fake-stat3' + WRAP_SUFFIX, model: 'm1', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] })) quietChunks += 1 } catch (error) { quietThrown = error }
     check('R2-7: onCall 抛错零影响流（chunks 正常产出）', quietThrown === null && quietChunks === 1)
+  }
+
+  // 7. FIX-033：twin imageRequestPricing 镜像语义（宿主 0.1.5-rc.2 原型新增，
+  //    :1645）。契约：同步零 I/O（宿主注释 :1639 "must answer synchronously
+  //    without I/O"），默认 undefined = 路由未声明图片定价（消费者回落中性
+  //    估算）；运行时消费点 LlmRuntime.imageRequestPricing :1996-1998 逐路由
+  //    经 adapters.get(provider).adapter 解析。twin 语义对齐：定价归属原适配
+  //    器（twin 路由 = 同一上游模型的包装路由）——原适配器声明则透传（传参
+  //    原 provider id，与其余镜像方法同构），未声明/缺失 → undefined（宿主
+  //    基类默认）。判别：透传错路由 id / 误声明默认定价 / 异步化均红。
+  {
+    // 7a 原适配器未实现（宿主基类默认 = 未声明）：twin 返回 undefined。
+    {
+      const llmPlain = {
+        registration: () => ({ adapter: { resolveModel: async (p, m) => ({ provider: p, id: m, name: m, inputModalities: ['text'] }) } }),
+        stream: async function* () { yield { type: 'text', text: 'ok' } },
+      }
+      const twinPlain = createWrapAdapter(llmPlain, 'fake-plain', [])
+      const pricing = twinPlain.imageRequestPricing('fake-plain' + WRAP_SUFFIX, 'm1')
+      check('FIX-033: 原适配器未声明定价 → twin 返回 undefined（宿主 :1645 默认语义）', pricing === undefined)
+    }
+
+    // 7b 原适配器声明定价：twin 同步透传同形返回 + 以原 provider id 委托。
+    {
+      const PRICING = { perImageTokens: 85, perRequestImages: 1 }
+      const seenArgs = []
+      const llmPriced = {
+        registration: () => ({
+          adapter: {
+            resolveModel: async (p, m) => ({ provider: p, id: m, name: m, inputModalities: ['text'] }),
+            imageRequestPricing(provider, model) {
+              seenArgs.push({ provider, model })
+              return PRICING
+            },
+          },
+        }),
+        stream: async function* () { yield { type: 'text', text: 'ok' } },
+      }
+      const twinPriced = createWrapAdapter(llmPriced, 'fake-priced', [])
+      const returned = twinPriced.imageRequestPricing('fake-priced' + WRAP_SUFFIX, 'm1')
+      check('FIX-033: 原适配器声明定价 → twin 同步透传同形返回（宿主 :1996 消费面同构）', returned === PRICING && seenArgs.length === 1 && seenArgs[0].provider === 'fake-priced' && seenArgs[0].model === 'm1')
+    }
   }
 }
 

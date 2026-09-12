@@ -13,7 +13,7 @@ import { runStatsTests } from './stats.mjs'
 import { runAudit001ConcurrencyTests } from './audit-001-concurrency.mjs'
 import { OauthCredentialStore, CHATGPT_PRESET } from '../lib/oauth-credentials.js'
 import { isAttachmentId, contentHashId } from '../lib/attachments.js'
-import { BlockAssembler, LlmRuntime, contentHasImage } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, LlmRuntime, contentHasImage, textOnlyImageText } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, createAssistantMessage } from '@deepseek-ai/dsh-llm/message'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { spawnSync } from 'node:child_process'
@@ -2431,22 +2431,23 @@ console.log('twin wrapper mechanism (real LlmRuntime):')
   twinText = assembler.blocks().filter((block) => block.type === 'text').map((block) => block.text).join('')
   check('image turn via twin completes', assembler.finish.kind === 'stop' && twinText === 'delegated-ok')
   check('delegate saw rewritten text, not raw image', delegateCalls.length === 1 && delegateCalls[0].messages[0].content.some((block) => block.type === 'text' && block.text.includes('调用视觉工具查看')) && delegateCalls[0].messages[0].content.every((block) => block.type !== 'image'))
-  // 4) 负向见证：裸图片块直接进原适配器必然失败（twin 是唯一放行路径）。
-  //  FIX-006 宿主漂移实证对齐：EVO-004 门控时的 rc 语义（FIX-001 适配
-  //  projectImagesForTextModel——宿主 adapterStream 在文本模型边界投影剥
-  //  离图片块、投影后正常完成 stop）已随宿主滚动漂移消失——本仓 peerDeps
-  //  声明 ^0.1.0-rc.6，pnpm-lock 实际解析 0.1.0-rc.8（rc 滚动漂移）；rc.8
-  //  的 adapterStream 无边界投影（forAdapter 仅清 replayState），目录声明
-  //  明确 advisory "never changes routing or request validation"。负向见证
-  //  回归本源形态：裸图直达文本适配器 → 适配器自拒（UNSUPPORTED_CONTENT）
-  //  → 宿主 adapterFailureChunk 终态 error + 委托可见裸图块（无投影实证）
-  //  ——twin 仍是图片轮唯一完成路径。
+  // 4) 负向见证（FIX-033 重锚定 0.1.5-rc.2）：裸图片块直达文本模型路由不再
+  //  loud-fail——adapterStream 边界投影回归（宿主 lib/index.js:2251：
+  //  modelInfo.inputModalities 不含 image 且消息含图 → projectImagesForTextModel
+  //  :721-729，图片块逐个替换为 textOnlyImageText :541-543 确定性占位文本后
+  //  正常分发，终态 stop）。语义第二次翻转：rc.7 投影（FIX-001 适配）→ rc.8
+  //  无投影（适配器自拒 UNSUPPORTED_CONTENT → error 终态）→ rc.2 投影回归。
+  //  判别力（防假绿）：占位文本断言**逐字锚定宿主导出 textOnlyImageText**
+  //  （P10-④ 导出名锚定）——宿主再漂移（投影消失 → delegate 见裸图块、或
+  //  占位形态变更）即红；raw delegate 零裸图块 + 终态 stop 同时证明 twin 仍是
+  //  图片轮唯一"内容可达"路径（raw 路由的图被边界剥为占位文本，模型永远
+  //  见不到视觉内容——与 twin 改写路径的 route_agent 分流语义判别开）。
   const rawAssembler = new BlockAssembler()
   for await (const chunk of llm.stream({ provider: 'text-provider', model: 'brain-1', system: undefined, messages: [imageMessage] })) {
     rawAssembler.push(chunk)
   }
   const rawDelegate = delegateCalls[delegateCalls.length - 1]
-  check('raw route fails loudly on image at adapter boundary (negative witness, rc.8)', rawAssembler.finish.kind === 'error' && !!rawDelegate && rawDelegate.messages[0].content.some((block) => block.type === 'image'))
+  check('raw route completes via boundary projection, no raw image reaches adapter (negative witness, rc.2)', rawAssembler.finish.kind === 'stop' && !!rawDelegate && rawDelegate.messages[0].content.every((block) => block.type !== 'image') && rawDelegate.messages[0].content.some((block) => block.type === 'text' && block.text === textOnlyImageText(imageMessage.content[1].attachment)))
   // 5) 文本轮原样委托（改写零开销、模型身份不变）。
   const textMessage = createUserMessage({ content: [{ type: 'text', text: '普通文本轮' }], source: { kind: 'user' } })
   const textAssembler = new BlockAssembler()
