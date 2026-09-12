@@ -44,7 +44,11 @@ const SPAWN_TIMEOUT_MS = 30000
  * CI 覆盖边界同此声明（.github/workflows/ci.yml「必须 Windows 本地跑」节：
  * 「目录 link 语义（win32 走 junction，POSIX 走 symlink）」）。
  * 判据取**平台**（非宿主）：win32 上 powershell/pwsh 两臂都执行 install.ps1；
- * 非 win32 上同一断言面由 install.sh 臂承担（见各段 sh 臂）——覆盖对称，无静默丢弃。
+ * 非 win32 上 POSIX 对偶覆盖按臂分列（仅陈述实际成立范围）：§6（`-File` 离线安装）/ §6c
+ * （裸源码依赖链接）在 sh 可用时由 install.sh 臂承担（见各段 sh 臂；sh 缺失时另有
+ * `POSIX online checks` skip 行可辨）；§6d（自带真实 `node_modules` 不得改动）**无 POSIX
+ * 对照臂**——install.sh:94-101 / :113-131 同载该数据保护语义却零判别测试（已知覆盖缺口，
+ * 台账候选）。非适用平台分支均先打印可见 skip 再空循环，不静默丢弃。
  */
 const PS1_OFFLINE_APPLICABLE = process.platform === 'win32'
 
