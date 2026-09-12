@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-09-12T09:13:56",
+  "generated_at": "2026-09-12T09:33:03",
   "packets": {
     "ARCH-004": {
       "task_id": "ARCH-004",
@@ -129,14 +129,14 @@
       ],
       "source": "plan-tracker.md##当前活跃事项"
     },
-    "EVO-018": {
-      "task_id": "EVO-018",
+    "EVO-019": {
+      "task_id": "EVO-019",
       "priority": "P1",
-      "status": "**已 triage（TRIAGE-EVO-018 机录：unblocked/无新环/side_effect 净）**——派发 Developer",
-      "goal": "EVO-018 ARCH-004 实施链 **B0 止损修正批（声明面）**：删 package.json:23 死行 @deepseek-ai/dsh-client-runtime（宿主 0.1.5 已无此包——inject 缺失=宿主静默跳过，纯死重）+ peerDeps/deps 版本范围改「实测基线」记录（0.1.5-rc.2，README 兼容矩阵同步；8 项口径）+ tests/host-version-snapshot.mjs 初版（锁基线 + 红/绿判别：假版本号→红）",
+      "status": "**开发完成待审**——TRIAGE-EVO-018 机录；commit `3344f0d`（3 文件 +162/−12：死行删除 + peerDeps 8 项/deps 3 项 ^0.1.5-rc.2 实测基线 + README 兼容小节 + tests/host-version-snapshot.mjs 145 行 24 断言）；TDD 自然红 20 FAILURE→绿 + 判别红 12 FAILURE（9.9.9-FAKE）→复原 24/24；全量网 21/21→**22/22 零回退**；hooks 全过；上报 3 项额外发现（门控命令 glob 展开留 B6 / pnpm-lock 陈旧候选 / 真机复验后置）；**R0 Code Reviewer APPROVED_WITH_NOTES/unresolved_blockers=0 机录（REVIEW-EVO-018-R0）**——5 维+AI 专项全过、声称核验 4 核实+1 静态吻合、Coordinator 门控独立复跑 22/22 实测；**P1-1 裁决（禁止沉默搁置已落实）**：pnpm-lock 脱同步 → 绑定 EVO-019 批刷新+全量网复跑；P2-1 真机验收 → 显式延后用户复验批次；**终态（审查通过）——复验项台账：重装后设置页可打开（B0 声明面排除）**",
+      "goal": "EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
       "product_success_contract": {
-        "user": "TO_BE_DEFINED: impacted persona for EVO-018 ARCH-004 实施链 **B0 止损修正批（声明面）**：删 package.json:23 死行 @deepseek-ai/dsh-client-runtime（宿主 0.1.5 已无此包——inject 缺失=宿主静默跳过，纯死重）+ peerDeps/deps 版本范围改「实测基线」记录（0.1.5-rc.2，README 兼容矩阵同步；8 项口径）+ tests/host-version-snapshot.mjs 初版（锁基线 + 红/绿判别：假版本号→红）",
-        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for EVO-018 ARCH-004 实施链 **B0 止损修正批（声明面）**：删 package.json:23 死行 @deepseek-ai/dsh-client-runtime（宿主 0.1.5 已无此包——inject 缺失=宿主静默跳过，纯死重）+ peerDeps/deps 版本范围改「实测基线」记录（0.1.5-rc.2，README 兼容矩阵同步；8 项口径）+ tests/host-version-snapshot.mjs 初版（锁基线 + 红/绿判别：假版本号→红）",
+        "user": "TO_BE_DEFINED: impacted persona for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
         "non_goals": [
           "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
           "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
@@ -152,7 +152,7 @@
         ]
       },
       "acceptance_contract": {
-        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for EVO-018 ARCH-004 实施链 **B0 止损修正批（声明面）**：删 package.json:23 死行 @deepseek-ai/dsh-client-runtime（宿主 0.1.5 已无此包——inject 缺失=宿主静默跳过，纯死重）+ peerDeps/deps 版本范围改「实测基线」记录（0.1.5-rc.2，README 兼容矩阵同步；8 项口径）+ tests/host-version-snapshot.mjs 初版（锁基线 + 红/绿判别：假版本号→红）",
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
         "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
         "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
         "last_run": {
@@ -165,42 +165,42 @@
       "quality_budget": {
         "dimensions": {
           "performance": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for EVO-018 ARCH-004 实施链 **B0 止损修正批（声明面）**：删 package.json:23 死行 @deepseek-ai/dsh-client-runtime（宿主 0.1.5 已无此包——inject 缺失=宿主静默跳过，纯死重）+ peerDeps/deps 版本范围改「实测基线」记录（0.1.5-rc.2，README 兼容矩阵同步；8 项口径）+ tests/host-version-snapshot.mjs 初版（锁基线 + 红/绿判别：假版本号→红）",
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
             "exception": ""
           },
           "reliability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for EVO-018 ARCH-004 实施链 **B0 止损修正批（声明面）**：删 package.json:23 死行 @deepseek-ai/dsh-client-runtime（宿主 0.1.5 已无此包——inject 缺失=宿主静默跳过，纯死重）+ peerDeps/deps 版本范围改「实测基线」记录（0.1.5-rc.2，README 兼容矩阵同步；8 项口径）+ tests/host-version-snapshot.mjs 初版（锁基线 + 红/绿判别：假版本号→红）",
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
             "exception": ""
           },
           "security": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for EVO-018 ARCH-004 实施链 **B0 止损修正批（声明面）**：删 package.json:23 死行 @deepseek-ai/dsh-client-runtime（宿主 0.1.5 已无此包——inject 缺失=宿主静默跳过，纯死重）+ peerDeps/deps 版本范围改「实测基线」记录（0.1.5-rc.2，README 兼容矩阵同步；8 项口径）+ tests/host-version-snapshot.mjs 初版（锁基线 + 红/绿判别：假版本号→红）",
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
             "exception": ""
           },
           "accessibility": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for EVO-018 ARCH-004 实施链 **B0 止损修正批（声明面）**：删 package.json:23 死行 @deepseek-ai/dsh-client-runtime（宿主 0.1.5 已无此包——inject 缺失=宿主静默跳过，纯死重）+ peerDeps/deps 版本范围改「实测基线」记录（0.1.5-rc.2，README 兼容矩阵同步；8 项口径）+ tests/host-version-snapshot.mjs 初版（锁基线 + 红/绿判别：假版本号→红）",
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
             "exception": ""
           },
           "ux": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for EVO-018 ARCH-004 实施链 **B0 止损修正批（声明面）**：删 package.json:23 死行 @deepseek-ai/dsh-client-runtime（宿主 0.1.5 已无此包——inject 缺失=宿主静默跳过，纯死重）+ peerDeps/deps 版本范围改「实测基线」记录（0.1.5-rc.2，README 兼容矩阵同步；8 项口径）+ tests/host-version-snapshot.mjs 初版（锁基线 + 红/绿判别：假版本号→红）",
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
             "exception": ""
           },
           "maintainability": {
-            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for EVO-018 ARCH-004 实施链 **B0 止损修正批（声明面）**：删 package.json:23 死行 @deepseek-ai/dsh-client-runtime（宿主 0.1.5 已无此包——inject 缺失=宿主静默跳过，纯死重）+ peerDeps/deps 版本范围改「实测基线」记录（0.1.5-rc.2，README 兼容矩阵同步；8 项口径）+ tests/host-version-snapshot.mjs 初版（锁基线 + 红/绿判别：假版本号→红）",
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
             "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
             "status": "TO_BE_DEFINED",
             "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
@@ -209,9 +209,9 @@
         }
       },
       "vertical_slice": {
-        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for EVO-018 ARCH-004 实施链 **B0 止损修正批（声明面）**：删 package.json:23 死行 @deepseek-ai/dsh-client-runtime（宿主 0.1.5 已无此包——inject 缺失=宿主静默跳过，纯死重）+ peerDeps/deps 版本范围改「实测基线」记录（0.1.5-rc.2，README 兼容矩阵同步；8 项口径）+ tests/host-version-snapshot.mjs 初版（锁基线 + 红/绿判别：假版本号→红）",
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for EVO-019 ARCH-004 实施链 **B1 host-abi 骨架+诊断环形批（纯增量）+ P1-1 绑定**：七域文件骨架（health/version 先行 + noteHostDiag 通用环形）+ `router/hostFaceDiagnostics` RPC descriptor + 设置页健康面板与徽章（读一次性快照）+ package.json files 白名单收录 + **pnpm-lock.yaml 刷新（EVO-018 P1-1 裁决）+ 全量网复跑**",
         "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
-        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**已 triage（TRIAGE-EVO-018 机录：unblocked/无新环/side_effect 净）**——派发 Developer)",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**已 triage（TRIAGE-EVO-019 机录：unblocked/无新环）**——派发 Developer；验收 = 环形有界判别（>64）+ render 期零 probe 判别 + 全量网绿 + 锁文件同步；真机徽章截图 = 用户复验项)",
         "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
         "status": "TO_BE_DEFINED",
         "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
@@ -237,7 +237,7 @@
         "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
       },
       "allowed_change_scope": [
-        "Only change files required by this task row: **已 triage（TRIAGE-EVO-018 机录：unblocked/无新环/side_effect 净）**——派发 Developer",
+        "Only change files required by this task row: **已 triage（TRIAGE-EVO-019 机录：unblocked/无新环）**——派发 Developer；验收 = 环形有界判别（>64）+ render 期零 probe 判别 + 全量网绿 + 锁文件同步；真机徽章截图 = 用户复验项",
         "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
       ],
       "required_evidence": [
@@ -250,7 +250,7 @@
         "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
       ],
       "done_definition": [
-        "**已 triage（TRIAGE-EVO-018 机录：unblocked/无新环/side_effect 净）**——派发 Developer",
+        "**已 triage（TRIAGE-EVO-019 机录：unblocked/无新环）**——派发 Developer；验收 = 环形有界判别（>64）+ render 期零 probe 判别 + 全量网绿 + 锁文件同步；真机徽章截图 = 用户复验项",
         "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
         "Commit and push are completed for this single task."
       ],
