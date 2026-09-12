@@ -26,8 +26,10 @@
  * 如何刷新基线（宿主升级后）：
  * 1. 实读新宿主 checkout：node_modules/@deepseek-ai/<pkg>/package.json 的 version
  *    字段（dsh CLI 包与 cordis / schemastery 单独核对）；
- * 2. 同步更新三处：本文件 HOST_BASELINE 常量、package.json 对应版本范围与
- *    inject 清单（若有包消亡/新增）、README「宿主兼容性（实测基线）」小节；
+ * 2. 同步更新四处：本文件 HOST_BASELINE 常量、package.json 对应版本范围与
+ *    inject 清单（若有包消亡/新增）、README「宿主兼容性（实测基线）」小节、
+ *    tests/host-contract.mjs 的 HOST_VERSION_BASELINE 副本（S7/S3 靶子版本
+ *    一致性判据用——两处常量由该文件「基线副本」断言机器锁定，漏改即红）；
  * 3. 跑 node tests/host-version-snapshot.mjs 确认绿，再跑全量门禁
  *    node tests/*.mjs 确认零回退。
  * 本测试不假设宿主 checkout 路径存在于测试环境——基线以常量形态记录于此。

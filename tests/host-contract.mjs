@@ -146,14 +146,22 @@ const MESSAGE_EXPORTS_BASELINE = ['CONTEXT_SUMMARY_MAX_CHARS', 'boundContextSumm
 const BLOCK_ASSEMBLER_PROTO_BASELINE = ['push', 'ensure', 'assemble', 'mustGet', 'assembled', 'blocks', 'interruptedBlocks', 'usage', 'finish', 'replayState', 'message']
 
 /**
- * 宿主关键包版本基线（FIX-037 ③ / FIX-036 R0 P2-2）——与
- * `tests/host-version-snapshot.mjs:44-49` 的 HOST_BASELINE **同源同值**（宿主升级后
- * 按该文件头注释一并刷新）。用途：靶子解析只保证「确定性」不保证「指向运行宿主」，
- * 版本一致是靶子可信的最低证据——不等即显式告警 + note（可见 skip）。
+ * 宿主关键包版本基线（FIX-037 ③ / FIX-036 R0 P2-2）——权威 = `tests/host-version-snapshot.mjs`
+ * 的 `HOST_BASELINE`（宿主升级后按该文件头注释一并刷新；**刷新点共四处**，第四处即本副本）。
+ * 本副本存在的原因：该文件为独立入口（顶层执行 + `process.exit`）无法被 import 复用——
+ * 「同源同值」由下方机器一致性断言锁定（任一处刷新漏改即红，FIX-037 R0 P2-1），非人工纪律。
+ * 用途：靶子解析只保证「确定性」不保证「指向运行宿主」，版本一致是靶子可信的最低证据——
+ * 不等即显式告警 + note（可见 skip）。
  */
 const HOST_VERSION_BASELINE = Object.freeze({ dsh: '0.1.5-rc.1', dshPackages: '0.1.5-rc.2' })
-/** 版本一致性判据的关键包（dsh CLI + S3/S7 直读的四个 dsh-* 宿主面包）。 */
-const HOST_KEY_PACKAGES = ['dsh', 'dsh-api-remotes', 'dsh-api-session-controller', 'dsh-client-ui-model-selection', 'dsh-llm']
+/**
+ * 版本一致性判据的关键包 = `dsh` CLI + **S7 直读四包**（`dsh-api-remotes` /
+ * `dsh-api-session-controller` / `dsh-client-ui-model-selection` / `dsh-llm`）+ **S3 判据两包**
+ * （`dsh-client-ui-settings` / `dsh-client-locale`；`dsh-api-remotes` 为 S3/S7 共用）——
+ * R0 P2-2 点名场景「早于 `dsh-client-ui-settings` 的旧缓存副本使 S3 半边报红而版本判据
+ * 仍打绿」由此同源可判（FIX-037 R0 P2-2 收口）。
+ */
+const HOST_KEY_PACKAGES = ['dsh', 'dsh-api-remotes', 'dsh-api-session-controller', 'dsh-client-ui-model-selection', 'dsh-llm', 'dsh-client-ui-settings', 'dsh-client-locale']
 
 /** remote.* 面方法形状基线（宿主 dsh-api-remotes TYPERT_REMOTE 描述符实读；域内 CLIENT_REMOTE_FACES 为代码侧权威）。 */
 const CLIENT_REMOTE_FACES_BASELINE = {
@@ -364,6 +372,22 @@ if (hostTarget.root) {
   }
 } else {
   console.log('      · 不可达（DSH_HOST_SOURCE 未设且本地无 _npx 缓存）→ S3 宿主侧半边与 S7 组均记 skip（BR-03：静态守卫不依赖宿主）')
+}
+
+// ── 基线副本机器一致性守卫（FIX-037 R0 P2-1）─────────────────────────────────
+// 双份常量的来由：host-version-snapshot.mjs 是独立入口（顶层执行 + process.exit），
+// 不可 import 复用「唯一权威」→ 本文件持副本。故「同源同值」MUST 有机器判据，否则
+// 宿主升级刷新漏改本副本 → 版本判据永久误报失配（噪声化告警稀释 ③ 的信号价值）。
+// 判据：从权威文件剥注释文本中按块提取 HOST_BASELINE，逐键与本副本比对；提取失败
+// （块缺失/键改名）同样判红（fail-closed——不因提取为空而静默通过）。
+{
+  const snapshotBaseline = blockOf(stripComments(readTest('host-version-snapshot.mjs')), 'const HOST_BASELINE = Object.freeze(')
+  const snapshotValueOf = (key) => new RegExp(`\\b${key}:\\s*'([^']+)'`).exec(snapshotBaseline)?.[1] ?? null
+  const baselineDiffs = Object.keys(HOST_VERSION_BASELINE)
+    .filter((key) => snapshotValueOf(key) !== HOST_VERSION_BASELINE[key])
+    .map((key) => `${key}: host-contract=${HOST_VERSION_BASELINE[key]} vs host-version-snapshot=${snapshotValueOf(key) ?? 'absent'}`)
+  check('基线副本: HOST_VERSION_BASELINE === host-version-snapshot.mjs HOST_BASELINE（双份常量机器锁定——刷新漏改任一即红；刷新点共四处）',
+    baselineDiffs.length === 0, baselineDiffs)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
