@@ -75,7 +75,7 @@ console.log('syntax:')
     // 守卫不得硬依赖 powershell.exe——Linux/macOS 只提供 PowerShell 7（pwsh），
     // CI（ubuntu-latest）即此类环境；硬编码 spawn 会 ENOENT → status null →
     // 断言假红。先探测可用宿主（`powerShellHosts` 探针先例：tests/install-entry.mjs——
-    // 符号名式锚；原写死 install-entry.mjs:74-77 已随该文件本批行数变动漂移），逐个执行；
+    // 符号名式锚；原写死该文件的行号区间锚已随其行数变动漂移），逐个执行；
     // 两者皆无 → 打印可见 skip——该断言在无 PS 解析器环境不可判定，静默「通过」
     // 会用假绿掩盖 install.ps1 语法回归（P4：看护不得静默降级）。
     const psHosts = ['powershell', 'pwsh'].filter((exe) => {
