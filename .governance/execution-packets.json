@@ -1,11 +1,138 @@
 {
   "version": 1,
-  "generated_at": "2026-09-10T07:48:52",
+  "generated_at": "2026-09-12T08:37:52",
   "packets": {
+    "ARCH-004": {
+      "task_id": "ARCH-004",
+      "priority": "P0",
+      "status": "**已启动**——2026-09-12 Coordinator 入账（.governance 快速通道：纯分析零产品代码修改，无 change-triage 义务）；过期锁清理（FIX-032/REL-012 TTL 均已过）；并行派发 Analyst（arch-004-dependency-inventory.md）+ Architect（arch-004-compatibility-design.md）；**用户预授权（2026-09-12）：分析完成后按推荐自动推进至兼容性架构演进闭环（发布/范围变更等关键决策点仍走 ask）**",
+      "goal": "ARCH-004 DSH 宿主升级兼容性设计系统性分析（用户指令 2026-09-12 四维：D1 依赖最小化 / D2 必需接口字段依赖解耦+单独维护 / D3 依赖严格校验与看护 / D4 依赖边界可调测性——早发现+低代价适配）；症状驱动 = ①部分 plugin 设置页崩溃 ②DSH 整体异常卡顿（插件已卸载止损——真机取证不可行，归因走代码级对照：插件宿主面期望 vs 升级后宿主源码）；执行 = Analyst 依赖全量清单+两症状归因域（change-impact-checklist）∥ Architect 四维兼容性架构设计（stage-architecture，ADR 候选+蓝军 ≥3）→ Design Reviewer + Requirement Reviewer 双审 → 用户实施裁决",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for ARCH-004 DSH 宿主升级兼容性设计系统性分析（用户指令 2026-09-12 四维：D1 依赖最小化 / D2 必需接口字段依赖解耦+单独维护 / D3 依赖严格校验与看护 / D4 依赖边界可调测性——早发现+低代价适配）；症状驱动 = ①部分 plugin 设置页崩溃 ②DSH 整体异常卡顿（插件已卸载止损——真机取证不可行，归因走代码级对照：插件宿主面期望 vs 升级后宿主源码）；执行 = Analyst 依赖全量清单+两症状归因域（change-impact-checklist）∥ Architect 四维兼容性架构设计（stage-architecture，ADR 候选+蓝军 ≥3）→ Design Reviewer + Requirement Reviewer 双审 → 用户实施裁决",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for ARCH-004 DSH 宿主升级兼容性设计系统性分析（用户指令 2026-09-12 四维：D1 依赖最小化 / D2 必需接口字段依赖解耦+单独维护 / D3 依赖严格校验与看护 / D4 依赖边界可调测性——早发现+低代价适配）；症状驱动 = ①部分 plugin 设置页崩溃 ②DSH 整体异常卡顿（插件已卸载止损——真机取证不可行，归因走代码级对照：插件宿主面期望 vs 升级后宿主源码）；执行 = Analyst 依赖全量清单+两症状归因域（change-impact-checklist）∥ Architect 四维兼容性架构设计（stage-architecture，ADR 候选+蓝军 ≥3）→ Design Reviewer + Requirement Reviewer 双审 → 用户实施裁决",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for ARCH-004 DSH 宿主升级兼容性设计系统性分析（用户指令 2026-09-12 四维：D1 依赖最小化 / D2 必需接口字段依赖解耦+单独维护 / D3 依赖严格校验与看护 / D4 依赖边界可调测性——早发现+低代价适配）；症状驱动 = ①部分 plugin 设置页崩溃 ②DSH 整体异常卡顿（插件已卸载止损——真机取证不可行，归因走代码级对照：插件宿主面期望 vs 升级后宿主源码）；执行 = Analyst 依赖全量清单+两症状归因域（change-impact-checklist）∥ Architect 四维兼容性架构设计（stage-architecture，ADR 候选+蓝军 ≥3）→ Design Reviewer + Requirement Reviewer 双审 → 用户实施裁决",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for ARCH-004 DSH 宿主升级兼容性设计系统性分析（用户指令 2026-09-12 四维：D1 依赖最小化 / D2 必需接口字段依赖解耦+单独维护 / D3 依赖严格校验与看护 / D4 依赖边界可调测性——早发现+低代价适配）；症状驱动 = ①部分 plugin 设置页崩溃 ②DSH 整体异常卡顿（插件已卸载止损——真机取证不可行，归因走代码级对照：插件宿主面期望 vs 升级后宿主源码）；执行 = Analyst 依赖全量清单+两症状归因域（change-impact-checklist）∥ Architect 四维兼容性架构设计（stage-architecture，ADR 候选+蓝军 ≥3）→ Design Reviewer + Requirement Reviewer 双审 → 用户实施裁决",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for ARCH-004 DSH 宿主升级兼容性设计系统性分析（用户指令 2026-09-12 四维：D1 依赖最小化 / D2 必需接口字段依赖解耦+单独维护 / D3 依赖严格校验与看护 / D4 依赖边界可调测性——早发现+低代价适配）；症状驱动 = ①部分 plugin 设置页崩溃 ②DSH 整体异常卡顿（插件已卸载止损——真机取证不可行，归因走代码级对照：插件宿主面期望 vs 升级后宿主源码）；执行 = Analyst 依赖全量清单+两症状归因域（change-impact-checklist）∥ Architect 四维兼容性架构设计（stage-architecture，ADR 候选+蓝军 ≥3）→ Design Reviewer + Requirement Reviewer 双审 → 用户实施裁决",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for ARCH-004 DSH 宿主升级兼容性设计系统性分析（用户指令 2026-09-12 四维：D1 依赖最小化 / D2 必需接口字段依赖解耦+单独维护 / D3 依赖严格校验与看护 / D4 依赖边界可调测性——早发现+低代价适配）；症状驱动 = ①部分 plugin 设置页崩溃 ②DSH 整体异常卡顿（插件已卸载止损——真机取证不可行，归因走代码级对照：插件宿主面期望 vs 升级后宿主源码）；执行 = Analyst 依赖全量清单+两症状归因域（change-impact-checklist）∥ Architect 四维兼容性架构设计（stage-architecture，ADR 候选+蓝军 ≥3）→ Design Reviewer + Requirement Reviewer 双审 → 用户实施裁决",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for ARCH-004 DSH 宿主升级兼容性设计系统性分析（用户指令 2026-09-12 四维：D1 依赖最小化 / D2 必需接口字段依赖解耦+单独维护 / D3 依赖严格校验与看护 / D4 依赖边界可调测性——早发现+低代价适配）；症状驱动 = ①部分 plugin 设置页崩溃 ②DSH 整体异常卡顿（插件已卸载止损——真机取证不可行，归因走代码级对照：插件宿主面期望 vs 升级后宿主源码）；执行 = Analyst 依赖全量清单+两症状归因域（change-impact-checklist）∥ Architect 四维兼容性架构设计（stage-architecture，ADR 候选+蓝军 ≥3）→ Design Reviewer + Requirement Reviewer 双审 → 用户实施裁决",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for ARCH-004 DSH 宿主升级兼容性设计系统性分析（用户指令 2026-09-12 四维：D1 依赖最小化 / D2 必需接口字段依赖解耦+单独维护 / D3 依赖严格校验与看护 / D4 依赖边界可调测性——早发现+低代价适配）；症状驱动 = ①部分 plugin 设置页崩溃 ②DSH 整体异常卡顿（插件已卸载止损——真机取证不可行，归因走代码级对照：插件宿主面期望 vs 升级后宿主源码）；执行 = Analyst 依赖全量清单+两症状归因域（change-impact-checklist）∥ Architect 四维兼容性架构设计（stage-architecture，ADR 候选+蓝军 ≥3）→ Design Reviewer + Requirement Reviewer 双审 → 用户实施裁决",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for ARCH-004 DSH 宿主升级兼容性设计系统性分析（用户指令 2026-09-12 四维：D1 依赖最小化 / D2 必需接口字段依赖解耦+单独维护 / D3 依赖严格校验与看护 / D4 依赖边界可调测性——早发现+低代价适配）；症状驱动 = ①部分 plugin 设置页崩溃 ②DSH 整体异常卡顿（插件已卸载止损——真机取证不可行，归因走代码级对照：插件宿主面期望 vs 升级后宿主源码）；执行 = Analyst 依赖全量清单+两症状归因域（change-impact-checklist）∥ Architect 四维兼容性架构设计（stage-architecture，ADR 候选+蓝军 ≥3）→ Design Reviewer + Requirement Reviewer 双审 → 用户实施裁决",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for ARCH-004 DSH 宿主升级兼容性设计系统性分析（用户指令 2026-09-12 四维：D1 依赖最小化 / D2 必需接口字段依赖解耦+单独维护 / D3 依赖严格校验与看护 / D4 依赖边界可调测性——早发现+低代价适配）；症状驱动 = ①部分 plugin 设置页崩溃 ②DSH 整体异常卡顿（插件已卸载止损——真机取证不可行，归因走代码级对照：插件宿主面期望 vs 升级后宿主源码）；执行 = Analyst 依赖全量清单+两症状归因域（change-impact-checklist）∥ Architect 四维兼容性架构设计（stage-architecture，ADR 候选+蓝军 ≥3）→ Design Reviewer + Requirement Reviewer 双审 → 用户实施裁决",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (**已启动**——2026-09-12 Coordinator 入账（.governance 快速通道：纯分析零产品代码修改，无 change-triage 义务）；过期锁清理（FIX-032/REL-012 TTL 均已过）；并行派发 Analyst（arch-004-dependency-inventory.md）+ Architect（arch-004-compatibility-design.md）；**用户预授权（2026-09-12）：分析完成后按推荐自动推进至兼容性架构演进闭环（发布/范围变更等关键决策点仍走 ask）**)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: **已启动**——2026-09-12 Coordinator 入账（.governance 快速通道：纯分析零产品代码修改，无 change-triage 义务）；过期锁清理（FIX-032/REL-012 TTL 均已过）；并行派发 Analyst（arch-004-dependency-inventory.md）+ Architect（arch-004-compatibility-design.md）；**用户预授权（2026-09-12）：分析完成后按推荐自动推进至兼容性架构演进闭环（发布/范围变更等关键决策点仍走 ask）**",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "**已启动**——2026-09-12 Coordinator 入账（.governance 快速通道：纯分析零产品代码修改，无 change-triage 义务）；过期锁清理（FIX-032/REL-012 TTL 均已过）；并行派发 Analyst（arch-004-dependency-inventory.md）+ Architect（arch-004-compatibility-design.md）；**用户预授权（2026-09-12）：分析完成后按推荐自动推进至兼容性架构演进闭环（发布/范围变更等关键决策点仍走 ask）**",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
     "FIX-032": {
       "task_id": "FIX-032",
       "priority": "P1",
-      "status": "**已受理（TRIAGE-FIX-032 机录）**——待派发 Developer RCA：机器复现取证（P10 ②禁止转嫁用户）+ 5-Why + 修复方向裁决（继承动态解析 = 会话当前主模型 vs 固化预设配置值）+ 判别测试 RED/GREEN",
+      "status": "**开发+审查终态（待用户真机复验）**——R0 Code Reviewer **APPROVED_WITH_NOTES/unresolved_blockers=0** 机录（REVIEW-FIX-032-R0；五维度+AI 专项五查+三方设计一致性全过；RED 判别力静态推演独立成立；声称 1-5 核验 4 属实 + 1 部分独立验证；P5 删净确认；台账 P3×3：F-1 留空路径 skip 诊断建议 / F-2 既有注释行号微偏（非本 diff）/ F-3 宿主实际路径 = npx 检出）；修复 640e2e4 + 门控 21/21 + EV-170；**用户复验 = 重启 DSH → 报障场景重现：预设（主模型已配 + subagent 留空）会话内手动切换主模型 → 派生 subagent → 确认跟随切换后模型（统计/遥测侧）；对照 subagent 显式配置仍走显式值**",
       "goal": "FIX-032 预设 subagent 未配置模型时未跟随主 agent 当前模型——继承固化预设配置值（用户报障 2026-09-07 直达）：预设已配主 Agent 模型 + subagent 留空（README L158/L165「留空 = 继承主 Agent 模型」、L16「会话内手动选择永远优先（用户主权）」承诺），会话内用户手动切换主模型后，派生 subagent 仍走预设配置的模型，不跟随主 agent 当前模型",
       "product_success_contract": {
         "user": "TO_BE_DEFINED: impacted persona for FIX-032 预设 subagent 未配置模型时未跟随主 agent 当前模型——继承固化预设配置值（用户报障 2026-09-07 直达）：预设已配主 Agent 模型 + subagent 留空（README L158/L165「留空 = 继承主 Agent 模型」、L16「会话内手动选择永远优先（用户主权）」承诺），会话内用户手动切换主模型后，派生 subagent 仍走预设配置的模型，不跟随主 agent 当前模型",
