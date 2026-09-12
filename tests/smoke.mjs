@@ -52,10 +52,28 @@ console.log('syntax:')
   }
   const installPs1 = join(ROOT_DIR, 'install.ps1')
   if (existsSync(installPs1)) {
+    // 平台容错（FIX-036 P1-1）：install.ps1 面向 Windows PowerShell 5.1，但解析器
+    // 守卫不得硬依赖 powershell.exe——Linux/macOS 只提供 PowerShell 7（pwsh），
+    // CI（ubuntu-latest）即此类环境；硬编码 spawn 会 ENOENT → status null →
+    // 断言假红。先探测可用宿主（install-entry.mjs:74-77 先例），逐个执行；
+    // 两者皆无 → 打印可见 skip——该断言在无 PS 解析器环境不可判定，静默「通过」
+    // 会用假绿掩盖 install.ps1 语法回归（P4：看护不得静默降级）。
+    const psHosts = ['powershell', 'pwsh'].filter((exe) => {
+      // spawnSync 成功时 `error` 为 undefined（ENOENT/超时才置 Error）——故探针
+      // 判据是 `error === undefined && status === 0`（install-entry 的 runCommand
+      // 是自定义封装才把 error 归一为 null，形态不可照搬）。
+      const probe = spawnSync(exe, ['-NoProfile', '-NonInteractive', '-Command', 'exit 0'], { stdio: 'ignore' })
+      return probe.error === undefined && probe.status === 0
+    })
+    if (psHosts.length === 0) {
+      console.log('  skip install.ps1 parses (no powershell/pwsh available — 该断言需 PS 解析器；Ubuntu CI 缺 pwsh 时同此)')
+    }
     // 路径直接内嵌 PS 单引号字符串（-Command 的尾随参数不进入 $args）。
     const parseScript = `$e=$null; $t=$null; [System.Management.Automation.Language.Parser]::ParseFile('${installPs1}', [ref]$t, [ref]$e) | Out-Null; exit $e.Count`
-    const result = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', parseScript], { stdio: 'ignore' })
-    check('install.ps1 parses', result.status === 0)
+    for (const host of psHosts) {
+      const result = spawnSync(host, ['-NoProfile', '-NonInteractive', '-Command', parseScript], { stdio: 'ignore' })
+      check(`install.ps1 parses (${host})`, result.status === 0)
+    }
   }
   // 文案键覆盖守卫：client.js 里每个 t('key') 引用必须同时存在于 zh 与 en
   // 文案表（缺键 = 渲染期崩溃），并检查两张表键集合一致。

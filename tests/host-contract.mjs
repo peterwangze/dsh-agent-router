@@ -5,8 +5,13 @@
  * 宿主面基线与源码锚点以「静态常量 + 注释锚行号」冻结（先例
  * tests/host-version-snapshot.mjs 的 HOST_BASELINE），因此本套件在用户侧 /
  * 异构 CI 环境（BR-03：插件装在别处、宿主 cache 路径漂移）同样可跑；宿主
- * checkout 可达时（环境变量 DSH_HOST_SOURCE / 本地 _npx 探测）追加 S7 增强
- * 靶子组：直读宿主源码逐字核验常量（缺失只记 skip，不失败）。
+ * checkout 可达时（环境变量 DSH_HOST_SOURCE / DSH_HOST_PACKAGES 优先，本地 _npx
+ * 缓存探测兜底）追加 S7 增强靶子组：直读宿主源码逐字核验常量（缺失只记 skip，
+ * 不失败）。靶子解析为**单一实现路径**且**确定性**（多 _npx 缓存共存时按目录名
+ * 降序取首命中——readdirSync 顺序非契约，非确定性选择会把 RISK-003 预警指向非
+ * 运行宿主副本，产生不可复现的假红/假绿），并在启动行打印实际读取路径（可诊断）。
+ * 同一靶子同时供 S3 宿主侧包表半边使用（设计 §5.1 L272「inject 声明 vs 宿主
+ * node_modules 实际包表」——插件自身 node_modules 不含 client inject 包）。
  *
  * 与 §6.1 诊断环形的边界（设计明文）：本文件是**静态守卫**——只读源码、声明面
  * 与契约形状常量，**不重复运行时探测**（面存在性 = D4 probe / failsafe 环形；
@@ -20,7 +25,10 @@
  *     签名断言，宿主漂移即红）
  *  S3 声明面比对：package.json `dsh.client.inject` + peerDeps 8 项 vs
  *     inject-manifest.js 代码侧常量；fiber inject 名单 vs 域面；cordis.patch.yml
- *     两宿主行 id 存在性（宿主对不存在条目仅 stderr 警告——静默面守卫）
+ *     两宿主行 id 存在性（宿主对不存在条目仅 stderr 警告——静默面守卫）；
+ *     **宿主侧包表半边**：inject 三 client 包 vs 宿主 `@deepseek-ai` 实际包表
+ *     （设计 §5.1 L272；插件侧 node_modules 不含这些包，故只能在宿主靶子上核验，
+ *     宿主不可达 → 与 S7 同语义 skip）
  *  S4 消费点黑名单：高危面名禁域模块外裸 ctx.get（白名单分级放行 = B4 §8a
  *     快照口径）；**域管事件名**（MANAGED_EVENTS）禁域外裸 ctx.on（scoped
  *     生命周期钩子 agent/pre-step、agent/created、agent/request 直订合法）
@@ -36,7 +44,10 @@
  *     往任意 lib/*.js 加裸 `ctx.on('settings/updated', …)` → S4 域管事件守卫红；
  *  3. 字段断言：从 S5 的 schema 白名单删一个被消费字段（如 listConfigurableProviders
  *     的 `declared`）→ 字段断言红（消费字段 ⊆ 白名单被击穿）；
- *  4. 声明面：改 package.json inject / peerDeps 或删 cordis.patch.yml 一行 id → S3 红。
+ *  4. 声明面：改 package.json inject / peerDeps 或删 cordis.patch.yml 一行 id → S3 红；
+ *  5. 宿主侧包表半边：DSH_HOST_SOURCE 指向缺少任一 inject client 包的宿主 root → S3
+ *     宿主侧断言红（宿主 checkout 可达时；
+ *     见 FIX-036 实证——临时 root = 宿主关键文件副本 + 缺一个 client 包 → 红）。
  *
  * 如何刷新本套件（宿主升级后，与 host-version-snapshot 刷新步骤同步执行）：
  *  1. 以宿主 checkout 实读核验本文件各 *_BASELINE / WIRE_SCHEMA / ANCHOR 常量
@@ -291,6 +302,35 @@ const clientSource = readLib('client.js')
 const clientStripped = stripComments(clientSource)
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 宿主靶子解析（S3 宿主侧包表半边 + S7 增强组**共用单一实现路径**；只读零写入）
+// 优先级：DSH_HOST_SOURCE > DSH_HOST_PACKAGES > 本地 _npx 缓存探测。
+// _npx 多缓存共存时按目录名**降序**取首个命中——readdirSync 顺序非契约
+// （P2-2：非确定性选择会把 RISK-003 预警指向非运行宿主副本 → 不可复现的假红/假绿）；
+// 解析结果与实际读取路径打印在启动行（可诊断性——先例：本文件原有 S7 skip note）。
+console.log('宿主靶子解析（S3 宿主侧包表半边 + S7 增强组共用；只读宿主源码，零写入）:')
+const hostTarget = (() => {
+  const candidates = []
+  if (process.env.DSH_HOST_SOURCE) candidates.push({ root: process.env.DSH_HOST_SOURCE, origin: 'DSH_HOST_SOURCE' })
+  if (process.env.DSH_HOST_PACKAGES) candidates.push({ root: process.env.DSH_HOST_PACKAGES, origin: 'DSH_HOST_PACKAGES' })
+  if (process.env.LOCALAPPDATA) {
+    try {
+      const npxRoot = join(process.env.LOCALAPPDATA, 'npm-cache', '_npx')
+      for (const entry of readdirSync(npxRoot).sort().reverse()) {
+        candidates.push({ root: join(npxRoot, entry, 'node_modules', '@deepseek-ai'), origin: `_npx/${entry}` })
+      }
+    } catch { /* 无 _npx 缓存 → 仅显式候选（不失败：静态守卫不依赖宿主，BR-03） */ }
+  }
+  const hit = candidates.find(({ root }) => existsSync(join(root, 'dsh-api-remotes', 'lib', 'client.js')))
+  return { root: hit?.root ?? null, origin: hit?.origin ?? null, candidates }
+})()
+if (hostTarget.root) {
+  const others = hostTarget.candidates.filter(({ root }) => root !== hostTarget.root).map(({ origin }) => origin)
+  console.log(`      · 靶子 = ${hostTarget.root}（来源 ${hostTarget.origin}；候选 ${hostTarget.candidates.length} 个${others.length > 0 ? `，降序取首命中，未选：${others.join(' / ')}` : ''}）`)
+} else {
+  console.log('      · 不可达（DSH_HOST_SOURCE 未设且本地无 _npx 缓存）→ S3 宿主侧半边与 S7 组均记 skip（BR-03：静态守卫不依赖宿主）')
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log('S1 契约快照四类面（宿主面形状漂移即红；宿主新增方法自动入集 = RISK-003 预警）:')
 
 // S1a llm 适配器契约（adapter-parity F2 动态枚举模式：宿主原型枚举 ∪ 静态补集）
@@ -418,6 +458,21 @@ console.log('S3 声明面比对（inject / peerDeps / fiber 面 / patch 条目�
     deepEqual(rows, PATCH_ROWS_BASELINE), rows)
   check('S3 声明面: patch insert 段结构完好（insert 块存在 + 行数 = 2）',
     /^-\s*insert:\s*$/m.test(patch) && rows.length === 2)
+
+  // S3 宿主侧半边（设计 §5.1 L272「inject 声明 vs 宿主 node_modules 实际包表」）：
+  // 三类 client inject 包由宿主供给——插件自身 node_modules 内不存在（实测），
+  // 故该半边的判据只能是宿主包表；宿主侧包名消亡/改名（D1-1 同类事件）在全绿
+  // 下静默的问题由本断言兜底。宿主不可达 → 与 S7 同语义 skip（BR-03 不失败）。
+  if (hostTarget.root) {
+    // hostRoot 即宿主 `@deepseek-ai` scope 目录本身（解析判据 = dsh-api-remotes/lib/client.js
+    // 在其下）——故拼包目录须剥 scope 前缀（scope=目录名，非子层）。
+    const missingClientPackages = CLIENT_PACKAGE_INJECT_BASELINE
+      .filter((name) => !existsSync(join(hostTarget.root, name.slice(name.indexOf('/') + 1))))
+    check('S3 声明面: inject 三 client 包在宿主 @deepseek-ai 包表实际在位（设计 §5.1 L272 宿主侧半边；消亡/改名即红——D1-1 同类事件）',
+      missingClientPackages.length === 0, missingClientPackages)
+  } else {
+    note('S3 声明面: 宿主 checkout 不可达 → inject 包表宿主侧半边跳过（设计 §5.1 L272；与 S7 增强组同语义，BR-03）')
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -539,22 +594,10 @@ console.log('S6 转发事件白名单静态比对（W-4）：客户端转发面 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量；不可达 → skip，BR-03 不依赖）:')
 {
-  const candidates = [
-    process.env.DSH_HOST_SOURCE,
-    process.env.DSH_HOST_PACKAGES,
-    ...(process.env.LOCALAPPDATA
-      ? (() => {
-          try {
-            const npxRoot = join(process.env.LOCALAPPDATA, 'npm-cache', '_npx')
-            return readdirSync(npxRoot).map((entry) => join(npxRoot, entry, 'node_modules', '@deepseek-ai'))
-          } catch { return [] }
-        })()
-      : []),
-  ].filter((root) => typeof root === 'string' && root.length > 0)
-  const hostRoot = candidates.find((root) => existsSync(join(root, 'dsh-api-remotes', 'lib', 'client.js')))
-  if (!hostRoot) {
-    note('S7 增强靶子: 宿主 checkout 不可达（DSH_HOST_SOURCE 未设且本地无 _npx 缓存）→ 跳过（静态守卫不依赖宿主；CI 第①步同理）')
+  if (!hostTarget.root) {
+    note('S7 增强靶子: 宿主 checkout 不可达（见上方「宿主靶子解析」行）→ 跳过（静态守卫不依赖宿主；CI 第①步同理）')
   } else {
+    const hostRoot = hostTarget.root
     const hostRead = (...parts) => readFileSync(join(hostRoot, ...parts), 'utf8')
     // 7a 转发事件白名单宿主声明源（单一声明源 parity）
     const eventsSource = hostRead('dsh-api-remotes', 'lib', 'types', 'remote-events.js')
