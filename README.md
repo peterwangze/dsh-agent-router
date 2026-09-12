@@ -138,7 +138,7 @@ cd package
 ### 宿主兼容性（实测基线）
 
 - **实测基线**：DSH 宿主 `dsh 0.1.5-rc.1` · 全系 `@deepseek-ai/dsh-* 0.1.5-rc.2` · `cordis 4.0.2` · `schemastery 3.18.2`（宿主环境各 package.json 实读，2026-09-12）。本插件的适配与测试以该基线为准。
-- `package.json` 的 `peerDependencies`（8 项）与 dsh 包 `dependencies` 版本范围（`^0.1.5-rc.2`）为**记录性声明**——只记录实测通过的宿主版本，不做安装期 enforcement 依赖（宿主 runner/cordis 不校验 peerDeps、安装器不告警）。兼容性判定的权威防护 = `tests/host-version-snapshot.mjs` 版本快照测试 + 本矩阵：声明面与基线不一致（版本范围漂移 / 注入清单引用已消亡包）时全量测试网即红。
+- `package.json` 的 `peerDependencies`（8 项）与 dsh 包 `dependencies` 版本范围（`^0.1.5-rc.2`）为**记录性声明**——只记录实测通过的宿主版本，不做安装期 enforcement 依赖（宿主 runner/cordis 不校验 peerDeps、安装器不告警）。兼容性判定的权威防护 = `tests/host-version-snapshot.mjs` 版本快照测试 + `tests/host-contract.mjs` 宿主面契约静态看护（声明面 / 契约形状 / 消费点，见「维护与开发」）+ 本矩阵：声明面与基线不一致（版本范围漂移 / 注入清单引用已消亡包）时全量测试网即红。
 - 宿主升级后请同步刷新基线：更新 package.json 版本范围、本矩阵数值与快照测试中的基线常量（测试文件头注释含刷新步骤）。
 
 ## 使用指南
@@ -210,6 +210,52 @@ cd package
   - **全局统计**：全局调用数 / 失败数 / 入出 tokens 汇总
 - **计数口径**：账号级调用数 = 请求口径（每次 LLM 请求恰记一条，覆盖全部路由形态）；token / 耗时 / 失败数 = 调用明细口径——插件自有流才有 token，直连 provider 端点无 token 上报时显示 0
 - CSV 导出三级（agent / account / preset），一键清空统计，每 2 秒自动刷新
+
+## 维护与开发
+
+### 门控命令（单入口，本地与 CI 同一命令）
+
+```bash
+node tests/run-all.mjs          # 全量测试网：枚举 tests/*.mjs 顺序执行并聚合退出码
+npm test                        # 等价（package.json scripts.test）
+node tests/host-contract.mjs    # 只跑宿主面契约静态看护（npm run test:contract）
+```
+
+- 任一套件失败 → 退出码非零（`run-all` 打印失败套件清单与输出尾部）；单套件超时 10 分钟（`RUN_ALL_TIMEOUT_MS` 可覆盖，挂死套件不得吞掉门控）。
+- 顺序执行（非并行）：部分套件占用固定端口 / 临时 `DSH_HOME` / 进程级单例，并行会互扰。
+- **产品代码变更 MUST 跑全量网并零回退**（P4）：改 `lib/**`、`package.json` 声明面、`cordis.patch.yml`、`tests/**` 后必须全绿再提交。
+
+### 静态看护体系（`tests/host-contract.mjs`）
+
+宿主面契约静态看护（ARCH-004 设计 §5.1 D3(a) 完整落地），五类守卫：
+
+- **契约快照四类面**：llm 适配器契约（动态枚举宿主基类原型 + twin / oauth-llm 适配器实现奇偶）、宿主协议对象导出面、`remote.*` 面方法形状、`ctx` 服务面、转发事件白名单——宿主新增/删除面即红（RISK-003 预警）；
+- **宿主源码形状锚点**：高风险非导出面以「形状签名 + 注释锚行号」冻结（P10-④：桩形态锚定宿主源码，禁按心智模型伪造宿主面）；
+- **声明面比对**：`dsh.client.inject` / `peerDependencies` 与 `lib/host-abi/inject-manifest.js` 代码侧常量交叉一致；`cordis.patch.yml` 两宿主行 id 存在性（宿主对不存在条目仅 stderr 警告——静默面守卫）；
+- **消费点黑名单**：高危面名禁止域模块外裸 `ctx.get`（低危面分级白名单放行）；域管事件名禁止域外裸 `ctx.on`（scoped 钩子 `agent/pre-step`、`agent/created`、`agent/request` 直订合法）；
+- **字段级 wire schema 白名单**：消费字段 ⊆ 宿主 schema 字段（锚宿主 `dsh-api-remotes` 源码声明），字段增删/改名不再静默；
+- **转发事件白名单**：客户端 `$on` 订阅事件名 ⊆ 宿主转发白名单（死订阅类缺陷的机器防线）。
+
+本套件**不依赖宿主 checkout 存在**（基线与锚点为静态常量，锚行号写在注释里）；宿主源码可达时（`DSH_HOST_SOURCE` 或本地 npx 缓存）自动追加增强靶子组直读源码核验，不可达只记 skip 不失败。宿主升级后按文件头注释刷新基线，并与 `tests/host-version-snapshot.mjs` 的版本基线同步执行。
+
+### CI 第①步（RISK-001 主轨道）
+
+`.github/workflows/ci.yml` 单 job：`checkout` → `setup-node`（LTS 锁定）→ `pnpm install --frozen-lockfile` → `node tests/run-all.mjs`。
+
+- **能覆盖**：全部可在 Node 内静态/桩驱动执行的套件（契约快照、声明面比对、消费点守卫、事件白名单、域行为判别）——即本地同一条门控命令。
+- **不能覆盖（已知边界，别把 CI 绿读成真机可用）**：宿主运行时装配与 fiber inject 面就绪时序、GUI 渲染与设置页交互、OAuth 真实端点登录流、CLI 子代理真机执行、Windows/macOS 平台差异，以及需要宿主 checkout 直读的增强核验（该组无宿主源码时自动 skip）。这些仍由真机手工验收 + 设置页诊断面板（`router/hostFaceDiagnostics`：宿主版本 + 面健康 + 诊断环形）兜底。
+- 宿主依赖在 CI 的解析：`lib/` 不直接 import 任何 `peerDependencies` 包（宿主面经 cordis 服务注入），直接依赖的 dsh 包与 cordis / schemastery 均在公开 registry 可解析（实测基线 `0.1.5-rc.2`），故冻结锁文件安装即可跑通全量网。首跑属 push 后动作。
+
+### 隔离 worktree 验证规矩（EV-178 事故教训）
+
+用 `git worktree` 做隔离验证时，**清理前必须先删 junction 再 `git worktree remove`**——`git worktree remove --force` 会穿越指向主仓库 `node_modules` 的 junction，删到 pnpm store 内容（EV-178 实证：cordis / dsh-llm / schemastery 等 5+ 包内容被误删，靠 `pnpm install --frozen-lockfile` + 全量网复验自愈）。规矩：
+
+```powershell
+# 1) 先删 worktree 内的 node_modules junction（只删链接，不动主仓库内容）
+(Get-Item <worktree>\node_modules -Force).Delete()
+# 2) 再移除 worktree
+git worktree remove <worktree>
+```
 
 ## 常见问题
 

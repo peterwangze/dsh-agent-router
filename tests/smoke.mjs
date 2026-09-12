@@ -2954,10 +2954,12 @@ console.log('admission wrapper (L1):')
 // settings/updated 4（index 统计持久化 + service 宿主路由维护 + wrapper 热同步
 // + oauth-llm 状态同步）/ llm/adapters-updated 2（wrapper + oauth-llm）/
 // agent/pre-step 1 / agent/created 1 / agent-preset/selected 1 / agent/request 1
-// = 10。本批已收敛：index/service 的 settings/updated（同目标共享单 listener，
-// 4→3）+ preset-defaults 的 agent-preset/selected（域管事件）；wrapper/oauth-llm
-// 四处 settings/updated/llm/adapters-updated 不在本批锁内（偏差项见任务结论——
-// 需 Coordinator 扩锁或后续批次），故 census 断言为「≤ 基线」而非「= 3」。
+// = 10。B5 批收敛：index/service 的 settings/updated（同目标共享单 listener，
+// 4→3）+ preset-defaults 的 agent-preset/selected（域管事件）。**EVO-024 B6
+// 归口收口**：wrapper/oauth-llm 剩余四处（settings/updated ×2 +
+// llm/adapters-updated ×2）全部经 events 域——四模块同根 ctx 共享**单**宿主
+// listener，实测 settings/updated 3→1、llm/adapters-updated 2→1、总量 9→6
+// （断言口径 = 收敛后实测精确值；BR-01②「只减不增」方向不回退）。
 {
   const b5IndexModule = await import('../lib/index.js')
   const root = new Context()
@@ -2987,8 +2989,8 @@ console.log('admission wrapper (L1):')
   root.logger = { warn: () => {}, info: () => {} }
   const app = await root.plugin({ name: 'b5-index', inject: b5IndexModule.inject, apply: b5IndexModule.apply })
   await new Promise((resolve) => setImmediate(resolve))
-  check('B5 census: settings/updated 订阅收敛 4→3（index 统计持久化 + service 宿主路由维护经 events 域共享单 listener）', census['settings/updated'] === 3, census)
-  check('B5 census: llm/adapters-updated 不增（2——wrapper/oauth-llm 剩余面不在本批锁内）', census['llm/adapters-updated'] === 2, census)
+  check('B6 census: settings/updated 收敛 3→1（index 统计持久化 + service 宿主路由维护 + wrapper 热同步 + oauth-llm 状态同步四消费者共享单宿主 listener）', census['settings/updated'] === 1, census)
+  check('B6 census: llm/adapters-updated 收敛 2→1（wrapper + oauth-llm 经 events 域共享单 listener——B6 归口收口）', census['llm/adapters-updated'] === 1, census)
   check('B5 census: agent-preset/selected 经 events 域（域管事件 Node 面单 listener）', census['agent-preset/selected'] === 1)
   check('B5 census: scoped 钩子保留直订（agent/pre-step 1 + agent/created 1 + agent/request 1——W-3 口径）', census['agent/pre-step'] === 1 && census['agent/created'] === 1 && census['agent/request'] === 1)
   check('B5 census: 全量订阅注册数 ≤ 迁移前基线 10（BR-01② 订阅总数只减不增）', Object.values(census).reduce((sum, count) => sum + count, 0) <= 10, census)

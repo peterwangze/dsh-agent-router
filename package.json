@@ -4,6 +4,10 @@
   "version": "0.4.6",
   "license": "MIT",
   "type": "module",
+  "scripts": {
+    "test": "node tests/run-all.mjs",
+    "test:contract": "node tests/host-contract.mjs"
+  },
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",

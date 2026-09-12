@@ -1,0 +1,61 @@
+# EVO-024（ARCH-004 设计 §5.3 D3(c) 第①步 / RISK-001 主轨道）：门控单入口 CI。
+#
+# 职责：把仓库门控命令 `node tests/run-all.mjs`（tests/*.mjs 全量网，顺序执行 +
+# 退出码聚合）挂到 GitHub Actions 单 job——契约快照/声明面/消费点守卫/白名单/
+# 域行为判别全部随每次 push 复跑（RISK-003 宿主漂移预警的仓库侧时点）。
+#
+# 边界（如实标注，避免「CI 绿 = 真机可用」的误读）：
+# - **本 workflow 能覆盖**：可在 Node 内静态或桩驱动执行的套件——宿主面契约
+#   快照与声明面比对（tests/host-contract.mjs）、宿主版本基线快照、消费点黑名单、
+#   转发事件白名单、域行为判别（host-abi-health / fix-029 / preset-defaults /
+#   oauth-* / client-render / smoke 等）；即本 job 跑的就是本地同一条门控命令。
+# - **本 workflow 不覆盖**（需真机，属人工验收 / 发布链）：宿主运行时装配
+#   （真实 DSH runner / fiber inject 面就绪时序）、GUI 渲染与设置页交互、
+#   OAuth 真实端点与登录流、CLI 子代理真机执行、Windows/macOS 平台差异，
+#   以及宿主 checkout 直读的 S7 增强核验（tests/host-contract.mjs 的 S7 组在
+#   无宿主源码时自动 skip 不失败）——这些由真机手工验收 +
+#   `router/hostFaceDiagnostics` 诊断面板（宿主版本 + 面健康 + 诊断环形）兜底。
+# - **宿主依赖解析（本步骤的已知边界）**：插件与宿主的宿主面交互全部经 cordis
+#   服务注入（ctx.get / ctx.remote.* / dsh.client.inject），lib/ 内**无任何**
+#   peerDependencies 包的直接 import（peerDeps 8 项仅为记录性声明，消费面为
+#   ctx 服务）；lib/ 直接 import 的宿主包 = dependencies（dsh-llm / dsh-tools /
+#   dsh-typert-protocol）+ cordis / schemastery，均在公开 registry 可解析
+#   （0.1.5-rc.2 实测基线）。故 `pnpm install --frozen-lockfile` 即可满足全部
+#   套件（lockfile 已含 autoInstallPeers 解析的 peer 记录）；若未来新增对宿主
+#   checkout 的硬依赖，须在本步骤显式锁版本安装宿主基线（0.1.5-rc.2）或标注
+#   为后续步骤——不得让门控静默降级。
+# - 首跑属 push 后动作（本批次只落结构 + 本地等价命令实证，不触发远端 CI）。
+name: ci
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  guard:
+    name: 全量门控 node tests/run-all.mjs
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: setup node (LTS)
+        uses: actions/setup-node@v4
+        with:
+          # LTS 锁定：本地实跑基线 v24.x（门控套件仅要求 node ≥ 20——Array.fromAsync /
+          # Object.hasOwn 等 API 面）；升级须同步跑一次全量门控确认零回退。
+          node-version: '24'
+          cache: pnpm
+
+      - name: install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: gate (all suites, aggregated exit code)
+        run: node tests/run-all.mjs
