@@ -34,6 +34,49 @@ const BOM = Buffer.from([0xef, 0xbb, 0xbf])
 const SPAWN_TIMEOUT_MS = 30000
 
 /**
+ * install.ps1 **离线安装臂**的平台适用性（FIX-038）：install.ps1 自述为 Windows
+ * 专属入口（install.ps1:1「Windows / PowerShell 5.1+」；POSIX 侧入口 = install.sh:2），
+ * 其离线臂依赖 Windows 原生链接/拷贝语义——`New-Item -ItemType Junction`（win32
+ * junction）、`robocopy` 拷贝回退、`Join-Path $dshHome 'profiles\node_modules'` 式
+ * 反斜杠子路径。非 win32 平台上该臂不可判定：CI run 34696694673（ubuntu-24.04 +
+ * PowerShell 7 首跑）实证 `offline install (-File) succeeds on pwsh` 失败，且裸源码
+ * 臂随后在 `lstatSync` 上 ENOENT 裸抛 → 套件崩溃、其后断言与诊断全部丢失。
+ * CI 覆盖边界同此声明（.github/workflows/ci.yml「必须 Windows 本地跑」节：
+ * 「目录 link 语义（win32 走 junction，POSIX 走 symlink）」）。
+ * 判据取**平台**（非宿主）：win32 上 powershell/pwsh 两臂都执行 install.ps1；
+ * 非 win32 上同一断言面由 install.sh 臂承担（见各段 sh 臂）——覆盖对称，无静默丢弃。
+ */
+const PS1_OFFLINE_APPLICABLE = process.platform === 'win32'
+
+/** install.ps1 各离线臂共用的不适用原因（单点，P5：同一动作单一实现路径）。 */
+const PS1_PLATFORM_DETAIL = `install.ps1 是 Windows 专属安装入口（离线臂依赖 junction/robocopy 与 'profiles\\node_modules' 反斜杠子路径）；本平台 ${process.platform} 不适用`
+
+/**
+ * 可见 skip（FIX-037 ① 机制）：非适用平台/宿主上断言不得静默通过——打印原因行
+ * （`  skip <臂> (<原因>)`；本模块的 stdout 由承载套件 smoke.mjs 输出，run-all.mjs
+ * 捕获该形态行回显 `#SKIP | …` 并计入 `#SKIP n` 汇总，口径见 ci.yml「预期内的 skip」）。
+ */
+function skipArm(label, reason) {
+  console.log(`  skip ${label} (${reason})`)
+}
+
+/**
+ * 目录项存在性安全探测（FIX-038）：`lstatSync` 在路径不存在时**裸抛 ENOENT**——
+ * 夹具断言点不得用异常表达「缺失」（CI run 34696694673 实证：安装脚本未产出链接
+ * → 套件崩在 lstat，真实失败面被 ENOENT 覆盖、后续断言全部丢失）。
+ * @param {string} path - 目标路径。
+ * @returns {import('node:fs').Stats | undefined} undefined = 路径不存在（交断言如实判 FAIL）。
+ */
+function lstatOrUndefined(path) {
+  try {
+    return lstatSync(path)
+  } catch (error) {
+    if (error?.code === 'ENOENT') return undefined
+    throw error
+  }
+}
+
+/**
  * 异步执行子进程并等待退出。默认 stdio 全部 ignore；传 `outputFile` 时把
  * stdout+stderr 合并重定向到该文件（文件捕获兼容受限环境，避免命名管道）。
  * 必须异步：fixture 服务器跑在本进程事件循环里，spawnSync 同步阻塞会饿死
@@ -266,7 +309,7 @@ export async function runInstallEntryTests(check) {
   // ── 4. 在线命令守卫（PowerShell 5.1 / 7）────────────────────────
     const hosts = await powerShellHosts()
     if (hosts.length === 0) {
-      console.log('  skip PowerShell online checks (no powershell/pwsh available)')
+      skipArm('PowerShell online checks', 'no powershell/pwsh available')
     }
     for (const host of hosts) {
       for (const variant of ['plain', 'bom']) {
@@ -296,7 +339,7 @@ export async function runInstallEntryTests(check) {
     // ── 5. POSIX 在线命令守卫 ────────────────────────────────────────
     const sh = await posixShell()
     if (sh === null) {
-      console.log('  skip POSIX online checks (no sh/curl available)')
+      skipArm('POSIX online checks', 'no sh/curl available')
     } else {
       const resultFile = join(tmpDir, 'online-sh.txt')
       server.register('/fixture.sh', (params) => shFixtureBody(params.get('result') ?? resultFile))
@@ -307,7 +350,13 @@ export async function runInstallEntryTests(check) {
 
     // ── 6. 离线安装守卫（临时 DSH_HOME，不触碰真实 ~/.dsh）──────────
     const dshHome = join(tmpDir, 'offline-dsh-home')
-    for (const host of hosts) {
+    // FIX-038：`-File` 离线臂仅 win32 适用（PS1_OFFLINE_APPLICABLE 注释含实证与
+    // CI 边界）；非适用平台打印可见 skip——不静默通过、不删断言，POSIX 侧由紧邻的
+    // install.sh 臂承担同一断言面（succeeds + idempotent）。
+    if (!PS1_OFFLINE_APPLICABLE) {
+      skipArm('offline install (-File) succeeds/idempotent', `${PS1_PLATFORM_DETAIL}——同一断言面由下方 install.sh 臂承担`)
+    }
+    for (const host of (PS1_OFFLINE_APPLICABLE ? hosts : [])) {
       const runInstall = () => runCommand(host, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(ROOT_DIR, 'install.ps1'), '-LocalPath', ROOT_DIR], { env: { ...process.env, DSH_HOME: dshHome } })
       const first = await runInstall()
       const patch = join(dshHome, 'profiles', 'web', 'cordis.patch.yml')
@@ -364,10 +413,16 @@ export async function runInstallEntryTests(check) {
         const probeNeg = await resolvePluginProbe(bareHome)
         check('bare source without dep link fails to resolve (regression witness)', probeNeg.includes('ERR_MODULE_NOT_FOUND'))
         // 6c. 正向：跑真实安装脚本后，依赖链接被创建且插件可解析；幂等重跑亦然。
-        for (const host of hosts) {
+        // FIX-038：`-File` 臂仅 win32 适用；非适用平台记可见 skip，同一断言面由
+        // 紧随其后的 sh --local 臂（6c-sh）承担。lstat 一律经 lstatOrUndefined
+        // （缺失 → undefined 交断言判 FAIL，禁 ENOENT 裸抛阻断后续断言）。
+        if (!PS1_OFFLINE_APPLICABLE) {
+          skipArm('bare-source install (-File) creates dep link / plugin resolves / idempotent', `${PS1_PLATFORM_DETAIL}——同一断言面由下方 sh --local 臂承担`)
+        }
+        for (const host of (PS1_OFFLINE_APPLICABLE ? hosts : [])) {
           const run = () => runCommand(host, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(ROOT_DIR, 'install.ps1'), '-LocalPath', bareSrc], { env: { ...process.env, DSH_HOME: bareHome } })
           const first = await run()
-          const depLinkOk = lstatSync(join(bareSrc, 'node_modules')).isSymbolicLink()
+          const depLinkOk = lstatOrUndefined(join(bareSrc, 'node_modules'))?.isSymbolicLink() === true
           const probeOk = await resolvePluginProbe(bareHome)
           const second = await run()
           const probeAgain = await resolvePluginProbe(bareHome)
@@ -389,7 +444,7 @@ export async function runInstallEntryTests(check) {
           mkdirSync(join(shBareHome, 'profiles', 'web'), { recursive: true })
           const run = () => runCommand(sh, ['-c', `DSH_HOME='${shBareHome}' sh '${join(ROOT_DIR, 'install.sh')}' --local '${bareSrc}'`])
           const first = await run()
-          const depLinkOk = lstatSync(join(bareSrc, 'node_modules')).isSymbolicLink()
+          const depLinkOk = lstatOrUndefined(join(bareSrc, 'node_modules'))?.isSymbolicLink() === true
           const probeOk = await resolvePluginProbe(shBareHome)
           const second = await run()
           const probeAgain = await resolvePluginProbe(shBareHome)
@@ -410,11 +465,17 @@ export async function runInstallEntryTests(check) {
           writeFileSync(join(realNmSrc, 'node_modules', 'user-marker.txt'), 'keep me')
           const realNmHome = join(bareRoot, 'real-nm-home')
           mkdirSync(join(realNmHome, 'profiles', 'node_modules'), { recursive: true })
-          for (const host of hosts) {
+          // FIX-038：`-File` 臂仅 win32 适用（install.ps1 的「跳过依赖链接 / 拷贝
+          // 回退」语义依赖 Windows 链接判定）——非适用平台记可见 skip。
+          if (!PS1_OFFLINE_APPLICABLE) {
+            skipArm('real node_modules dir left untouched (-File)', `${PS1_PLATFORM_DETAIL}——拷贝/链接回退语义仅 win32 可判定`)
+          }
+          for (const host of (PS1_OFFLINE_APPLICABLE ? hosts : [])) {
             const run = () => runCommand(host, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(ROOT_DIR, 'install.ps1'), '-LocalPath', realNmSrc], { env: { ...process.env, DSH_HOME: realNmHome } })
             const result = await run()
+            const nmStat = lstatOrUndefined(join(realNmSrc, 'node_modules'))
             const markerOk = existsSync(join(realNmSrc, 'node_modules', 'user-marker.txt'))
-            const stillRealDir = lstatSync(join(realNmSrc, 'node_modules')).isDirectory() && !lstatSync(join(realNmSrc, 'node_modules')).isSymbolicLink()
+            const stillRealDir = nmStat?.isDirectory() === true && nmStat.isSymbolicLink() === false
             check(`real node_modules dir left untouched on ${host}`, result.status === 0 && markerOk && stillRealDir)
           }
         }

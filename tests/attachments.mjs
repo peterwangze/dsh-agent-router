@@ -238,8 +238,16 @@ export async function runAttachmentTests(check) {
     // lru-*.txt 均为虚构文件（不存在于真实工作区）：覆写 fs 面为"任何路径
     // 都是 1 字节文件"，专注注册表 LRU 语义。
     const lruFs = makeFs({})
+    // FIX-038（CI 首跑 run 34696694673 实证）：判据与 makeFs（本文件 :53）对齐——
+    // `includes(':')` 只识别 Windows 盘符，POSIX 绝对路径（以 '/' 开头、无冒号）
+    // 会落入 join(options.cwd, path) 分支；而 `path.join` 对**已是绝对路径**的
+    // 第二参不做重置（≠ `path.resolve`）→ 产出 WORKSPACE 自嵌套的重复路径
+    // （win32 的盘符分支恰好掩盖该缺陷）。后果：条目按重复路径登记，
+    // `byPath(原路径)` 恒未命中 → 两条 LRU 断言在 ubuntu 上必败。修法 = 补齐
+    // 平台中立判据，断言本身照跑（平台无关语义，不 skip、不删断言）。
     lruFs.resolve = async (path, options = {}) => {
-      const target = String(path).includes(':') ? path : join(options.cwd ?? '', path)
+      const raw = String(path)
+      const target = raw.includes(':') || raw.startsWith('/') ? raw : join(options.cwd ?? '', raw)
       return { displayPath: target }
     }
     lruFs.stat = async (target) => {

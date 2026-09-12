@@ -30,19 +30,36 @@
 #      PowerShell 7（pwsh）→ 该断言经 pwsh 臂执行；**该平台事实以 CI 首跑日志确认**
 #      （FIX-037 ① 起探针结果可见——单宿主探针失败亦打印 `skip … (probe failed: …)`，
 #      该臂不静默消失）；若运行器无 pwsh，则该断言打印可见 skip（非静默通过）。
-#      **预期内的 skip（非缺陷，FIX-037 P2-3/R1，按环境分列）**：ubuntu 首跑正常态 =
-#      `#SKIP 3 (host-contract.mjs×2, smoke.mjs×1)`——host-contract 在 CI 必然无宿主
-#      （见上条）⇒ S3 半边 + S7 组 2 条；加 smoke 的 `install.ps1 parses (powershell)`
-#      臂 1 条（5.1 仅 Windows 存在，同一断言由 pwsh 臂完整执行，≠ 断言被跳过）。
-#      Windows 本地正常态 = `#SKIP 1 (smoke.mjs×1)`（install-entry 的 POSIX 臂）。
+#      **FIX-038 新增 skip 来源（平台适用性判据；CI 首跑 run 34696694673 实证驱动）**：
+#      ① smoke 的 `cli invocation cmd shim + wrapCmdLine outer quotes` 1 条——`.cmd` shim
+#      经 cmd.exe 执行 + `/d /s /c` 引号包裹是 **Windows 专属实现分支**（非 win32 恒走
+#      直接 spawn），非适用平台记可见 skip；平台中立的 `wrapCmdLine passthrough` 照跑
+#      （不随该条 skip）；② install-entry 的 `-File` 离线臂 3 条——`offline install (-File)
+#      succeeds/idempotent`、`bare-source install (-File) creates dep link / plugin resolves
+#      / idempotent`、`real node_modules dir left untouched (-File)`：install.ps1 自述为
+#      Windows 专属入口（install.ps1:1「Windows / PowerShell 5.1+」），其离线臂依赖
+#      junction / robocopy 拷贝回退 / 反斜杠子路径（'profiles\node_modules'），非 win32
+#      不可判定（首跑实证该臂失败 + 裸源码臂于 `lstatSync` ENOENT 裸抛致套件崩溃、其后
+#      断言与诊断全部丢失）；POSIX 侧同一断言面由 install.sh 臂承担（见下条），覆盖对称。
+#      **预期内的 skip（非缺陷，FIX-037 P2-3/R1 口径 + FIX-038 扩表，按环境分列）**：
+#      ubuntu 正常态 = `#SKIP 7 (host-contract.mjs×2, smoke.mjs×5)`——host-contract 在 CI
+#      必然无宿主（见上条）⇒ S3 半边 + S7 组 2 条；smoke 5 条 = `install.ps1 parses
+#      (powershell)` 臂 1 条（5.1 仅 Windows 存在，同一断言由 pwsh 臂完整执行，≠ 断言被
+#      跳过）+ 上述 FIX-038 新增来源 4 条（①1 + ②3）。**Windows 本地正常态 =
+#      `#SKIP 1 (smoke.mjs×1)`（install-entry 的 POSIX 臂）——FIX-038 平台判据在 win32
+#      不产生新 skip（shim 臂与 `-File` 离线臂照跑）**。
 #      判据取**相对基线增量**：新增 skip 来源或断言数下降才需研判（绝对值随平台
 #      组合变化，不作告警依据）；
 #   3) tests/install-entry.mjs：在线/离线命令臂按可用宿主择一——POSIX sh+curl 臂在
 #      ubuntu 执行，PowerShell 臂走 pwsh（7.x）；**Windows PowerShell 5.1 臂在本平台
-#      不存在**（自动降级为 7.x 臂，不失败）。
+#      不存在**（自动降级为 7.x 臂，不失败）。**FIX-038 平台适用性补齐**：`-File` 离线
+#      安装臂（§6 / §6c / §6d）MUST 在 win32 执行——非 win32 打印可见 skip（原因见上条
+#      ②），即首跑 failure 的修复面；在线命令臂（pwsh `-Command`）与 git 失败中止臂
+#      （断言失败路径，不涉链接语义）跨平台照跑，不因平台判据被截断。
 # - **必须 Windows 本地跑（本 job 不覆盖）**：Windows PowerShell 5.1 解析/执行臂
 #   （install.ps1 5.1 + install-entry 的 5.1 online/offline 命令）、目录 link 语义
-#   （win32 走 junction，POSIX 走 symlink）、宿主运行时装配（真实 DSH runner / fiber
+#   （win32 走 junction，POSIX 走 symlink——FIX-038 起 install.ps1 的 `-File` 离线
+#   安装臂按此判据平台门控：非 win32 记可见 skip，不再以失败/崩溃形态出现）、宿主运行时装配（真实 DSH runner / fiber
 #   inject 面就绪时序）、GUI 渲染与设置页交互、OAuth 真实端点与登录流、CLI 子代理
 #   真机执行——由真机手工验收 + `router/hostFaceDiagnostics` 诊断面板（宿主版本 +
 #   面健康 + 诊断环形）兜底。对称面：smoke 的 POSIX 文件权限断言（0o600）仅在非

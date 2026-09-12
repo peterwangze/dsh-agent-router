@@ -1615,10 +1615,22 @@ console.log('RouterService:')
   check('cli spec gemini boolean sandbox', cliSpecGemini.sandbox === '' && cliSpecGeminiSbx.sandbox === 'on' && cliSpecGeminiSbx.args.includes('--yolo') === false)
   const cliSpecGeminiLongSbx = service.resolveCliSpec({ command: 'gemini', args: '-p --output-format json --sandbox' }, 'win32')
   check('cli spec gemini long boolean sandbox', cliSpecGeminiLongSbx.sandbox === 'on')
-  const cmdInv = service.resolveCliInvocation('codex.cmd', ['-p', 'a b'])
-  check('cli invocation cmd shim', cmdInv.executable.toLowerCase().includes('cmd.exe') && cmdInv.argv.length === 4 && cmdInv.argv[3].includes('"-p"') && cmdInv.argv[3].includes('"a b"'))
-  const wrappedCmd = wrapCmdLine(cmdInv.argv)
-  check('wrapCmdLine outer quotes', wrappedCmd[3] === `"${cmdInv.argv[3]}"` && wrappedCmd.slice(0, 3).join('|') === '/d|/s|/c')
+  // 平台适用性（FIX-038，CI 首跑 run 34696694673 实证）：`.cmd`/`.bat` shim 经
+  // cmd.exe 执行与 `/d /s /c` 引号包裹是 **Windows 专属实现分支**
+  // （resolveCliInvocation 的 `win &&` 门控；非 win32 恒走「直接 spawn」形态）
+  // ——该断言在非 Windows 平台不可判定（executable 恒为原 command、argv 长度恒为
+  // 原始参数数）。按 FIX-037 ① 纪律：打印可见 skip（run-all 回显 `#SKIP | …` 并
+  // 计入 `#SKIP n`），**不得**用 `if (win) { … }` 静默包住（那会让非 Windows 侧
+  // 无声通过、断言被静默丢弃）。
+  if (process.platform === 'win32') {
+    const cmdInv = service.resolveCliInvocation('codex.cmd', ['-p', 'a b'])
+    check('cli invocation cmd shim', cmdInv.executable.toLowerCase().includes('cmd.exe') && cmdInv.argv.length === 4 && cmdInv.argv[3].includes('"-p"') && cmdInv.argv[3].includes('"a b"'))
+    const wrappedCmd = wrapCmdLine(cmdInv.argv)
+    check('wrapCmdLine outer quotes', wrappedCmd[3] === `"${cmdInv.argv[3]}"` && wrappedCmd.slice(0, 3).join('|') === '/d|/s|/c')
+  } else {
+    skip('cli invocation cmd shim + wrapCmdLine outer quotes', `Windows-only: .cmd shim 经 cmd.exe 执行 + /d /s /c 引号包裹（本平台 ${process.platform} 无该实现分支）——两条断言在本平台不可判定`)
+  }
+  // 平台中立（纯函数形态：无 /d /s /c 前导时零改写）——恒跑，不随上一条 skip。
   check('wrapCmdLine passthrough', wrapCmdLine(['-p', 'x']).join('|') === '-p|x' && wrapCmdLine(['/d', '/s', '/c', 'plain'])[3] === 'plain')
   const jsInv = service.resolveCliInvocation('./tool.mjs', ['x'])
   check('cli invocation node script', jsInv.executable === process.execPath && jsInv.argv[0] === './tool.mjs')
