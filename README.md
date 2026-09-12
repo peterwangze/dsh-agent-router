@@ -223,7 +223,8 @@ node tests/host-contract.mjs    # 只跑宿主面契约静态看护（npm run te
 
 - 任一套件失败 → 退出码非零（`run-all` 打印失败套件清单与输出尾部）；单套件超时 10 分钟（`RUN_ALL_TIMEOUT_MS` 可覆盖，挂死套件不得吞掉门控）。
 - 顺序执行（非并行）：部分套件占用固定端口 / 临时 `DSH_HOME` / 进程级单例，并行会互扰。
-- **套件计数口径**：`tests/` 下 `attachments.mjs` / `audit-001-concurrency.mjs` / `client-render.mjs` / `install-entry.mjs` 只 `export runX(check)`、无顶层执行、无 `process.exit`，属 **runner 模块**——其断言由 `smoke.mjs` import 后调用承载，**不计入独立套件**（当作套件子进程执行 = 零断言幻影 PASS：计数虚高 + 静默覆盖丢失）。`run-all` 启动行区分「N 独立套件 + M runner 模块」，并在跑套件前**机器断言 `smoke.mjs` 仍 import 并调用这些 `runX`**：调用点消失/改名、模块被误登记、或登记项含 `process.exit` → 门控红（排除不得等于丢覆盖）。
+- **套件计数口径**：`tests/` 下 `attachments.mjs` / `audit-001-concurrency.mjs` / `client-render.mjs` / `install-entry.mjs` 只 `export runX(check)`、无顶层执行、无 `process.exit`，属 **runner 模块**——其断言由 `smoke.mjs` import 后调用承载，**不计入独立套件**（当作套件子进程执行 = 零断言幻影 PASS：计数虚高 + 静默覆盖丢失）。`run-all` 启动行区分「N 独立套件 + M runner 模块」，并在跑套件前**机器断言 `smoke.mjs` 仍 import 并调用这些 `runX`**：调用点消失/改名、模块被误登记、或登记项含 `process.exit` → 门控红（排除不得等于丢覆盖）。**双向守卫**（FIX-037 ②）：反向断言「未排除的每个套件 MUST 含独立入口/退出闸（`process.exit` / `process.exitCode` / `invokedDirectly`，判据取剥注释后的代码文本）」——新增 runner 形态模块漏登记即红，幻影 PASS 不可复发。
+- **skip 可见性**（FIX-037 ①）：通过套件默认只打一行摘要，故 `run-all` 捕获套件输出中的 skip 行（`  skip …` / `  --  …`）并回显——`PASS <suite> (Nms, K skip)` + `#SKIP | <原行>`，汇总行附 `#SKIP n (套件×条数)`；`smoke.mjs` 汇总行同时给出自身 skipped 计数。门控（CI）日志因此可判定「哪些断言被跳过」，与「打印可见 skip、禁静默降级」的口径一致（此前 skip 行被 `stdio: pipe` 吞掉）。
 - **产品代码变更 MUST 跑全量网并零回退**（P4）：改 `lib/**`、`package.json` 声明面、`cordis.patch.yml`、`tests/**` 后必须全绿再提交。
 
 ### 静态看护体系（`tests/host-contract.mjs`）
@@ -237,16 +238,16 @@ node tests/host-contract.mjs    # 只跑宿主面契约静态看护（npm run te
 - **字段级 wire schema 白名单**：消费字段 ⊆ 宿主 schema 字段（锚宿主 `dsh-api-remotes` 源码声明），字段增删/改名不再静默；
 - **转发事件白名单**：客户端 `$on` 订阅事件名 ⊆ 宿主转发白名单（死订阅类缺陷的机器防线）。
 
-本套件**不依赖宿主 checkout 存在**（基线与锚点为静态常量，锚行号写在注释里）；宿主源码可达时（`DSH_HOST_SOURCE` / `DSH_HOST_PACKAGES` 显式优先，本地 `_npx` 缓存探测兜底）自动追加增强靶子组直读源码核验，不可达只记 skip 不失败。**靶子选择确定**：多 `_npx` 缓存共存时按目录名降序取首命中（`readdirSync` 顺序非契约），启动行打印实际读取路径、来源与未选候选——RISK-003 预警可复现。宿主升级后按文件头注释刷新基线，并与 `tests/host-version-snapshot.mjs` 的版本基线同步执行。
+本套件**不依赖宿主 checkout 存在**（基线与锚点为静态常量，锚行号写在注释里）；宿主源码可达时（`DSH_HOST_SOURCE` / `DSH_HOST_PACKAGES` 显式优先，本地 `_npx` 缓存探测兜底）自动追加增强靶子组直读源码核验，不可达只记 skip 不失败。**靶子选择确定**：多 `_npx` 缓存共存时按目录名降序取首命中（`readdirSync` 顺序非契约），启动行打印实际读取路径、来源与未选候选——RISK-003 预警可复现。**版本一致性判据**（FIX-037 ③）：确定性 ≠ 指向运行宿主，故选定靶子与全部候选的关键包版本（`dsh` + S7/S3 直读的四个 `dsh-*` 包）逐条打印并与 `tests/host-version-snapshot.mjs` 的 `HOST_BASELINE` 比对——不一致即**显式告警 + 记 skip**（门控可见），S3/S7 结论的适用范围由此可判定（不引入宿主硬依赖红——BR-03 不变）。宿主升级后按文件头注释刷新基线，并与 `tests/host-version-snapshot.mjs` 的版本基线同步执行。
 
 ### CI 第①步（RISK-001 主轨道）
 
 `.github/workflows/ci.yml` 单 job：`checkout` → `setup pnpm` → `setup-node`（LTS 锁定）→ `pnpm install --frozen-lockfile` → `node tests/run-all.mjs`。
 
 - **能覆盖**：全部可在 Node 内静态/桩驱动执行的套件（契约快照、声明面比对、消费点守卫、事件白名单、域行为判别）——与本地同一条门控命令（启动行区分独立套件与 runner 模块）。
-- **在 ubuntu-latest 上会 skip 的断言**（打印可见 skip、不失败）：① `host-contract.mjs` 的 S3 宿主侧包表半边与 S7 增强靶子组（CI 无宿主 checkout）——其余 70 条静态断言照跑；② `smoke.mjs` 的 install.ps1 解析（探测 `powershell`/`pwsh`，两者皆无则打印 skip 原因；Ubuntu 运行器预期自带 PowerShell 7，该平台事实以 CI 首跑日志确认）；③ `install-entry.mjs` 的在线/离线命令臂按可用宿主择一（ubuntu 走 `sh`+`curl` 与 `pwsh` 臂）。
+- **在 ubuntu-latest 上会 skip 的断言**（打印可见 skip、不失败）：① `host-contract.mjs` 的 S3 宿主侧包表半边与 S7 增强靶子组（CI 无宿主 checkout）——其余 70 条静态断言照跑，宿主靶子不可达记 `--  skipped`（靶子可达时另打印关键包版本一致性判据，≠ `HOST_BASELINE` → 告警 + skip）；② `smoke.mjs` 的 install.ps1 解析（探测 `powershell`/`pwsh`，两者皆无则打印 skip 原因；Ubuntu 运行器预期自带 PowerShell 7，该平台事实以 CI 首跑日志确认）；③ `install-entry.mjs` 的在线/离线命令臂按可用宿主择一（ubuntu 走 `sh`+`curl` 与 `pwsh` 臂）。**这些 skip 行不再只在套件内可见**：`run-all` 汇总回显 `#SKIP | <原行>` 与 `#SKIP n (套件×条数)`（FIX-037 ①）——CI 日志可直接判定被跳过的断言；单宿主探针失败同样打印 `skip … (probe failed: …)`，该臂不静默消失。
 - **必须 Windows 本地跑（CI 不覆盖）**：Windows PowerShell 5.1 解析/执行臂（`install.ps1` + `install-entry` 的 5.1 online/offline 命令）、目录 link 语义（win32 junction vs POSIX symlink）、宿主运行时装配与 fiber inject 面就绪时序、GUI 渲染与设置页交互、OAuth 真实端点登录流、CLI 子代理真机执行。这些仍由真机手工验收 + 设置页诊断面板（`router/hostFaceDiagnostics`：宿主版本 + 面健康 + 诊断环形）兜底。
-- 宿主依赖在 CI 的解析：`lib/` 不直接 import 任何 `peerDependencies` 包（宿主面经 cordis 服务注入），直接依赖的 dsh 包与 cordis / schemastery 均在公开 registry 可解析（实测基线 `0.1.5-rc.2`），故冻结锁文件安装即可跑通全量网。首跑属 push 后动作。
+- 宿主依赖在 CI 的解析：`lib/` 不直接 import 任何 `peerDependencies` 包（宿主面经 cordis 服务注入），直接依赖的 dsh 包与 cordis / schemastery 均在公开 registry 可解析（实测基线 `0.1.5-rc.2`）——**「公开 registry 可解析」属远端事实，待 CI 首跑确认**（本地等价命令已实证），故冻结锁文件安装即可跑通全量网。首跑属 push 后动作。
 
 ### 隔离 worktree 验证规矩（EV-178 事故教训）
 

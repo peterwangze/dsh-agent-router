@@ -29,9 +29,28 @@ const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
 const EVO12_PNG_BYTES = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
 
 let failures = 0
-function check(label, condition) {
+let skipped = 0
+/**
+ * 断言（FIX-037 R0 P2-3：三参形态对齐 host-contract.mjs:82-88）——详情报文只在
+ * 失败时打印（`condition` 仍是真值判定）。旧二参形态导致 `cond ? true : '缺键…'`
+ * 式调用恒真（字符串为真值 → 缺键以 ok 形式静默通过）。
+ */
+function check(label, condition, detail) {
   if (condition) console.log(`  ok  ${label}`)
-  else { failures++; console.error(`FAIL  ${label}`) }
+  else {
+    failures++
+    console.error(`FAIL  ${label}${detail === undefined ? '' : ` :: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`}`)
+  }
+}
+/**
+ * 可见 skip（FIX-037 ①/P8：禁静默降级）——跳过路径 MUST 打印原因，且计数入汇总行；
+ * 门控侧 `run-all.mjs` 捕获本行并回显（CI 日志可见「哪些断言被跳过」）。本计数只含
+ * smoke 自身 skip；runner 模块（install-entry 等）自打的 skip 行由 run-all 按下述
+ * 输出行统一聚合（跨进程唯一汇总点在门控入口）。
+ */
+function skip(label, reason) {
+  skipped++
+  console.log(`  skip ${label} (${reason})`)
 }
 
 // C-3 统计持久化隔离（EVO-003 Phase 2）：index apply 接线会按 settings 默认
@@ -63,10 +82,14 @@ console.log('syntax:')
       // 判据是 `error === undefined && status === 0`（install-entry 的 runCommand
       // 是自定义封装才把 error 归一为 null，形态不可照搬）。
       const probe = spawnSync(exe, ['-NoProfile', '-NonInteractive', '-Command', 'exit 0'], { stdio: 'ignore' })
-      return probe.error === undefined && probe.status === 0
+      if (probe.error === undefined && probe.status === 0) return true
+      // FIX-037 ①/P8：单宿主探针失败（如 7.x 安装损坏）不得静默少一条断言——
+      // 该臂消失 MUST 有痕迹（run-all 汇总回显本行；CI 日志可诊断）。
+      skip(`install.ps1 parses (${exe})`, `probe failed: ${probe.error ? probe.error.code ?? probe.error.message : `status=${probe.status}`}`)
+      return false
     })
     if (psHosts.length === 0) {
-      console.log('  skip install.ps1 parses (no powershell/pwsh available — 该断言需 PS 解析器；Ubuntu CI 缺 pwsh 时同此)')
+      skip('install.ps1 parses', 'no powershell/pwsh available — 该断言需 PS 解析器；Ubuntu CI 缺 pwsh 时同此')
     }
     // 路径直接内嵌 PS 单引号字符串（-Command 的尾随参数不进入 $args）。
     const parseScript = `$e=$null; $t=$null; [System.Management.Automation.Language.Parser]::ParseFile('${installPs1}', [ref]$t, [ref]$e) | Out-Null; exit $e.Count`
@@ -91,9 +114,9 @@ console.log('syntax:')
   const missingEn = [...new Set(usedKeys)].filter((key) => !enKeys.includes(key))
   const zhExtra = zhKeys.filter((key) => !enKeys.includes(key))
   const enExtra = enKeys.filter((key) => !zhKeys.includes(key))
-  check('client label keys covered (zh)', missingZh.length === 0 ? true : `missing: ${missingZh.join(', ')}`)
-  check('client label keys covered (en)', missingEn.length === 0 ? true : `missing: ${missingEn.join(', ')}`)
-  check('client label tables match', zhExtra.length === 0 && enExtra.length === 0 ? true : `zh-only: ${zhExtra.join(', ')} | en-only: ${enExtra.join(', ')}`)
+  check('client label keys covered (zh)', missingZh.length === 0, missingZh)
+  check('client label keys covered (en)', missingEn.length === 0, missingEn)
+  check('client label tables match', zhExtra.length === 0 && enExtra.length === 0, { zhOnly: zhExtra, enOnly: enExtra })
 }
 
 // 1. schema 默认值解析
@@ -3049,7 +3072,9 @@ console.log('admission wrapper (L1):')
 // 8. 平台安装入口（BOM 免疫在线命令 + 离线安装幂等；涉及系统宿主与本地 fixture 服务器）
 await runInstallEntryTests(check)
 
-console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : `\n${failures} FAILURES`)
+console.log(failures === 0
+  ? `\nALL SMOKE TESTS PASSED${skipped > 0 ? ` (${skipped} skipped)` : ''}`
+  : `\n${failures} FAILURES${skipped > 0 ? ` (${skipped} skipped)` : ''}`)
 process.exit(failures === 0 ? 0 : 1)
 
 

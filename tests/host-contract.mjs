@@ -145,6 +145,16 @@ const MESSAGE_EXPORTS_BASELINE = ['CONTEXT_SUMMARY_MAX_CHARS', 'boundContextSumm
 /** BlockAssembler 原型面（dsh-llm lib/index.js 实读 11 项；本包消费 push/usage/finish/blocks——lib/service.js:1437-1443）。 */
 const BLOCK_ASSEMBLER_PROTO_BASELINE = ['push', 'ensure', 'assemble', 'mustGet', 'assembled', 'blocks', 'interruptedBlocks', 'usage', 'finish', 'replayState', 'message']
 
+/**
+ * 宿主关键包版本基线（FIX-037 ③ / FIX-036 R0 P2-2）——与
+ * `tests/host-version-snapshot.mjs:44-49` 的 HOST_BASELINE **同源同值**（宿主升级后
+ * 按该文件头注释一并刷新）。用途：靶子解析只保证「确定性」不保证「指向运行宿主」，
+ * 版本一致是靶子可信的最低证据——不等即显式告警 + note（可见 skip）。
+ */
+const HOST_VERSION_BASELINE = Object.freeze({ dsh: '0.1.5-rc.1', dshPackages: '0.1.5-rc.2' })
+/** 版本一致性判据的关键包（dsh CLI + S3/S7 直读的四个 dsh-* 宿主面包）。 */
+const HOST_KEY_PACKAGES = ['dsh', 'dsh-api-remotes', 'dsh-api-session-controller', 'dsh-client-ui-model-selection', 'dsh-llm']
+
 /** remote.* 面方法形状基线（宿主 dsh-api-remotes TYPERT_REMOTE 描述符实读；域内 CLIENT_REMOTE_FACES 为代码侧权威）。 */
 const CLIENT_REMOTE_FACES_BASELINE = {
   llm: ['listProviders', 'listConfigurableProviders', 'discoverModels'],
@@ -307,6 +317,10 @@ const clientStripped = stripComments(clientSource)
 // _npx 多缓存共存时按目录名**降序**取首个命中——readdirSync 顺序非契约
 // （P2-2：非确定性选择会把 RISK-003 预警指向非运行宿主副本 → 不可复现的假红/假绿）；
 // 解析结果与实际读取路径打印在启动行（可诊断性——先例：本文件原有 S7 skip note）。
+// 版本一致性判据（FIX-037 ③，FIX-036 R0 P2-2 补强）：本机两候选可同为基线版本，
+// 但「降序确定性」不等于「指向运行宿主」——故追加关键包版本比对并打印（选定靶子 +
+// 全部候选），不一致即显式告警 + note（走可见 skip 面，门控日志可判定 S3/S7 结论的
+// 适用范围；不引入宿主硬依赖红——BR-03「静态守卫不依赖宿主」不变）。
 console.log('宿主靶子解析（S3 宿主侧包表半边 + S7 增强组共用；只读宿主源码，零写入）:')
 const hostTarget = (() => {
   const candidates = []
@@ -321,11 +335,33 @@ const hostTarget = (() => {
     } catch { /* 无 _npx 缓存 → 仅显式候选（不失败：静态守卫不依赖宿主，BR-03） */ }
   }
   const hit = candidates.find(({ root }) => existsSync(join(root, 'dsh-api-remotes', 'lib', 'client.js')))
-  return { root: hit?.root ?? null, origin: hit?.origin ?? null, candidates }
+  /** 读包版本（缺包/坏 package.json → null，不抛——只让一致性判据显式失配）。 */
+  const versionOf = (root, name) => {
+    try { return JSON.parse(readFileSync(join(root, name, 'package.json'), 'utf8')).version ?? null } catch { return null }
+  }
+  const versionsOf = (root) => Object.fromEntries(HOST_KEY_PACKAGES.map((name) => [name, versionOf(root, name)]))
+  const expectedOf = (name) => (name === 'dsh' ? HOST_VERSION_BASELINE.dsh : HOST_VERSION_BASELINE.dshPackages)
+  const versions = hit ? versionsOf(hit.root) : null
+  const mismatches = versions
+    ? HOST_KEY_PACKAGES.filter((name) => versions[name] !== expectedOf(name)).map((name) => `${name}@${versions[name] ?? 'absent'} ≠ ${expectedOf(name)}`)
+    : []
+  return { root: hit?.root ?? null, origin: hit?.origin ?? null, candidates, versions, versionsOf, mismatches }
 })()
+const versionLine = (versions) => HOST_KEY_PACKAGES.map((name) => `${name}@${versions[name] ?? 'absent'}`).join(' / ')
 if (hostTarget.root) {
   const others = hostTarget.candidates.filter(({ root }) => root !== hostTarget.root).map(({ origin }) => origin)
   console.log(`      · 靶子 = ${hostTarget.root}（来源 ${hostTarget.origin}；候选 ${hostTarget.candidates.length} 个${others.length > 0 ? `，降序取首命中，未选：${others.join(' / ')}` : ''}）`)
+  console.log(`      · 靶子关键包版本: ${versionLine(hostTarget.versions)}（基线 dsh ${HOST_VERSION_BASELINE.dsh} / dsh-* ${HOST_VERSION_BASELINE.dshPackages}）`)
+  for (const candidate of hostTarget.candidates) {
+    if (candidate.root === hostTarget.root) continue
+    console.log(`      · 未选候选 ${candidate.origin}: ${versionLine(hostTarget.versionsOf(candidate.root))}`)
+  }
+  if (hostTarget.mismatches.length > 0) {
+    console.log(`      · 版本一致性告警（FIX-037 ③）: ${hostTarget.mismatches.join('; ')}`)
+    note(`S3/S7 宿主靶子版本一致性: 关键包 ≠ HOST_BASELINE（${hostTarget.mismatches.join('; ')}）→ 靶子可能非运行宿主副本（RISK-003 预警对象不确定），S3/S7 结论仅对该副本成立`)
+  } else {
+    console.log('      · 版本一致性: 关键包版本 === HOST_VERSION_BASELINE（靶子与实测基线同版——RISK-003 预警对象可判定）')
+  }
 } else {
   console.log('      · 不可达（DSH_HOST_SOURCE 未设且本地无 _npx 缓存）→ S3 宿主侧半边与 S7 组均记 skip（BR-03：静态守卫不依赖宿主）')
 }
