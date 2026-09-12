@@ -27,7 +27,7 @@
 
 ### 方式一（推荐）：dsh plugin 标准管理
 
-前置要求：DSH ≥ 0.1.1-rc.2（含 `dsh plugin` 命令）+ [pnpm](https://pnpm.io/)（宿主插件管理以 pnpm 拉起安装）。
+前置要求：DSH ≥ 0.1.1-rc.2（含 `dsh plugin` 命令；受支持与实测基线见下方「宿主兼容性（实测基线）」）+ [pnpm](https://pnpm.io/)（宿主插件管理以 pnpm 拉起安装）。
 
 **在线安装**（插件未发布 npm registry，走 GitHub git 源）：
 
