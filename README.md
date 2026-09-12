@@ -27,7 +27,7 @@
 
 ### 方式一（推荐）：dsh plugin 标准管理
 
-前置要求：DSH ≥ 0.1.1-rc.2（含 `dsh plugin` 命令；受支持与实测基线见下方「宿主兼容性（实测基线）」）+ [pnpm](https://pnpm.io/)（宿主插件管理以 pnpm 拉起安装）。
+前置要求：DSH ≥ **0.1.5-rc.2**（本版受支持与实测基线；`dsh plugin` 命令自 0.1.1-rc.2 起提供）+ [pnpm](https://pnpm.io/)（宿主插件管理以 pnpm 拉起安装）。
 
 **在线安装**（插件未发布 npm registry，走 GitHub git 源）：
 
@@ -127,7 +127,7 @@ cd package
 ```text
 请帮我在 DeepSeek Harness 上安装「dsh-agent-router」多模型路由插件：
 
-1. 确认前置条件：DeepSeek Harness ≥ 0.1.1-rc.2（含 dsh plugin 命令；受支持与实测基线见下方「宿主兼容性（实测基线）」）、本机已安装 pnpm。
+1. 确认前置条件：DeepSeek Harness ≥ 0.1.5-rc.2（本版受支持与实测基线）、本机已安装 pnpm。
 2. 在终端执行标准管理命令（npx 形态最通用，Windows / macOS / Linux 一致）：
    npx @deepseek-ai/dsh plugin --profile web add github:peterwangze/dsh-agent-router
 3. 等待命令执行完成，确认输出无报错（pnpm 会自动安装插件依赖）。
