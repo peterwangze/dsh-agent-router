@@ -261,8 +261,9 @@ console.log('rpc contribution:')
   const contribution = createHostContribution()
   check('face host', contribution.face === 'host')
   // ARCH-004 B1（EVO-019）：+router/hostFaceDiagnostics（19 项——新增 RPC 面
-  // 时同步更新本计数三处：本行 / 下一行 / `typert contribution registered` 断言行
-  // （符号名式锚；原写死行号已随本文件行数变动漂移））。
+  // 时同步更新本计数三处：本行 / 紧随的 `19 invocations` 断言行 /
+  // `typert contribution registered` 断言行（符号名式锚；原写死行号已随
+  // 本文件行数变动漂移，FIX-040 N3 修正「下一行」字面指代错位）。
   check('19 invocations', contribution.invocations.length === 19)
   check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 19 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
   check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))

@@ -472,10 +472,11 @@ export async function runInstallEntryTests(check) {
           writeFileSync(join(realNmSrc, 'node_modules', 'user-marker.txt'), 'keep me')
           const realNmHome = join(bareRoot, 'real-nm-home')
           mkdirSync(join(realNmHome, 'profiles', 'node_modules'), { recursive: true })
-          // FIX-038：`-File` 臂仅 win32 适用（install.ps1 的「跳过依赖链接 / 拷贝
-          // 回退」语义依赖 Windows 链接判定）——非适用平台记可见 skip。
+          // FIX-038：`-File` 臂仅 win32 适用；非适用平台记可见 skip。理由串与同
+          // 文件 `PS1_OFFLINE_APPLICABLE` JSDoc 同口径（FIX-040 N1）：install.sh
+          // 同载该保护语义但**无对照臂**（已知覆盖缺口），不得表述为「平台不可判定」。
           if (!PS1_OFFLINE_APPLICABLE) {
-            skipArm('real node_modules dir left untouched (-File)', `${PS1_PLATFORM_DETAIL}——拷贝/链接回退语义仅 win32 可判定`)
+            skipArm('real node_modules dir left untouched (-File)', `${PS1_PLATFORM_DETAIL}——install.sh 同载该保护语义但无对照臂（已知覆盖缺口，台账候选）`)
           }
           for (const host of (PS1_OFFLINE_APPLICABLE ? hosts : [])) {
             const run = () => runCommand(host, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(ROOT_DIR, 'install.ps1'), '-LocalPath', realNmSrc], { env: { ...process.env, DSH_HOME: realNmHome } })
