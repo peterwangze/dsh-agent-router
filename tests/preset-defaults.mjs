@@ -1064,14 +1064,16 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
 // 报障（用户 2026-09-07）：预设 subagent 未设置模型时，会话内手动切换主
 // agent 模型后，新派生 subagent 仍走预设配置的模型，不跟随用户切换。
 // 根因：subagentFixup 的 target 链在 cfg.subagent 未设置时回落 cfg.main
-//（预设配置的静态值）——把 README L158「留空 = 继承主 Agent 模型」实现成
+//（预设配置的静态值）——把 README「留空 = 继承主 Agent 模型」句实现成
 // 「固化到配置时写入的值」。宿主继承基线 parentAgentOptionsForDelegation
 //（dsh-subagent lib/index.js L603-613）本已把**父最近请求头路由**（会话
 // 实际模型——含手动切换后的请求路由；首请求前回落 parent.options）传给
 // child；fixup 再改写为 cfg.main = 主动覆盖宿主继承——「会话内手动选择
-// 永远优先（用户主权）」（README L16）被子代理路径击穿。
+// 永远优先（用户主权）」条（README「特性」节 🎯 首句）被子代理路径击穿。
 // 判别：M1 复刻报障主诉（父头路由 ≠ cfg.main，旧实现必败 RED）；M2-M5 =
-// 语义四态守卫（README L16/L158/L165 承诺）。夹具与 K 节同形（宿主面：
+// 语义四态守卫（README「特性」节 🎯「手动选择永远优先」条 +「预设 Agent
+// 默认模型」节「留空 = 继承主 Agent 模型」/「未设置时 subagent 跟随主 Agent
+// 当前实际模型」两句承诺）。夹具与 K 节同形（宿主面：
 // parent.session.requestHeader() → {config} 即「最近请求头路由」事实源）。
 {
   const makeParentM = ({ options, headerRoute }) => ({
