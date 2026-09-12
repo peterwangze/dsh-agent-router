@@ -580,3 +580,7 @@
 | TRIAGE-EVO-022 | EVO-022 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/EVO-022.json） | EVO-022.json | change-triage | 2026-09-12 | G11 | TRIAGED |
 
 | EV-179 | EVO-022 | development | B4 ctx-services 域批开发实现完成（待审查）：TDD RED 17→GREEN 93 + 红演示实证（黑名单临时加裸 ctx.get → 红）+ 全量网 23/23 exit 0 零回退 + 镜像 hash 一致；主体 = serviceFaceOf 通用 probe + 11 访问器 + 24 散点切换（17 高危 + 7 host-route）+ 常量迁 version.js；八项累积绑定逐项落实（①反向边翻转②RPC 供数平移③agentPresetsServiceOf 归并④边缘守卫⑤注释锚清扫⑥probe 三方法⑦modelDirectories 缺面短码+诊断⑧faces 去重）；含两项 Coordinator 授权锁扩展（G14 值锚重锚至 version.js / client-remotes.js ⑦权威侧——triage 累积绑定锁清单遗漏的补正）；目标对齐：高危三域全覆盖达成，ctx 服务面消费收敛单点受看护，24 处散点 inline 判断的宿主漂移盲区自此有分级白名单机器防线，深化 RISK-003 根治；用户影响: 获得=随版本发布自动生效, 感知=CHANGELOG, 体验变化=否-内部重构, 迁移指南=不需要 | 事实依据：Developer 结构化结论（本会话，含 RED/GREEN 输出与 git stat）+ 两项授权裁决留痕（本会话 send_message） | TRIAGE-EVO-022; commit 待落（12 文件暂存） | Developer + Coordinator 机录 | 2026-09-12 | G6 | 开发完成待审 | commit 待治理前置落盘后由 Developer 重试 |
+
+| REVIEW-EVO-022-R0 | EVO-022 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-EVO-022-R0-input.md; review-EVO-022-R0.md | Code Reviewer | 2026-09-12 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| TRIAGE-EVO-023 | EVO-023 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/EVO-023.json） | EVO-023.json | change-triage | 2026-09-12 | G11 | TRIAGED |
