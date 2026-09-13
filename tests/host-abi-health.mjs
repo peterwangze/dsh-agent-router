@@ -1473,13 +1473,47 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   //   `tests/**` 文件（不登记、不豁免）⇒ 判红；③ 从表中移除任一条目（其文件仍含锚）⇒ 亦判红
   //   （⇒ 判据依赖实际表内容，非常量满足）。9h-5b 独立判**豁免表腐化**（所列文件已无锚 / 与已登记
   //   条目重叠 ⇒ 判红）。
+  //   FIX-045 收口（R5 P3-2/P3-3 两项，均为**代码面**收口、无产品代码改动）：
+  //     · P3-2 形态①的扩展名集 ⊃ 扫描面枚举集（潜在漏面，实测当前实例 = 0）⇒ 已按**单一常量来源**
+  //       收敛（见下方 `ANCHOR_COVERAGE_EXT_ALTERNATION`），并新增 9h-5c 机器判据看护该单源绑定；
+  //     · P3-3 `overlappingExempts` 单变量判红实证：仓库外副本**仅**向 `ANCHOR_CASES` 增加一条指向
+  //       `tests/oauth-promotion.mjs`（既有豁免文件）的登记单元（旧式锚侧留空 + 一条实存于该文件的
+  //       fresh 字符串，其它构造一字未动）⇒ 实测 **1 FAILURE(S) (190 passed)**、exit 1，且该 FAIL 的
+  //       detail 为 `{"exemptCount":3,"deadExempts":[],"overlappingExempts":["tests/oauth-promotion.mjs"]}`
+  //       ⇒ **`deadExempts` 分支未触发**（该合取项为真）而重叠分支单独判红 = 单变量实证；同一副本上
+  //       不改任何构造的基线运行 = 190 断言全绿 / exit 0（不误红对照）。
+  //   **本段与下方 9h-5c 判据新增文本同样受 9h-4/9h-4b/9h-4c 约束**（已实跑复核：三条 hygiene 判据
+  //   保持全绿、断言面为「基线 189 + 9h-5c 1 = 190」；本段首版曾因逐字复述登记数据单元的起始标记
+  //   被 9h-4c 判红 ⇒ 已改为指代式表述，这正是本条判据看护自身文本的现场实证）。
   {
+    // 形态①的扩展名集**由扫描面枚举单点派生**（FIX-045 P3-2）：此前该正则的扩展名交替组宽于枚举集，
+    //   即正则认作「文件:行号」载体的扩展名不被 `coverageFiles` 枚举 ⇒ 若该类文件写入行号式锚，
+    //   `anchorBearingFiles` 无从命中该文件、也就无从判红（潜在漏面；实测当前实例 = 0，非已发生缺口）。
+    //   收敛方向取「单一常量来源」（P5）：正则扩展名集 = `ANCHOR_COVERAGE_EXTS` 逐项去前导点后拼接，
+    //   二者结构性同步。**方向性说明（不得反向理解）**：枚举集才是面定义，正则随其**同步收窄**
+    //   （`js|mjs|cjs`，与既有面**同集**）；本项**未**放宽扫描面去吞非 JS 系载体（那会改面语义）。
+    //   强度对照（P-v2 质量基线只升不降）：本例的派生结果与派生前正则在**匹配能力上等价**
+    //   （两式源串仅扩展名交替组与转义写法不同 ⇒ 同集匹配、零行为漂移；等价性由 9h-5c 机器判据
+    //   看护），且此后任何一次面枚举变更都**自动**同步到形态①、并使该扩展名的既有锚文件
+    //   fail-closed 判红（宁可判红不可静默放过）——故收敛方向严格更严，不降低既有判据强度。
+    const ANCHOR_COVERAGE_EXTS = ['.js', '.mjs', '.cjs']
+    const ANCHOR_COVERAGE_EXT_ALTERNATION = ANCHOR_COVERAGE_EXTS.map((extension) => extension.replace(/^\./, '')).join('|')
+    const ANCHOR_COVERAGE_FORM_1_SOURCE = `[A-Za-z0-9_@/.-]*[A-Za-z0-9_-]\\.(${ANCHOR_COVERAGE_EXT_ALTERNATION}):\\d+(-\\d+)?`
     const ANCHOR_COVERAGE_FORMS = [
-      /[A-Za-z0-9_@/.-]*[A-Za-z0-9_-]\.(js|mjs|ts|tsx|sh|ps1):\d+(-\d+)?/,
+      new RegExp(ANCHOR_COVERAGE_FORM_1_SOURCE),
       /\bL\d{2,4}(?:[-–]\d{2,4})?/,
       /(?:^|[^A-Za-z0-9_]):\d{2,4}(\/\d{1,4})?([-–]\d{2,4})?/,
     ]
-    const ANCHOR_COVERAGE_EXTS = ['.js', '.mjs', '.cjs']
+    // 9h-5c（FIX-045 P3-2 机器判据）：**单源绑定非静默失真**——形态①的扩展名交替组 MUST 恰等于
+    //   由 `ANCHOR_COVERAGE_EXTS` 派生的交替串（顺序含：弱等于会放行「组内混入枚举外扩展名」的静默
+    //   漂移），且该组 MUST 是形态①**结尾**（`…<扩展名>:<行号>`——否则另有扩展名被正则纳入而枚举不含，
+    //   即原缺口形态复发）。判据面 = 运行时派生值，故任一单侧改动（枚举增项 / 正则写回字面量 / 组内
+    //   混入额外扩展名）都在本项判红，而非等下次人工巡检（P5 单点化 + P8 失败可观测）。
+    const anchorCoverageExtGroup = ANCHOR_COVERAGE_FORMS[0].source.match(/\(([^()]*)\):\\d\+\(-\\d\+\)\?$/)
+    check('B5 9h-5c R-1: 形态①扩展名集 === 扫描面枚举派生集（单源绑定；组内额外扩展名 / 枚举增项 / 写回字面量即红）',
+      anchorCoverageExtGroup?.[1] === ANCHOR_COVERAGE_EXT_ALTERNATION
+      && ANCHOR_COVERAGE_FORMS[0].source.endsWith(ANCHOR_COVERAGE_FORM_1_SOURCE),
+      { extAlternation: ANCHOR_COVERAGE_EXT_ALTERNATION, form1ExtGroup: anchorCoverageExtGroup?.[1] ?? null, form1Source: ANCHOR_COVERAGE_FORMS[0].source })
     // 豁免面（显式、带理由、可复核；三类各有依据）：镜像侧 + 本地快照对象 + 版本冻结文档。
     const ANCHOR_COVERAGE_EXEMPTS = [
       { file: ['tests', 'served-client.js'], kind: 'mirror', reason: '镜像侧不重复登记（载体 §一 notes 4）：`served-client mirror stays byte-identical to lib/client.js` 的字节恒等判据是更强的保证（逐字节相等 ⇒ 内容判据自动传递）。' },
