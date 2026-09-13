@@ -828,7 +828,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
       { ...selfSatisfied, tableSize: ANCHOR_OBJECTS_3.length })
     // 9h-3（FIX-040 R0 P1-1-B / P2-1 收口）：**入表完备性自检**——metrics.mjs 内出现的
     //   每个「…」候选锚名（逐行抽取，兼容跨行注释被折行/截断的形态）MUST 登记在
-    //   ANCHOR_OBJECTS 首列 ⇒ **新增锚未入表即红**——把「完备性」由人工改为机器看护
+    //   ANCHOR_OBJECTS_3 首列 ⇒ **新增锚未入表即红**——把「完备性」由人工改为机器看护
     //   （本批 P1-1 的失效链 = 新写死锚 + 表未收 + 声称「死锚即红」）。
     //   判据强度（R1 P2-1(new) 收口）：用**双向精确判据**而非子串包含式 `key.includes(label)`
     //   ——后者会让「新标签恰为既有键子串」的笔误形态（漏字/截断）静默通过。允许的两种
