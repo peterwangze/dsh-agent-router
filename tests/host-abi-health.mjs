@@ -708,6 +708,12 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   //   FIX-040 扩面（R1 N4）：把 FIX-038 清扫面（llm-selection.js / metrics.mjs / smoke.mjs /
   //   install-entry.mjs / install.sh 引用位与 ci.yml / README 契约面）纳入同一清单，使
   //   「行号式锚零残留」成为机器看护而非人工巡检（此前全部靠手工逐个发现 ⇒ 必然复发）。
+  // FIX-042 W2：本守卫**自身**也登记锚判据（自指锚一律用判据名/块名，不用行号——W2 机核实测本文件
+  //   零处行号式自指）。自条目的**自满足陷阱**：若把某旧锚串以字面量整串写进本文件，ANCHOR_CASES 对
+  //   本文件的 `includes` 判据会命中**本行自身**（X && X 恒真、判别力归零）；与同批其他文件条目的
+  //   stale 字面量也会互相碰撞。故此类串统一以**拼接常量**定义——文件内不存在该连续串，而 needle
+  //   的值与判据（`source.includes(needle)`）完全不变（改回字面量行号式锚即判红）。
+  const OLD_PRESETDIAG_LINE_ANCHOR = 'presetDiag ' + ':127-141'
   const ANCHOR_CASES = [
     { file: ['lib', 'host-abi', 'ctx-services.js'], stale: ['preset-defaults.js:163', 'preset-defaults.js:194', 'preset-defaults.js:214', 'prestep.js:193', 'wrapper.js:516', 'oauth-llm.js:449', 'service.js:927', 'host-route.js:248'], fresh: ['safeListModels', 'sessionSelectFaceOf', 'agentsRegistryOf', 'agentPresetsServiceOf', 'llmFaceOf'] },
     { file: ['lib', 'host-abi', 'events.js'], stale: ['host-route.js:263-270'], fresh: ['syncHostRoute'] },
@@ -716,7 +722,10 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   改**符号名式**；本条目一并扩 stale/fresh（原条目只覆盖 `host-route.js:55` 一串）。
     { file: ['lib', 'stats.js'], stale: ['host-route.js:55', 'lib/oauth-llm.js:43'], fresh: ['host-abi/version.js', 'OAUTH_PROVIDER'] },
     { file: ['tests', 'fix-031-attribution.mjs'], stale: ['host-route.js HOST_ROUTE_PROVIDER'], fresh: ['host-abi/version.js HOST_ROUTE_PROVIDER'] },
-    { file: ['tests', 'client-render.mjs'], stale: ['lib/host-route.js HOST_ROUTE_PROVIDER'], fresh: ['lib/host-abi/version.js HOST_ROUTE_PROVIDER'] },
+    // FIX-042 W1（扩充既有条目，P5：同文件不重复登记）：`agentPresetsServiceOf` 先例锚原写
+    //   `lib/preset-defaults.js:100-108`（实测漂移——该区间非定义；定义实在
+    //   lib/host-abi/ctx-services.js 的 `export function agentPresetsServiceOf`）⇒ 归属文件式。
+    { file: ['tests', 'client-render.mjs'], stale: ['lib/host-route.js HOST_ROUTE_PROVIDER', 'lib/preset-defaults.js:100-108'], fresh: ['lib/host-abi/version.js HOST_ROUTE_PROVIDER', 'agentPresetsServiceOf 先例，定义在'] },
     // FIX-040 W8a：llm-selection.js 三处行号锚（R0 P3-3，:99/:179 已实测漂移）→ 符号名式。
     { file: ['lib', 'host-abi', 'llm-selection.js'], stale: ['preset-defaults.js:226-238', 'preset-defaults.js:209-240', 'preset-defaults.js:303-307'], fresh: ['lib/preset-defaults.js', 'sessionSelectFaceOf', 'sessionNeverProduced', 'inheritedRouteOf', 'LLM_FACE_METHODS'] },
     // FIX-040 W4：metrics.mjs 的 12 处 smoke.mjs:<行号> 证据锚（实测偏 ~1038~1200）→ 断言名式。
@@ -742,7 +751,10 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   发布文档（`release-checklist-v0.3.2.md:30` / `version-plan-v0.3.2.md:82`）与
     //   `CHANGELOG.md:25`（已发布节冻结）仍含同族 `README L<n>` 锚，属**历史快照**（锚指向
     //   当时的 README 行号），刻意不清扫。
-    { file: ['lib', 'service.js'], stale: ['README L125'], fresh: ['README「常见问题」节「视觉 agent 用什么'] },
+    // FIX-042 W1（扩充既有条目）：`lib/service.js` 裸 `:4074` 锚原指向「设备码会话取消」，
+    //   实测 :4074 属 `oauthTokenExchange` 的 tokenRef 解析（对象不符）；同一事实在
+    //   `exchangeDeviceCode` 的落盘前 cancelled 复查 ⇒ 符号名式。
+    { file: ['lib', 'service.js'], stale: ['README L125', ':4074 的设备码会话取消'], fresh: ['README「常见问题」节「视觉 agent 用什么', '`exchangeDeviceCode` 的落盘前 cancelled 复查'] },
     { file: ['tests', 'routing-paths.mjs'], stale: ['README L125'], fresh: ['README「常见问题」节「视觉 agent 用什么'] },
     // FIX-041 W2：镜像对中**可在本仓核验**的行号锚/自身锚已符号名化（6 处）——stale 零
     //   残留 + 替代式锚在位。镜像侧（tests/served-client.js）**不重复登记**：§3 的字节
@@ -758,6 +770,21 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   不同数字（如审查员口径把 `L5682-5760` 只计为 `L5682`、并排除 `/:342` 形态 ⇒
     //   13/17/8 = 38）——**数字必须连口径引用**，且随文本增删自动变化，不得作长期基线。
     { file: ['lib', 'client.js'], stale: ['lib/oauth-llm.js:43', 'presetDiagnostics :2109', 'health.js:35-48', 'OAUTH_ROUTE_PROVIDER :36', '权威单点 :124-125'], fresh: ['lib/oauth-llm.js `export const', 'presetDiagnostics 方法存在性先例', 'lib/host-abi/health.js noteHostDiag', 'HOST_FACE_ERROR_CODES 三错误码'] },
+    // FIX-042 W1/W2：在仓漂移锚收口批（8 文件）的看护接线——FIX-041 R1 §三.3 硬前置「逐处语义
+    //   判定」已逐处执行（判定表见 FIX-042 交付报告 W1），本段只登记**判定后**的 stale/fresh 对：
+    //   stale = 本轮清除的旧行号式锚串（零残留即绿）；fresh = 替代式符号名/代码串锚（在位即绿）。
+    //   宿主锚（`dsh-*` / 宿主 上下文，含 lib/client.js 内 9 处 `lib/client.js:<NNN>`）**不入本
+    //   清单**：对象不在本仓库面，仓库级守卫不可解析宿主树（基线登记与人工复检义务见下方注释）。
+    { file: ['lib', 'host-abi', 'health.js'], stale: ['lib/preset-defaults.js:116-124', OLD_PRESETDIAG_LINE_ANCHOR], fresh: ['presetDiag/notePresetDiag'] },
+    { file: ['lib', 'host-abi', 'inject-manifest.js'], stale: ['（:5060 先例', 'lib/client.js:5060'], fresh: ['`const inject ='] },
+    { file: ['lib', 'oauth-llm.js'], stale: ['runCodexResponsesChat :2906-2929'], fresh: ['`runCodexResponsesChat`'] },
+    { file: ['lib', 'wrapper.js'], stale: ['stream 直传分支（下方 :353）'], fresh: ['`stream()` 的图片块保真直传分支'] },
+    { file: ['tests', 'rpc-shadow-guard.mjs'], stale: ['lib/service.js:673', 'lib/service.js:3172'], fresh: ['`this.stats = new StatsStore(...)`（lib/service.js）', '`statsSnapshot()` 委托'] },
+    // FIX-042 W2：**本守卫自身**的锚注释同口径看护（W2 机核实测：本文件零处行号式自指——自指
+    //   一律用判据名/块名，如「9h-2b 的 ANCHOR_OBJECTS_3 校验块」；行号式自指随增删行即失效，
+    //   即 FIX-041 R1 P3-2 指出的失效机理）。stale 侧 = 本批自本文件清除的旧行号式锚（拼接常量，
+    //   见上）；fresh 侧 = 替代式符号名/代码串锚（同样拼接写出，规避自满足）。
+    { file: ['tests', 'host-abi-health.mjs'], stale: [OLD_PRESETDIAG_LINE_ANCHOR], fresh: ['presetDiag/notePresetDiag ' + '纪律同构'] },
   ]
   for (const anchorCase of ANCHOR_CASES) {
     const filePath = join(ROOT_DIR, ...anchorCase.file)
