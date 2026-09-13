@@ -43,7 +43,10 @@
  *    **跨文件对象核验**（9h-2：metrics 断言名式锚所指对象按**声明单源**实存；9h-2b：零自满足；
  *    9h-2c：表内声明源名合法性——未知源名显式判红，不裸抛 TypeError；
  *    9h-2d：对象在其声明源内恰出现 1 次——同源重复/副本即红）
- *    + **入表完备性自检**（9h-3：metrics 候选锚名未入表即红），使锚漂移成为机器看护而非人工巡检。
+ *    + **入表完备性自检**（9h-3：metrics 候选锚名未入表即红），使锚漂移成为机器看护而非人工巡检；
+ *    并增设 **needle 自碰撞卫生**（FIX-043 批 A 收口 FIX-042 R1 P3-1：9h-4「stale needle 在守卫自身
+ *    内的非登记出现次数 = 0」（被登记说明文本逐字复述即红）/ 9h-4b 自条目 needle 全文件出现次数 = 0
+ *    （拼接常量登记）/ 9h-4c 登记数据单元解析完整性——解析失配即红，防判据面静默退化）。
  * 10. FIX-035（EVO-023 R0 P2-1 收口，§9i）：events 域 attach 失败条目**不入表**
  *    （后续订阅重试 attach——静默死订阅消除）+ event-subscribe-failed 诊断
  *    （code=attach-threw + consumer 标签 + 错误摘要，P8）+ 失败消费者 dispose
@@ -714,16 +717,23 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   //   stale 字面量也会互相碰撞。故此类串统一以**拼接常量**定义——文件内不存在该连续串，而 needle
   //   的值与判据（`source.includes(needle)`）完全不变（改回字面量行号式锚即判红）。
   const OLD_PRESETDIAG_LINE_ANCHOR = 'presetDiag ' + ':127-141'
+  // FIX-043 ⑤/⑥：**自条目**（file 指向本守卫）的 needle/fresh 一律以**拼接常量**登记——自条目判据
+  //   对 `source.includes(...)` 是对本文件自身求值：字面量登记会使判据命中自身的定义处（stale 侧恒红、
+  //   fresh 侧恒真 ⇒ 判别力归零），故必须让文件内不存在该连续串（9h-4b 机器判据看护此纪律）。
+  //   两条分别对应 FIX-042 R1 P3-2 的旧口径措辞（被清扫对象）与替代后的如实口径句（新增在位要求）。
+  const OLD_CLIENT_SELF_ANCHOR_CLAIM = '9 处 ' + '`lib/client.js' + ':<NNN>` 自锚'
+  const FRESH_CLIENT_HOST_ANCHOR_CLAIM = '非本仓' + '自锚'
   const ANCHOR_CASES = [
     { file: ['lib', 'host-abi', 'ctx-services.js'], stale: ['preset-defaults.js:163', 'preset-defaults.js:194', 'preset-defaults.js:214', 'prestep.js:193', 'wrapper.js:516', 'oauth-llm.js:449', 'service.js:927', 'host-route.js:248'], fresh: ['safeListModels', 'sessionSelectFaceOf', 'agentsRegistryOf', 'agentPresetsServiceOf', 'llmFaceOf'] },
     { file: ['lib', 'host-abi', 'events.js'], stale: ['host-route.js:263-270'], fresh: ['syncHostRoute'] },
-    // FIX-041 R0 F-2：同族在仓漂移锚收口——lib/stats.js 引 `lib/oauth-llm.js:43`，该行现已
-    //   漂移为无关注释（`export const OAUTH_PROVIDER` 实在 :47）⇒ 按 FIX-041 W2 同形去行号
-    //   改**符号名式**；本条目一并扩 stale/fresh（原条目只覆盖 `host-route.js:55` 一串）。
+    // FIX-041 R0 F-2：同族在仓漂移锚收口——lib/stats.js 引 `lib/oauth-llm.js` 的 `:43`，该行现已
+    //   漂移为无关注释（`export const OAUTH_PROVIDER` 实在 `:47`）⇒ 按 FIX-041 W2 同形去行号
+    //   改**符号名式**；本条目一并扩 stale/fresh（原条目只覆盖 `host-route.js` 的 `:55` 一串）。
+    //   FIX-043 ⑤ 卫生：被清锚串**不得在登记说明里逐字复述**——一律分段写出（9h-4 机器判据看护）。
     { file: ['lib', 'stats.js'], stale: ['host-route.js:55', 'lib/oauth-llm.js:43'], fresh: ['host-abi/version.js', 'OAUTH_PROVIDER'] },
     { file: ['tests', 'fix-031-attribution.mjs'], stale: ['host-route.js HOST_ROUTE_PROVIDER'], fresh: ['host-abi/version.js HOST_ROUTE_PROVIDER'] },
     // FIX-042 W1（扩充既有条目，P5：同文件不重复登记）：`agentPresetsServiceOf` 先例锚原写
-    //   `lib/preset-defaults.js:100-108`（实测漂移——该区间非定义；定义实在
+    //   `lib/preset-defaults.js` 的 `:100-108`（实测漂移——该区间非定义；定义实在
     //   lib/host-abi/ctx-services.js 的 `export function agentPresetsServiceOf`）⇒ 归属文件式。
     { file: ['tests', 'client-render.mjs'], stale: ['lib/host-route.js HOST_ROUTE_PROVIDER', 'lib/preset-defaults.js:100-108', 'lib/client.js:4754-4825', 'lib/client.js:2842-2848'], fresh: ['lib/host-abi/version.js HOST_ROUTE_PROVIDER', 'agentPresetsServiceOf 先例，定义在', 'connection handle 面已无 `api` 字段', 'dsh-client-ui-settings-models 的 static `inject` 声明'] },
     // FIX-040 W8a：llm-selection.js 三处行号锚（R0 P3-3，:99/:179 已实测漂移）→ 符号名式。
@@ -737,7 +747,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   被核验取决于该名是否在 9h-2 表内（表内 = 按声明单源核验；表外 = 无核验）——不声称闭环。
     { file: ['tests', 'metrics.mjs'], stale: ['smoke.mjs:1162-1177', 'smoke.mjs:1316-1326', 'smoke.mjs:816-820', 'smoke.mjs:1473-1480', 'smoke.mjs:1669-1682', 'smoke.mjs:1500-1507', 'smoke.mjs:1153-1157', 'smoke.mjs:846-868', 'smoke.mjs:1557-1569', 'smoke.mjs:848-867', 'smoke.mjs:1266', 'smoke.mjs:1680-1681'], fresh: ['smoke.mjs「image turn config passes through unchanged (no whole-turn routing)」', 'smoke.mjs「wrapper takes over default model」', 'smoke.mjs「vision call returns text without echoing injected images (B)」', 'smoke.mjs「native multimodal delegate sees raw image (preserveImageInput)」', 'smoke.mjs §7.7 pre-step「image turn on wrapper route injects plugin reminder」', 'smoke.mjs「collectMarkers dedupes by attachment」', 'smoke.mjs「tool parameters schema」', 'smoke.mjs「attachmentIds resolution (M2)」节', 'smoke.mjs「follow-up text turn injects memory segment into system」', 'smoke.mjs「wrapper delegate sees route_agent'] },
     // FIX-040 W2/W8b：smoke.mjs 的旧式锚（行号区间 / 自锚）→ 符号名或内容式指代。
-    // FIX-042 W4（扩充既有条目）：`check` 三参形态锚原写 `host-contract.mjs:82-88`（实测 HIT，但属
+    // FIX-042 W4（扩充既有条目）：`check` 三参形态锚原写 `host-contract.mjs` 的 `:82-88`（实测 HIT，但属
     //   行号式）⇒ 去行号改签名式（C5 半条）。
     { file: ['tests', 'smoke.mjs'], stale: ['install-entry.mjs:74-77', 'typert contribution registered` 断言行\n  // （符号名式锚；原写死行号', 'host-contract.mjs:82-88'], fresh: ['powerShellHosts', 'typert contribution registered', '紧随的 `19 invocations` 断言行', 'host-contract.mjs 的 `check(label, condition, detail)`'] },
     // FIX-040 W2/W3：install-entry.mjs 引用侧符号锚在位（其 install.sh 行号锚已符号化）。
@@ -749,7 +759,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     // FIX-040 W5：README 行号锚（L16/L158/L165，实测漂移 7 行）→ 关键词/小节名式。
     { file: ['lib', 'preset-defaults.js'], stale: ['README L158', 'README L16', 'README L165'], fresh: ['README「预设 Agent 默认模型」节', '留空 = 继承主 Agent 模型'] },
     { file: ['tests', 'preset-defaults.mjs'], stale: ['README L158', 'README L16', 'README L165'], fresh: ['README「留空 = 继承主 Agent 模型」句', 'README「特性」节'] },
-    // FIX-041 W3：同族 `README L125` 行号锚（实测已漂移 ~141 行——`:125` 现为安装提示句，
+    // FIX-041 W3：同族 `README` 的 `L125` 行号锚（实测已漂移 ~141 行——`:125` 现为安装提示句，
     //   被引 qwen3.7-plus 事实句现位于 `README.md:266`「常见问题」节「视觉 agent 用什么
     //   模型？」条）→ 关键词/小节名式；两处引用同口径核验。**限定语**（FIX-041 R0 F-5）：
     //   「零残留」只在 **shipped 面（lib/** + tests/**）**成立——`docs/release/` 两处历史
@@ -801,6 +811,12 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   **自我引用注意**：本段注释与 ANCHOR_CASES 条目文本**自身即含行号形态** ⇒ 每增一行都会再次改变
     //   计数（R0 返工笔后同一脚本实测已给 94/19）——这正是「数字必须连**取数修订**引用」的实证：
     //   **任何引用 MUST 按引用时点重跑并标注修订**，不得沿用他时点数字、不得作长期基线。
+    //   **快照取数时点绑定**（FIX-043 ⑦ / FIX-042 R1 P3-3 收口）：差额工具的两份输入 = **时点快照**
+    //   ——`fix042-base.txt` @`6bc3841`（自声明 97/22，本批实测吻合）/ `fix042-head.txt` @`61af16a`
+    //   （自声明 92/19，本批实测吻合）；两者 MUST 按引用时点重生成，不得跨时点复用。
+    //   **锁外未闭合（如实登记，不制造改动）**：工具头 / 表头（`.test-home/`，未跟踪取证件）内的
+    //   快照时点标注不在本批锁面（本批只可改 `tests/host-contract.mjs` / `tests/host-abi-health.mjs`）
+    //   ——该处标注移交后续批；守卫侧登记面即本段，已含两份快照的修订绑定与复跑命令。
     //   **本批实测计数回填**（FIX-042 R0 F-2 收口；提交信息历史不回改 ⇒ 计数事实以本行为准）：
     //   W1 = **12** 个 MISS 位点 / **8** 文件（`+20/−19`）；W2 = `ANCHOR_CASES` **16→22** 条目 /
     //   断言 165→**171**；W4 = 4 文件（`+14/−4`）/ 条目 22→**24** / 断言 **173**；W3 = 试点 **11** 锚位 /
@@ -816,12 +832,21 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     // FIX-042 W1/W2：在仓漂移锚收口批（8 文件）的看护接线——FIX-041 R1 §三.3 硬前置「逐处语义
     //   判定」已逐处执行（判定表见 FIX-042 交付报告 W1），本段只登记**判定后**的 stale/fresh 对：
     //   stale = 本轮清除的旧行号式锚串（零残留即绿）；fresh = 替代式符号名/代码串锚（在位即绿）。
-    //   宿主锚（`dsh-*` / 宿主 上下文，含 lib/client.js 内 9 处 `lib/client.js:<NNN>`）**不入本
-    //   清单**：对象不在本仓库面，仓库级守卫不可解析宿主树（基线登记与人工复检义务见上方注释）。
+    //   FIX-043 ⑥ 如实口径（FIX-042 R1 P3-2 收口——原句写「9 处自锚」与实测不符）：宿主锚（`dsh-*` /
+    //   宿主 上下文，含 `lib/client.js` 内 **8 处** `lib/client.js:<NNN>`——**全部为宿主包锚**
+    //   （包名在邻近行：7 处紧邻上一行、1 处为上二行同句续行），**非本仓自锚**）**不入本清单**：
+    //   对象不在本仓库面，仓库级守卫不可解析宿主树（基线登记与人工复检义务见上方注释）。
+    //   **数字口径 + 取数时点绑定**：口径 = `git grep -oE 'lib/client\.js:[0-9]+(-[0-9]+)?'
+    //   -- lib/client.js`（匹配次数）；取数修订 `175d3e1` 实测 = **8 处**（FIX-042 批前树 `6bc3841`
+    //   = 9 处，差额 1 处 = `lib/client.js` 的 `:4754-4825` 已随 FIX-042 W1/W2 清扫）——历史数字
+    //   （R0 / FIX-041 R1 记为 9 处）**不得沿用**，引用 MUST 按引用时点重跑并标注修订。
     { file: ['lib', 'host-abi', 'health.js'], stale: ['lib/preset-defaults.js:116-124', OLD_PRESETDIAG_LINE_ANCHOR], fresh: ['presetDiag/notePresetDiag'] },
-    { file: ['lib', 'host-abi', 'inject-manifest.js'], stale: [':5060 先例', 'lib/client.js:5060', 'dsh-client-modules lib/client.js:265-268'], fresh: ['const inject =', '宿主 dsh-client-modules 的包表行'] },
+    // FIX-043 ⑤（FIX-042 R1 P3-1 收口）：F-3 登记曾把被清扫的锚串**逐字**写入守卫 ⇒ 该 needle 成
+    //   「自碰撞死 needle」（守卫自身 +1、目标文件 0）。改**拼接常量**登记——needle 值与判据
+    //   （`source.includes(needle)`）完全不变，而守卫文本内不再存在该连续串（由 9h-4/9h-4b 看护）。
+    { file: ['lib', 'host-abi', 'inject-manifest.js'], stale: [':5060 先例', 'lib/client.js:5060', 'dsh-client-modules ' + 'lib/client.js:265-268'], fresh: ['const inject =', '宿主 dsh-client-modules 的包表行'] },
     { file: ['lib', 'oauth-llm.js'], stale: ['runCodexResponsesChat :2906-2929'], fresh: ['`runCodexResponsesChat`'] },
-    // FIX-042 R0 F-3（扩充同条目）：`lib/wrapper.js:266` 的宿主锚 `（:1397-1403）` 为清单外**真漂移**
+    // FIX-042 R0 F-3（扩充同条目）：`lib/wrapper.js:266` 的宿主锚（全角括号形态的 `:1397-1403`）为清单外**真漂移**
     //   （审查员宿主树实读：`dsh-llm resolveModelInfoFor` 在 `:2046`、`adapter.resolveModel` 在 `:2047`；
     //   `:1397-1403` 现为 `assembleAssistantStream`）⇒ 去行号改符号链式（与 W3.3 试点同法）。
     { file: ['lib', 'wrapper.js'], stale: ['stream 直传分支（下方 :353）', 'dsh-llm lib/index.js:1527', '（:1397-1403）'], fresh: ['`stream()` 的图片块保真直传分支', '宿主 dsh-llm 的 `registration()` 实现', '`resolveModelInfo → resolveModelInfoFor → adapter.resolveModel` 链'] },
@@ -836,17 +861,80 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   机核（严格口径 = 指向本文件者；宽口径 = 注释行内全部行号式锚）。
     //   stale 侧 = 本批自本文件清除的旧行号式锚（拼接常量，见上）；fresh 侧 = 替代式符号名/代码串锚
     //   （同样拼接写出，规避自满足）。
-    { file: ['tests', 'host-abi-health.mjs'], stale: [OLD_PRESETDIAG_LINE_ANCHOR], fresh: ['presetDiag/notePresetDiag ' + '纪律同构'] },
+    { file: ['tests', 'host-abi-health.mjs'], stale: [OLD_PRESETDIAG_LINE_ANCHOR, OLD_CLIENT_SELF_ANCHOR_CLAIM], fresh: ['presetDiag/notePresetDiag ' + '纪律同构', FRESH_CLIENT_HOST_ANCHOR_CLAIM] },
     // FIX-042 W4：语义待定 5 项中「在仓且可改」的 2 处（第 3 处 `tests/smoke.mjs` 已并入上方既有条目）：
-    //   ① tests/stats.mjs 的 `service.js:2414-2561` 实为**历史迁移源**（现址为模态判定面，对象不符）
+    //   ① tests/stats.mjs 的 `service.js` 的 `:2414-2561` 实为**历史迁移源**（现址为模态判定面，对象不符）
     //      ⇒ 改为「EVO-003 迁移前 RouterService 内联聚合」+ 现单点 `StatsStore`；
-    //   ② tests/fix-012-image-takeover.mjs 的 `lib/client.js:3226` 指**已勘正的旧注释**（现址为
+    //   ② tests/fix-012-image-takeover.mjs 的 `lib/client.js` 的 `:3226` 指**已勘正的旧注释**（现址为
     //      preset schema 保存形状）⇒ 改为归属文件式（假设文本仍可 grep：`会话已含图`）。
     { file: ['tests', 'stats.mjs'], stale: ['service.js:2414-2561'], fresh: ['EVO-003 迁移前 RouterService 内联聚合'] },
     { file: ['tests', 'fix-012-image-takeover.mjs'], stale: ['lib/client.js:3226'], fresh: ['lib/client.js 的旧假设'] },
     // FIX-042 W3.3：宿主锚有界试点（本仓文本侧判据——去行号改包名+符号名式；宿主对象核验不可机器化，
     //   见上方基线登记）。lib/host-route.js 为本批新增条目（其余试点文件已并入各自既有条目）。
     { file: ['lib', 'host-route.js'], stale: ['dsh-credentials-local resolve(:473)/set(:513)/unset(:517)'], fresh: ['宿主 dsh-credentials-local 的 `resolve`/`set`/`unset`'] },
+    // FIX-043 批 A（锚族分批清扫 批 A 收口）：`tests/host-contract.mjs` 的 19 处行号式锚**逐处语义判定**
+    //   后登记如下（判定表见交付报告；禁 grep 批量改写）。判定要点：**8 处是 `anchor:` 字段且被
+    //   S2/S5 的「锚形态」判据消费** ⇒ 改前先在代码内把该两条判据由「路径:行号」改写为「宿主包名 +
+    //   宿主文件 + 宿主符号」（否则去行号即判红；改写后判据面为三元 token，覆盖 > 单行号，且符号可由
+    //   S7 增强组在宿主可达时逐字核验）；**1 处（`extra` 签名锚）为跨文件逐字在位断言**，源串在锁外
+    //   文件（`tests/fix-029-host-contract.mjs` 与 `lib/prestep.js`）亦在位 ⇒ 本批**保留**（notes 登记）；
+    //   其余 10 处为注释/断言标签面（不参与判据谓词 ⇒ 改文本不改判据强度）。**口径外同族**（同文件）
+    //   一并处置：`.d.ts` 行锚 2 处 + 设计文档 `L###` 行锚 5 处（判定同上）。宿主锚对象不在本仓库面
+    //   ⇒ 本条目只判**本仓文本内的锚串形态**，不声称机器覆盖宿主对象（基线登记见上方注释）。
+    //   数字口径（批前 / 批后同一命令；口径 = FIX-042 R0 #23 审查员口径：`git grep -nE
+    //   '([A-Za-z0-9_./-]+\.(js|mjs)):[0-9]+(-[0-9]+)?' -- tests/host-contract.mjs`，行数口径）：
+    //   批前 @`175d3e1` = **19**；本批交付后同命令 = **1**（余 1 处 = 上记保留项，见 notes）——引用 MUST
+    //   按引用时点重跑并标注修订，不得沿用他时点数字、不得作长期基线。
+    {
+      file: ['tests', 'host-contract.mjs'],
+      stale: [
+        'dsh-api-remotes lib/client.js:5727-5734',
+        'lib/client.js:8164-8193',
+        'dsh-llm lib/index.js:1618',
+        ':1624/:1635/:1645/:1653/:1665/:1681',
+        'lib/service.js:1437-1443',
+        'remote-events.js:12-32',
+        'lib/index.js:605,2502-2503',
+        'lib/types/agent.js:289-318',
+        ':297-299',
+        'lib/types/client/service.d.ts:44',
+        'lib/types/client/directory.d.ts:13-32,60',
+        '设计 §5.1 L272',
+        'lib/client.js:5735-5738',
+        'lib/client.js:4712-4730',
+        'lib/client.js:4701-4705',
+        'lib/client.js:4315-4325',
+        'dsh-llm lib/index.js:1618-1687',
+        'service.js:28',
+        'prestep.js:33',
+        'lib/service.js:636',
+        'lib/tool.js:61-219',
+      ],
+      fresh: [
+        '宿主 dsh-llm 的 LlmAdapter 类原型',
+        'assembler.push/usage/finish/blocks 消费块',
+        'API_REMOTE_FORWARDED_EVENTS 逐字核验',
+        'selectionFor(agent) → stateOf(session,"modelSelection") → projectionState.pending',
+        'stateOf(session,"modelSelection") → projectionState.pending（S7 增强组逐字核验）',
+        'llm_listConfigurableProviders_result schema',
+        'llm_listProviders_result schema',
+        'session_modelCatalog_result schema',
+        'settings_describe_result schema',
+        'credentials_describe_result schema',
+        'agentPresets_list_result schema',
+        'directoryFor(sessionId: SessionId) 面',
+        '设计 §5.1(a)',
+        '锚点带「宿主包名 + 宿主文件 + 宿主符号」',
+        '锚点带「宿主包名 + 宿主文件 + schema 符号」',
+        'createUserMessage 消费面 = lib/service.js 与 lib/prestep.js 的 dsh-llm/message import 行',
+        '`export class RouterService extends TypertRemoteService` 继承锚',
+        'ctx.tools.register(defineTool( 块锚宿主 defineTool options 契约',
+        '锚宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表',
+      ],
+      notes: [
+        '未闭合（本批保留）：`extra` 签名锚含 `types/agent.js` 的 `:297-318`（宿主锚 + 跨文件逐字在位断言——源串在 tests/fix-029-host-contract.mjs 与 lib/prestep.js 亦在位；单侧去行号会使该断言红 / 改判据语义 ⇒ 需三处同步，属锁外文件）——移交后续批（tests 其余 / lib 其余）。',
+      ],
+    },
   ]
   for (const anchorCase of ANCHOR_CASES) {
     const filePath = join(ROOT_DIR, ...anchorCase.file)
@@ -859,6 +947,58 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     check(`B5 9h R-1: ${anchorCase.file.join('/')} 清单所列旧式锚零残留 + 替代式锚在位`, staleHits.length === 0 && missingFresh.length === 0, { staleHits, missingFresh })
     // notes（可选）：不可修 / 需产品语义裁决的项，以 note 形式登记（不参与判别，仅可见）。
     for (const note of anchorCase.notes ?? []) console.log(`  note  B5 9h R-1: ${anchorCase.file.join('/')} ${note}`)
+  }
+  // 9h-4（FIX-043 批 A 收口；FIX-042 R1 P3-1 的机核化）：**stale needle 自碰撞卫生**——每条 stale
+  //   needle 在守卫自身内的出现 MUST 全部落在其**登记数据单元**（`stale` 字段的数组字面量）内；出现在
+  //   守卫的其余文本（注释块 / 断言标签 / fresh 清单 / 其他结构）即判红。该失效形态的实例：
+  //   「清洗自我引用时引入新的自我引用」——把被清扫的锚串逐字复述进登记说明（F-3 登记文本、
+  //   FIX-042 W1/W2/W4 各条目注释），needle 文本因此常驻判据文件内（FIX-042 R1 P3-1）。
+  //   口径（为何不判「全文件出现次数 = 0」）：needle 必须在**某处**被定义，其定义处即登记数据单元
+  //   （恒 +1）；要求全文件零出现等于要求全部 needle 一律拼接常量编码——对非自条目无可判据收益且
+  //   损害可读性。故本条判「**非登记逐字复述 = 0**」（= 在守卫自身内的出现次数恰等于其登记处次数）；
+  //   **自条目**（file 指向本守卫者）另由 9h-4b 要求全文件出现次数 = 0——该处定义处本身即判据面，
+  //   字面量登记会使判据恒红 / 判别力归零（先例：OLD_PRESETDIAG_LINE_ANCHOR 的拼接常量法）。
+  //   可达性（非恒真谓词，双方向均实跑）：本判据落地时**自然红**——10 处 needle 被登记说明文本
+  //   逐字复述（逐处分段化后转绿）；9h-4b 由定向变异实证（自条目 needle 改字面量 → 判红）。
+  //   9h-4c：登记数据单元解析完整性（单元数 === 条目数）——解析失配（引号/括号形态变化）会使本判据
+  //   面静默失真（如 needle 被误判为「已登记」），故 fail-closed 判红而非静默降级（P8）。
+  {
+    const guardSource = readFileSync(join(ROOT_DIR, 'tests', 'host-abi-health.mjs'), 'utf8')
+    const staleFieldMarker = 'stale' + ': ['
+    const staleUnits = []
+    for (let cursor = 0; (cursor = guardSource.indexOf(staleFieldMarker, cursor)) !== -1;) {
+      let end = cursor + staleFieldMarker.length
+      let inString = false
+      for (; end < guardSource.length; end++) {
+        const char = guardSource[end]
+        if (char === '\\') { end += 1; continue }
+        if (char === "'") inString = !inString
+        else if (char === ']' && !inString) break
+      }
+      staleUnits.push(guardSource.slice(cursor, end + 1))
+      cursor = end + 1
+    }
+    const staleDataText = staleUnits.join('\n')
+    const countOccurrences = (text, needle) => text.split(needle).length - 1
+    const needleRepetitions = []
+    const selfLiteralNeedles = []
+    for (const anchorCase of ANCHOR_CASES) {
+      const fileKey = anchorCase.file.join('/')
+      const selfTarget = fileKey === 'tests/host-abi-health.mjs'
+      for (const needle of anchorCase.stale) {
+        const registered = countOccurrences(staleDataText, needle)
+        const inGuard = countOccurrences(guardSource, needle)
+        if (inGuard > registered) needleRepetitions.push(`${fileKey} :: 「${needle}」登记 ${registered} 处 / 守卫内 ${inGuard} 处`)
+        if (selfTarget && inGuard !== 0) selfLiteralNeedles.push(needle)
+      }
+    }
+    check('B5 9h-4c R-1: 登记数据单元解析完整性（stale 字段数组单元数 === 条目数——解析失配即红，防判据面静默失真）',
+      staleUnits.length === ANCHOR_CASES.length, { staleUnitCount: staleUnits.length, caseCount: ANCHOR_CASES.length })
+    check('B5 9h-4 R-1: stale needle 在守卫自身内的出现次数 = 其登记处次数（非登记逐字复述即红——needle 自碰撞卫生）',
+      needleRepetitions.length === 0,
+      { needleRepetitions, needleCount: ANCHOR_CASES.reduce((sum, item) => sum + item.stale.length, 0), staleUnitCount: staleUnits.length })
+    check('B5 9h-4b R-1: 自条目 stale needle 全文件出现次数 = 0（拼接常量登记——定义处即判据面，字面量登记使判据恒红/判别力归零）',
+      selfLiteralNeedles.length === 0, { selfLiteralNeedles })
   }
   // 9h-2（FIX-040 W4；R0 P1-1 收口）：跨文件对象核验——metrics.mjs 的断言名式锚
   //   （`smoke.mjs「<label>」`）所引用的断言名 MUST 在 smoke.mjs（或测试面）中确实存在。

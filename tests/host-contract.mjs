@@ -2,7 +2,7 @@
  * EVO-024（ARCH-004 设计 §5.1(a) D3 静态层 / §10 B6 收官批）：宿主面契约静态看护体系。
  *
  * 定位：D3 三层防线的最外一层（静态层）——**不依赖宿主 checkout 存在**。
- * 宿主面基线与源码锚点以「静态常量 + 注释锚行号」冻结（先例
+ * 宿主面基线与源码锚点以「静态常量 + 宿主源码锚（包名/文件/符号）」冻结（先例
  * tests/host-version-snapshot.mjs 的 HOST_BASELINE），因此本套件在用户侧 /
  * 异构 CI 环境（BR-03：插件装在别处、宿主 cache 路径漂移）同样可跑；宿主
  * checkout 可达时（环境变量 DSH_HOST_SOURCE / DSH_HOST_PACKAGES 优先，本地 _npx
@@ -10,7 +10,7 @@
  * 不失败）。靶子解析为**单一实现路径**且**确定性**（多 _npx 缓存共存时按目录名
  * 降序取首命中——readdirSync 顺序非契约，非确定性选择会把 RISK-003 预警指向非
  * 运行宿主副本，产生不可复现的假红/假绿），并在启动行打印实际读取路径（可诊断）。
- * 同一靶子同时供 S3 宿主侧包表半边使用（设计 §5.1 L272「inject 声明 vs 宿主
+ * 同一靶子同时供 S3 宿主侧包表半边使用（设计 §5.1(a)「inject 声明 vs 宿主
  * node_modules 实际包表」——插件自身 node_modules 不含 client inject 包）。
  *
  * 与 §6.1 诊断环形的边界（设计明文）：本文件是**静态守卫**——只读源码、声明面
@@ -27,13 +27,13 @@
  *     inject-manifest.js 代码侧常量；fiber inject 名单 vs 域面；cordis.patch.yml
  *     两宿主行 id 存在性（宿主对不存在条目仅 stderr 警告——静默面守卫）；
  *     **宿主侧包表半边**：inject 三 client 包 vs 宿主 `@deepseek-ai` 实际包表
- *     （设计 §5.1 L272；插件侧 node_modules 不含这些包，故只能在宿主靶子上核验，
+ *     （设计 §5.1(a)；插件侧 node_modules 不含这些包，故只能在宿主靶子上核验，
  *     宿主不可达 → 与 S7 同语义 skip）
  *  S4 消费点黑名单：高危面名禁域模块外裸 ctx.get（白名单分级放行 = B4 §8a
  *     快照口径）；**域管事件名**（MANAGED_EVENTS）禁域外裸 ctx.on（scoped
  *     生命周期钩子 agent/pre-step、agent/created、agent/request 直订合法）
  *  S5 字段级 wire schema 白名单断言（S-5）：消费字段 ⊆ 宿主 schema 字段
- *     （锚 dsh-api-remotes lib/client.js:5727-5734 / :8164-8193 / 同源四例）
+ *     （锚 dsh-api-remotes 的 lib/client.js 六 schema——逐面宿主符号见 WIRE_SCHEMA_WHITELIST 的 anchor 字段，S7 增强组按该符号定位宿主源码）
  *  S6 转发事件白名单静态比对（W-4）：客户端转发面订阅事件名 ⊆ 白名单 +
  *     镜像值级 parity + Node 面 ctx.on 事件名 ⊆ {域管事件, scoped 钩子}
  *
@@ -51,7 +51,7 @@
  *
  * 如何刷新本套件（宿主升级后，与 host-version-snapshot 刷新步骤同步执行）：
  *  1. 以宿主 checkout 实读核验本文件各 *_BASELINE / WIRE_SCHEMA / ANCHOR 常量
- *     （行号锚点以 S7 增强组输出的实测行号为准更新）；消费字段漂移则同步更新
+ *     （锚点按宿主实读核验的包名/文件/符号更新——FIX-043 批 A 已去行号）；消费字段漂移则同步更新
  *     对应域模块（lib/host-abi/*.js）与浏览器镜像（lib/client.js）——镜像
  *     parity 由 S1c/S5 双向锁定；
  *  2. 跑 `node tests/host-contract.mjs` 确认绿，再跑全量门控 `node tests/run-all.mjs`。
@@ -136,13 +136,13 @@ const arrayOf = (source, startMarker) => {
 const fieldsIn = (block, pattern) => [...new Set([...block.matchAll(pattern)].map((match) => match[1]))].sort()
 
 // ── 冻结基线（唯一事实源 = 宿主 checkout 只读实读；刷新步骤见文件头）──────────
-/** llm 适配器契约（dsh-llm lib/index.js:1618 class LlmAdapter；方法行号 :1624/:1635/:1645/:1653/:1665/:1681）。 */
+/** llm 适配器契约（宿主 dsh-llm 的 LlmAdapter 类原型；六方法符号见下方基线常量，S7 增强组按方法名逐字核验）。 */
 const LLM_ADAPTER_PROTO_BASELINE = ['providerInfo', 'providerRetryPolicy', 'imageRequestPricing', 'listModels', 'resolveModel', 'prepareCall']
 /** 静态补集：stream 为抽象声明（不在 LlmAdapter.prototype，FIX-001b F2 先例）。 */
 const ADAPTER_CONTRACT_BASELINE = [...LLM_ADAPTER_PROTO_BASELINE, 'stream']
 /** 宿主协议对象导出面（dsh-llm/message 导出名——宿主 lib/message.js 实读 8 项）。 */
 const MESSAGE_EXPORTS_BASELINE = ['CONTEXT_SUMMARY_MAX_CHARS', 'boundContextSummary', 'createAssistantMessage', 'createMessage', 'createSystemMessage', 'createToolResultMessage', 'createUserMessage', 'freezeMessage']
-/** BlockAssembler 原型面（dsh-llm lib/index.js 实读 11 项；本包消费 push/usage/finish/blocks——lib/service.js:1437-1443）。 */
+/** BlockAssembler 原型面（宿主 dsh-llm 的 BlockAssembler 原型 11 项；本包消费 push/usage/finish/blocks——lib/service.js 的 assembler.push/usage/finish/blocks 消费块）。 */
 const BLOCK_ASSEMBLER_PROTO_BASELINE = ['push', 'ensure', 'assemble', 'mustGet', 'assembled', 'blocks', 'interruptedBlocks', 'usage', 'finish', 'replayState', 'message']
 
 /**
@@ -185,7 +185,7 @@ const CTX_SERVICES_BASELINE = {
   agents: ['get'],
   agentPresets: ['composedPreset'],
 }
-/** 宿主转发事件白名单（dsh-api-remotes lib/types/remote-events.js:12-32 实读 19 项，逐字逐序）。 */
+/** 宿主转发事件白名单（宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表 19 项，逐字逐序；S7 增强组经 API_REMOTE_FORWARDED_EVENTS 逐字核验）。 */
 const FORWARDED_EVENT_BASELINE = [
   'agent-preset/selected',
   'approval/request',
@@ -249,27 +249,29 @@ const SCOPED_HOOK_EVENTS = ['agent/pre-step', 'agent/created', 'agent/request']
 
 /**
  * S2 宿主源码形状锚点（P10-④）：高风险非导出面以「形状签名不一致即红」的
- * 静态常量 + 注释锚行号实现（宿主 checkout 不可假设存在）。consumer 命中
+ * 静态常量 + 宿主源码锚实现（宿主 checkout 不可假设存在）。consumer 命中
  * 断言 = 该签名必须逐字仍在消费模块源码中（消费面形态漂移即红）；anchor
- * 断言 = 锚点必须带 `路径:行号`（禁心智模型式无锚常量）。
+ * 断言 = 锚点必须带「宿主包名 + 宿主文件 + 宿主符号（调用式）」（禁心智模型式
+ * 无锚常量；FIX-043 批 A 判定：原「路径:行号」形态去行号——宿主行号不可在本仓
+ * 核验且必然漂移，三元 token 覆盖面大于单行号，符号由 S7 增强组宿主可达时逐字核验）。
  */
 const HOST_SHAPE_ANCHORS = [
   {
     face: 'sessionController.selectModel',
-    anchor: 'dsh-api-session-controller lib/index.js:605,2502-2503；selectionFor 语义锚 lib/types/agent.js:289-318（pending 优先层 :297-299）',
+    anchor: 'dsh-api-session-controller 的 lib/index.js selectModel 面；语义锚 lib/types/agent.js 的 selectionFor(agent) → stateOf(session,"modelSelection") → projectionState.pending（S7 增强组逐字核验）',
     consumer: ['lib/host-abi/llm-selection.js'],
     signatures: ['controller.selectModel({ ...selection })', "get('sessionController')"],
   },
   {
     face: 'sessionProjections.stateOf(session, "modelSelection") → {lastUsed, pending}',
-    anchor: 'dsh-api-session-controller lib/types/agent.js:289-318（stateOf(session,"modelSelection") → projectionState.pending）',
+    anchor: 'dsh-api-session-controller 的 lib/types/agent.js：stateOf(session,"modelSelection") → projectionState.pending（S7 增强组逐字核验）',
     consumer: ['lib/prestep.js'],
     signatures: ["stateOf(agent?.session, 'modelSelection')", 'state.pending'],
     extra: [{ file: 'tests/fix-029-host-contract.mjs', signatures: ['types/agent.js:297-318', "key === 'modelSelection'"] }],
   },
   {
     face: 'modelDirectories.directoryFor(sessionId).load()',
-    anchor: 'dsh-client-ui-model-selection lib/types/client/service.d.ts:44（directoryFor）；lib/types/client/directory.d.ts:13-32,60（ModelDirectoryState/load）',
+    anchor: 'dsh-client-ui-model-selection 的 lib/types/client/service.d.ts 的 directoryFor(sessionId: SessionId) 面；lib/types/client/directory.d.ts 的 ModelDirectoryState/load（S7 增强组逐字核验）',
     consumer: ['lib/host-abi/client-remotes.js'],
     signatures: ['directoryService.directoryFor(input.sessionId)', 'directory.load()'],
   },
@@ -277,38 +279,38 @@ const HOST_SHAPE_ANCHORS = [
 
 /**
  * S5 字段级 wire schema 白名单（S-5）：消费字段 ⊆ 宿主 schema 字段。
- * schema.*  = 宿主 api-remotes 声明面字段（锚行号实读）；
+ * schema.*  = 宿主 api-remotes 声明面字段（按 schema 符号实读）；
  * consumed  = 产品消费字段（dynamic 块动态提取——新增字段读取未经白名单即红；
  *             frozen 项为「域内整体透传 + 消费点在浏览器镜像按字段读」的显式声明）。
  */
 const WIRE_SCHEMA_WHITELIST = {
   'llm.listConfigurableProviders': {
-    anchor: 'dsh-api-remotes lib/client.js:5727-5734',
+    anchor: 'dsh-api-remotes 的 lib/client.js 的 llm_listConfigurableProviders_result schema（S7 增强组按符号逐字核验）',
     schema: ['provider', 'displayName', 'settingsNs', 'settingsPath', 'declared', 'error'],
     dynamic: { file: 'lib/host-abi/client-remotes.js', marker: 'function joinProviderDirectoryHost(', pattern: /entry\.([A-Za-z_]\w*)/g },
   },
   'llm.listProviders': {
-    anchor: 'dsh-api-remotes lib/client.js:5735-5738',
+    anchor: 'dsh-api-remotes 的 lib/client.js 的 llm_listProviders_result schema（S7 增强组按符号逐字核验）',
     schema: ['id', 'name'],
     dynamic: { file: 'lib/host-abi/client-remotes.js', marker: 'function joinProviderDirectoryHost(', pattern: /provider\.([A-Za-z_]\w*)/g },
   },
   'session.modelCatalog': {
-    anchor: 'dsh-api-remotes lib/client.js:8164-8193',
+    anchor: 'dsh-api-remotes 的 lib/client.js 的 session_modelCatalog_result schema（S7 增强组按符号逐字核验）',
     schema: ['default', 'routableProviders', 'groups', 'failures'],
     dynamic: { file: 'lib/host-abi/client-remotes.js', marker: "models: guard('remote.session'", pattern: /catalog\.([A-Za-z_]\w*)/g },
   },
   'settings.describe': {
-    anchor: 'dsh-api-remotes lib/client.js:4712-4730',
+    anchor: 'dsh-api-remotes 的 lib/client.js 的 settings_describe_result schema（S7 增强组按符号逐字核验）',
     schema: ['writable', 'hasDocument', 'namespaces'],
     dynamic: { file: 'lib/host-abi/client-remotes.js', marker: "describe: guard('remote.settings'", pattern: /\bvalue\.([A-Za-z_]\w*)/g },
   },
   'credentials.describe': {
-    anchor: 'dsh-api-remotes lib/client.js:4701-4705（record<string, {configured, source?, writable}>）',
+    anchor: 'dsh-api-remotes 的 lib/client.js 的 credentials_describe_result schema（record<string, {configured, source?, writable}>；S7 增强组按符号逐字核验）',
     schema: ['configured', 'source', 'writable'],
     frozen: { consumed: ['configured'], presence: [{ file: 'lib/client.js', pattern: /\?\.configured === true/ }], note: '域内整体透传宿主 map；字段级消费在浏览器镜像账号卡（configured 判定）' },
   },
   'agentPresets.list': {
-    anchor: 'dsh-api-remotes lib/client.js:4315-4325',
+    anchor: 'dsh-api-remotes 的 lib/client.js 的 agentPresets_list_result schema（S7 增强组按符号逐字核验）',
     schema: ['presets', 'authorable'],
     frozen: { consumed: ['presets'], presence: [{ file: 'lib/host-abi/client-remotes.js', pattern: /presets: \[\]/ }], note: '域内整体透传 {presets}；authorable 未被消费（不越界断言）' },
   },
@@ -400,7 +402,7 @@ console.log('S1 契约快照四类面（宿主面形状漂移即红；宿主新�
     : []
   const contract = [...new Set([...enumerated, ...ADAPTER_CONTRACT_BASELINE.filter((name) => name === 'stream')])]
   const missing = LLM_ADAPTER_PROTO_BASELINE.filter((name) => !enumerated.includes(name))
-  check('S1a 契约快照: LlmAdapter.prototype 动态枚举 ⊇ 基线 6 方法（宿主删/改方法即红；锚 dsh-llm lib/index.js:1618-1687）', missing.length === 0, missing)
+  check('S1a 契约快照: LlmAdapter.prototype 动态枚举 ⊇ 基线 6 方法（宿主删/改方法即红；锚宿主 dsh-llm 的 LlmAdapter 类原型）', missing.length === 0, missing)
   console.log(`      · 快照 diff: 枚举 ${enumerated.length} 项 [${enumerated.join(',')}]${enumerated.some((name) => !LLM_ADAPTER_PROTO_BASELINE.includes(name)) ? '（宿主新增方法已自动入集——twin/oauth 未跟进即下方红）' : ''}`)
   const active = [{ modality: 'image', stateOf: null, marker: () => '', rewrite: () => null }]
   const fakeLlm = { registration: () => ({ adapter: {} }), stream: async function* () {} }
@@ -416,14 +418,14 @@ console.log('S1 契约快照四类面（宿主面形状漂移即红；宿主新�
 {
   const assemblerProto = typeof BlockAssembler === 'function' ? Object.getOwnPropertyNames(BlockAssembler.prototype).filter((name) => name !== 'constructor') : []
   const assemblerMissing = BLOCK_ASSEMBLER_PROTO_BASELINE.filter((name) => !assemblerProto.includes(name))
-  check('S1b 契约快照: BlockAssembler.prototype ⊇ 基线 11 项（消费面 push/blocks/usage/finish——lib/service.js:1437-1443）', assemblerMissing.length === 0, assemblerMissing)
+  check('S1b 契约快照: BlockAssembler.prototype ⊇ 基线 11 项（消费面 push/blocks/usage/finish——lib/service.js 的 assembler.push/usage/finish/blocks 消费块）', assemblerMissing.length === 0, assemblerMissing)
   const messageMissing = MESSAGE_EXPORTS_BASELINE.filter((name) => !(name in dshMessage))
-  check('S1b 契约快照: dsh-llm/message 导出面 ⊇ 基线 8 项（createUserMessage/createAssistantMessage 为消费面：service.js:28、prestep.js:33；CONTEXT_SUMMARY_MAX_CHARS 值级常量面）', messageMissing.length === 0, messageMissing)
-  check('S1b 契约快照: RouterService extends TypertRemoteService（宿主基类面——lib/service.js:636 继承锚）',
+  check('S1b 契约快照: dsh-llm/message 导出面 ⊇ 基线 8 项（createUserMessage 消费面 = lib/service.js 与 lib/prestep.js 的 dsh-llm/message import 行；createAssistantMessage 消费面 = lib/service.js 同一 import 行；CONTEXT_SUMMARY_MAX_CHARS 值级常量面）', messageMissing.length === 0, messageMissing)
+  check('S1b 契约快照: RouterService extends TypertRemoteService（宿主基类面——lib/service.js 的 `export class RouterService extends TypertRemoteService` 继承锚）',
     typeof RouterService === 'function' && typeof TypertRemoteService === 'function' && Object.getPrototypeOf(RouterService) === TypertRemoteService)
   const toolBlock = blockOf(stripComments(readLib('tool.js')), 'ctx.tools.register(defineTool(')
   check('S1b 契约快照: defineTool 函数契约（宿主 dsh-tools lib/index.js 实读：函数 + 单参数 options）', typeof defineTool === 'function' && defineTool.length === 1)
-  check('S1b 契约快照: 消费面 options 键守卫（name/description/parameters 键 + execute 方法式——lib/tool.js:61-219 锚宿主 defineTool options 契约）',
+  check('S1b 契约快照: 消费面 options 键守卫（name/description/parameters 键 + execute 方法式——lib/tool.js 的 ctx.tools.register(defineTool( 块锚宿主 defineTool options 契约）',
     ['name', 'description', 'parameters'].every((key) => new RegExp(`\\b${key}:`).test(toolBlock)) && /(?:^|[\s,{])async execute\(/.test(toolBlock), toolBlock.slice(0, 80))
 }
 
@@ -455,7 +457,7 @@ console.log('S1 契约快照四类面（宿主面形状漂移即红；宿主新�
 
 // S1e 转发事件白名单（19 项 + 镜像 parity + 判定函数）
 {
-  check('S1e 契约快照: FORWARDED_EVENT_ALLOWLIST === 宿主 19 项基线（逐字逐序——锚 remote-events.js:12-32）',
+  check('S1e 契约快照: FORWARDED_EVENT_ALLOWLIST === 宿主 19 项基线（逐字逐序——锚宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表）',
     FORWARDED_EVENT_ALLOWLIST.length === 19 && deepEqual(FORWARDED_EVENT_ALLOWLIST, FORWARDED_EVENT_BASELINE), FORWARDED_EVENT_ALLOWLIST)
   const mirrorLiteral = arrayOf(clientStripped, 'FORWARDED_EVENT_ALLOWLIST = [')
   let mirror = null
@@ -469,10 +471,13 @@ console.log('S1 契约快照四类面（宿主面形状漂移即红；宿主新�
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-console.log('S2 宿主源码形状锚点（P10-④：形状签名 + 注释锚行号；消费面漂移即红）:')
+console.log('S2 宿主源码形状锚点（P10-④：形状签名 + 宿主源码锚；消费面漂移即红）:')
 for (const anchorCase of HOST_SHAPE_ANCHORS) {
-  const anchorWellFormed = /[\w./-]+\.\w+:\d+/.test(anchorCase.anchor)
-  check(`S2 形状锚点: ${anchorCase.face} 锚点带「路径:行号」（禁无锚心智模型常量）`, anchorWellFormed, anchorCase.anchor)
+  // FIX-043 批 A 判定（锚形态判据改写）：由「路径:行号」改为「宿主包名 + 宿主文件 + 宿主符号
+  //   （调用式）」——行号在宿主侧不可核验且必然漂移（W3.3 试点同法去行号）；三元 token 覆盖面
+  //   大于单行号，「禁心智模型式无锚常量」语义不变，符号可由 S7 增强组在宿主可达时逐字核验。
+  const anchorHostForm = /dsh-[a-z0-9-]+/.test(anchorCase.anchor) && /[\w./-]+\.(?:js|mjs|ts)/.test(anchorCase.anchor) && /[A-Za-z_$][\w$]*\(/.test(anchorCase.anchor)
+  check(`S2 形状锚点: ${anchorCase.face} 锚点带「宿主包名 + 宿主文件 + 宿主符号」（禁无锚心智模型常量）`, anchorHostForm, anchorCase.anchor)
   let hits = 0
   for (const file of anchorCase.consumer) {
     const source = stripComments(readFileSync(join(ROOT_DIR, file), 'utf8'))
@@ -519,7 +524,7 @@ console.log('S3 声明面比对（inject / peerDeps / fiber 面 / patch 条目�
   check('S3 声明面: patch insert 段结构完好（insert 块存在 + 行数 = 2）',
     /^-\s*insert:\s*$/m.test(patch) && rows.length === 2)
 
-  // S3 宿主侧半边（设计 §5.1 L272「inject 声明 vs 宿主 node_modules 实际包表」）：
+  // S3 宿主侧半边（设计 §5.1(a)「inject 声明 vs 宿主 node_modules 实际包表」）：
   // 三类 client inject 包由宿主供给——插件自身 node_modules 内不存在（实测），
   // 故该半边的判据只能是宿主包表；宿主侧包名消亡/改名（D1-1 同类事件）在全绿
   // 下静默的问题由本断言兜底。宿主不可达 → 与 S7 同语义 skip（BR-03 不失败）。
@@ -528,10 +533,10 @@ console.log('S3 声明面比对（inject / peerDeps / fiber 面 / patch 条目�
     // 在其下）——故拼包目录须剥 scope 前缀（scope=目录名，非子层）。
     const missingClientPackages = CLIENT_PACKAGE_INJECT_BASELINE
       .filter((name) => !existsSync(join(hostTarget.root, name.slice(name.indexOf('/') + 1))))
-    check('S3 声明面: inject 三 client 包在宿主 @deepseek-ai 包表实际在位（设计 §5.1 L272 宿主侧半边；消亡/改名即红——D1-1 同类事件）',
+    check('S3 声明面: inject 三 client 包在宿主 @deepseek-ai 包表实际在位（设计 §5.1(a) 宿主侧半边；消亡/改名即红——D1-1 同类事件）',
       missingClientPackages.length === 0, missingClientPackages)
   } else {
-    note('S3 声明面: 宿主 checkout 不可达 → inject 包表宿主侧半边跳过（设计 §5.1 L272；与 S7 增强组同语义，BR-03）')
+    note('S3 声明面: 宿主 checkout 不可达 → inject 包表宿主侧半边跳过（设计 §5.1(a)；与 S7 增强组同语义，BR-03）')
   }
 }
 
@@ -602,7 +607,10 @@ console.log('S5 字段级 wire schema 白名单断言（S-5：消费字段 ⊆ �
 {
   const joinBlock = blockOf(stripComments(readHostAbi('client-remotes.js')), 'function joinProviderDirectoryHost(')
   for (const [face, spec] of Object.entries(WIRE_SCHEMA_WHITELIST)) {
-    check(`S5 字段: ${face} 锚点带「路径:行号」（S-5 单一声明源可复核）`, /[\w./-]+\.\w+:\d+/.test(spec.anchor), spec.anchor)
+    // FIX-043 批 A 判定（同 S2 改写）：锚形态 = 「宿主包名 + 宿主文件 + schema 符号」；schema 符号按
+    //   面键约定 `<面键去点>_result`（S7 增强组同一约定单点派生），宿主可达时逐字核验。
+    const anchorHostForm = /dsh-api-remotes/.test(spec.anchor) && /lib\/client\.js/.test(spec.anchor) && spec.anchor.includes(`${face.replace('.', '_')}_result`)
+    check(`S5 字段: ${face} 锚点带「宿主包名 + 宿主文件 + schema 符号」（S-5 单一声明源可复核）`, anchorHostForm, spec.anchor)
     let consumed
     if (spec.dynamic) {
       const block = blockOf(stripComments(readFileSync(join(ROOT_DIR, spec.dynamic.file), 'utf8')), spec.dynamic.marker)
@@ -687,14 +695,9 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
       }
       return [...new Set(out)]
     }
-    const schemaCases = [
-      ['llm_listConfigurableProviders_result', 'llm.listConfigurableProviders'],
-      ['llm_listProviders_result', 'llm.listProviders'],
-      ['session_modelCatalog_result', 'session.modelCatalog'],
-      ['settings_describe_result', 'settings.describe'],
-      ['credentials_describe_result', 'credentials.describe'],
-      ['agentPresets_list_result', 'agentPresets.list'],
-    ]
+    // FIX-043 批 A：schemaCases 与 S5 锚点符号同源单点派生（约定 = 面键去点 + `_result`，与
+    //   S5 的 `anchorHostForm` 判据同一表达式）——消除两处手抄映射的漂移面（P5 单点化）。
+    const schemaCases = Object.keys(WIRE_SCHEMA_WHITELIST).map((face) => [`${face.replace('.', '_')}_result`, face])
     for (const [schemaName, face] of schemaCases) {
       const fields = topLevelFields(schemaBlockOf(schemaName))
       const expected = WIRE_SCHEMA_WHITELIST[face].schema
