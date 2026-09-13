@@ -378,7 +378,7 @@ console.log('fix-029 D: D1-2 legacy apiProxy face stays dead + llmFaceOf union g
 {
   const domainSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'host-abi', 'llm-selection.js'), 'utf8')
   check('D1: llm-selection 域源码零 apiProxy 解析（D1-2 旧面删除——复活即红）', !/get\(['"]apiProxy['"]\)/.test(domainSource))
-  check('D2: sessionSelectFaceOf 域内单形态（sessionController 解析；宿主锚 dsh-api-session-controller index.js:605,2502）', /sessionSelectFaceOf/.test(domainSource) && /get\('sessionController'\)/.test(domainSource))
+  check('D2: sessionSelectFaceOf 域内单形态（sessionController 解析；宿主锚 dsh-api-session-controller 的 selectModel(request) 面 + Remote("selectModel") 注册）', /sessionSelectFaceOf/.test(domainSource) && /get\('sessionController'\)/.test(domainSource))
   check('D3: 域接口 §4.3 域 2 五函数齐备（llmFaceOf/sessionSelectFaceOf/inheritedRouteOf/liveDefaultSelection/sessionNeverProduced）',
     ['llmFaceOf', 'sessionSelectFaceOf', 'inheritedRouteOf', 'liveDefaultSelection', 'sessionNeverProduced']
       .every((name) => new RegExp(`export function ${name}\\b`).test(domainSource)))
@@ -386,7 +386,7 @@ console.log('fix-029 D: D1-2 legacy apiProxy face stays dead + llmFaceOf union g
   try { llmSelection = await import('../lib/host-abi/llm-selection.js') } catch { /* RED：导出缺失 */ }
   const fullFace = { registerAdapter: () => {}, registration: () => {}, listModels: async () => [] }
   const missingListModels = { registerAdapter: () => {}, registration: () => {} }
-  check('D4: llmFaceOf 三方法并集门控（缺 listModels → null；三方法齐 → 面本体；宿主 LlmRuntime 0.1.5-rc.2 三方法齐备实证 dsh-llm lib/index.js:1698/1780/2177/2018——零回退）',
+  check('D4: llmFaceOf 三方法并集门控（缺 listModels → null；三方法齐 → 面本体；宿主 LlmRuntime 0.1.5-rc.2 的 registerAdapter/registration/listModels 三方法齐备实证 dsh-llm——零回退）',
     typeof llmSelection?.llmFaceOf === 'function'
     && llmSelection.llmFaceOf({ get: (name) => (name === 'llm' ? missingListModels : undefined) }) === null
     && llmSelection.llmFaceOf({ get: (name) => (name === 'llm' ? fullFace : undefined) }) === fullFace)

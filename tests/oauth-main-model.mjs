@@ -310,9 +310,9 @@ console.log('fix-016 tools shape (host-real shape; old code Missing tools[0].nam
   // "Missing required parameter: 'tools[0].name'"。根因：mapTools 错误嵌套
   // {type:'function', function:{name,…}}，而 codex/responses 契约
   // （OpenAI Responses API）要求 name/description/parameters 顶层。
-  // 宿主真实 tool 形状（取证：dsh-system-prompt lib/index.js:254-258 +
-  // dsh-llm-pi-ai lib/index.js:1123-1128 双向印证）：{name, description,
-  // parameters}——name 必填字符串。夹具精确复刻该形状。
+  // 宿主真实 tool 形状（取证：dsh-system-prompt 的 assemble() 工具 schema 消费面
+  // `{name, description, parameters}` + dsh-llm-pi-ai 的 toolsOf(options) 映射面
+  // 双向印证）：{name, description, parameters}——name 必填字符串。夹具精确复刻该形状。
   const h = makeHarness({ chatgpt: ACCOUNT_A })
   const off = installOauthLlmAdapters(h.ctx, h.service)
   const hostTools = [

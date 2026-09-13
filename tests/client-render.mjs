@@ -376,8 +376,9 @@ export async function runClientRender(check) {
   const sessionModelsCalls = []
   // FIX-026：模型目录服务面模式——'ok' 主路径（directoryFor→load）、
   // 'absent' 服务不可达（ctx.get 返回 undefined → 保底 RPC）、
-  // 'throw' subagent 会话形态（directoryFor 同步 throw，宿主 service.js:193
-  // 「resolved no scope」同型——防御断言：捕获不炸 + warn 可观测）。
+  // 'throw' subagent 会话形态（directoryFor 同步 throw，宿主
+  // dsh-client-ui-model-selection 的 directoryFor「resolved no scope」同型
+  // ——防御断言：捕获不炸 + warn 可观测）。
   let modelDirectoriesMode = 'ok'
   const directoryForCalls = []
   const directoryLoadCalls = []
@@ -512,10 +513,10 @@ export async function runClientRender(check) {
     },
   }
   // FIX-026：modelDirectories 客户端服务 stub——宿主 ModelDirectoryResolver
-  // （dsh-client-ui-model-selection lib/client.js:170 `super(ctx, "modelDirectories")`
-  // 注册；directoryFor :187 惰性返回带 load() 的会话目录，load 为只读幂等刷新
-  // directory.d.ts:52）。directoryFor 记录调用；'throw' 模式复刻宿主无 scope
-  // 会话的同步 throw 形态（宿主 lib/client.js:193「resolved no scope」）。
+  // （dsh-client-ui-model-selection 的 `super(ctx, "modelDirectories")` 注册；
+  // directoryFor(sessionId) 惰性返回带 load() 的会话目录，load 为只读幂等刷新
+  // ——ModelDirectory.load）。directoryFor 记录调用；'throw' 模式复刻宿主无
+  // scope 会话的同步 throw 形态（宿主 directoryFor「resolved no scope」）。
   const modelDirectoriesStub = () => {
     if (modelDirectoriesMode === 'absent') return undefined
     return {
@@ -1852,7 +1853,7 @@ export async function runClientRender(check) {
   // 缺陷事实：服务端播种全对（fce2785a 四连切终态正确），显示层不跟随——
   // FIX-024 服务端 ctx.emit 在真机不可达。修复 = FIX-012 已验证模式：客户端
   // 订阅 agent-preset/selected（dsh-api-remotes API_REMOTE_FORWARDED_EVENTS
-  // 首项，lib/index.js:19）直接调宿主 modelDirectories 服务 directoryFor(
+  // 首项 agent-preset/selected）直接调宿主 modelDirectories 服务 directoryFor(
   // sessionId).load()（只读幂等、generation 守卫，composer ModelSelect 经
   // uSES 订阅目录 store——load 完成即显示更新）。判别断言四组：主路径恰一
   // 次 / 服务不可达保底 RPC / directoryFor throw 不炸 + warn 可观测 / 卸载
@@ -1862,12 +1863,12 @@ export async function runClientRender(check) {
   // 剩余嫌疑 = 裸 ctx.get('modelDirectories') 在客户端隔离域/注入门控下解析
   // undefined → handler 走保底 RPC（只读不更新显示）。fixture 同型 mock 保真度
   // 缺陷（旧 ctx.get 直塞服务、未复刻注入门控）已修正：get 与属性面均按模块
-  // inject 声明门控（宿主 cordis-client-runner dynamicCordisContext：属性访问
-  // 按 fiber.inject 声明门控 L342、get 为可选查找 L335；声明 = 激活等待
-  // L581 waitingFor + 可见性保证）。RED 判别：旧 inject 不含 modelDirectories
+  // inject 声明门控（宿主 cordis-client-runner 的 dynamicCordisContext：属性访问
+  // 按 fiber.inject 声明门控、get 为可选查找；声明 = 激活等待 `waitingFor`
+  // 记录 + 可见性保证）。RED 判别：旧 inject 不含 modelDirectories
   // → 主路径解析 undefined → 保底 RPC → 下方场景 1 断言与结构守卫必败。
-  // 修复面 = 模块 inject 声明（宿主 dsh-client-ui-model-selection lib/client.js:
-  // 157-161 static inject / :729-736 模块级 inject + :799 exports.inject 同款
+  // 修复面 = 模块 inject 声明（宿主 dsh-client-ui-model-selection 的
+  // static inject / 模块级 inject + exports.inject 同款
   // 机制）+ get→属性面双形态解析（agentPresetsServiceOf 先例，定义在
   // lib/host-abi/ctx-services.js）+ 结构化 console 遥测（前缀
   // dsh-agent-router[FIX-027]；服务端上行面待后续任务——不为遥测新造 RPC 面）。
@@ -2102,7 +2103,7 @@ export async function runClientRender(check) {
     await settle(60)
     const deadSubs = pageSubs.filter((entry) => entry.event === 'credentials/updated')
     const refSubs = pageSubs.filter((entry) => entry.event === 'credentials/reference-updated')
-    check('B5 D-2: 设置页订阅正名 credentials/reference-updated（白名单锚 remote-events.js:21）——死名 credentials/updated 零订阅', deadSubs.length === 0 && refSubs.length === 1)
+    check('B5 D-2: 设置页订阅正名 credentials/reference-updated（白名单锚 API_REMOTE_FORWARDED_EVENTS）——死名 credentials/updated 零订阅', deadSubs.length === 0 && refSubs.length === 1)
     check('B5 D-2: 页面其余转发订阅在位（settings/document-updated + llm/adapters-updated——域管事件清单内）', pageSubs.some((entry) => entry.event === 'settings/document-updated') && pageSubs.some((entry) => entry.event === 'llm/adapters-updated'))
     const catalogBeforeCred = catalogCalls
     for (const entry of refSubs) entry.listener()

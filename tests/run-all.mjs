@@ -63,7 +63,8 @@ const TIMEOUT_MS = Number.parseInt(process.env.RUN_ALL_TIMEOUT_MS ?? '', 10) > 0
 /**
  * 注释剥离（偏移量不变：注释字符换空格、换行保留）——本文件的形态判据只认**代码
  * 文本**：注释里提到 `process.exit` / `export function runX` 不得充当形态证据
- * （否则反向守卫被一句注释绕过——FIX-037 ② 演示实证；host-contract.mjs:96-99 同法）。
+ * （否则反向守卫被一句注释绕过——FIX-037 ② 演示实证；host-contract.mjs 的
+ * `stripComments` 同法）。
  */
 const stripComments = (source) => source
   .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' '))

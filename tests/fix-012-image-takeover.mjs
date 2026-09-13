@@ -3,18 +3,20 @@
 //
 // 问题形态（用户实证 2026-08-30）：主模型为文本模型（DeepSeek-V4-Flash Max）
 // 时发送带图消息 → 宿主 GUI Toast「当前模型不支持图片」消息被拦。RCA：
-// apiproxy prompt 准入（dsh-host-apiproxy lib/index.js:2749-2760）按当前选中
+// apiproxy prompt 准入（dsh-api-session-controller 的 prompt 侧准入
+// MODEL_DOES_NOT_SUPPORT_IMAGES）按当前选中
 // 模型的 inputModalities 判图，纯文本模型拒绝（MODEL_DOES_NOT_SUPPORT_IMAGES）；
 // 插件 ModelTakeover 的武装条件（FIX-002 后）只看 takeoverDefaultModel 开关
 // （默认 false）→ 永不自动切到包装路由 twin → 拦截复现。
 //
-// 宿主核实（2026-08-30 只读，dsh-host-apiproxy lib/index.js）：
-//   - session.selectModel（:2596-2630）仅 resolveCallConfig + 写
+// 宿主核实（2026-08-30 只读，dsh-api-session-controller）：
+//   - session.selectModel（dsh-api-session-controller 的 selectModel(request) 面）
+//     仅 resolveCallConfig + 写
 //     selectionFor.current（+ best-effort saveDefaultModelSelection），对会话
 //     历史/草稿中的图片零校验——旧注释「会话已含图时宿主拒绝切回纯文本」
 //     （lib/client.js 的旧假设；该假设现已在组件头注释中标注「不成立」）不成立；
-//   - 图片准入只在 prompt 时点（:2749-2760）与 pi-ai stream 时点
-//     （dsh-llm-pi-ai lib/index.js:1721 UNSUPPORTED_CONTENT）。
+//   - 图片准入只在 prompt 时点（MODEL_DOES_NOT_SUPPORT_IMAGES）
+//     与 pi-ai stream 时点（dsh-llm-pi-ai 的 UNSUPPORTED_CONTENT 判定）。
 //   → 还原语义按任务方案 P1（基于事实，不臆造）：image-conditional 接管
 //     **永不自动还原**——「发送后 imageCount 归零」与「移除未发送图片归零」
 //     在组件观测面不可区分（无会话日志查询面）；宿主不拒绝还原意味着还原会

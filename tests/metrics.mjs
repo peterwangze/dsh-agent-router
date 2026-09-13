@@ -525,7 +525,7 @@ function observeEscapeTradeoffs() {
   console.log('逃生组三项取舍观测面（R8 P3 记录项，review-MIG-001-R8.md）:')
   console.log('  F-05 user 层标记复述风险：逃生组改写把 route_agent 标记文本放 user 消息层（prestep.js')
   console.log('      rewriteImageTurnsToMarkers——最小改写标记 minimalImageRewrite 替换 user 层图块）；')
-  console.log('      复述风险为设计内取舍（vision-router 同款，index.js:4832-4835）。观测点：逃生轮改写后')
+  console.log('      复述风险为设计内取舍（dsh-vision-router 同款：adapterHandlesImages 分支——有适配器原样留块 / 无适配器 pre-step 改写标记）。观测点：逃生轮改写后')
   console.log('      decision.messages 消息层含标记文本无裸图块（smoke.mjs「wrapper delegate sees route_agent')
   console.log('      marker in system」/「log keeps original image block (F3)」断言）；复述行为需真实')
   console.log('      模型观测（D-1-3 U-3 会话样本顺带检查）。')

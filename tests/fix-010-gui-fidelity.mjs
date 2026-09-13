@@ -8,8 +8,8 @@
 //   official/deepseek-v4-flash，宿主 18:17 重启 resume 后 agent.options 更新）
 //   而会话仍走 glm-router → prestep 误判 onWrapperRoute=false →
 //   rewriteImageTurnsToMarkers 逃生组改写把 image 块替换为 route_agent 标记
-//   文本 → 宿主把 decision.messages 持久化为 user/message（dsh-agent-loop
-//   lib/index.js:554）→ GUI 渲染标记文本而非图片（用户实证：图片消失）。
+//   文本 → 宿主把 decision.messages 持久化为 user/message（dsh-agent-loop 的
+//   session.append("user/message", message) 持久化点）→ GUI 渲染标记文本而非图片（用户实证：图片消失）。
 //   对比 v0.3.0 时代同会话：image 块原样持久化（turn 4/13/15/16）。
 //
 // 判别断言（TDD 先红后绿）：

@@ -2278,8 +2278,8 @@ console.log('apply wiring:')
     // ── EVO-012（批一）：/router-assets/ 同源 HTTP 图片路由——绕开宿主
     // imageData RPC 通道（FIX-020 承载）。判别性：旧代码无前缀路由注册（RED
     // = webRoutes 无 prefix 条目）；handler 读附件字节、404 语义与穿越拒绝为新
-    // 行为面。宿主路由匹配器能力结论见任务返回报告（dsh-host-webserver 支持
-    // kind:'prefix'，最长前缀优先，index.js:128-135 register / 269-279 match）。
+    // 行为面。宿主路由匹配器能力结论见任务返回报告（dsh-host-webserver 的
+    // register(route) 支持 kind:'prefix' 前缀表 / match(pathname) 最长前缀优先）。
     const assetsRoute = webRoutes.find((route) => route && route.kind === 'prefix' && route.path === '/router-assets')
     check('EVO-012 router-assets prefix route registered (old code: no registration)', !!assetsRoute && typeof assetsRoute?.handler === 'function')
     const evoSvc = root.get('router')
@@ -2493,9 +2493,9 @@ console.log('twin wrapper mechanism (real LlmRuntime):')
   check('image turn via twin completes', assembler.finish.kind === 'stop' && twinText === 'delegated-ok')
   check('delegate saw rewritten text, not raw image', delegateCalls.length === 1 && delegateCalls[0].messages[0].content.some((block) => block.type === 'text' && block.text.includes('调用视觉工具查看')) && delegateCalls[0].messages[0].content.every((block) => block.type !== 'image'))
   // 4) 负向见证（FIX-033 重锚定 0.1.5-rc.2）：裸图片块直达文本模型路由不再
-  //  loud-fail——adapterStream 边界投影回归（宿主 lib/index.js:2251：
-  //  modelInfo.inputModalities 不含 image 且消息含图 → projectImagesForTextModel
-  //  :721-729，图片块逐个替换为 textOnlyImageText :541-543 确定性占位文本后
+  //  loud-fail——adapterStream 边界投影回归（宿主 dsh-llm 的 adapterStream：
+  //  modelInfo.inputModalities 不含 image 且消息含图 → projectImagesForTextModel，
+  //  图片块逐个替换为 textOnlyImageText 确定性占位文本后
   //  正常分发，终态 stop）。语义第二次翻转：rc.7 投影（FIX-001 适配）→ rc.8
   //  无投影（适配器自拒 UNSUPPORTED_CONTENT → error 终态）→ rc.2 投影回归。
   //  判别力（防假绿）：占位文本断言**逐字锚定宿主导出 textOnlyImageText**
