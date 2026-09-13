@@ -40,7 +40,8 @@
  *    清扫面扩至 lib/host-abi/llm-selection.js / tests/metrics.mjs / tests/smoke.mjs /
  *    tests/install-entry.mjs / lib/preset-defaults.js / tests/preset-defaults.mjs +
  *    ci.yml / README.md 契约面（stale 零残留 + 符号/断言名式锚在位），并增设
- *    **跨文件对象核验**（9h-2：metrics 断言名式锚所指对象按**声明单源**实存；9h-2b：零自满足）
+ *    **跨文件对象核验**（9h-2：metrics 断言名式锚所指对象按**声明单源**实存；9h-2b：零自满足；
+ *    9h-2c：表内声明源名合法性——未知源名显式判红，不裸抛 TypeError）
  *    + **入表完备性自检**（9h-3：metrics 候选锚名未入表即红），使锚漂移成为机器看护而非人工巡检。
  * 10. FIX-035（EVO-023 R0 P2-1 收口，§9i）：events 域 attach 失败条目**不入表**
  *    （后续订阅重试 attach——静默死订阅消除）+ event-subscribe-failed 诊断
@@ -795,7 +796,18 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
       wrapper: wrapperSource,
       metrics: metricsSource,
     }
-    const deadAnchors = ANCHOR_OBJECTS_3.filter(([, assertion, origin]) => !ANCHOR_SOURCES[origin].includes(assertion))
+    // 声明源名合法性（FIX-041 R2 P3-1(new) 收口）：表第三元是**字符串源名**，此前
+    //   直接 `ANCHOR_SOURCES[origin].includes(...)`——源名误写（如尾随空格的 `'smoke '`）
+    //   时取值为 undefined ⇒ 调用 `.includes` 抛 TypeError：套件以栈回溯崩溃退出，而
+    //   非「源名非法」的明确报文（非静默，但诊断指向错误）。本项把该形态改为**显式
+    //   check FAIL**（带非法源名清单 + 合法源名全集），并把下方核验一律改为安全取值
+    //   （`?.includes(...) ?? false`）——非法源名只判红、不裸抛。
+    const anchorSourceNames = Object.keys(ANCHOR_SOURCES)
+    const unknownAnchorSources = [...new Set(ANCHOR_OBJECTS_3.map(([, , origin]) => origin))]
+      .filter((origin) => !anchorSourceNames.includes(origin))
+    check('B5 9h-2c R-1: 锚对象表的声明源名全部在 ANCHOR_SOURCES 内（未知源名判红，不得裸抛 TypeError）',
+      unknownAnchorSources.length === 0, { unknownAnchorSources, knownSources: anchorSourceNames })
+    const deadAnchors = ANCHOR_OBJECTS_3.filter(([, assertion, origin]) => !(ANCHOR_SOURCES[origin]?.includes(assertion) ?? false))
       .map(([, assertion, origin]) => `${origin}: ${assertion}`)
     // 自满足面核验（R1 P1-1(new) 的机器判据，三类恒 0）：
     //   ① anchor === object（同一谓词判两次）② object ⊂ anchor（对象被锚文本包含）
