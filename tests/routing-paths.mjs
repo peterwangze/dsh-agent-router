@@ -593,7 +593,8 @@ console.log('D. 模态路由:')
 
 // ── [X] FIX-004 能力自证 + 预检可观测（判定单点复用 sourceAcceptsModality）──
 // 问题定性：宿主 pi-ai 自定义 provider 的 inputModalities 缺省 DEFAULT_INPUT=
-// ["text"]——纯靠宿主声明不可信（qwen3.7-plus 实测可看图却会被误拒，README L125）。
+// ["text"]——纯靠宿主声明不可信（qwen3.7-plus 实测可看图却会被误拒，
+// README「常见问题」节「视觉 agent 用什么模型？」条）。
 // 判别覆盖三路径：探测成功（宿主 text-only 但适配器自证 image → 放行）/探测失败
 // （宿主 text-only 且自证不可用 → 安全回落拒绝 + 诊断事件 P8 可观测）/声明可信
 // （宿主明确 image → 信任放行）。探测失败回落判别（F-2 先例）：绝不放行裸图块击穿
