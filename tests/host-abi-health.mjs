@@ -737,6 +737,13 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   模型？」条）→ 关键词/小节名式；两处 shipped 引用同口径核验（全仓该族零残留）。
     { file: ['lib', 'service.js'], stale: ['README L125'], fresh: ['README「常见问题」节「视觉 agent 用什么'] },
     { file: ['tests', 'routing-paths.mjs'], stale: ['README L125'], fresh: ['README「常见问题」节「视觉 agent 用什么'] },
+    // FIX-041 W2：镜像对中**可在本仓核验**的行号锚/自身锚已符号名化（6 处）——stale 零
+    //   残留 + 替代式锚在位。镜像侧（tests/served-client.js）**不重复登记**：§3 的字节
+    //   恒等判据（`served-client mirror stays byte-identical to lib/client.js`）是更强的
+    //   保证（逐字节相等 ⇒ 内容判据自动传递），重复登记只增表面不增判别力。
+    //   宿主包锚（余 41 处，目标在 node_modules/$DSH_HOME 下 dsh-* 包内）刻意不入本清单
+    //   ——不在本仓库面，仓库级守卫不可解析（见 FIX-041 W4 报告与建议方案）。
+    { file: ['lib', 'client.js'], stale: ['lib/oauth-llm.js:43', 'presetDiagnostics :2109', 'health.js:35-48', 'OAUTH_ROUTE_PROVIDER :36', '权威单点 :124-125'], fresh: ['lib/oauth-llm.js `export const', 'presetDiagnostics 方法存在性先例', 'lib/host-abi/health.js noteHostDiag', 'HOST_FACE_ERROR_CODES 三错误码'] },
   ]
   for (const anchorCase of ANCHOR_CASES) {
     const filePath = join(ROOT_DIR, ...anchorCase.file)
