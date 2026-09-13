@@ -715,3 +715,5 @@
 | RECO-AUDIT-001 | AUDIT-001 | 治理记录 | task-priority-analysis 机器写入完成必推荐调用快照（trigger AUDIT-001，M7.4 step 6 / FIX-262） | 事实依据：task-priority-analysis 输出摘要（机器写入） | 53 tasks/8 completed/3 unblocked/8 blocked/34 non-exec | Coordinator | 2026-09-13 | G11 | N/A |
 
 | RECO-FIX-032 | FIX-032 | 治理记录 | task-priority-analysis 机器写入完成必推荐调用快照（trigger FIX-032，M7.4 step 6 / FIX-262） | 事实依据：task-priority-analysis 输出摘要（机器写入） | 53 tasks/8 completed/3 unblocked/8 blocked/34 non-exec | Coordinator | 2026-09-13 | G11 | N/A |
+
+| REVIEW-FIX-046-R0 | FIX-046 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 0） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-FIX-046-R0-input.md; review-FIX-046-R0.md | CodeReviewer | 2026-09-13 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
