@@ -787,6 +787,22 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //     试点口径（FIX-042 W3.3）：宿主锚去行号改**符号名/包名式**（如
     //     `dsh-client-connection` 的 connection handle 面、`dsh-api-gateway` 的
     //     `Reflect.get(receiver, implementation)` 解析面）——不引入未实证的宿主符号。
+    //   **清点数字的取数修订绑定**（FIX-042 R0 F-1 收口；本批自设纪律「数字必须连口径引用」）：
+    //   宿主锚清点 = **97 处 / 22 文件 @ `6bc3841`（FIX-042 批前树）**，其中 H1（同行宿主线索）
+    //   57 / H2（仅**上一行**线索）40。**复跑命令**：`node .test-home/fix042-host-family.mjs`
+    //   （口径见该脚本头：H1 同行线索 / H2 仅取上一行；排除 .governance/**、docs/**、CHANGELOG.md）；
+    //   批前树复现：`git worktree add <tmp> 6bc3841` 后在该目录用同一脚本复跑（实测 97/57/40/22）。
+    //   **同一脚本在 HEAD（本批 4 笔之后）复跑 = 92 处 / 19 文件**（H1 54 / H2 38）——**差额可复算**
+    //   （工具 `.test-home/fix042-inventory-diff.mjs`，用法见其文件头）：**13 处**「批前有 / HEAD 无」
+    //   （= 本批 W3 试点清点的宿主锚位点：镜像对 2 + inject-manifest 1 + llm-selection 4 +
+    //   host-route 1 + wrapper 1 + client-render 2 + rpc-shadow-guard 2）；**8 处**「HEAD 有 / 批前无」
+    //   （= 本批新增守卫条目行 `:728/:729/:733/:796/:797/:798/:799/:814` 的备忘文本，其自身即行号形态）。
+    //   ⇒ 清点数字**随文本增删自动变化**，引用时必须连**取数修订 + 口径 + 复跑命令**，不得作长期基线。
+    //   **本批实测计数回填**（FIX-042 R0 F-2 收口；提交信息历史不回改 ⇒ 计数事实以本行为准）：
+    //   W1 = **12** 个 MISS 位点 / **8** 文件（`+20/−19`）；W2 = `ANCHOR_CASES` **16→22** 条目 /
+    //   断言 165→**171**；W4 = 4 文件（`+14/−4`）/ 条目 22→**24** / 断言 **173**；W3 = 试点 **11** 锚位 /
+    //   **8** 文件（5 lib + `tests/rpc-shadow-guard.mjs` + `tests/client-render.mjs` + 镜像侧
+    //   `tests/served-client.js`）/ 条目 24→**25** / 断言 **174**；4 笔合计 **15** 文件（`--numstat` 口径）。
     // FIX-042 W1/W2：在仓漂移锚收口批（8 文件）的看护接线——FIX-041 R1 §三.3 硬前置「逐处语义
     //   判定」已逐处执行（判定表见 FIX-042 交付报告 W1），本段只登记**判定后**的 stale/fresh 对：
     //   stale = 本轮清除的旧行号式锚串（零残留即绿）；fresh = 替代式符号名/代码串锚（在位即绿）。
