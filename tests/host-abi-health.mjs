@@ -101,7 +101,7 @@ console.log('host diag ring bounded (noteHostDiag):')
   check('ring keeps exactly HOST_DIAG_LIMIT entries after >64 writes', entries.length === HOST_DIAG_LIMIT && HOST_DIAG_LIMIT === 64)
   check('ring keeps the NEWEST entries (overflow dropped from head)', entries[0].kind === `ring-fill-${16}` && entries[entries.length - 1].kind === `ring-fill-${HOST_DIAG_LIMIT + 15}`)
   check('entries carry timestamps and parse as lossless JSON', entries.every((entry) => typeof entry.at === 'number' && typeof entry.kind === 'string') && typeof JSON.stringify(entries) === 'string')
-  // 字段白名单 + 截断 + 恶性输入防御（presetDiag :127-141 纪律同构）。
+  // 字段白名单 + 截断 + 恶性输入防御（presetDiag/notePresetDiag 纪律同构）。
   noteHostDiag({ kind: 'shape', face: 'f'.repeat(300), consumer: 'c'.repeat(300), code: 'x'.repeat(300), detail: 'd'.repeat(500), poison: { nope: true } })
   noteHostDiag(null)
   noteHostDiag({ kind: () => {}, face: { weird: 1 } })

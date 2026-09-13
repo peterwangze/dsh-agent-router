@@ -530,7 +530,7 @@ export async function runClientRender(check) {
   // cordis 客户端形态；'remote.router' 的声明名是 'remote'——命名空间远程面
   // 挂在 remote 服务下）。'getMiss' 模式 = get 解析落空而属性面可用（隔离域/
   // 注入门控下裸 get 失败的 EV-134 嫌疑形态；双形态防御判别面——
-  // agentPresetsServiceOf 先例 lib/preset-defaults.js:100-108）。
+  // agentPresetsServiceOf 先例，定义在 lib/host-abi/ctx-services.js）。
   const declaredService = (key) => Array.isArray(bundleExports.inject) && bundleExports.inject.includes(String(key).split('.')[0])
   let modelDirectoriesGetMiss = false
   const zh = {}
@@ -1868,8 +1868,8 @@ export async function runClientRender(check) {
   // → 主路径解析 undefined → 保底 RPC → 下方场景 1 断言与结构守卫必败。
   // 修复面 = 模块 inject 声明（宿主 dsh-client-ui-model-selection lib/client.js:
   // 157-161 static inject / :729-736 模块级 inject + :799 exports.inject 同款
-  // 机制）+ get→属性面双形态解析（agentPresetsServiceOf 先例
-  // lib/preset-defaults.js:100-108）+ 结构化 console 遥测（前缀
+  // 机制）+ get→属性面双形态解析（agentPresetsServiceOf 先例，定义在
+  // lib/host-abi/ctx-services.js）+ 结构化 console 遥测（前缀
   // dsh-agent-router[FIX-027]；服务端上行面待后续任务——不为遥测新造 RPC 面）。
   {
     // FIX-027 结构守卫：模块 inject 声明含 modelDirectories（丢失即 EV-134

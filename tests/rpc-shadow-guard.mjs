@@ -3,9 +3,9 @@
  *
  * RCA（Coordinator 已实证，本测试复核）：
  * - v0.3.0（EVO-003 统计迁移）在 RouterService 构造器引入实例字段
- *   `this.stats = new StatsStore(...)`（lib/service.js:673），该自有属性
- *   遮蔽原型上的 RPC 方法 `stats()`（lib/service.js:3172，委托
- *   statsSnapshot()）。
+ *   `this.stats = new StatsStore(...)`（lib/service.js），该自有属性
+ *   遮蔽原型上的 RPC 方法 `stats()`（lib/service.js 的 `stats()` →
+ *   `statsSnapshot()` 委托）。
  * - 宿主 typert 网关按 `descriptor.implementation ?? descriptor.method`
  *   经 `Reflect.get(receiver, implementation)` 解析方法并断言函数类型
  *   （dsh-api-gateway/lib/index.js:101-103）。`Reflect.get(service, 'stats')`
