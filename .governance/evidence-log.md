@@ -724,3 +724,5 @@
 | REVIEW-FIX-046-R1 | FIX-046 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 1） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-FIX-046-R1-input.md; review-FIX-046-R1.md | CodeReviewer | 2026-09-13 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
 
 | RECO-FIX-046 | FIX-046 | 治理记录 | task-priority-analysis 机器写入完成必推荐调用快照（trigger FIX-046，M7.4 step 6 / FIX-262） | 事实依据：task-priority-analysis 输出摘要（机器写入） | 53 tasks/9 completed/2 unblocked/8 blocked/34 non-exec | Coordinator | 2026-09-13 | G11 | N/A |
+
+| TRIAGE-FIX-047 | FIX-047 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析） | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/FIX-047.json） | FIX-047.json | change-triage | 2026-09-13 | G11 | TRIAGED |
