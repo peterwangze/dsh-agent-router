@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
 
     // FIX-019：插件直选路由 provider id 单点镜像——浏览器包 client.js 经
     // __ModuleLoader__ 仅 require('react')，无 ESM 模块面，无法 import Node
-    // ESM 模块 lib/oauth-llm.js；此值与 lib/oauth-llm.js:43 `export const
+    // ESM 模块 lib/oauth-llm.js；此值与 lib/oauth-llm.js `export const
     // OAUTH_PROVIDER = 'chatgpt-oauth'` 同构——lib/oauth-llm.js 是权威单点，
     // 本镜像必须随其同步（EVO-010 起主模型经插件路由的调用统计即按此 id 记账）。
     const OAUTH_ROUTE_PROVIDER = 'chatgpt-oauth'
@@ -2186,7 +2186,7 @@ window.__ModuleLoader__.load({
       // 绝不进 2s 轮询（D1-10 治理纪律：设置页常驻 RPC 面不加码）；
       // render 期零 probe 判别锚点（tests/host-abi-health.mjs §3——调用点
       // 唯一且位于本 effect 内，面板只读 hostHealth 状态缓存）。方法缺失
-      // （旧服务端未重启）静默跳过（presetDiagnostics :2109 先例）。
+      // （旧服务端未重启）静默跳过（presetDiagnostics 方法存在性先例）。
       useEffect(() => {
         if (!ready) return
         let alive = true
@@ -5056,9 +5056,10 @@ window.__ModuleLoader__.load({
      *  noteHostDiag/HOST_DIAG_LIMIT=64 同构（浏览器包无法 import Node ESM）；
      *  face-degraded / inject-face-missing 事件的唯一数据面（createClientRemotes
      *  health().diag——健康徽章面板可观测，P8 禁无观测吞错）。
-     *  FIX-037 ⑤（EVO-023 R0 P2-1 镜像半边）：补**字段白名单 + 长度截断**（与
-     *  health.js:35-48 逐字同构——旧实现仅 64 条上限，face/consumer/code/detail
-     *  靠调用点各自截断，镜像环防御深度低于权威半球）。 */
+     *  FIX-037 ⑤（EVO-023 R0 P2-1 镜像半边）：补**字段白名单 + 长度截断**
+     *  （与 lib/host-abi/health.js noteHostDiag 逐字同构——旧实现仅 64 条
+     *  上限，face/consumer/code/detail 靠调用点各自截断，镜像环防御深度
+     *  低于权威半球）。 */
     const HOST_FACE_DIAG_LIMIT = 64
     const hostFaceDiagEntries = []
     function noteHostFaceDiag(entry) {
@@ -5237,7 +5238,7 @@ window.__ModuleLoader__.load({
 
     /** ARCH-004 B2（§4.3 域 1 唯一入口）createClientRemotes——FIX-028 旧
      *  适配层本体迁域更名（→ lib/host-abi/client-remotes.js 权威单点 +
-     *  本浏览器镜像，OAUTH_ROUTE_PROVIDER :36 镜像先例；envelope/health 行为
+     *  本浏览器镜像，OAUTH_ROUTE_PROVIDER 镜像先例；envelope/health 行为
      *  parity 由 tests/host-abi-health.mjs §7 判别锁定，漂移即红；P5：旧
      *  实现已删除，grep 零残留）。
      *  面按调用时延迟解析（get 优先 + ctx.remote.<ns> 属性面兜底——FIX-027
@@ -5396,8 +5397,9 @@ window.__ModuleLoader__.load({
               const directoryService = directoryFace()
               // F-3（EVO-020 R0 台账，EVO-022 B4 ⑦收口）：缺面（命名空间未挂载）
               // → host-face-missing 降级信封 + face-degraded 诊断事件——对齐
-              // 权威单点 :124-125 三错误码降级体系（原 FIX-028 failureOf 无短码
-              // 无环形事件）。directoryFor 形状漂移 / sessionId 缺失保持
+              // 权威单点 HOST_FACE_ERROR_CODES 三错误码降级体系（原 FIX-028
+              // failureOf 无短码无环形事件）。directoryFor 形状漂移 / sessionId
+              // 缺失保持
               // failureOf 原语义（非缺面形态不误标 missing）。
               if (!directoryService) {
                 return degradedEnvelope('modelDirectories', 'host-face-missing', 'dsh-agent-router: modelDirectories 服务不可用（宿主旧版本？）')
@@ -5469,7 +5471,7 @@ window.__ModuleLoader__.load({
       // ARCH-004 域 5（§4.3 域 5 ②，B2 接线）：apply 时 fiber 面存在性自检
       // ——缺面记 inject-face-missing 诊断（lib/host-abi/inject-manifest.js
       // noteInjectFaceGaps 的浏览器镜像：本包无法 import Node ESM，
-      // OAUTH_ROUTE_PROVIDER :36 镜像先例；FIBER_INJECT 单一事实源 ↔ 模块
+      // OAUTH_ROUTE_PROVIDER 镜像先例；FIBER_INJECT 单一事实源 ↔ 模块
       // inject 数组镜像锁定 tests/host-abi-health.mjs 6e）。不 throw 不阻断
       // apply——宿主 runner waitingFor 门控下用户无从得知卡在哪一面，本自检
       // 让「等待面」页面打开后立即可见（健康徽章数据源）。
