@@ -803,6 +803,13 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   断言 165→**171**；W4 = 4 文件（`+14/−4`）/ 条目 22→**24** / 断言 **173**；W3 = 试点 **11** 锚位 /
     //   **8** 文件（5 lib + `tests/rpc-shadow-guard.mjs` + `tests/client-render.mjs` + 镜像侧
     //   `tests/served-client.js`）/ 条目 24→**25** / 断言 **174**；4 笔合计 **15** 文件（`--numstat` 口径）。
+    //   **隔行站点登记**（FIX-042 R0 F-3）：对象在同块**隔行**（非同/上一行）的宿主锚未入 97 ——
+    //   `lib/client.js:4281`（宿主 dsh-host-apiproxy `lib/index.js:2596-2630`）、`lib/service.js:1326`
+    //   （同上宿主面 `:2582-2594`）、`lib/wrapper.js:266`（**本批已按 W3.3 同法**去行号改符号名式：
+    //   宿主 dsh-llm 的 `resolveModelInfo → resolveModelInfoFor → adapter.resolveModel` 链——该处
+    //   为清单外**真漂移**，审查员以宿主树只读实证 `:1397-1403` 现为 `assembleAssistantStream`）。
+    //   前两处本轮**不改**（宿主锚不可本仓核验、同句无具名宿主符号 ⇒ 避免新幻觉引用），后续批以
+    //   逐处语义判定收敛。
     // FIX-042 W1/W2：在仓漂移锚收口批（8 文件）的看护接线——FIX-041 R1 §三.3 硬前置「逐处语义
     //   判定」已逐处执行（判定表见 FIX-042 交付报告 W1），本段只登记**判定后**的 stale/fresh 对：
     //   stale = 本轮清除的旧行号式锚串（零残留即绿）；fresh = 替代式符号名/代码串锚（在位即绿）。
@@ -811,7 +818,10 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     { file: ['lib', 'host-abi', 'health.js'], stale: ['lib/preset-defaults.js:116-124', OLD_PRESETDIAG_LINE_ANCHOR], fresh: ['presetDiag/notePresetDiag'] },
     { file: ['lib', 'host-abi', 'inject-manifest.js'], stale: ['（:5060 先例', 'lib/client.js:5060', 'dsh-client-modules lib/client.js:265-268'], fresh: ['const inject =', '宿主 dsh-client-modules 的包表行'] },
     { file: ['lib', 'oauth-llm.js'], stale: ['runCodexResponsesChat :2906-2929'], fresh: ['`runCodexResponsesChat`'] },
-    { file: ['lib', 'wrapper.js'], stale: ['stream 直传分支（下方 :353）', 'dsh-llm lib/index.js:1527'], fresh: ['`stream()` 的图片块保真直传分支', '宿主 dsh-llm 的 `registration()` 实现'] },
+    // FIX-042 R0 F-3（扩充同条目）：`lib/wrapper.js:266` 的宿主锚 `（:1397-1403）` 为清单外**真漂移**
+    //   （审查员宿主树实读：`dsh-llm resolveModelInfoFor` 在 `:2046`、`adapter.resolveModel` 在 `:2047`；
+    //   `:1397-1403` 现为 `assembleAssistantStream`）⇒ 去行号改符号链式（与 W3.3 试点同法）。
+    { file: ['lib', 'wrapper.js'], stale: ['stream 直传分支（下方 :353）', 'dsh-llm lib/index.js:1527', '（:1397-1403）'], fresh: ['`stream()` 的图片块保真直传分支', '宿主 dsh-llm 的 `registration()` 实现', '`resolveModelInfo → resolveModelInfoFor → adapter.resolveModel` 链'] },
     { file: ['tests', 'rpc-shadow-guard.mjs'], stale: ['lib/service.js:673', 'lib/service.js:3172', 'dsh-api-gateway/lib/index.js:101-103'], fresh: ['`this.stats = new StatsStore(...)`（lib/service.js）', '`statsSnapshot()` 委托', '宿主 dsh-api-gateway 的 `Reflect.get(receiver, implementation)` 解析面'] },
     // FIX-042 W2：**本守卫自身**的锚注释同口径看护（W2 机核实测：本文件零处行号式自指——自指
     //   一律用判据名/块名，如「9h-2b 的 ANCHOR_OBJECTS_3 校验块」；行号式自指随增删行即失效，
