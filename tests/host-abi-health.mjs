@@ -823,10 +823,16 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   `:1397-1403` 现为 `assembleAssistantStream`）⇒ 去行号改符号链式（与 W3.3 试点同法）。
     { file: ['lib', 'wrapper.js'], stale: ['stream 直传分支（下方 :353）', 'dsh-llm lib/index.js:1527', '（:1397-1403）'], fresh: ['`stream()` 的图片块保真直传分支', '宿主 dsh-llm 的 `registration()` 实现', '`resolveModelInfo → resolveModelInfoFor → adapter.resolveModel` 链'] },
     { file: ['tests', 'rpc-shadow-guard.mjs'], stale: ['lib/service.js:673', 'lib/service.js:3172', 'dsh-api-gateway/lib/index.js:101-103'], fresh: ['`this.stats = new StatsStore(...)`（lib/service.js）', '`statsSnapshot()` 委托', '宿主 dsh-api-gateway 的 `Reflect.get(receiver, implementation)` 解析面'] },
-    // FIX-042 W2：**本守卫自身**的锚注释同口径看护（W2 机核实测：本文件零处行号式自指——自指
-    //   一律用判据名/块名，如「9h-2b 的 ANCHOR_OBJECTS_3 校验块」；行号式自指随增删行即失效，
-    //   即 FIX-041 R1 P3-2 指出的失效机理）。stale 侧 = 本批自本文件清除的旧行号式锚（拼接常量，
-    //   见上）；fresh 侧 = 替代式符号名/代码串锚（同样拼接写出，规避自满足）。
+    // FIX-042 W2（**结论口径经 F-4 更正与限定**）：**本守卫自身**的锚注释同口径看护——结论限定为
+    //   「本文件无**指向本文件自身位置**的行号式自指」（口径：注释行内 `:NNN` / `L###` 且**被指
+    //   对象在本文件**；`ANCHOR_CASES` 的 stale 字段字面量清单、以及**他文件锚**的历史引用**不计入**）。
+    //   自指一律用判据名/块名（如「9h-2b 的 ANCHOR_OBJECTS_3 校验块」）——行号式自指随增删行即失效，
+    //   即 FIX-041 R1 P3-2 指出的失效机理。**FIX-042 R0 F-4 如实更正**：原句「本文件零处行号式自指」
+    //   未带口径 ⇒ 属**声明强度超过事实**（宽口径下另有多处他文件锚的历史引用）；本笔已把唯一一处
+    //   无归属的 `:118-119` 去行号（见 9h-2 表内注释），两口径计数由 `.test-home/fix042-w2-selfref.mjs`
+    //   机核（严格口径 = 指向本文件者；宽口径 = 注释行内全部行号式锚）。
+    //   stale 侧 = 本批自本文件清除的旧行号式锚（拼接常量，见上）；fresh 侧 = 替代式符号名/代码串锚
+    //   （同样拼接写出，规避自满足）。
     { file: ['tests', 'host-abi-health.mjs'], stale: [OLD_PRESETDIAG_LINE_ANCHOR], fresh: ['presetDiag/notePresetDiag ' + '纪律同构'] },
     // FIX-042 W4：语义待定 5 项中「在仓且可改」的 2 处（第 3 处 `tests/smoke.mjs` 已并入上方既有条目）：
     //   ① tests/stats.mjs 的 `service.js:2414-2561` 实为**历史迁移源**（现址为模态判定面，对象不符）
@@ -885,7 +891,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
       ['current-turn image not double-injected as memory', "check('current-turn image not double-injected as memory'", 'smoke'],
       ['smoke.mjs「wrapper delegate sees route_agent', "check('wrapper delegate sees route_agent marker in system'", 'smoke'],
       ['log keeps original image block (F3)', "check('log keeps original image block (F3)'", 'smoke'],
-      // R0 P1-1：:118-119 的旧锚名（不存在的断言名）已改写为指向本条实存对象——实现面按
+      // R0 P1-1：`tests/metrics.mjs` 该条目的旧锚名（不存在的断言名）已改写为指向本条实存对象——实现面按
       //   声明单源（wrapper）核验；对偶断言按声明单源（parity）核验。
       ['twin 实现保 id 仅改写 provider', 'return { ...resolved, provider: wrapRoute, inputModalities: modalities }', 'wrapper'],
       ['prepared model carries wrapRoute rewrite', "check('prepared model carries wrapRoute rewrite'", 'parity'],
