@@ -2135,7 +2135,7 @@ window.__ModuleLoader__.load({
         // Analyst D-2 死订阅修复：旧 `credentials/updated` 不在宿主转发白名单
         // （dsh-api-remotes/lib/types/remote-events.js 全表无此名 → 宿主从未转发
         // → 凭据变化不触发刷新，死订阅实证）；正名 `credentials/reference-updated`
-        // （同表 :21，凭据引用变化转发事件）。
+        // （同表 API_REMOTE_FORWARDED_EVENTS 条目内，凭据引用变化转发事件）。
         const disposeEvents = subscribeClientEvents($on, [
           { event: 'settings/document-updated', consumer: 'settings-page-reload', handler: (ns) => {
             if (ns === 'router' || ns === 'llm-pi-ai' || ns === 'llm-deepseek' || ns === 'agent-default-model') loadRef.current()
@@ -4305,9 +4305,10 @@ window.__ModuleLoader__.load({
       // sessionId）都把用户手动选的 twin 静默剥回原生。
       // FIX-029-B：宿主 0.1.2-rc.1 起 conversation.input.right standardProps
       // 只提供 useInput（SnapshotSelectorHook）/inputActions/sessionId，不再
-      // 提供 input（快照 prop）——宿主注入面 uiSession.provide({hooks:
-      // ['conversation','input']}),PropsHooks input→useInput（dsh-client-
-      // ui-conversation :16041-16056）。imageIds 改经 hook 快照读取；typeof
+      // 提供 input（快照 prop）——宿主注入面 dsh-client-ui-conversation 的
+      // ctx.uiSession.provide({ hooks: ['conversation','input'], props:
+      // ['inputActions'] })，PropsHooks input→useInput（FIX-043 批 C 实读：
+      // 原行号式锚已漂移到他对象 ⇒ 改代码串式）。imageIds 改经 hook 快照读取；typeof
       // 分支在组件生命周期内形态稳定（宿主面恒定），hook 调用序不漂移；
       // props.input 旧形态回落（旧宿主/旧夹具双形态兼容——AttachButton
       // useInput 同款先例）。
@@ -4979,9 +4980,16 @@ window.__ModuleLoader__.load({
     //    credentials L4942-5030 / agentPresets L4337-4500 / session
     //    L8018-8500），响应为 {ok, value|error} 直面、参数为位置参数；
     //    宿主官方插件同款消费：dsh-client-ui-settings-models
-    //    的 static inject（remote.credentials/llm/settings）+
-    //    dsh-client-ui-model-selection 的 scope.modelDirectories 与
-    //    ctx.remote.session.modelCatalog() 调用。
+    //    的 static inject（remote.credentials/llm/settings）+ 其对**同批三命名
+    //    空间**的调用面（`ctx.remote.llm.listProviders()` 与
+    //    `createModelsOperations(ctx)` 绑定的 `remote.credentials` 读写 /
+    //    `remote.settings.mutate` / `remote.llm.discoverModels`）；
+    //    另有 dsh-client-ui-model-selection 的 scope.modelDirectories 与
+    //    ctx.remote.session.modelCatalog() 调用——后两者属 modelDirectories
+    //    服务与 remote.session（**命名空间不同**），作**追加**证据保留，
+    //    不替代上句三命名空间的证据对象（FIX-043 批 C 按 R1 P2-2 裁定取
+    //    (a)：恢复原证据对象并符号化去行号——该对象经批 C 实读复核仍准确，
+    //    且恰为三命名空间消费面）。
     // 本适配层把「新面」收敛成本包既有消费面「旧信封」——页面/组件消费点
     // 零改动（P5：宿主面代差单点收敛；旧 connection.api 路径已删除，禁止
     // 并存）。映射与形状全部锚定宿主 schema：
@@ -5450,7 +5458,8 @@ window.__ModuleLoader__.load({
     // 解析 undefined，handler 走保底 RPC（只读不更新显示）。声明即同时拿到
     // 两点保证：runner 激活门控等待服务就绪（dsh-cordis-client-runner
     // 的 waitingFor 记录按 fiber.inject 过滤）+ 属性面可见
-    // （dynamicCordisContext 属性访问按 fiber.inject 声明门控，:313-314/:342）。
+    // （dynamicCordisContext 属性访问按 fiber.inject 声明门控，宿主
+    // readService(prop, true) 面）。
     // FIX-028：命名空间面（remote.llm/settings/credentials/agentPresets/
     // session）同样按宿主官方先例声明——dsh-client-ui-settings-models
     // 的 static inject（remote.credentials/llm/settings）
@@ -5558,8 +5567,9 @@ window.__ModuleLoader__.load({
       // ctx.remote.$on），直接调宿主 modelDirectories 服务
       // （ModelDirectoryResolver，super(ctx, "modelDirectories") 注册，宿主
       // dsh-client-ui-model-selection 的 directoryFor 面）的 directoryFor(sessionId).load()——load 只读幂等
-      // （generation 守卫，宿主 :47/:53）、从 session.models 重拉并写 store
-      // 快照，composer 模型选择器经 uSES 订阅该 store（宿主 :292）→ load 完成
+      // （generation === this.generation 守卫，宿主模型目录服务面）、从 session.models 重拉并写 store
+      // 快照，composer 模型选择器经 uSES（useSyncExternalStore）订阅该 store
+      // （宿主 directory.store.subscribe + ModelSelect 的 uSES 订阅）→ load 完成
       // 即显示更新；与新会话打开时组件 mount → load() 同构。FIX-026 范围
       // 追加（EV-132 真机反证 emit 链不可达 + 用户架构裁决 P5 单一路径）：
       // 服务端 preset-defaults.js 的 FIX-024 emit 死路径已删除——本订阅是
