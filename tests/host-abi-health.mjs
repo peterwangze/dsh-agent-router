@@ -734,7 +734,9 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   被核验取决于该名是否在 9h-2 表内（表内 = 按声明单源核验；表外 = 无核验）——不声称闭环。
     { file: ['tests', 'metrics.mjs'], stale: ['smoke.mjs:1162-1177', 'smoke.mjs:1316-1326', 'smoke.mjs:816-820', 'smoke.mjs:1473-1480', 'smoke.mjs:1669-1682', 'smoke.mjs:1500-1507', 'smoke.mjs:1153-1157', 'smoke.mjs:846-868', 'smoke.mjs:1557-1569', 'smoke.mjs:848-867', 'smoke.mjs:1266', 'smoke.mjs:1680-1681'], fresh: ['smoke.mjs「image turn config passes through unchanged (no whole-turn routing)」', 'smoke.mjs「wrapper takes over default model」', 'smoke.mjs「vision call returns text without echoing injected images (B)」', 'smoke.mjs「native multimodal delegate sees raw image (preserveImageInput)」', 'smoke.mjs §7.7 pre-step「image turn on wrapper route injects plugin reminder」', 'smoke.mjs「collectMarkers dedupes by attachment」', 'smoke.mjs「tool parameters schema」', 'smoke.mjs「attachmentIds resolution (M2)」节', 'smoke.mjs「follow-up text turn injects memory segment into system」', 'smoke.mjs「wrapper delegate sees route_agent'] },
     // FIX-040 W2/W8b：smoke.mjs 的旧式锚（行号区间 / 自锚）→ 符号名或内容式指代。
-    { file: ['tests', 'smoke.mjs'], stale: ['install-entry.mjs:74-77', 'typert contribution registered` 断言行\n  // （符号名式锚；原写死行号'], fresh: ['powerShellHosts', 'typert contribution registered', '紧随的 `19 invocations` 断言行'] },
+    // FIX-042 W4（扩充既有条目）：`check` 三参形态锚原写 `host-contract.mjs:82-88`（实测 HIT，但属
+    //   行号式）⇒ 去行号改签名式（C5 半条）。
+    { file: ['tests', 'smoke.mjs'], stale: ['install-entry.mjs:74-77', 'typert contribution registered` 断言行\n  // （符号名式锚；原写死行号', 'host-contract.mjs:82-88'], fresh: ['powerShellHosts', 'typert contribution registered', '紧随的 `19 invocations` 断言行', 'host-contract.mjs 的 `check(label, condition, detail)`'] },
     // FIX-040 W2/W3：install-entry.mjs 引用侧符号锚在位（其 install.sh 行号锚已符号化）。
     { file: ['tests', 'install-entry.mjs'], stale: ['install.sh:94-101', 'install.sh:113-131', '拷贝/链接回退语义仅 win32 可判定'], fresh: ['powerShellHosts', 'lstatOrUndefined', 'PS1_OFFLINE_APPLICABLE', 'PS1_PLATFORM_DETAIL', '源码自带依赖目录', '绝不对真实目录 rm -rf'] },
     // FIX-040 W3：install.sh 契约面引用位（ci.yml 头部契约 + README 覆盖边界）同口径核验。
@@ -785,6 +787,13 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   即 FIX-041 R1 P3-2 指出的失效机理）。stale 侧 = 本批自本文件清除的旧行号式锚（拼接常量，
     //   见上）；fresh 侧 = 替代式符号名/代码串锚（同样拼接写出，规避自满足）。
     { file: ['tests', 'host-abi-health.mjs'], stale: [OLD_PRESETDIAG_LINE_ANCHOR], fresh: ['presetDiag/notePresetDiag ' + '纪律同构'] },
+    // FIX-042 W4：语义待定 5 项中「在仓且可改」的 2 处（第 3 处 `tests/smoke.mjs` 已并入上方既有条目）：
+    //   ① tests/stats.mjs 的 `service.js:2414-2561` 实为**历史迁移源**（现址为模态判定面，对象不符）
+    //      ⇒ 改为「EVO-003 迁移前 RouterService 内联聚合」+ 现单点 `StatsStore`；
+    //   ② tests/fix-012-image-takeover.mjs 的 `lib/client.js:3226` 指**已勘正的旧注释**（现址为
+    //      preset schema 保存形状）⇒ 改为归属文件式（假设文本仍可 grep：`会话已含图`）。
+    { file: ['tests', 'stats.mjs'], stale: ['service.js:2414-2561'], fresh: ['EVO-003 迁移前 RouterService 内联聚合'] },
+    { file: ['tests', 'fix-012-image-takeover.mjs'], stale: ['lib/client.js:3226'], fresh: ['lib/client.js 的旧假设'] },
   ]
   for (const anchorCase of ANCHOR_CASES) {
     const filePath = join(ROOT_DIR, ...anchorCase.file)

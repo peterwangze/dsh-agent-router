@@ -31,7 +31,7 @@ const EVO12_PNG_BYTES = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcS
 let failures = 0
 let skipped = 0
 /**
- * 断言（FIX-037 R0 P2-3：三参形态对齐 host-contract.mjs:82-88）——详情报文只在
+ * 断言（FIX-037 R0 P2-3：三参形态对齐 host-contract.mjs 的 `check(label, condition, detail)`）——详情报文只在
  * 失败时打印（`condition` 仍是真值判定）。旧二参形态导致 `cond ? true : '缺键…'`
  * 式调用恒真（字符串为真值 → 缺键以 ok 形式静默通过）。
  */

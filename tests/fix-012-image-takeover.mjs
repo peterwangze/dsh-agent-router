@@ -12,7 +12,7 @@
 //   - session.selectModel（:2596-2630）仅 resolveCallConfig + 写
 //     selectionFor.current（+ best-effort saveDefaultModelSelection），对会话
 //     历史/草稿中的图片零校验——旧注释「会话已含图时宿主拒绝切回纯文本」
-//     （lib/client.js:3226 假设）不成立；
+//     （lib/client.js 的旧假设；该假设现已在组件头注释中标注「不成立」）不成立；
 //   - 图片准入只在 prompt 时点（:2749-2760）与 pi-ai stream 时点
 //     （dsh-llm-pi-ai lib/index.js:1721 UNSUPPORTED_CONTENT）。
 //   → 还原语义按任务方案 P1（基于事实，不臆造）：image-conditional 接管

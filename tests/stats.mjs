@@ -5,7 +5,8 @@
  * - estimateCost 纯函数（E8：单价表参数化 / 未知模型 zero-cost / usageCost 直读优先）
  * - percentile 分位（p50/p95 nearest-rank）
  * - defaultStatsDir（DSH_HOME → ~/.dsh 回退，EV-028 / oauth-credentials.js 同构）
- * - 内存两级聚合 + snapshot 形状（迁移自 service.js:2414-2561 的等价语义）
+ * - 内存两级聚合 + snapshot 形状（EVO-003 迁移前 RouterService 内联聚合的等价语义——
+ *   现单点实现 = lib/stats.js 的 `StatsStore`）
  * - E6-a 存储布局：按天 JSONL + index.json（schemaVersion/days）+ 行字段白名单（P7 无敏感内容）
  * - E7-a 写入时机：flushThreshold 异步批量 flush / 队列满丢弃最旧计数 dropped / record 同步不反压
  * - 存储往返（重启恢复聚合）
