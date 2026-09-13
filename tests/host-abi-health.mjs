@@ -809,7 +809,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
       wrapper: wrapperSource,
       metrics: metricsSource,
     }
-    // 声明源名合法性（FIX-041 R2 P3-1(new) 收口）：表第三元是**字符串源名**，此前
+    // 声明源名合法性（FIX-040 R2 P3-1(new) 收口）：表第三元是**字符串源名**，此前
     //   直接 `ANCHOR_SOURCES[origin].includes(...)`——源名误写（如尾随空格的 `'smoke '`）
     //   时取值为 undefined ⇒ 调用 `.includes` 抛 TypeError：套件以栈回溯崩溃退出，而
     //   非「源名非法」的明确报文（非静默，但诊断指向错误）。本项把该形态改为**显式
@@ -840,14 +840,14 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     check('B5 9h-2b R-1: 对象核验零自满足（anchor≠object × 对象不被锚文本包含 × 对象仅在其声明源出现）',
       selfSatisfied.identical.length === 0 && selfSatisfied.objectInsideAnchor.length === 0 && selfSatisfied.foreignSourceHits.length === 0,
       { ...selfSatisfied, tableSize: ANCHOR_OBJECTS_3.length })
-    // 9h-2d（FIX-041 R2 P3-2(new) 收口）：**同源重复**判据——对象串在其**声明源**内
+    // 9h-2d（FIX-040 R2 P3-2(new) 收口）：**同源重复**判据——对象串在其**声明源**内
     //   MUST **恰出现 1 次**。9h-2b 的三类只覆盖「非声明源 / 锚文本」碰撞：若在声明源
     //   **自身**的注释里复制一份对象串、同时删掉真断言，字符串包含式判别仍判绿（残留
     //   盲区；R1 的实际缺陷即该类碰撞的跨源变体，已由 9h-2b ③ 堵住）——要求「恰 1 次」
     //   把该残留形式化关闭：同源多一份同串 ⇒ 对象存活证据不再唯一 ⇒ 判红。
     //   现状基线：**21/21 对象在其声明源内均恰 1 次**（零暴露、零误红；独立复算见 FIX-041
     //   取证件 .test-home/fix041-occurrence-count.mjs）。
-    //   落地形态说明：R2 将该类表述为「9h-2b 第四类」；此处落地为**独立判据 9h-2d**
+    //   落地形态说明：FIX-040 R2 将该类表述为「9h-2b 第四类」；此处落地为**独立判据 9h-2d**
     //   （不折叠进 9h-2b 聚合谓词）——①判据彼此独立，独立 check 的失败定位更细；②断言
     //   计数如实体现新增判据；③不重复判别（9h-2b 仍判原三类，无并存双路径）。
     const duplicateInSource = ANCHOR_OBJECTS_3
