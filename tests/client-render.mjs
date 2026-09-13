@@ -2394,19 +2394,34 @@ export async function runClientRender(check) {
     // 「失败 → 成功一拍 → 再失败」恰 +1（旧实现吞错则两侧恒 0；若去掉边沿触发
     // 则同周期 +3 ⇒ 此断言必红）。
     const statsTimer = captured.timers.filter((timer) => timer.ms === 2000 && !timer.cleared).pop()
+    // FIX-047 R0 P3（Rework）：harness 面形态守卫——原写法直接 `statsTimer.fn()`，
+    // 一旦 timer 未被捕获（该渲染路径不再产生 2s timer / clearInterval 标记异常），
+    // 即以 TypeError **崩掉整个 runner 模块**：本组后续断言全丢、失败退化为裸崩栈
+    // 而非一条 FAIL。现改为**结构化 FAIL + 空驱动**（诊断携 timer census，形态漂移
+    // 可定位），runner 不崩、后续断言照跑。
+    check('FIX-047-F16b[harness]: 2s stats 轮询 timer 已被 harness 捕获且未清除（缺失 ⇒ 结构化 FAIL，不崩 runner；R0 P3）',
+      Boolean(statsTimer) && typeof statsTimer.fn === 'function',
+      { capturedTimers: captured.timers.length, nonClearedMs: captured.timers.filter((timer) => !timer.cleared).map((timer) => timer.ms) })
+    const tickStatsTimer = statsTimer && typeof statsTimer.fn === 'function' ? statsTimer.fn : () => {}
     statsFailMode = true
-    for (let index = 0; index < 3; index += 1) statsTimer.fn()
+    for (let index = 0; index < 3; index += 1) tickStatsTimer()
     await settle()
     const statsDiagWithinEpisode = statsDiagOf().length
     statsFailMode = false
-    statsTimer.fn()
+    tickStatsTimer()
     await settle()
     statsFailMode = true
-    statsTimer.fn()
+    tickStatsTimer()
     await settle()
     statsFailMode = false
-    check('FIX-047-F16b: 边沿触发——同失败周期 3 拍不追加（统计轮询 2s 拍不挤满 64 条环）+ 成功复位后新周期恰 +1',
-      statsDiagWithinEpisode === statsDiagAfter.length && statsDiagOf().length === statsDiagAfter.length + 1)
+    // FIX-047 R0 P3（Rework）：显式**基线非空前提**——`statsDiagWithinEpisode ===
+    // statsDiagAfter.length` 在该窗口零记录时同样成立（`0 === 0`），此前判别力依赖
+    // **前置** F-16 断言的非空 guard（`statsDiagAfter.length > 0`）这一隐式前提；断言
+    // 顺序调整 / 前置被改即退化为空洞绿。显式写入 `statsDiagAfter.length > 0` 后，
+    // 基线为空即判红（不再静默通过），判别力不再外挂于另一条断言。
+    check('FIX-047-F16b: 边沿触发——同失败周期 3 拍不追加（统计轮询 2s 拍不挤满 64 条环）+ 成功复位后新周期恰 +1（含基线非空前提，防「0 === 0」空洞绿；R0 P3）',
+      statsDiagAfter.length > 0 && statsDiagWithinEpisode === statsDiagAfter.length && statsDiagOf().length === statsDiagAfter.length + 1,
+      { baseline: statsDiagAfter.length, withinEpisode: statsDiagWithinEpisode, final: statsDiagOf().length })
 
     // F-10（R0 P3）：原夹具成功分支 faces/diag **恒空** ⇒ lib/schemas.js 的
     // `faceHealthCodec` / `hostDiagEntryCodec` 形状面在渲染组零行使。唯一变量 =
