@@ -12,6 +12,7 @@
 - **current_gate**: **G4 待评** —— CI 已接线且**新增两跑次 success**（run `34737348545` @`e002fa2` = FIX-043 六批代码面；run `34738392207` @`cfbaa3c` = FIX-044 判据面）⇒ 评估证据较上轮更充足
 - **trigger_mode / permission_mode**: always-on / maximum-autonomy
 - **远端**: `origin/main` = `d48caf9`（本地 ahead 0）；工作树仅 `.governance/tpa-last-run.json`（工具缓存，随本快照一并入仓）
+- **最新已发布版本**: v0.5.0（2026-09-12，tag `2a119f9` + GitHub Release `dsh-agent-router-0.5.0.tar.gz`；2026-09-13 Check 28c 事实源对齐补登）
 - **锁**: `file_locks` / `active_tasks` **双空**
 
 ## 遗留任务
