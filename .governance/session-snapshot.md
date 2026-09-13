@@ -1,75 +1,79 @@
-# 会话快照 — 2026-09-13（锚守卫全链收口日：FIX-043 六批 + FIX-044 终态 + CI 双绿）
+# 会话快照 — 2026-09-13（下午场：治理数据健康全链收口 · G4 通过 · 归档链打通）
 
-- **session_id**: 20260913-ANCHOR-GUARD-CLOSURE
+- **session_id**: 20260913-GOV010-DATA-HEALTH-PM
 - **session_date**: 2026-09-13
 - **agent**: deepseek-flash @ DeepSeek Harness + software-project-governance v0.80.0
 - **工作流版本**: 0.80.0
-- **mode**: always-on × maximum-autonomy
+- **最新已发布版本**: v0.5.0（2026-09-12，tag `2a119f9` + GitHub Release `dsh-agent-router-0.5.0.tar.gz`）
+- **mode**: always-on × maximum-autonomy（**文件策略 = danger-full-access**，用户本会话切换；approval prompts 已禁用）
 
 ## 当前状态
 
-- **current_stage**: development (6/11)
-- **current_gate**: **G4 待评** —— CI 已接线且**新增两跑次 success**（run `34737348545` @`e002fa2` = FIX-043 六批代码面；run `34738392207` @`cfbaa3c` = FIX-044 判据面）⇒ 评估证据较上轮更充足
+- **current_stage**: 防护网与CI/CD（8/11——G4「开发+测试→CI」通过后进入）
+- **current_gate**: **G4 通过（2026-09-13）**；G5~G7 待逐门评估
 - **trigger_mode / permission_mode**: always-on / maximum-autonomy
-- **远端**: `origin/main` = `d48caf9`（本地 ahead 0）；工作树仅 `.governance/tpa-last-run.json`（工具缓存，随本快照一并入仓）
-- **最新已发布版本**: v0.5.0（2026-09-12，tag `2a119f9` + GitHub Release `dsh-agent-router-0.5.0.tar.gz`；2026-09-13 Check 28c 事实源对齐补登）
-- **锁**: `file_locks` / `active_tasks` **双空**
+- **远端**: `origin/main` = `b67b4b9`（本地 ahead 0）；**FIX-045 R1 返工进行中**（工作树含返工改动）
+- **锁**: `active_tasks.FIX-045` + `file_locks[tests/host-abi-health.mjs]`（R1 返工中；其余零锁）
+- **健康**: `check-governance` **156 → 71 issues**；Check 3 / 14 / 27 / 28c 全 PASS；CI 跑次 `34742533222` @`79d7033`、`34743157784` @`b67b4b9` 均 **success**
 
 ## 遗留任务
 
 | 任务 ID | 描述 | 完成百分比 | 阻塞原因 | 优先级 |
 |---------|------|-----------|----------|--------|
-| GOV-009 | 宿主仓钩子产品代码判定边界（`is_product_code()` 不含 `tests/**` ⇒ M7.4 review-evidence 的 B 级门禁在宿主仓惰性；**本会话两次被独立确认**） | 已立项待派发 | 无 | P2 |
-| （未立 ID） | **治理数据健康**：Check 14 十处表列数不匹配 + risk-log 活跃计数口径（实测 2 条「活跃」vs `status` 报 0）+ FIX-043 行长度；**本会话第六次因它绕行**（RECO 快照连续多轮不可用，Top pick 恒为终态任务） | 未启动（诊断完成） | 无（`.governance/**` 可直写） | P2 |
-| FIX-044 R0 P3×3 | ① commit message §④「与 `lib/client.js` 条目同形登记」误述 ② `9h-5` 形态正则扩展名集 ⊃ 扫描面扩展名集（潜在漏面，当前 0 实例）③ `overlappingExempts` 缺单变量判红实证 | 未启动 | 无 | P3 |
-| FIX-043 台账 | R0–R5 各级 P3 + 未验证项 5 项（含 CI 侧 `#SKIP` / 断言计数未逐项取回） | 已登记 | 无 | P3 |
-| ARCH-004 | 兼容性演进闭环已达成，台账保留 open（各级 P3 + CI 回填 + 真机复验项） | 主体终态 | 真机复验需用户在场 | P0（台账面） |
-| AUDIT-001 | 待用户重启 + 刷新验证 | 待用户 | 用户侧动作 | P0 |
-| G4 Gate | 阶段 Gate 评估 | 未启动 | 无（CI 证据已就绪） | P2 |
+| FIX-045 | 锚守卫 9h-5 完备性收口（单源派生 + 9h-5c + 单变量判红实证） | R1 返工中（R0 AWN/0） | 无 | P2 |
+| GOV-009 | 宿主仓钩子产品代码判定边界（`commit-msg` 不含 `lib/**`/`tests/**`） | 已立项待派发 | **跨仓**（修复面属插件仓；用户本会话裁决「不动当前仓之外的仓」） | P2 |
+| GOV-011 | 插件仓解析侧缺陷批（7 项：TPA 终态词表 / archive 版本识别 / 混链判据 / evidence `EV-`↔`EVD-` / auto 端点插件范围 / 决策选择器无语义保留 / 归档计数分歧） | 已立项待派发 | **跨仓**（同上） | P2 |
+| GOV-010 | 治理数据健康修复（W1–W3 + F2–F7） | **✅ 已完成** | — | P2 |
+| ARCH-004 | 宿主升级兼容性分析链 | 主体终态（台账 open） | 真机复验需用户在场 | P0 |
+| AUDIT-001 | 审计 + P0 修复 | 待用户 | 重启 DSH + 刷新验证（用户侧动作） | P0 |
+| FIX-031 / FIX-032 | 路由透明性 / 预设 subagent 跟随 | 开发+审查终态 | 待用户真机复验（F-7 / FIX-032 场景） | P0/P1 |
+| EVO-014 / FIX-018 / FIX-025 / FIX-024 / FIX-026 | 预设显示链批次 | 开发+审查终态 | 待用户重启复验（FIX-024/026 已由 FIX-026/027 承载并 EV-136/137 双确认） | P1 |
+| G5~G7 Gate 评估 | 阶段推进 | 未启动 | — | P2 |
+| FIX-044 R0 P3-3 / FIX-043 R5 P3-1 等台账 | 卫生批 | 部分由 FIX-045 收口 | — | P3 |
 
 ## 待确认决策
 
 | 决策 ID | 标题 | 上下文 | 截止日期 |
 |---------|------|--------|----------|
-| — | （本轮无未决决策；全部关键决策均已由用户 ask 裁决） | — | — |
+| — | 无未决决策（本会话用户裁决：①执行治理数据健康修复 ②批量收集 agent 可作项 ③**不允许修改当前仓之外的其它仓代码**） | — | — |
 
 ## 活跃风险
 
 | 风险 ID | 描述 | 升级截止日期 | 负责人 |
 |---------|------|-------------|--------|
-| RISK-003 | 宿主接口演进（宿主更新无预警通道）——**缓解已结构化落地**（依赖最小化 / `lib/host-abi/` 解耦单点 / 契约快照 + 基线守卫 + **9h-5 入表完备性判据** / 面级降级与诊断面板）；**保持活跃**（宿主持续演进，不关闭）；残余 = 宿主 ABI 面外新形态仍可能未被静态守卫覆盖 | 宿主 node_modules 变更后首次接管路由调用 | Coordinator |
-| RISK-001 | CI 回归保护——**主轨道闭合**（CI 接线 + 本会话两跑次 success）；残余 = CI 未覆盖面清单 + 锚守卫卫生（已由 FIX-043/044 大幅收敛） | — | Coordinator |
-| （口径分歧待核） | risk-log 实测 2 条标注「活跃」，`status` 面板报 0 ⇒ 计入「治理数据健康」待修面（P8 可观测） | — | Coordinator |
+| RISK-003 | 宿主接口演进（缓解已结构化落地；保持活跃——宿主持续演进） | 宿主 node_modules 变更后首次接管路由调用 | Coordinator |
+| RISK-001 | CI 回归保护（主轨道闭合；残余 = CI 未覆盖面清单 + 锚守卫卫生） | — | Coordinator |
+| — | **Check 36 R2 FAIL 未处置**：RISK-003（高）缓解引用 ARCH-004/FIX-038 未完成（RISK-003 开放 + ARCH-004 台账 open = 真实信号，待用户裁决「补完台账」或「显式接受残余」） | — | Coordinator |
 
 ## 本轮已完成
 
-- **FIX-043 全链终态**：六批 `813c4a9`（`host-contract.mjs` 19 处 + needle 卫生）/ `2d65f6e`（镜像对 24 处 + ⑧ 隔行站点）/ `cfe7756`（守卫自指清零 + 判据硬化）/ `2ea0bc9`（lib 面 + P2-2/P2-3）/ `ce8d908`（tests 面）/ `355687a`（守卫收尾 + **19 文件级 `ANCHOR_CASES` 接线**）；**审查链 R0–R5 六轮全 APPROVED_WITH_NOTES / unresolved_blockers=0，零 NEEDS_CHANGE**
-- **FIX-044 终态**：`6680d29`（**`9h-5`/`9h-5b` 入表完备性机器判据** + notes 收口 + `L####` 逐 schema 重建 17 符号 + `:16041-16056` 归属定位改指）；**R0 AWN/0**（四项裁定全成立）
-- **CI 外部验证**：两跑次全 success（EV-206；排队 ~27 分钟现象如实留痕，**未把 queued 当通过**）
-- **治理入仓 + 推送**：`e002fa2` / `cfbaa3c` / `d48caf9` → origin/main（本地 ahead 0）
-- **证据**：`EV-190…EV-206` + `REVIEW-FIX-043-R0…R5` + `REVIEW-FIX-044-R0` + 需求载体 `.governance/fix-043-anchor-cases-requirements.md`
-- **Coordinator 自纠 3 处已入册**（P1 不美化）：`#SKIP 1` 陈旧表述 / 派发 prompt 文件↔数字配对互换 / 「第二重非恒真实证」措辞重叠
+- **GOV-010 治理数据健康修复（全链终态）**：W1 Check 14 十条结构清零（10 行内容逐字保全机验 10/10）· W2 risk-log 迁移规范 13 列（3 行 × 11 原件逐字在位）⇒ 风险域复活（Open risks 0 → 2）· W3 终态行 ✅ 归一（7 + 10 行）⇒ TPA 泄漏清零 · F2 版本路线图规范化 + 补登（15 行）⇒ archive 触发器由「0 < 2」转**满足** · F3 优先级表 87 行 6→7 列 ⇒ archive「未知结构 83 → 可解析 83」 · F4 依赖环 FIX-014↔REL-006 清零 · F5 **G4 判 passed**（阶段 → 8/11） · F6 Check 28c 事实源（快照补键 + 最新发布版本） · F7 CI 回填
+- **归档链打通并执行**：`archive.py migrate --auto` = 32 task → `archive/tasks/v0.1.7~v0.79.0.md` + `index.md`（33 条目），**plan-tracker 178→147KB（−17%）**，校验 PASS，`check-archive-integrity` PASS
+- **FIX-045 开发交付**：`3e9e8a5`（+36/−2；形态①单源派生 + 9h-5c + `overlappingExempts` 纯单变量判红实证）；门控 = 190 断言 / ALL 20 SUITES + 4 RUNNER MODULES PASSED / `#SKIP 2`；R0 **AWN/0** 机录（`review-FIX-045-R0.md`）→ F-1(P1)/F-2(P2)/F-3(P2) 返工 R1 中
+- **证据**：`EV-207…EV-210` + `REVIEW-FIX-045-R0` + `RECO-GOV-010` + `TRIAGE-FIX-045`
+- **Coordinator 自纠 5 处入册（P1 不美化）**：① 验收标准①「不降低判据强度」措辞错误（单源收敛必然收窄正则）② archive index 重建丢条目**初判被实测证伪**（临时副本复核后勘正）③ GOV-011 ⑥⑦ 首写替换锚未命中导致静默未落盘（复写并加断言）④ `EV-209` 行内含半角竖线致列数 15（已改述）⑤ 归档范围端点语义（插件 ledger vs 宿主）如实标为未决 ⑥ **GOV-011 行内半角竖线致 Check 14 回归**（GOV-011④ 文本内写入 `任务ID|描述|…|状态` 表头示例 ⇒ 行长成 14 列 / 1 blocking；本会话自巡检发现并改全角 ｜ 修正，Check 14 复归 PASS——**教训：治理文本内引用表格形态 MUST 用全角或代码块**）
 
 ## 未完成 / 已延期
 
-- 治理数据健康（Check 14 + risk-log 口径）：本会话六次绕行，未修
-- GOV-009：已立项未派发
-- FIX-044 R0 P3×3、FIX-043 台账 P3：转后续卫生批
-- G4 Gate 评估：未启动（CI 证据已就绪）
+- FIX-045 R1 返工 + 复审（进行中）
+- Check 28s ERROR：evidence-log 431.6KB —— 归档缓解被解析侧阻断（本仓 `EV-` 前缀 vs 规范 `EVD-`，690 行），转 GOV-011④
+- GOV-009 / GOV-011 跨仓修复（用户裁决不动外部仓）
+- Check 30（11 closure）/ 32（29 triage）/ 37（1 gate）/ 18 系列（5 个待验任务）存量项
+- G5~G7 Gate 评估；卫生批 P3 台账
 
 ## 下次会话优先级
 
-1. **治理数据健康** —— 修复面仅 `.governance/**`，是恢复「完成必推荐」依据链可信度的前置
-2. **GOV-009** —— 钩子边界（插件产品代码 ⇒ Governance Developer + Code Reviewer）
-3. **FIX-044 R0 P3×3 卫生批** —— 低成本收口
-4. **G4 Gate 评估** —— 推进阶段链条
+1. **真机验收批（用户在场）** —— AUDIT-001（重启 + 刷新）· ARCH-004 台账面（徽章/面板截图）· FIX-031 F-7 · FIX-032 场景 · EVO-014/FIX-018/FIX-025 —— 一次重启可批量覆盖
+2. **Check 36 R2 处置裁决** —— RISK-003（高）↔ ARCH-004：补完台账 or 显式接受残余（DEC/风险裁决）
+3. **GOV-009 / GOV-011（跨仓）** —— 需用户授权在插件仓会话执行
+4. **G5~G7 Gate 评估** —— 逐门证据扫查推进阶段链条
 
-> FIX-262/REQ-108：本节由完成必推荐快照派生。
-- **推荐快照引用**: **RECO-FIX-044**（`task-priority-analysis --evidence-task FIX-044` 机器写入，evidence-log）
+> FIX-262/REQ-108：本节派生自完成必推荐快照。
+- **推荐快照引用**: **RECO-GOV-010**（`task-priority-analysis --evidence-task GOV-010` 机器写入，evidence-log）
 
 ## 用户偏好设置
 
-- 交互节奏：**逐批推进 + 每批独立审查**；每步以 ask_user_question 确认（本轮用户选择：并行批 → 守卫面前置 → push 触发 CI → 暂停）
-- 对「并行」有偏好：本轮以 **M7.6 合规的零重叠切分**实现（守卫/共享注册表面不参与并行）
-- 推送：用户授权 `push origin/main` 以触发 CI 验证（本轮两跑次已绿）
-- 暂停指令：用户明确选择「暂停本轮」（2026-09-13）
+- 交互节奏：用户本会话指令「**把 agent 能作的一把收了**」+「**不允许动当前仓之外的其他仓的代码**」——即：批量收敛本仓可执行项、跨仓项一律登记不动手
+- 裁决记录：会话起点在状态面板多选题中改问「还有哪些未完成的事务」→ 拿到全景后选择批量执行路径
+- 文件策略：用户把 DSH 文件策略切至 **danger-full-access** 并关闭 approval prompts（本会话生效）
+- git 推送：治理批量入仓后 push origin/main（触发 CI；本会话两跑次 success）
