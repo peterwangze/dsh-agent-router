@@ -626,6 +626,8 @@ window.__ModuleLoader__.load({
       hostHealthWarn: (n) => `⚠ ${n} 个宿主面降级/缺失`,
       faceDegraded: (list) => `宿主面降级（对应分区只读，其余功能正常）：${list}`,
       hostHealthVersions: (v) => `宿主版本：dsh-llm ${v.llm} · dsh-tools ${v.tools} · typert-protocol ${v.typertProtocol}`,
+      hostHealthVersionsUnavailable: '宿主版本不可读（下文列出取数失败原因）',
+      hostHealthRpcFailed: (code) => `⚠ 宿主面取数失败：${code}`,
       hostHealthFacesTitle: '面探针：',
       hostHealthNoProbes: '尚无已注册面探针（B2-B5 迁移批次接入后自动覆盖宿主依赖面）',
       hostHealthDiagTitle: '最近宿主诊断事件：',
@@ -955,6 +957,8 @@ window.__ModuleLoader__.load({
       hostHealthWarn: (n) => `⚠ ${n} host face(s) degraded/missing`,
       faceDegraded: (list) => `Host faces degraded (affected sections read-only, rest unaffected): ${list}`,
       hostHealthVersions: (v) => `Host versions: dsh-llm ${v.llm} · dsh-tools ${v.tools} · typert-protocol ${v.typertProtocol}`,
+      hostHealthVersionsUnavailable: 'Host versions unreadable (the fetch failure is listed below)',
+      hostHealthRpcFailed: (code) => `⚠ host face fetch failed: ${code}`,
       hostHealthFacesTitle: 'Face probes: ',
       hostHealthNoProbes: 'No face probes registered yet (host dependency faces are covered automatically once the B2-B5 migration batches land)',
       hostHealthDiagTitle: 'Recent host diagnostics: ',
@@ -2004,6 +2008,11 @@ window.__ModuleLoader__.load({
       // 缓存 + 诊断环形——router/hostFaceDiagnostics RPC；render 期零 probe，
       // §7.1 惰性纪律：渲染只读本快照缓存）。
       const [hostHealth, setHostHealth] = useState(null)
+      // FIX-046：宿主面 RPC 取数失败/结果形状非法的**显式诊断**（P8 禁无观测
+      // 吞错）——旧实现两侧静默（方法缺失不调用、rejection 吞为 undefined），
+      // 真机表现 = 版本三值恒 '?' + 诊断恒空而面板显示「宿主面正常」。本状态
+      // 承载 { code, detail }，由 HostHealthCard 上行（徽章计降级 + 诊断行）。
+      const [hostFaceNotice, setHostFaceNotice] = useState(null)
       // ARCH-004 B2（§4.3 域 1）：本地 client 面健康快照（createClientRemotes
       // health() ——一次性 effect 探测后缓存，render 期零 probe，§7.1 惰性
       // 纪律）+ 面·code 降级表（load() 消费路径实测的降级短码——面级降级行）。
@@ -2185,8 +2194,14 @@ window.__ModuleLoader__.load({
       // ARCH-004 B1（§6.1/D4）：宿主面健康一次性快照——打开期仅取一次，
       // 绝不进 2s 轮询（D1-10 治理纪律：设置页常驻 RPC 面不加码）；
       // render 期零 probe 判别锚点（tests/host-abi-health.mjs §3——调用点
-      // 唯一且位于本 effect 内，面板只读 hostHealth 状态缓存）。方法缺失
-      // （旧服务端未重启）静默跳过（presetDiagnostics 方法存在性先例）。
+      // 唯一且位于本 effect 内，面板只读 hostHealth 状态缓存）。
+      // FIX-046（P8：失败与降级 MUST 可观测）：旧实现三处静默——① 方法缺失
+      // 直接跳过（presetDiagnostics 方法存在性先例沿用过度：那一处是惰性观测
+      // 面的可选降级，版本/诊断面是面板主数据源，缺它即面板失真）；② rejection
+      // 经 `() => undefined` 吞噬；③ `ok:false` / 结果形状非法静默保留 null。
+      // 三者合并表现为「本地 face 探针全绿 + 版本三值 '?' + 诊断恒空」，真机
+      // 报障无从定因。现改为四态分类（method-missing / rpc-failed /
+      // result-invalid / ok），失败一律 noteHostFaceDiag 机录 + 上屏。
       useEffect(() => {
         if (!ready) return
         let alive = true
@@ -2198,12 +2213,50 @@ window.__ModuleLoader__.load({
           const localFaces = health()
           if (alive && localFaces && typeof localFaces === 'object') setFaceHealth(localFaces)
         }
-        const routerRemote = remote()
-        if (routerRemote && typeof routerRemote.hostFaceDiagnostics === 'function') {
-          routerRemote.hostFaceDiagnostics({}).then((response) => {
-            if (alive && response.ok && response.value && typeof response.value === 'object') setHostHealth(response.value)
-          }, () => undefined)
+        // FIX-046：诊断短码/详情提取（宿主侧错误信封 {code,message} 优先，
+        // 无 code 的 rejection/Error 回落 name/message；长度按环形白名单截断）。
+        const failNotice = (code, detail) => ({
+          code: typeof code === 'string' && code ? code.slice(0, 48) : 'host-face-unknown',
+          detail: typeof detail === 'string' ? detail.slice(0, 160) : String(detail ?? '').slice(0, 160),
+        })
+        const reportFailure = (code, detail) => {
+          if (!alive) return
+          const notice = failNotice(code, detail)
+          // 幂等写入（值相等保留原对象）——effect deps 含 remote()，宿主侧
+          // props.remote 每次渲染新函数 ⇒ effect 可能重跑；若每次新建对象，
+          // 幂等重跑会自激重渲染（判别测试的 settle 循环可复现）。
+          setHostFaceNotice((current) => (current && current.code === notice.code && current.detail === notice.detail ? current : notice))
+          noteHostFaceDiag({ kind: 'host-face-rpc', face: 'remote.router', code: notice.code, detail: notice.detail })
         }
+        const routerRemote = remote()
+        if (!routerRemote) {
+          reportFailure('host-face-missing', 'remote.router 命名空间未挂载（宿主行 dsh-agent-router 未挂载或 Remote 挂载失败）')
+          return () => { alive = false }
+        }
+        if (typeof routerRemote.hostFaceDiagnostics !== 'function') {
+          reportFailure('host-face-shape: hostFaceDiagnostics', '宿主面版本/诊断 RPC 方法缺失（宿主服务端未注册该方法——插件与宿主服务端版本不一致？）')
+          return () => { alive = false }
+        }
+        routerRemote.hostFaceDiagnostics({}).then((response) => {
+          if (!alive) return
+          if (!response || typeof response !== 'object' || typeof response.ok !== 'boolean') {
+            reportFailure('host-face-result-invalid', `宿主面取数响应非形状信封：${String(response).slice(0, 120)}`)
+            return
+          }
+          if (!response.ok) {
+            const error = response.error ?? {}
+            reportFailure(error.code ?? 'host-face-rpc-failed', error.message ?? String(response.error ?? '未知错误'))
+            return
+          }
+          if (!response.value || typeof response.value !== 'object' || typeof response.value.hostVersions !== 'object' || response.value.hostVersions === null) {
+            reportFailure('host-face-result-shape', `宿主面取数结果缺 hostVersions 对象：${JSON.stringify(response.value).slice(0, 120)}`)
+            return
+          }
+          setHostHealth(response.value)
+          setHostFaceNotice(null)
+        }, (error) => {
+          reportFailure(error?.code ?? error?.name ?? 'host-face-call-rejected', error?.message ?? String(error))
+        })
         return () => { alive = false }
       }, [ready, remote, health])
 
@@ -3303,7 +3356,7 @@ window.__ModuleLoader__.load({
         // ARCH-004 B1（§6.1）：宿主面健康徽章 + 面板（一次性快照；
         // render 期零 probe——纯 HostHealthCard 缓存渲染）。B2 起并入本地
         // client 面健康（faceHealth——createClientRemotes health() 快照）。
-        el(HostHealthCard, { hostHealth, faceHealth, t }),
+        el(HostHealthCard, { hostHealth, faceHealth, hostFaceNotice, t }),
         // ARCH-004 B2（§4.3 域 1 降级行为）：单面降级行——面级短码入页面
         // （对比 FIX-028 时代 throw → 整页「加载失败」行：此处仅该面分区
         // 降级只读，其余面照常工作，永不整页崩）。
@@ -3755,7 +3808,7 @@ window.__ModuleLoader__.load({
      * （details/summary 折叠行）；徽章语义：✓ 全绿 / ⚠ n 面降级或缺失。
      */
     function HostHealthCard(props) {
-      const { hostHealth, faceHealth, t } = props
+      const { hostHealth, faceHealth, hostFaceNotice, t } = props
       // ARCH-004 B2：faces/diag = RPC 面（hostFaceDiagnostics——Node 侧注册表
       // 快照）∪ 本地 client 面（faceHealth——createClientRemotes health()
       // 一次性探测快照；remote.* 客户端 fiber 面 Node 侧不可见故本地并入）。
@@ -3781,27 +3834,39 @@ window.__ModuleLoader__.load({
         ...(faceHealth && Array.isArray(faceHealth.diag) ? faceHealth.diag : []),
         ...(hostHealth && Array.isArray(hostHealth.diag) ? hostHealth.diag : []),
       ]
+      // FIX-046（P8）：取数失败**不**计入降级面数——面数与本地 face 探针一一
+      // 对应（remote.llm/settings/credentials/agentPresets/session 五面），
+      // router 自身 RPC 失败不与任一探针面混同；失败改由下方专用失败行 +
+      // 诊断区上行（「恒 ? 而全绿」的误导性已由该行消除，不借面数篡改语义）。
+      const failure = hostFaceNotice && typeof hostFaceNotice === 'object' ? hostFaceNotice : null
       const degraded = faces.filter((face) => face && face.state !== 'ok').length
       const versions = hostHealth && hostHealth.hostVersions && typeof hostHealth.hostVersions === 'object'
         ? hostHealth.hostVersions
         : { llm: '?', tools: '?', typertProtocol: '?' }
+      // FIX-046：失败原因进「最近宿主诊断事件」区（替代「暂无诊断事件」）——
+      // 下一轮排障从此行直接读出失败类型短码（缺方法 / 调用被拒 / 形状非法）
+      // 与详情，不再需要猜。
+      const diagRows = failure
+        ? [{ at: Date.now(), kind: 'host-face-rpc', face: 'remote.router', code: failure.code, detail: failure.detail }]
+        : diag
       return el('details', { className: 'dshrouter-notice', style: { margin: '0' } },
         el('summary', { style: { cursor: 'pointer', fontSize: '12px' } },
           el('span', { className: degraded > 0 ? 'dshrouter-error' : 'dshrouter-ok' },
             degraded > 0 ? t('hostHealthWarn')(degraded) : t('hostHealthOk')),
           el('span', { className: 'dshrouter-meta', style: { marginLeft: 8 } },
-            ` ${t('hostHealthTitle')} · ${t('hostHealthVersions')(versions)}`)),
+            ` ${t('hostHealthTitle')} · ${failure ? t('hostHealthVersionsUnavailable') : t('hostHealthVersions')(versions)}`)),
         el('div', { style: { fontSize: '12px', lineHeight: 1.7, marginTop: '6px', wordBreak: 'break-all' } },
+          failure ? el('div', { className: 'dshrouter-error' }, t('hostHealthRpcFailed')(failure.code), failure.detail ? ` ${failure.detail}` : '') : null,
           faces.length === 0
             ? el('div', { style: { opacity: 0.6 } }, t('hostHealthNoProbes'))
             : el('div', null, t('hostHealthFacesTitle'),
               ...faces.map((face, index) => el('div', { key: `hface-${index}-${face.name}` },
                 `${face.state === 'ok' ? '✓' : face.state === 'degraded' ? '⚠' : '✗'} ${face.name}${face.detail ? ` (${face.detail})` : ''}`))),
           el('div', { style: { marginTop: '4px' } }, t('hostHealthDiagTitle'),
-            diag.length === 0
+            diagRows.length === 0
               ? el('div', { style: { opacity: 0.6 } }, t('hostHealthNoDiag'))
               : el('div', null,
-                ...diag.slice(0, 8).map((entry, index) => el('div', { key: `hdiag-${index}-${entry.at}` },
+                ...diagRows.slice(0, 8).map((entry, index) => el('div', { key: `hdiag-${index}-${entry.at}` },
                   `${new Date(entry.at).toLocaleTimeString()} ${entry.kind}${entry.face ? ` ${entry.face}` : ''}${entry.code ? ` (${entry.code})` : ''}${entry.detail ? ` ${entry.detail}` : ''}`))))))
     }
 

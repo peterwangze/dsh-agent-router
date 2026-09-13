@@ -267,6 +267,14 @@ export async function runClientRender(check) {
   // 失败形态）与 config.presets 夹具（可变对象，EVO-013 块内按场景注入）。
   let presetRosterMode = 'ok'
   const configPresets = {}
+  // FIX-046 判别面：remote.router.hostFaceDiagnostics 的宿主面形态开关——
+  // 'ok' 正常取数 / 'absent' 方法缺失（旧服务端未重启）/ 'throw' 调用被拒 /
+  // 'reject' 宿主失败信封 / 'noVersions' 结果缺 hostVersions。
+  // 形态锚定（P10-④，非心智模型）：宿主侧调用校验 = `dsh-api-gateway`
+  // `assertExactArguments` 的 wire 字段对齐 + `dispatchRpc`/`invokeRpc` 的
+  // `{ok:false,error:{code,message}}` 失败信封（本机宿主 checkout 0.1.5-rc.2
+  // `lib/index.js` 该两符号实读；见下方 FIX-046 组断言）。
+  let hostFaceMode = 'ok'
   const remoteMock = {
     catalog: async () => ({
       ok: true,
@@ -328,6 +336,25 @@ export async function runClientRender(check) {
     // EVO-023（B5）：presetDiag 随 2s 轮询同拍拉取（FIX-030-C 观测面）——
     // 计数面供「双 RPC 同拍/隐藏态零 RPC」判别（既有用例零消费面）。
     presetDiagnostics: async () => { pollRpc.presetDiagnostics += 1; return { ok: true, value: { ok: true, enabled: true, entries: [] } } },
+    // FIX-046：宿主面健康 RPC（真实形状 = service.js hostFaceDiagnostics()
+    // 三合一 { hostVersions, faces, diag }；faces 条目形状锚定 lib/schemas.js
+    // faceHealthCodec、diag 条目锚定 hostDiagEntryCodec——宿主侧本仓权威面）。
+    // 默认 'ok' 恒成功（非判别场景下维持「健康面板正常」基线，避免各用例
+    // 被取数失败噪音污染）；失败形态由下方 FIX-046 判别组按需切换。
+    // 未注入者 = 本夹具**无 hostFaceDiagnostics 方法**（旧服务端形态）——
+    // 与真机 V-1 报障同形。
+    hostFaceDiagnostics: async () => {
+      if (hostFaceMode === 'throw') throw new Error('router gateway rejected hostFaceDiagnostics')
+      if (hostFaceMode === 'notOk') {
+        return { ok: false, error: { code: 'gateway/arguments-invalid', message: 'typert gateway: router/hostFaceDiagnostics: args fields do not match the descriptor: missing "request"' } }
+      }
+      if (hostFaceMode === 'noVersions') return { ok: true, value: { faces: [], diag: [] } }
+      return { ok: true, value: {
+        hostVersions: { llm: '9.9.9-a', tools: '8.8.8-b', typertProtocol: '7.7.7-c' },
+        faces: [],
+        diag: [],
+      } }
+    },
     statsExport: async (request) => { captured.statsExportCalls.push(request); return { ok: true, value: { ok: true, message: '已导出 2 行', csv: 'date,agent,account,model,calls,errors,inputTokens,outputTokens,p50ms,p95ms,costEstimate\n2026-01-15,vision,openai,gpt-4o,3,1,110,50,60,180,0.5' } } },
     save: async (request) => { captured.saveOps.push(...((request && request.ops) ?? [])); return { ok: true, value: { ok: true, revision: 1 } } },
     oauthBegin: async (request) => { captured.beginCalls.push(request); return { ok: true, value: { ok: true, message: '授权 URL 已生成', authUrl: 'https://auth.openai.com/oauth/authorize?x=1', state: 'st-6' } } },
@@ -2055,6 +2082,9 @@ export async function runClientRender(check) {
     check('B2: remote.llm 缺失 → 整页零「加载失败」行（旧 throw 语义此 fixture 必红）', b2WholePageErrors.length === 0)
     check('B2: llm 面卡片降级短码入页面（面级降级行 llm:host-face-missing）', textOf(b2Tree).includes('llm:host-face-missing'))
     check('B2: 健康徽章 ⚠ + 缺失面行（本地 face health 进 HostHealthCard：⚠ 1 面 + ✗ llm）', textOf(b2Tree).includes(zh.hostHealthWarn(1)) && textOf(b2Tree).includes('✗ llm'))
+    // FIX-046 非回归：取数面正常时面板**不得**出现失败行（反向判据——失败行
+    // 只在取数失败时出现，禁止恒显/误显），且版本行显示真实宿主版本值而非回落。
+    check('FIX-046 非回归: 取数正常时零宿主面取数失败行 + 版本行显示真实值（非 ? 回落）', !textOf(b2Tree).includes(zh.hostHealthRpcFailed('')) && textOf(b2Tree).includes('9.9.9-a') && textOf(b2Tree).includes('7.7.7-c'))
     const b2PresetsHead = findAll(b2Tree, (node) => node && node.type === 'button' && hasClass(node, 'dshrouter-category-head')).find((node) => textOf(node).includes(zh.presetsTitle))
     if (b2PresetsHead) {
       b2PresetsHead.props.onClick()
@@ -2147,5 +2177,77 @@ export async function runClientRender(check) {
     for (const entry of captured.documentListeners.slice(docListenerMark).filter((item) => item.type === 'visibilitychange')) entry.handler()
     await new Promise((resolve) => setImmediate(resolve))
     check('B5 D1-10: 恢复可见立即补拍一次（visibilitychange 唤醒——实时语义保留，不丢一轮）', pollRpc.stats === hiddenStats + 1 && pollRpc.presetDiagnostics === hiddenDiag + 1)
+  }
+
+  // ── FIX-046（P8）：宿主面取数失败/降级 MUST 可观测（禁无观测吞错）────────
+  // 真机 V-1 报障形态：设置页「Agent 路由」宿主面健康面板 = 本地 face 探针
+  // 五面全绿 + 宿主版本三值恒 '?' + 诊断事件恒空。旧实现三处静默（方法缺失
+  // 跳过 / rejection 吞为 undefined / ok:false 与形状非法静默保留 null）使
+  // 该形态与「健康」不可区分——本组四形态逐一判别：失败**必须**产生明确
+  // 诊断（短码 + 详情）并上屏，且**不得**再回落为「暂无诊断事件」。
+  //
+  // 判别性（RED 证明）：四条的断言面（失败行文案 / 诊断行短码 / 版本行不可读
+  // 标记）在旧实现下**全部不存在**（旧代码无任何 notice 状态与渲染面）⇒ 本组
+  // 对旧实现必红；对照面 case 1（真实值落地）旧实现亦红（真机版本三值为 '?'）。
+  // 形态锚定（P10-④）：失败短码与信封形状取自本仓权威面——宿主失败信封
+  // `{ ok:false, error:{ code, message } }` = 宿主 `dsh-api-gateway`
+  // `invokeRpc`/`rpcFailure` 实读形态；调用参数形状 = 同包
+  // `assertExactArguments` 的 wire 字段对齐（missing "request" 即该函数文案，
+  // 真机定因证据见 FIX-046 交付报告）。
+  console.log('FIX-046: host face fetch observability (P8):')
+  {
+    // 每形态独立 remote：（a）携带各自 hostFaceDiagnostics；（b）模块级诊断环
+    // 与面板展示严格同拍——四形态各判各的（互不继承 notice 状态）。
+    const renderHostFace = async (prefix, method) => {
+      // 浅拷贝 + 按需覆盖宿主面方法：'absent' 用**自有属性置 undefined** 表达
+      // 「该方法不存在」（delete 只摘自有属性时原型链仍可达，判别会假绿）。
+      // 其余注入面（api/health/remoteReady/t/$on）复用注册点自述注入
+      // （settingsReg.inject()——与生产 render 路径同源），只替换 remote 取数。
+      const router = { ...remoteMock }
+      if (method === 'absent') router.hostFaceDiagnostics = undefined
+      await renderInto(settingsReg.render({ ...settingsReg.inject(), remote: () => router }), prefix)
+      return settle()
+    }
+
+    // case 1（对照面）：取数成功 → 宿主版本三值真实上屏（真机期望面）。
+    hostFaceMode = 'ok'
+    const hfOk = await renderHostFace('fix046-ok')
+    const hfOkText = textOf(hfOk)
+    check('FIX-046-1: 取数成功 → 宿主版本三值真实上屏（非 ? 回落）且零失败行', hfOkText.includes('9.9.9-a') && hfOkText.includes('8.8.8-b') && hfOkText.includes('7.7.7-c') && !hfOkText.includes(zh.hostHealthRpcFailed('')))
+
+    // case 2：宿主面方法缺失（旧服务端未注册 hostFaceDiagnostics）→ 必须显式
+    // 诊断 + 上屏（旧实现静默跳过：面板全绿 + 版本 '?' + 诊断恒空）。
+    const hfAbsent = await renderHostFace('fix046-method-absent', 'absent')
+    const hfAbsentText = textOf(hfAbsent)
+    check('FIX-046-2: 方法缺失 → 明确诊断上屏（short code host-face-shape + 版本行「不可读」标记；旧实现此断言必红）',
+      hfAbsentText.includes('host-face-shape: hostFaceDiagnostics') && hfAbsentText.includes(zh.hostHealthVersionsUnavailable) && hfAbsentText.includes(zh.hostHealthRpcFailed('host-face-shape: hostFaceDiagnostics')))
+    check('FIX-046-2: 方法缺失的诊断进「最近宿主诊断事件」区（kind + code 机录，禁「暂无诊断事件」替代）',
+      hfAbsentText.includes('host-face-rpc') && hfAbsentText.includes('(host-face-shape: hostFaceDiagnostics)') && !hfAbsentText.includes(zh.hostHealthNoDiag))
+    check('FIX-046-2: 方法缺失下本地 face 探针快照保留（失败不改写面数据源——面数仍为本地五面派生）', hfAbsentText.includes(zh.hostHealthFacesTitle))
+
+    // case 3：调用 reject（宿主侧抛错/传输失败形态）→ 诊断 detail 携带宿主错误。
+    hostFaceMode = 'throw'
+    const hfThrow = await renderHostFace('fix046-throw')
+    const hfThrowText = textOf(hfThrow)
+    check('FIX-046-3: 调用 reject → 明确诊断（Error 名/消息入 detail，禁 `() => undefined` 吞噬；旧实现此断言必红）',
+      hfThrowText.includes('router gateway rejected hostFaceDiagnostics') && hfThrowText.includes('(Error)') && !hfThrowText.includes(zh.hostHealthNoDiag))
+
+    // case 4：宿主失败信封（真机已知形态：网关 wire 字段对齐拒绝）→ 诊断须携带
+    // 宿主 code（gateway/arguments-invalid），下一轮排障可直接读出定因。
+    hostFaceMode = 'notOk'
+    const hfNotOk = await renderHostFace('fix046-not-ok')
+    const hfNotOkText = textOf(hfNotOk)
+    check('FIX-046-4: ok:false 信封 → 诊断携带宿主 error.code + message（旧实现静默保留 null，此断言必红）',
+      hfNotOkText.includes('(gateway/arguments-invalid)') && hfNotOkText.includes('missing "request"') && hfNotOkText.includes(zh.hostHealthRpcFailed('gateway/arguments-invalid')))
+
+    // case 5：结果缺 hostVersions（形状非法）→ 显式 result-shape 诊断，禁静默
+    // 回落为 '?' 而不留痕。
+    hostFaceMode = 'noVersions'
+    const hfShape = await renderHostFace('fix046-result-shape')
+    const hfShapeText = textOf(hfShape)
+    check('FIX-046-5: 结果缺 hostVersions → 显式 host-face-result-shape 诊断（版本三值回落必须有痕；旧实现此断言必红）',
+      hfShapeText.includes('(host-face-result-shape)') && hfShapeText.includes(zh.hostHealthVersionsUnavailable) && !hfShapeText.includes(zh.hostHealthNoDiag))
+
+    hostFaceMode = 'ok'
   }
 }
