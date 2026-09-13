@@ -816,7 +816,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   宿主锚（`dsh-*` / 宿主 上下文，含 lib/client.js 内 9 处 `lib/client.js:<NNN>`）**不入本
     //   清单**：对象不在本仓库面，仓库级守卫不可解析宿主树（基线登记与人工复检义务见上方注释）。
     { file: ['lib', 'host-abi', 'health.js'], stale: ['lib/preset-defaults.js:116-124', OLD_PRESETDIAG_LINE_ANCHOR], fresh: ['presetDiag/notePresetDiag'] },
-    { file: ['lib', 'host-abi', 'inject-manifest.js'], stale: ['（:5060 先例', 'lib/client.js:5060', 'dsh-client-modules lib/client.js:265-268'], fresh: ['const inject =', '宿主 dsh-client-modules 的包表行'] },
+    { file: ['lib', 'host-abi', 'inject-manifest.js'], stale: [':5060 先例', 'lib/client.js:5060', 'dsh-client-modules lib/client.js:265-268'], fresh: ['const inject =', '宿主 dsh-client-modules 的包表行'] },
     { file: ['lib', 'oauth-llm.js'], stale: ['runCodexResponsesChat :2906-2929'], fresh: ['`runCodexResponsesChat`'] },
     // FIX-042 R0 F-3（扩充同条目）：`lib/wrapper.js:266` 的宿主锚 `（:1397-1403）` 为清单外**真漂移**
     //   （审查员宿主树实读：`dsh-llm resolveModelInfoFor` 在 `:2046`、`adapter.resolveModel` 在 `:2047`；
