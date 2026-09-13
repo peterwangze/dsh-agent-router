@@ -267,14 +267,21 @@ export async function runClientRender(check) {
   // 失败形态）与 config.presets 夹具（可变对象，EVO-013 块内按场景注入）。
   let presetRosterMode = 'ok'
   const configPresets = {}
-  // FIX-046 判别面：remote.router.hostFaceDiagnostics 的宿主面形态开关——
-  // 'ok' 正常取数 / 'absent' 方法缺失（旧服务端未重启）/ 'throw' 调用被拒 /
-  // 'reject' 宿主失败信封 / 'noVersions' 结果缺 hostVersions。
-  // 形态锚定（P10-④，非心智模型）：宿主侧调用校验 = `dsh-api-gateway`
-  // `assertExactArguments` 的 wire 字段对齐 + `dispatchRpc`/`invokeRpc` 的
-  // `{ok:false,error:{code,message}}` 失败信封（本机宿主 checkout 0.1.5-rc.2
-  // `lib/index.js` 该两符号实读；见下方 FIX-046 组断言）。
+  // FIX-046 判别面：hostFaceDiagnostics 的宿主面形态开关——
+  // 'ok' 正常取数 / 'absent' 方法缺失（旧服务端未注册该方法）/ 'throw' 调用被拒 /
+  // 'notOk' 宿主失败信封 / 'noVersions' 结果缺 hostVersions / 'plain' 响应非
+  // 信封对象（结果形状非法）。
+  // 形态锚定（P10-④）：**本仓权威面** = lib/service.js `hostFaceDiagnostics()`
+  // 的三键返回形状（hostVersions/faces/diag，`:3475-3485`）+ lib/schemas.js 的
+  // `hostFaceDiagnosticsResult`（`:427-435`）；失败信封 `{ ok:false, error:{ code,
+  // message } }` 与本仓既有同型用例一致（tests/host-abi-health.mjs 的
+  // `{ok:false,error:{code}}` 面）。**R0 F-6 勘正**：此前该处登记「宿主
+  // dsh-api-gateway `assertExactArguments` wire 对齐拒绝 = 真机定因」——该断言
+  // 已被真机证据证伪（EV-216：真机 `router/stats` RPC 成功；EV-217：真机定因为
+  // 客户端 `$mount` 缺 descriptor），本夹具不锚定该形态，仅按本仓信封形状判别。
   let hostFaceMode = 'ok'
+  // F-5：remote.router 命名空间整体缺失形态（旧实现静默吞错；本批须显式诊断）。
+  let remoteAbsentMode = false
   const remoteMock = {
     catalog: async () => ({
       ok: true,
@@ -336,7 +343,7 @@ export async function runClientRender(check) {
     // EVO-023（B5）：presetDiag 随 2s 轮询同拍拉取（FIX-030-C 观测面）——
     // 计数面供「双 RPC 同拍/隐藏态零 RPC」判别（既有用例零消费面）。
     presetDiagnostics: async () => { pollRpc.presetDiagnostics += 1; return { ok: true, value: { ok: true, enabled: true, entries: [] } } },
-    // FIX-046：宿主面健康 RPC（真实形状 = service.js hostFaceDiagnostics()
+    // FIX-046：宿主面健康 RPC（真实形状 = lib/service.js hostFaceDiagnostics()
     // 三合一 { hostVersions, faces, diag }；faces 条目形状锚定 lib/schemas.js
     // faceHealthCodec、diag 条目锚定 hostDiagEntryCodec——宿主侧本仓权威面）。
     // 默认 'ok' 恒成功（非判别场景下维持「健康面板正常」基线，避免各用例
@@ -346,9 +353,11 @@ export async function runClientRender(check) {
     hostFaceDiagnostics: async () => {
       if (hostFaceMode === 'throw') throw new Error('router gateway rejected hostFaceDiagnostics')
       if (hostFaceMode === 'notOk') {
+        // 宿主失败信封（形状锚定见上方形态开关注释；非真机定因断言）。
         return { ok: false, error: { code: 'gateway/arguments-invalid', message: 'typert gateway: router/hostFaceDiagnostics: args fields do not match the descriptor: missing "request"' } }
       }
       if (hostFaceMode === 'noVersions') return { ok: true, value: { faces: [], diag: [] } }
+      if (hostFaceMode === 'plain') return 'not-an-envelope'
       return { ok: true, value: {
         hostVersions: { llm: '9.9.9-a', tools: '8.8.8-b', typertProtocol: '7.7.7-c' },
         faces: [],
@@ -590,7 +599,7 @@ export async function runClientRender(check) {
     // 显示）。声明名且服务就绪才回 stub；'getMiss' 模式 = 声明在而 get 落空。
     get: (key) => {
       if (!declaredService(key)) return undefined
-      if (key === 'remote.router') return remoteMock
+      if (key === 'remote.router') return remoteAbsentMode ? undefined : remoteMock
       if (missingFaces.has(key)) return undefined
       if (key === 'remote.llm') return hostFaces.llm
       if (key === 'remote.settings') return hostFaces.settings
@@ -622,6 +631,12 @@ export async function runClientRender(check) {
   check('client remotes include cli methods', !!captured.mount && ['cliStatus', 'cliLogin', 'cliModels'].every((method) => (captured.mount.descriptors ?? []).some((descriptor) => descriptor.method === method)))
   check('client remotes include image methods', !!captured.mount && (captured.mount.descriptors ?? []).some((descriptor) => descriptor.method === 'imageData'))
   check('client remotes include uploadFile', !!captured.mount && (captured.mount.descriptors ?? []).some((descriptor) => descriptor.method === 'uploadFile' && descriptor.id === 'dsh-agent-router#router/uploadFile'))
+  // FIX-046 返工验收（EV-217 根因）：观测面两条 MUST 进 `$mount` 列表——缺失时
+  // 浏览器侧 `remote.router.hostFaceDiagnostics` 不存在（真机 host-face-shape：
+  // 面板版本/诊断面被静默跳过）。此处判「挂载列表含该方法 + id 对齐」；与服务端
+  // 集合的等价判据在 tests/rpc-shadow-guard.mjs（双侧 id 集合 + codec 深度等价）。
+  check('client remotes include router observability methods (FIX-046: presetDiagnostics + hostFaceDiagnostics registered via $mount)',
+    !!captured.mount && ['dsh-agent-router#router/presetDiagnostics', 'dsh-agent-router#router/hostFaceDiagnostics'].every((id) => (captured.mount.descriptors ?? []).some((descriptor) => descriptor.id === id && descriptor.method === id.split('/')[1])))
   rootElement = settingsReg.render({ api: apiMock, remote: () => remoteMock, remoteReady: Promise.resolve(), t: (key) => zh[key] ?? key, $on: () => () => {} })
   dirty = true
   currentTree = await settle()
@@ -2183,21 +2198,26 @@ export async function runClientRender(check) {
   // 真机 V-1 报障形态：设置页「Agent 路由」宿主面健康面板 = 本地 face 探针
   // 五面全绿 + 宿主版本三值恒 '?' + 诊断事件恒空。旧实现三处静默（方法缺失
   // 跳过 / rejection 吞为 undefined / ok:false 与形状非法静默保留 null）使
-  // 该形态与「健康」不可区分——本组四形态逐一判别：失败**必须**产生明确
+  // 该形态与「健康」不可区分——本组六形态逐一判别：失败**必须**产生明确
   // 诊断（短码 + 详情）并上屏，且**不得**再回落为「暂无诊断事件」。
   //
-  // 判别性（RED 证明）：四条的断言面（失败行文案 / 诊断行短码 / 版本行不可读
-  // 标记）在旧实现下**全部不存在**（旧代码无任何 notice 状态与渲染面）⇒ 本组
-  // 对旧实现必红；对照面 case 1（真实值落地）旧实现亦红（真机版本三值为 '?'）。
-  // 形态锚定（P10-④）：失败短码与信封形状取自本仓权威面——宿主失败信封
-  // `{ ok:false, error:{ code, message } }` = 宿主 `dsh-api-gateway`
-  // `invokeRpc`/`rpcFailure` 实读形态；调用参数形状 = 同包
-  // `assertExactArguments` 的 wire 字段对齐（missing "request" 即该函数文案，
-  // 真机定因证据见 FIX-046 交付报告）。
+  // 判别性（RED 口径，R0 F-7 勘正后）：case 2/3/4/5/6 的失败断言面（失败徽章
+  // 文案 / 失败行 / 诊断行短码 / 版本行「不可读」标记）在旧实现下**全部不存在**
+  // （旧代码无任何 notice 状态与渲染面）⇒ 对旧实现必红；case 1 为**非回归对照**
+  // （成功路径新旧皆绿——其断言面均为既有渲染面）、FIX-046-2b 的面探针标题断言
+  // 为面数据源保留守卫（亦非判别）——真机版本三值为 '?' 属另一环境事实
+  // （EV-214，根因见 EV-217），不构成本组 case 1 的 RED 依据。
+  // 形态锚定（P10-④）：**本仓权威面** = lib/schemas.js `hostFaceDiagnosticsResult`
+  // 三键结果形状 + lib/service.js `hostFaceDiagnostics()` 供数方法；失败信封
+  // `{ ok:false, error:{ code, message } }` 与本仓同型用例一致
+  // （tests/host-abi-health.mjs 的 `{ok:false,error:{code}}` 面）。**R0 F-6
+  // 勘正**：此前登记的「真机定因 = 宿主网关 wire 字段对齐拒绝」已被证伪
+  // （EV-216 真机 stats RPC 成功反证；EV-217 真机定因 = 客户端 `$mount` 缺
+  // descriptor），本组断言不依赖亦不声称该形态。
   console.log('FIX-046: host face fetch observability (P8):')
   {
     // 每形态独立 remote：（a）携带各自 hostFaceDiagnostics；（b）模块级诊断环
-    // 与面板展示严格同拍——四形态各判各的（互不继承 notice 状态）。
+    // 与面板展示严格同拍——六形态各判各的（互不继承 notice 状态）。
     const renderHostFace = async (prefix, method) => {
       // 浅拷贝 + 按需覆盖宿主面方法：'absent' 用**自有属性置 undefined** 表达
       // 「该方法不存在」（delete 只摘自有属性时原型链仍可达，判别会假绿）。
@@ -2205,11 +2225,37 @@ export async function runClientRender(check) {
       // （settingsReg.inject()——与生产 render 路径同源），只替换 remote 取数。
       const router = { ...remoteMock }
       if (method === 'absent') router.hostFaceDiagnostics = undefined
+      if (method === 'noRemote') {
+        // F-5：`host-face-missing` 分支覆盖。诚实登记**可达前提**：生产装配下
+        // `remote.router` 缺失会使首页 load() 早退为错误态（lib/client.js 的
+        // load 守卫），面板本身不渲染 ⇒ 该分支是**防御分支**，仅在「面板已渲染
+        // 后命名空间才消失」（Remote 热卸载/重挂——`injected()` 每次经
+        // `ctx.get('remote.router') ?? null` 动态解析）时可达。此处以
+        // 「首轮解析成功、面板首屏渲染后解析落空」的状态化 stub 复现该时序：
+        // 自检 effect 的 deps 含 `remote`（其身份不变）⇒ 不重跑；重跑来自
+        // 同页 stats 卡的 `clearStats` 路径（clear 按钮回调）——复现「取数时点
+        // 命名空间已消失」。
+        remoteAbsentMode = true
+        let resolved = false
+        await renderInto(settingsReg.render({ ...settingsReg.inject(), remote: () => (resolved ? null : (resolved = true, remoteMock)) }), prefix)
+        const tree = await settle()
+        remoteAbsentMode = false
+        return tree
+      }
       await renderInto(settingsReg.render({ ...settingsReg.inject(), remote: () => router }), prefix)
       return settle()
     }
+    // 折叠态可见性判别（F-2）：summary 元素的文本面 = 用户无需展开即读到的内容。
+    const summaryTextOf = (tree) => {
+      const details = findAll(tree, (node) => node && node.type === 'details' && hasClass(node, 'dshrouter-notice'))
+      if (details.length === 0) return ''
+      const summary = findAll(details[0], (node) => node && node.type === 'summary')
+      return summary.length > 0 ? textOf(summary[0]) : ''
+    }
+    /** 取该渲染树的折叠面板展开文本（既有组一律经 textOf 读全树——文本判据面）。 */
+    const hfTexts = (tree) => ({ all: textOf(tree), summary: summaryTextOf(tree) })
 
-    // case 1（对照面）：取数成功 → 宿主版本三值真实上屏（真机期望面）。
+    // case 1（非回归对照面）：取数成功 → 宿主版本三值真实上屏（真机期望面）。
     hostFaceMode = 'ok'
     const hfOk = await renderHostFace('fix046-ok')
     const hfOkText = textOf(hfOk)
@@ -2219,11 +2265,20 @@ export async function runClientRender(check) {
     // 诊断 + 上屏（旧实现静默跳过：面板全绿 + 版本 '?' + 诊断恒空）。
     const hfAbsent = await renderHostFace('fix046-method-absent', 'absent')
     const hfAbsentText = textOf(hfAbsent)
+    const hfAbsentSummary = summaryTextOf(hfAbsent)
     check('FIX-046-2: 方法缺失 → 明确诊断上屏（short code host-face-shape + 版本行「不可读」标记；旧实现此断言必红）',
       hfAbsentText.includes('host-face-shape: hostFaceDiagnostics') && hfAbsentText.includes(zh.hostHealthVersionsUnavailable) && hfAbsentText.includes(zh.hostHealthRpcFailed('host-face-shape: hostFaceDiagnostics')))
     check('FIX-046-2: 方法缺失的诊断进「最近宿主诊断事件」区（kind + code 机录，禁「暂无诊断事件」替代）',
       hfAbsentText.includes('host-face-rpc') && hfAbsentText.includes('(host-face-shape: hostFaceDiagnostics)') && !hfAbsentText.includes(zh.hostHealthNoDiag))
     check('FIX-046-2: 方法缺失下本地 face 探针快照保留（失败不改写面数据源——面数仍为本地五面派生）', hfAbsentText.includes(zh.hostHealthFacesTitle))
+    // F-2（R0）：失败短码 MUST 在**折叠态即可见**（`<details>` 默认折叠 ⇒ 只
+    // summary 文本可见；原实现把短码放进折叠体内 ⇒「直接看到失败原因」不成立）。
+    check('FIX-046-2: 失败短码在折叠态（summary 文本）即直接可见——无需展开（R0 F-2；旧实现 summary 无短码此断言必红）',
+      hfAbsentSummary.includes('host-face-shape: hostFaceDiagnostics') && hfAbsentSummary.includes(zh.hostHealthRpcFailed('host-face-shape: hostFaceDiagnostics')))
+    // F-3（R0）：失败态徽章 MUST NOT 仍渲染 `✓ 宿主面正常`（`degraded` 只由面数
+    // 派生 ⇒ 原实现失败与绿色徽章同排，显示层语义自相矛盾）。
+    check('FIX-046-2: 失败态徽章不渲染「✓ 宿主面正常」（R0 F-3；旧实现 degraded=0 ⇒ 失败与绿徽章同排）',
+      !hfAbsentText.includes(zh.hostHealthOk) && hfAbsentSummary.includes(zh.hostHealthRpcFailed('host-face-shape: hostFaceDiagnostics')))
 
     // case 3：调用 reject（宿主侧抛错/传输失败形态）→ 诊断 detail 携带宿主错误。
     hostFaceMode = 'throw'
@@ -2232,8 +2287,7 @@ export async function runClientRender(check) {
     check('FIX-046-3: 调用 reject → 明确诊断（Error 名/消息入 detail，禁 `() => undefined` 吞噬；旧实现此断言必红）',
       hfThrowText.includes('router gateway rejected hostFaceDiagnostics') && hfThrowText.includes('(Error)') && !hfThrowText.includes(zh.hostHealthNoDiag))
 
-    // case 4：宿主失败信封（真机已知形态：网关 wire 字段对齐拒绝）→ 诊断须携带
-    // 宿主 code（gateway/arguments-invalid），下一轮排障可直接读出定因。
+    // case 4：宿主失败信封 → 诊断须携带宿主 code（下一轮排障可直接读出）。
     hostFaceMode = 'notOk'
     const hfNotOk = await renderHostFace('fix046-not-ok')
     const hfNotOkText = textOf(hfNotOk)
@@ -2247,6 +2301,32 @@ export async function runClientRender(check) {
     const hfShapeText = textOf(hfShape)
     check('FIX-046-5: 结果缺 hostVersions → 显式 host-face-result-shape 诊断（版本三值回落必须有痕；旧实现此断言必红）',
       hfShapeText.includes('(host-face-result-shape)') && hfShapeText.includes(zh.hostHealthVersionsUnavailable) && !hfShapeText.includes(zh.hostHealthNoDiag))
+
+    // case 6（F-5 补覆盖）：响应非信封对象（宿主动词返回值形态漂移）→ 必须走
+    // host-face-result-invalid 分支，禁静默（旧实现「ok:false 与形状非法静默
+    // 保留 null」⇒ 此断言必红）。
+    hostFaceMode = 'plain'
+    const hfPlain = await renderHostFace('fix046-result-invalid')
+    const hfPlainText = textOf(hfPlain)
+    const hfPlainSummary = summaryTextOf(hfPlain)
+    check('FIX-046-6: 响应非信封对象 → 显式 host-face-result-invalid 诊断（含响应戳记）且折叠态可见（R0 F-5 补覆盖；旧实现此断言必红）',
+      hfPlainText.includes('(host-face-result-invalid)') && hfPlainText.includes('not-an-envelope') && !hfPlainText.includes(zh.hostHealthNoDiag) && hfPlainSummary.includes('host-face-result-invalid'))
+
+    // case 7（F-5 补覆盖）：remote.router 命名空间整体缺失 → host-face-missing
+    // 短码（与「方法缺失」区分；旧实现 `if (!routerRemote) return` 静默 ⇒ 必红）。
+    hostFaceMode = 'ok'
+    const hfNoRemote = await renderHostFace('fix046-namespace-missing', 'noRemote')
+    const hfNoRemoteText = textOf(hfNoRemote)
+    const hfNoRemoteSummary = summaryTextOf(hfNoRemote)
+    check('FIX-046-7: remote.router 命名空间缺失 → 显式 host-face-missing 诊断且折叠态可见（R0 F-5 补覆盖；旧实现静默跳过此断言必红）',
+      hfNoRemoteText.includes('(host-face-missing)') && hfNoRemoteText.includes(zh.hostHealthVersionsUnavailable) && !hfNoRemoteText.includes(zh.hostHealthNoDiag) && hfNoRemoteSummary.includes('host-face-missing'))
+
+    // F-1（R0）：失败行 MUST **并列**于诊断全集（原实现以失败行替换 diag 全集 ⇒
+    // 本地镜像环条目被静默隐藏）。每形态独立渲染 ⇒ 本地环条目此刻恒在场
+    // （apply 期 noteHostFaceDiag 写入——本文件 fixtures 先例），断言 = 失败行
+    // 短码与本地条目名**同时**出现于诊断区。
+    check('FIX-046-8: 失败行与本地镜像环诊断条目并列（禁失败行替换 diag 全集；R0 F-1——旧实现丢失本地条目此断言必红）',
+      hfAbsentText.includes('(host-face-shape: hostFaceDiagnostics)') && hfAbsentText.includes('inject-face-missing'))
 
     hostFaceMode = 'ok'
   }
