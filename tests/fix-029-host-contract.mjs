@@ -14,12 +14,14 @@
 //   standardProps 只提供 useInput（SnapshotSelectorHook）/inputActions/
 //   sessionId（dsh-cordis-client-runner slots 目录 :2920-2932；宿主先例
 //   dsh-client-ui-plan inject(sessionId)），不再提供 input（快照 prop）——
-//   宿主注入面 = ctx.uiSession.provide({hooks:['conversation','input'],...})
-//   （PropsHooks：input → useInput，dsh-client-ui-conversation :16041-16056）。
-//   **FIX-043 批 F 判定（未闭合；与 `lib/client.js` 侧同判 = 跨文件同步）**：上行行号锚的**对象不成立**
-//   ——`PropsHooks` 在该宿主包内 **0 命中**，该区间实为 InputBar 的 JSX 渲染段（批 C 宿主只读实读判定
-//   「不准」；该包真实注入面在别处）。按 P10-④「不得虚构宿主符号」⇒ 本处**维持原锚 + 显式登记**，
-//   **不按心智模型改指**；真实归属待定位后与 `lib/client.js` 侧一并收敛。登记面 =
+//   宿主注入面 = 该宿主包 `lib/client.js` 的 `InputHub` 装配点
+//   `ctx.uiSession.provide({ hooks: ["conversation", "input"], props: ["inputActions"], ... })`；input → useInput
+//   契约由该包 `SessionStandardProps.useInput` 承载（`lib/types/client/contract/slots.d.ts` 的
+//   `useInput: SnapshotSelectorHook<InputState>`）——均为 FIX-044 宿主只读实读定位所得。
+//   **FIX-043 批 F 判定 → FIX-044 改指（与 `lib/client.js` 侧同判 = 跨文件同步）**：原锚（对象 =
+//   `dsh-client-ui-conversation` 的 `:16041-16056`）的**对象不成立**——`PropsHooks` 在该宿主包内 **0 命中**，
+//   该区间实为 InputBar 的 JSX 渲染段（批 C 宿主只读实读判定「不准」）。批 F 按 P10-④ 维持原锚 + 显式登记；
+//   本批在同一纪律下**先定位、后改指**为上记实读可达面（零新增未实证符号）。登记面 =
 //   `tests/host-abi-health.mjs` 的本文件条目 `notes`（同条另有 `types/agent.js` 的 `:297-318`
 //   判据承载锚的保留登记）。
 //   ModelTakeover 读 props.input.imageIds → undefined → imageCount 恒 0 →

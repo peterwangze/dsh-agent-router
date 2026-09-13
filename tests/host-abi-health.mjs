@@ -759,6 +759,20 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
         '按 fiber.inject 声明门控 L342',
         'get 为可选查找 L335',
         'L581 waitingFor',
+        // FIX-044 ③：`L####` wire-schema 块逐 schema 符号名重建后**清除**的旧行号式锚（`L` 族一律带同句
+        //   上下文登记——裸行号必歧义；原锚 → 实读符号的逐条对照见下方 notes）。
+        'llm/listProviders result L5678-5681',
+        'L5671-5677、discoverModels(settingsNs, request) 参数 L5658-5664',
+        '（裸数组）L5665-5670',
+        'settings/describe result L4709-4757',
+        'settings/mutate(ns, ops) L4758-4811',
+        'credentials/describe result L4698-4702',
+        'set(ref, value) L4703-4705',
+        'unset(ref) L4706-4707',
+        'agentPresets/list result L4315-4325',
+        'session/modelCatalog result L7794-7823',
+        'session/selectModel L7946-7956',
+        '宿主 L5774-5778 真实形状',
       ],
       fresh: [
         'lib/host-abi/version.js HOST_ROUTE_PROVIDER',
@@ -775,10 +789,29 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
         'static inject / 模块级 inject + exports.inject',
         'dynamicCordisContext',
         'waitingFor',
+        // FIX-044 ③：替代式锚 = 宿主 `dsh-api-remotes/lib/client.js` 只读实读所得的**逐 schema 符号名**
+        //   （同一动作汇入「符号名式」单一实现路径：行号式 → 符号名式）。
+        '_deepseek_ai_dsh_llm_llm_listProviders_result$schema',
+        '_deepseek_ai_dsh_llm_llm_listConfigurableProviders_result$schema',
+        '_deepseek_ai_dsh_llm_llm_discoverModels_parameter_0$schema',
+        '_deepseek_ai_dsh_llm_llm_discoverModels_parameter_1$schema',
+        '_deepseek_ai_dsh_llm_llm_discoverModels_result$schema',
+        '_deepseek_ai_dsh_api_settings_controller_settings_describe_result$schema',
+        '_deepseek_ai_dsh_api_settings_controller_settings_mutate_parameter_0$schema',
+        '_deepseek_ai_dsh_api_settings_controller_settings_mutate_parameter_1$schema',
+        '_deepseek_ai_dsh_api_settings_controller_settings_mutate_parameter_2$schema',
+        '_deepseek_ai_dsh_api_settings_controller_credentials_describe_result$schema',
+        '_deepseek_ai_dsh_api_settings_controller_credentials_set_parameter_0$schema',
+        '_deepseek_ai_dsh_api_settings_controller_credentials_set_parameter_1$schema',
+        '_deepseek_ai_dsh_api_settings_controller_credentials_unset_parameter_0$schema',
+        '_deepseek_ai_dsh_agent_presets_agentPresets_list_result$schema',
+        '_deepseek_ai_dsh_api_session_controller_session_modelCatalog_result$schema',
+        '_deepseek_ai_dsh_api_session_controller_session_selectModel_parameter_0$schema',
+        '_deepseek_ai_dsh_api_session_controller_session_selectModel_result$schema',
       ],
       notes: [
-        '未闭合（批 D 自报 → 批 F 固化在仓；R4 §2.4-② 实读复核）：本文件 wire-schema 块的行号式锚（`L####` 族）**实测部分漂移**、本批未收敛——原 claim 的 settings/describe 区间**起界错位**（该区间首三条实为 credentials unset 参数 / settings canOpenAgentPresetDirectory 结果的 schema，describe 结果 schema 实在其后 3 行）；另一组 `L####` 实为 parameters 段（llm/listProviders 结果 schema 实在别处）。逐 schema 符号名重建归后续批（本批不制造改动）。',
-        '保留：`L5774-5778`（presets/authorable/hasDocument 三字段的宿主形状引用）亦未收敛，与上同一根因（宿主 schema 引用的行号式锚待逐 schema 符号名重建）。',
+        'FIX-044 ③ 收口（批 F 登记的「wire-schema 块逐 schema 符号名重建」）：该块 12 处行号式锚已按宿主**只读实读**逐 schema 重建为符号名式（原锚 → 实读符号逐条对照见本批交付报告；P10-④：改建对象全部为宿主 `dsh-api-remotes/lib/client.js` 内实读可达的 `$schema` 常量标识符，零虚构）。**实测漂移（如实登记）**：原 claim 的 describe 区间起界错位——该区间首三条实为 credentials unset 参数 / credentials unset 结果 / settings canOpenAgentPresetDirectory 结果的 schema，describe 结果 schema 实在其后 3 行；另一组（llm 面）实为 **parameters 段**（非结果 schema）；另一处原 `L5774-5778` 引用实为宿主 descriptor 的 `sourceLocation` 元数据块（非 schema 定义）。⇒ 原「presets/authorable/hasDocument 三字段为宿主形状」claim **部分不成立**：`hasDocument` 属宿主 `settings_describe_result` 面（消费面 = `settings.describe()`），不在 agentPresets list 结果 schema 内——本批已在目标文件行内**如实更正**（未改产品代码、未放宽任何判据）。',
+        '对象核验边界（如实登记，**不得作通过依据**）：fresh 侧只判「锚串在目标文件内到位」。宿主对象面：17 个符号中 **6 个**（listProviders / listConfigurableProviders / session modelCatalog / settings describe / credentials describe / agentPresets list 的 result schema）由 `tests/host-contract.mjs` 的 S5/S7 组在宿主可达时按符号逐字核验；其余 11 个（`discoverModels` / `settings mutate` / `credentials set·unset` / `session selectModel` 的 parameter/result 细分符号）**本批未新增宿主侧核验** ⇒ 本条目**不声称**机器覆盖宿主对象，宿主升级后 MUST 按 `tests/host-contract.mjs` 头部刷新程序重核。',
       ],
     },
     // FIX-040 W8a：llm-selection.js 三处行号锚（R0 P3-3，:99/:179 已实测漂移）→ 符号名式。
@@ -1174,7 +1207,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
         'adapterHandlesImages',
       ],
       notes: [
-        '保留（MUST NOT 入 stale 侧）：`types/agent.js` 的 `:297-318` 判据承载锚**刻意保留**——受 `tests/host-contract.mjs` 的 S2 `extra.signatures` 跨文件逐字在位断言约束（收敛 MUST 三处同步且**先改判据**；逐处理由见 `tests/fix-029-host-contract.mjs` 条目的对应 notes）。',
+        '保留（MUST NOT 入 stale 侧）：`types/agent.js` 的 `:297-318` 判据承载锚**刻意保留**——受 `tests/host-contract.mjs` 的 S2 `extra.signatures` 跨文件逐字在位断言约束（收敛 MUST 三处同步且**先改判据**）。**逐处理由全集**（完整指向，三处；FIX-044 ② 收口）：① `tests/host-contract.mjs` 的 S2 `extra` face 处**行内注释**（该处 9 行判定理由：机器锁 1/2 + P5 纪律锁 + 处置顺序）；② `tests/fix-029-host-contract.mjs` 头部**行内判定注释**（机器锁的**对象面**）；③ `tests/host-abi-health.mjs` 的 `tests/fix-029-host-contract.mjs` 条目 `notes`（收敛顺序说明）。',
         '对象参考面限制：两处 stale 锚的对象 = 本地参考副本 `.tmp-research/dsh-vision-router`（**在仓库路径内、版本控制外**；该包在宿主装态不存在）⇒ 仓库级守卫**不可机器核验该对象**，本条目只判本仓文本内的锚串形态。',
       ],
     },
@@ -1213,14 +1246,21 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
       stale: [
         'dsh-api-session-controller index.js:605,2502',
         'dsh-llm lib/index.js:1698/1780/2177/2018',
+        // FIX-044 ④：改指后**清除**的旧锚形态（与 `lib/client.js` 条目同形登记——同一对象的两处消费面
+        //   各自看护；裸区间锚带对象名上下文）。
+        'ui-conversation :16041-16056',
       ],
       fresh: [
         'selectModel(request) 面 + Remote("selectModel") 注册',
         'registerAdapter/registration/listModels 三方法齐备实证',
+        // FIX-044 ④：定位所得**真实归属面**（宿主只读实读；替换原对象不成立的 `PropsHooks` claim）。
+        'ctx.uiSession.provide({ hooks: ["conversation", "input"], props: ["inputActions"], ... })',
+        'SessionStandardProps.useInput',
+        'useInput: SnapshotSelectorHook<InputState>',
       ],
       notes: [
-        '保留（MUST NOT 入 stale 侧）：`types/agent.js` 的 `:297-318`（本文件头部）为**机器锁**——`tests/host-contract.mjs` 的 S2 `extra.signatures` 对**本文件原文**做 `includes()`（不经注释剥离）⇒ 单侧去行号即判红；改锚 MUST 三处同步（守卫 needle + 本文件 + lib/prestep.js 的 P5 纪律锁）。',
-        '未闭合（批 D 自报 → 批 F **固化在仓**；R4 §2.4-①b 实读复核）：本文件头部的 `dsh-client-ui-conversation` 的 `:16041-16056` 锚**对象不成立**——`PropsHooks` 在该宿主包内 **0 命中**，该区间实为 InputBar JSX 渲染段。按 P10-④ **不按心智模型替换**，真实归属待定位后一并收敛；**该锚仍在位 ⇒ MUST NOT 入 stale 侧（入表即判红）**。在仓登记**两处**：本 notes + 本文件头部行内判定注释（R3 §2.4(3) 要求的**跨文件同步**——同锚旧形态两处判定自此一致，均为「不准 + 维持原锚 + 待定位」）。',
+        '保留（MUST NOT 入 stale 侧）：`types/agent.js` 的 `:297-318`（本文件头部）为**机器锁**——`tests/host-contract.mjs` 的 S2 `extra.signatures` 对**本文件原文**做 `includes()`（不经注释剥离）⇒ 单侧去行号即判红（R4 §2.1 谓词独立复算：现文 `[true,true]` / 假设去行号 `[false,true]`）。**理由全集与收敛顺序见 `lib/prestep.js` 条目 notes**（FIX-044 ② 去冗余：本处不重复「三处同步」清单）。',
+        '**已定位并改指**（FIX-044 ④ 收口；批 F 的「对象不成立」判定予以保留）：原 `:16041-16056` 区间锚（对象 = `dsh-client-ui-conversation`，claim 为 `PropsHooks` 面）——`PropsHooks` 在该宿主包内 **0 命中**、该区间实为 InputBar 的 JSX 渲染段（批 C / R4 实读判定）⇒ 本批以宿主**只读实读**定位真实面并改指（本文件头部行内注释同步）：宿主注入面 = 该包 `lib/client.js` 的 `InputHub` 装配点 `ctx.uiSession.provide({ hooks: ["conversation", "input"], ... })`；input → useInput 契约 = `SessionStandardProps.useInput`（`lib/types/client/contract/slots.d.ts` 的 `useInput: SnapshotSelectorHook<InputState>`）。按 P10-④ 只写实读可达符号（零虚构）；**旧形态已入本条目 `stale` ⇒ 再引入即判红**（批 F 的「MUST NOT 入 stale」成立于旧态——彼时对象未定位）。在仓登记两处（跨文件同步）：本 notes + 本文件头部行内判定注释。',
       ],
     },
     {
@@ -1410,6 +1450,70 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
       { needleRepetitions, needleCount: ANCHOR_CASES.reduce((sum, item) => sum + item.stale.length, 0), staleUnitCount: staleUnits.length })
     check('B5 9h-4b R-1: 自条目 stale needle 全文件出现次数 = 0（拼接常量登记——定义处即判据面，字面量登记使判据恒红/判别力归零）',
       selfLiteralNeedles.length === 0, { selfLiteralNeedles })
+  }
+  // 9h-5（FIX-044 ① 收口 R5 P3-2；R4 P3-5「保护窗口」同族面）：**入表完备性自检——文件级**。
+  //   判据（与 9h-3 同族同型：9h-3 判「候选锚名未入表即红」，本项判「含行号式锚的**文件**未入表即红」）：
+  //   行号式锚只由 `ANCHOR_CASES` 的 `stale` 侧看护 ⇒ 若**某文件存在行号式锚却无任何登记单元**，
+  //   其锚可被静默重引入（批 F 前的保护窗口即此形态）。本项把「文件是否已纳入看护面」由人工核验
+  //   改为机器看护：扫描面内含锚文件 MUST 出现在 `ANCHOR_CASES` 的 `file` 全集**或**显式豁免表内。
+  //   **扫描面**（机器枚举，非人工清单——新增文件自动入面）：`lib/**` + `tests/**` 的非点号条目
+  //   （点号条目 = 运行时产物 / 参考副本）中扩展名为 `.js`/`.mjs`/`.cjs` 者，外加 `README.md` 与
+  //   `.github/workflows/*.yml`。**面外**：`docs/**`、`CHANGELOG.md`（历史快照锚刻意不清扫，见上方
+  //   ⑥ 段落限定语）、`.tmp-research/**`（版本控制外的参考副本）、宿主树（本就不可解析）。
+  //   **行号式锚形态** = 与上方 ⑥ 段落同源的三种正则（① 文件:行号 ② `L###` ③ 裸 `:NNN`）。
+  //   **如实声明的限制（不得夸大覆盖）**：
+  //     ① 本项判**文件级**入表（该文件存在登记单元）——**不**声称该文件内的每一个行号式锚都已逐条
+  //        纳入看护（逐锚覆盖由各条目 stale/fresh 自身承担，即 9h R-1）；
+  //     ② 形态判定依赖上述三正则 ⇒ 正则不可达的形态（跨行拆分的锚、三种写法之外的变体）不计入，属已知盲区；
+  //     ③ 豁免表是**人工维护面**：把新文件同时写入豁免表即不判红 ⇒ 本项把「静默漏登」改为
+  //        「必须显式登记或显式豁免」，豁免是可在 diff 中复审的显式决策；本项**不**判断豁免理由的
+  //        实质充分性；
+  //     ④ 面外文件不覆盖（见上）。
+  //   **非恒真/可达性**（实跑证据见本批交付报告）：① 基线不误红；② 在仓库外副本新增一个含行号式锚的
+  //   `tests/**` 文件（不登记、不豁免）⇒ 判红；③ 从表中移除任一条目（其文件仍含锚）⇒ 亦判红
+  //   （⇒ 判据依赖实际表内容，非常量满足）。9h-5b 独立判**豁免表腐化**（所列文件已无锚 / 与已登记
+  //   条目重叠 ⇒ 判红）。
+  {
+    const ANCHOR_COVERAGE_FORMS = [
+      /[A-Za-z0-9_@/.-]*[A-Za-z0-9_-]\.(js|mjs|ts|tsx|sh|ps1):\d+(-\d+)?/,
+      /\bL\d{2,4}(?:[-–]\d{2,4})?/,
+      /(?:^|[^A-Za-z0-9_]):\d{2,4}(\/\d{1,4})?([-–]\d{2,4})?/,
+    ]
+    const ANCHOR_COVERAGE_EXTS = ['.js', '.mjs', '.cjs']
+    // 豁免面（显式、带理由、可复核；三类各有依据）：镜像侧 + 本地快照对象 + 版本冻结文档。
+    const ANCHOR_COVERAGE_EXEMPTS = [
+      { file: ['tests', 'served-client.js'], kind: 'mirror', reason: '镜像侧不重复登记（载体 §一 notes 4）：`served-client mirror stays byte-identical to lib/client.js` 的字节恒等判据是更强的保证（逐字节相等 ⇒ 内容判据自动传递）。' },
+      { file: ['tests', 'oauth-credentials.mjs'], kind: 'snapshot-object', reason: '该处锚的对象 = `.router-files/` 的一手快照（版本控制外的一手来源，非本仓 tracked 面、非宿主包）⇒ 与 `.tmp-research` 同类的对象参考面限制，属「无实读对象」的登记面。' },
+      { file: ['tests', 'oauth-promotion.mjs'], kind: 'frozen-doc', reason: '该处锚的对象 = `rollback-plan v0.3.0` 版本冻结文档（历史快照）⇒ 与既有 ⑥ 段落「`docs/release` 历史发布文档锚刻意不清扫」同口径。' },
+    ]
+    const coverageFiles = []
+    const walkCoverageFace = (absoluteDir, relativeDir) => {
+      for (const entry of readdirSync(absoluteDir, { withFileTypes: true })) {
+        if (entry.name.startsWith('.')) continue
+        const relativePath = `${relativeDir}/${entry.name}`
+        if (entry.isDirectory()) walkCoverageFace(join(absoluteDir, entry.name), relativePath)
+        else if (ANCHOR_COVERAGE_EXTS.some((extension) => entry.name.endsWith(extension))) coverageFiles.push(relativePath)
+      }
+    }
+    walkCoverageFace(join(ROOT_DIR, 'lib'), 'lib')
+    walkCoverageFace(join(ROOT_DIR, 'tests'), 'tests')
+    coverageFiles.push('README.md')
+    for (const entry of readdirSync(join(ROOT_DIR, '.github', 'workflows'), { withFileTypes: true })) {
+      if (entry.isFile() && entry.name.endsWith('.yml')) coverageFiles.push(`.github/workflows/${entry.name}`)
+    }
+    const anchorBearingFiles = coverageFiles.filter((relativePath) => {
+      const source = readFileSync(join(ROOT_DIR, ...relativePath.split('/')), 'utf8')
+      return ANCHOR_COVERAGE_FORMS.some((form) => form.test(source))
+    })
+    const registeredFiles = new Set(ANCHOR_CASES.map((anchorCase) => anchorCase.file.join('/')))
+    const exemptFiles = new Set(ANCHOR_COVERAGE_EXEMPTS.map((entry) => entry.file.join('/')))
+    const uncoveredFiles = anchorBearingFiles.filter((relativePath) => !registeredFiles.has(relativePath) && !exemptFiles.has(relativePath))
+    const deadExempts = [...exemptFiles].filter((relativePath) => !anchorBearingFiles.includes(relativePath))
+    const overlappingExempts = [...exemptFiles].filter((relativePath) => registeredFiles.has(relativePath))
+    check('B5 9h-5 R-1: 扫描面内含行号式锚的文件全部已入 ANCHOR_CASES（或显式豁免）——新增含锚文件未入表即红',
+      uncoveredFiles.length === 0, { scanFaceSize: coverageFiles.length, anchorFileCount: anchorBearingFiles.length, uncoveredFiles })
+    check('B5 9h-5b R-1: 豁免表完整性（所列文件仍含锚 × 不与已登记条目重叠——豁免表腐化即红）',
+      deadExempts.length === 0 && overlappingExempts.length === 0, { exemptCount: exemptFiles.size, deadExempts, overlappingExempts })
   }
   // 9h-2（FIX-040 W4；R0 P1-1 收口）：跨文件对象核验——metrics.mjs 的断言名式锚
   //   （`smoke.mjs「<label>」`）所引用的断言名 MUST 在 smoke.mjs（或测试面）中确实存在。

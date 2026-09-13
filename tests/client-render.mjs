@@ -421,7 +421,10 @@ export async function runClientRender(check) {
     // 形态——客户端按可观测降级处理：错误提示 + 空列表，不阻塞整页）。
     // FIX-022：宿主客户端 api 面方法组名为复数 agentPresets（wire 方法名
     // agentPreset.list 是单数——宿主自身命名不一致陷阱，EV-123）；响应值含
-    // presets/authorable/hasDocument 三字段（宿主 L5774-5778 真实形状）。
+    // presets/authorable/hasDocument 三字段（FIX-044 逐 schema 符号名重建）：`presets` 与 `authorable`
+    // 锚定宿主 `_deepseek_ai_dsh_agent_presets_agentPresets_list_result$schema`；**`hasDocument` 不在该
+    // schema 内**（宿主当前装态该字段属
+    // `_deepseek_ai_dsh_api_settings_controller_settings_describe_result$schema`，消费面 = 下方 settings.describe 夹具）。
     // fixture 仅提供复数域——旧实现（误调 api.agentPreset）对此必败（判别 RED）。
     agentPresets: {
       // R0 F-1：broken 用宿主真实形状——非空原因字符串（dsh-agent-presets
@@ -450,16 +453,27 @@ export async function runClientRender(check) {
   // 浏览器镜像）的宿主面输入；数据与上方
   // 旧 apiMock 语义等价（providers=registered∪declared 连接 / models=
   // session.modelCatalog / discover 返回裸数组 / settings+credentials 位置
-  // 参数）。形状锚定宿主 schema（dsh-api-remotes lib/client.js）：
-  //  · llm/listProviders result L5678-5681、listConfigurableProviders result
-  //    L5671-5677、discoverModels(settingsNs, request) 参数 L5658-5664 + 结果
-  //    （裸数组）L5665-5670；
-  //  · settings/describe result L4709-4757、settings/mutate(ns, ops) L4758-4811；
-  //  · credentials/describe result L4698-4702、set(ref, value) L4703-4705、
-  //    unset(ref) L4706-4707；
-  //  · agentPresets/list result L4315-4325（含 isDefault 字段——宿主真实形状，
-  //    R0 F-1 的 legacy-broken 双形态保留）；
-  //  · session/modelCatalog result L7794-7823、session/selectModel L7946-7956。
+  // 参数）。形状锚定宿主 schema（dsh-api-remotes lib/client.js）——**逐 schema 符号名**式（FIX-044 按
+  // 宿主只读实读逐条重建；原行号式 `L####` 锚实测部分漂移，判定与逐条对照见
+  // `tests/host-abi-health.mjs` 本文件条目 `notes`）：
+  //  · llm/listProviders result = `_deepseek_ai_dsh_llm_llm_listProviders_result$schema`、
+  //    listConfigurableProviders result = `_deepseek_ai_dsh_llm_llm_listConfigurableProviders_result$schema`、
+  //    discoverModels(settingsNs, request) 参数 = `_deepseek_ai_dsh_llm_llm_discoverModels_parameter_0$schema`
+  //    / `_deepseek_ai_dsh_llm_llm_discoverModels_parameter_1$schema` + 结果（裸数组）=
+  //    `_deepseek_ai_dsh_llm_llm_discoverModels_result$schema`；
+  //  · settings/describe result = `_deepseek_ai_dsh_api_settings_controller_settings_describe_result$schema`、
+  //    settings/mutate(ns, ops) 参数 = `_deepseek_ai_dsh_api_settings_controller_settings_mutate_parameter_0$schema`
+  //    / `_deepseek_ai_dsh_api_settings_controller_settings_mutate_parameter_1$schema`
+  //    / `_deepseek_ai_dsh_api_settings_controller_settings_mutate_parameter_2$schema`；
+  //  · credentials/describe result = `_deepseek_ai_dsh_api_settings_controller_credentials_describe_result$schema`、
+  //    set(ref, value) 参数 = `_deepseek_ai_dsh_api_settings_controller_credentials_set_parameter_0$schema`
+  //    / `_deepseek_ai_dsh_api_settings_controller_credentials_set_parameter_1$schema`、
+  //    unset(ref) 参数 = `_deepseek_ai_dsh_api_settings_controller_credentials_unset_parameter_0$schema`；
+  //  · agentPresets/list result = `_deepseek_ai_dsh_agent_presets_agentPresets_list_result$schema`
+  //    （含 isDefault 字段——宿主真实形状，R0 F-1 的 legacy-broken 双形态保留）；
+  //  · session/modelCatalog result = `_deepseek_ai_dsh_api_session_controller_session_modelCatalog_result$schema`、
+  //    session/selectModel 参数 = `_deepseek_ai_dsh_api_session_controller_session_selectModel_parameter_0$schema`
+  //    / 结果 = `_deepseek_ai_dsh_api_session_controller_session_selectModel_result$schema`。
   // p10：夹具按宿主源码形态锚定，禁止从旧 apiMock 心智模型外推。
   const missingFaces = new Set()
   const hostFaces = {
