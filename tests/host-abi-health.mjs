@@ -41,7 +41,8 @@
  *    tests/install-entry.mjs / lib/preset-defaults.js / tests/preset-defaults.mjs +
  *    ci.yml / README.md 契约面（stale 零残留 + 符号/断言名式锚在位），并增设
  *    **跨文件对象核验**（9h-2：metrics 断言名式锚所指对象按**声明单源**实存；9h-2b：零自满足；
- *    9h-2c：表内声明源名合法性——未知源名显式判红，不裸抛 TypeError）
+ *    9h-2c：表内声明源名合法性——未知源名显式判红，不裸抛 TypeError；
+ *    9h-2d：对象在其声明源内恰出现 1 次——同源重复/副本即红）
  *    + **入表完备性自检**（9h-3：metrics 候选锚名未入表即红），使锚漂移成为机器看护而非人工巡检。
  * 10. FIX-035（EVO-023 R0 P2-1 收口，§9i）：events 域 attach 失败条目**不入表**
  *    （后续订阅重试 attach——静默死订阅消除）+ event-subscribe-failed 诊断
@@ -812,6 +813,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     // 自满足面核验（R1 P1-1(new) 的机器判据，三类恒 0）：
     //   ① anchor === object（同一谓词判两次）② object ⊂ anchor（对象被锚文本包含）
     //   ③ 对象串在**非声明源**里出现（碰撞/自引渠道）。
+    //   同源重复渠道（第四类）由下方 **9h-2d** 独立判据判别（见该处说明）。
     const selfSatisfied = {
       identical: ANCHOR_OBJECTS_3.filter(([anchor, assertion]) => anchor === assertion).map(([anchor]) => anchor),
       objectInsideAnchor: ANCHOR_OBJECTS_3.filter(([anchor, assertion]) => anchor !== assertion && anchor.includes(assertion)).map(([anchor, assertion]) => `${anchor} ⊃ ${assertion}`),
@@ -826,6 +828,22 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     check('B5 9h-2b R-1: 对象核验零自满足（anchor≠object × 对象不被锚文本包含 × 对象仅在其声明源出现）',
       selfSatisfied.identical.length === 0 && selfSatisfied.objectInsideAnchor.length === 0 && selfSatisfied.foreignSourceHits.length === 0,
       { ...selfSatisfied, tableSize: ANCHOR_OBJECTS_3.length })
+    // 9h-2d（FIX-041 R2 P3-2(new) 收口）：**同源重复**判据——对象串在其**声明源**内
+    //   MUST **恰出现 1 次**。9h-2b 的三类只覆盖「非声明源 / 锚文本」碰撞：若在声明源
+    //   **自身**的注释里复制一份对象串、同时删掉真断言，字符串包含式判别仍判绿（残留
+    //   盲区；R1 的实际缺陷即该类碰撞的跨源变体，已由 9h-2b ③ 堵住）——要求「恰 1 次」
+    //   把该残留形式化关闭：同源多一份同串 ⇒ 对象存活证据不再唯一 ⇒ 判红。
+    //   现状基线：**21/21 对象在其声明源内均恰 1 次**（零暴露、零误红；独立复算见 FIX-041
+    //   取证件 .test-home/fix041-occurrence-count.mjs）。
+    //   落地形态说明：R2 将该类表述为「9h-2b 第四类」；此处落地为**独立判据 9h-2d**
+    //   （不折叠进 9h-2b 聚合谓词）——①判据彼此独立，独立 check 的失败定位更细；②断言
+    //   计数如实体现新增判据；③不重复判别（9h-2b 仍判原三类，无并存双路径）。
+    const duplicateInSource = ANCHOR_OBJECTS_3
+      .map(([, assertion, origin]) => ({ origin, assertion, count: (ANCHOR_SOURCES[origin] ?? '').split(assertion).length - 1 }))
+      .filter((entry) => entry.count !== 1)
+      .map((entry) => `${entry.origin}: ×${entry.count} ${entry.assertion}`)
+    check('B5 9h-2d R-1: 对象串在其声明源内恰出现 1 次（同源重复/副本即红——9h-2b 跨源判据的盲区）',
+      duplicateInSource.length === 0, { duplicateInSource, tableSize: ANCHOR_OBJECTS_3.length })
     // 9h-3（FIX-040 R0 P1-1-B / P2-1 收口）：**入表完备性自检**——metrics.mjs 内出现的
     //   每个「…」候选锚名（逐行抽取，兼容跨行注释被折行/截断的形态）MUST 登记在
     //   ANCHOR_OBJECTS_3 首列 ⇒ **新增锚未入表即红**——把「完备性」由人工改为机器看护
