@@ -72,7 +72,8 @@ check('statsSnapshot: totals is array', Array.isArray(snap.totals))
 //
 // 读取方式：lib/client.js 是浏览器包（`window.__ModuleLoader__.load({...})`），
 // 非 ESM 模块面 ⇒ 在临时 window 垫片上求值后从 factory 导出取面；与
-// tests/client-render.mjs 的加载形态（`:211`）同源，只读取值不执行 apply。
+// tests/client-render.mjs 的客户端包求值形态（`new Function('window', source)`
+// + `window.__ModuleLoader__.load` 载荷捕获）同源，只读取值不执行 apply。
 console.log('FIX-046: client/server descriptor parity (single source of truth):')
 {
   const clientPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'client.js')
@@ -137,12 +138,44 @@ console.log('FIX-046: client/server descriptor parity (single source of truth):'
   check('双侧 descriptor 均非空（防「空集对空集」假绿——fail-closed 前置闸）',
     clientIds.length > 0 && serverIds.length > 0, { clientCount: clientIds.length, serverCount: serverIds.length })
 
+  // FIX-047（N-1，R1 P3）：**方法轴**等价——上列判据此前只覆盖 id 集合（+ 新增
+  // 两条的 codec 深等），`service`/`namespace`/`method`/`invocation.kind` 未参与
+  // ⇒「id 不变而 method 单侧异名」可静默复现 EV-217 同型缺陷（浏览器侧
+  // `remote.router.<method>` 仍然缺失，而集合判据全绿）。顺序已由上方判据锁定
+  // ⇒ 本项按位成对比较四轴；任一侧任一 descriptor 漂移即红（诊断含双侧值）。
+  const methodAxisOf = (descriptor) => [
+    descriptor.service, descriptor.namespace, descriptor.method,
+    descriptor.invocation && descriptor.invocation.kind,
+  ].join(' | ')
+  const methodAxisMismatches = []
+  for (let index = 0; index < Math.min(clientDescriptors.length, ROUTER_DESCRIPTORS.length); index++) {
+    const clientAxis = methodAxisOf(clientDescriptors[index])
+    const serverAxis = methodAxisOf(ROUTER_DESCRIPTORS[index])
+    if (clientAxis !== serverAxis) methodAxisMismatches.push(`${clientIds[index]} :: 客户端[${clientAxis}] ≠ 服务端[${serverAxis}]`)
+  }
+  check('双侧 descriptor 方法轴逐条等价（service/namespace/method/invocation.kind 逐位相等——id 不变而方法异名即红；FIX-047 N-1）',
+    clientDescriptors.length > 0 && clientDescriptors.length === ROUTER_DESCRIPTORS.length && methodAxisMismatches.length === 0,
+    { axisMismatches: methodAxisMismatches })
+  if (methodAxisMismatches.length > 0 || clientDescriptors.length !== ROUTER_DESCRIPTORS.length) {
+    // 诊断优先（与上方 id 差集同法）：失败时直接给出双侧四轴值，修复不必再对账。
+    for (const mismatch of methodAxisMismatches) console.error(`  detail  方法轴不一致: ${mismatch}`)
+    if (clientDescriptors.length !== ROUTER_DESCRIPTORS.length) {
+      console.error(`  detail  方法轴比较前提失败（双侧条数不等）: 客户端 ${clientDescriptors.length} / 服务端 ${ROUTER_DESCRIPTORS.length}`)
+    }
+  }
+
   // 逐条 codec 等价：**本批新增的两条**（presetDiagnostics / hostFaceDiagnostics）
   // 的请求/结果 schema **深度逐值相等**——它们是新增面，无历史包袱，MUST 与
   // lib/schemas.js 的权威形状完全相同（含 typeSymbol）；任一单侧改形状即红。
   // 既有 17 条为**历史镜像**（客户端 v 家族是服务端 schemastery 形状的**有意
   // 缩减镜像**，如 catalog 结果缺 takeoverDefaultModel/mainModelImage——深比会
   // 恒红，非本批授权面）⇒ 只判「形状声明在场且非空」（结构性在场判据）。
+  // **FIX-047（N-5，R1 P3）限定语（禁超宣示）**：本判据的语义 = **声明等价
+  // ≠ 校验行为等价**——深等只比对两侧**手写 spec 的文本**（lib/schemas.js `v`
+  // 构造器 vs lib/client.js `wv` 构造器产出的 spec 字面量），**不覆盖**两侧
+  // 校验器实现（lib/schemas.js `check` vs lib/client.js `wireCheck`：未知字段
+  // 策略等行为分叉不会在此判红），也**不覆盖**宿主 `$mount` 的 codec 消费面
+  // （宿主包不在本仓索引面，仓内不可核验）。
   const parityIds = ['dsh-agent-router#router/presetDiagnostics', 'dsh-agent-router#router/hostFaceDiagnostics']
   const serverByIdForShape = new Map(ROUTER_DESCRIPTORS.map((descriptor) => [descriptor.id, descriptor]))
   const specOf = (node) => (node && node.spec ? node.spec : node)

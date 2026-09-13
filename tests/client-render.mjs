@@ -268,18 +268,25 @@ export async function runClientRender(check) {
   let presetRosterMode = 'ok'
   const configPresets = {}
   // FIX-046 判别面：hostFaceDiagnostics 的宿主面形态开关——
-  // 'ok' 正常取数 / 'absent' 方法缺失（旧服务端未注册该方法）/ 'throw' 调用被拒 /
-  // 'notOk' 宿主失败信封 / 'noVersions' 结果缺 hostVersions / 'plain' 响应非
-  // 信封对象（结果形状非法）。
-  // 形态锚定（P10-④）：**本仓权威面** = lib/service.js `hostFaceDiagnostics()`
-  // 的三键返回形状（hostVersions/faces/diag，`:3475-3485`）+ lib/schemas.js 的
-  // `hostFaceDiagnosticsResult`（`:427-435`）；失败信封 `{ ok:false, error:{ code,
-  // message } }` 与本仓既有同型用例一致（tests/host-abi-health.mjs 的
-  // `{ok:false,error:{code}}` 面）。**R0 F-6 勘正**：此前该处登记「宿主
+  // 'ok' 正常取数 / 'absent' 方法缺失（浏览器侧挂载列表或宿主命名空间未提供该方法）/
+  // 'throw' 调用被拒 / 'notOk' 宿主失败信封 / 'noVersions' 结果缺 hostVersions /
+  // 'plain' 响应非信封对象（结果形状非法）/ 'withEntries' 成功且 faces/diag 非空
+  // （FIX-047 F-10：codec 形状面）。
+  // 形态锚定（P10-④）：**本仓权威面** = lib/service.js 的 `hostFaceDiagnostics()`
+  // 供数方法与其返回的三键形状（hostVersions/faces/diag）+ lib/schemas.js 导出的
+  // `hostFaceDiagnosticsResult`（face 条目 `faceHealthCodec`、diag 条目
+  // `hostDiagEntryCodec`）；失败信封 `{ ok:false, error:{ code, message } }` 与本仓
+  // 既有同型用例一致（tests/host-abi-health.mjs 的 `{ok:false,error:{code}}` 面）。
+  // **FIX-047 N-4**（锚卫生）：上列锚原为「文件 + 行号区间」式，行号漂移后无判据
+  // 看护 ⇒ 按仓库既有卫生方向（FIX-040/043/044）改**符号名式**（文件 + 导出名）。
+  // **R0 F-6 勘正**：此前该处登记「宿主
   // dsh-api-gateway `assertExactArguments` wire 对齐拒绝 = 真机定因」——该断言
   // 已被真机证据证伪（EV-216：真机 `router/stats` RPC 成功；EV-217：真机定因为
   // 客户端 `$mount` 缺 descriptor），本夹具不锚定该形态，仅按本仓信封形状判别。
   let hostFaceMode = 'ok'
+  // FIX-047（F-16，R0 P3）：stats 轮询失败形态开关——判别「静默吞错 → 诊断环
+  // 机录」（唯一变量；默认 false 维持既有 stats 成功基线）。
+  let statsFailMode = false
   // F-5：remote.router 命名空间整体缺失形态（旧实现静默吞错；本批须显式诊断）。
   let remoteAbsentMode = false
   const remoteMock = {
@@ -333,7 +340,12 @@ export async function runClientRender(check) {
         codexentry: { name: 'Codex 子代理', enabled: true, command: 'codex', args: '', timeoutMs: 0, maxConcurrent: 1, loginArgs: '', statusArgs: '', modelsArgs: '' },
       },
     }, user: null } }),
-    stats: async () => { pollRpc.stats += 1; return ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [
+    stats: async () => {
+      pollRpc.stats += 1
+      // FIX-047（F-16）：stats 轮询失败形态（唯一变量开关）——判别「静默吞错 →
+      // 诊断环机录」。
+      if (statsFailMode) throw new Error('stats gateway rejected (FIX-047 F-16 fixture)')
+      return ({ ok: true, value: { ok: true, enabled: true, totals: [], recent: [], series: [], accountTotals: [
       ...(oauthGhostMode ? [{ provider: 'oauth:chatgpt', name: 'ChatGPT 订阅', calls: 3, errors: 0, inputTokens: 13200, outputTokens: 4800, totalMs: 0, lastAt: undefined }] : []),
       ...(oauthRouteGhostMode ? [{ provider: 'chatgpt-oauth', name: 'ChatGPT 订阅', calls: 18, errors: 0, inputTokens: 119100, outputTokens: 1000, totalMs: 0, lastAt: undefined }] : []),
     ], accountSeries: [], days: {
@@ -348,13 +360,33 @@ export async function runClientRender(check) {
     // faceHealthCodec、diag 条目锚定 hostDiagEntryCodec——宿主侧本仓权威面）。
     // 默认 'ok' 恒成功（非判别场景下维持「健康面板正常」基线，避免各用例
     // 被取数失败噪音污染）；失败形态由下方 FIX-046 判别组按需切换。
-    // 未注入者 = 本夹具**无 hostFaceDiagnostics 方法**（旧服务端形态）——
-    // 与真机 V-1 报障同形。
+    // 未注入者 = 本夹具**无 hostFaceDiagnostics 方法**（方法缺失形态；真机 V-9
+    // 实测该短码同形，成因见 EV-217 —— 挂载列表/命名空间两侧皆可能，不预设宿主
+    // 单因；FIX-047 N-6 措辞中性化前写「旧服务端形态」）。
     hostFaceDiagnostics: async () => {
       if (hostFaceMode === 'throw') throw new Error('router gateway rejected hostFaceDiagnostics')
       if (hostFaceMode === 'notOk') {
         // 宿主失败信封（形状锚定见上方形态开关注释；非真机定因断言）。
         return { ok: false, error: { code: 'gateway/arguments-invalid', message: 'typert gateway: router/hostFaceDiagnostics: args fields do not match the descriptor: missing "request"' } }
+      }
+      if (hostFaceMode === 'withEntries') {
+        // FIX-047（F-10，R0 P3）：非空示例条目——字段面取两侧同构的 codec 声明
+        // （lib/schemas.js `faceHealthCodec`：name/state/detail；`hostDiagEntryCodec`：
+        // at/kind/face/code/detail，code 语义 = 面状态变化后的新状态，与
+        // lib/host-abi/health.js 的 face-state 条目同形）。`hostDiagEntryCodec` 的
+        // `consumer` 为可选字段且卡片正文不渲染它 ⇒ 本夹具不带、本组不声称覆盖。
+        // （codec 声明等价由 tests/rpc-shadow-guard.mjs 的深等判据看护；客户端渲染
+        // 路径为手写判定、不经 codec——限定语见该守卫 N-5 段。）
+        return { ok: true, value: {
+          hostVersions: { llm: '9.9.9-a', tools: '8.8.8-b', typertProtocol: '7.7.7-c' },
+          faces: [
+            { name: 'host-probe-alpha', state: 'degraded', detail: 'face detail: codec 形状样例' },
+            { name: 'host-probe-beta', state: 'ok' },
+          ],
+          diag: [
+            { at: 1767225600000, kind: 'face-state', face: 'host-probe-alpha', code: 'degraded', detail: 'hostDiagEntryCodec 形状样例' },
+          ],
+        } }
       }
       if (hostFaceMode === 'noVersions') return { ok: true, value: { faces: [], diag: [] } }
       if (hostFaceMode === 'plain') return 'not-an-envelope'
@@ -2214,6 +2246,12 @@ export async function runClientRender(check) {
   // 勘正**：此前登记的「真机定因 = 宿主网关 wire 字段对齐拒绝」已被证伪
   // （EV-216 真机 stats RPC 成功反证；EV-217 真机定因 = 客户端 `$mount` 缺
   // descriptor），本组断言不依赖亦不声称该形态。
+  // FIX-047 续判（同组内，口径同上：旧实现对应断言必败，逐 case 注释给出唯一
+  // 变量）：① F-16 stats 轮询 reject 必须机录诊断环（旧 `() => undefined` 吞错）；
+  // ② F-10 非空 faces/diag 条目逐字段上屏（原夹具恒空 ⇒ codec 形状面零行使）；
+  // ③ F-12 effect 重跑失败必须清陈旧 RPC 快照；④ F-11 双源皆缺时失败通知仍上屏
+  // （旧早退条件吞掉唯一必须上屏的信息）；⑤ N-2 失败 ∧ 降级并存的折叠态双信息
+  // 可见（最小改法 = summary 单点合成，见 lib/client.js 同段注释）。
   console.log('FIX-046: host face fetch observability (P8):')
   {
     // 每形态独立 remote：（a）携带各自 hostFaceDiagnostics；（b）模块级诊断环
@@ -2261,7 +2299,8 @@ export async function runClientRender(check) {
     const hfOkText = textOf(hfOk)
     check('FIX-046-1: 取数成功 → 宿主版本三值真实上屏（非 ? 回落）且零失败行', hfOkText.includes('9.9.9-a') && hfOkText.includes('8.8.8-b') && hfOkText.includes('7.7.7-c') && !hfOkText.includes(zh.hostHealthRpcFailed('')))
 
-    // case 2：宿主面方法缺失（旧服务端未注册 hostFaceDiagnostics）→ 必须显式
+    // case 2：宿主面方法缺失（该方法在浏览器侧挂载列表/宿主命名空间不可用——
+    // FIX-047 N-6 措辞中性化，不预设宿主单因）→ 必须显式
     // 诊断 + 上屏（旧实现静默跳过：面板全绿 + 版本 '?' + 诊断恒空）。
     const hfAbsent = await renderHostFace('fix046-method-absent', 'absent')
     const hfAbsentText = textOf(hfAbsent)
@@ -2327,6 +2366,110 @@ export async function runClientRender(check) {
     // 短码与本地条目名**同时**出现于诊断区。
     check('FIX-046-8: 失败行与本地镜像环诊断条目并列（禁失败行替换 diag 全集；R0 F-1——旧实现丢失本地条目此断言必红）',
       hfAbsentText.includes('(host-face-shape: hostFaceDiagnostics)') && hfAbsentText.includes('inject-face-missing'))
+
+    // ── FIX-047 续判（R0 F-10/F-11/F-12/F-16 + R1 N-2；每条唯一变量）──────
+    // 共享观察面：诊断环 = settingsReg.inject().health().diag（B2 组既有先例
+    // ——模块级镜像环的公开读面）；折叠态文本 = summaryTextOf；报告面置空的
+    // health stub 使「文本面出现某条」只可能来自被判别的那一侧数据源。
+    const emptyHealth = () => ({ faces: [], diag: [] })
+    // F-16（R0 P3／P8 同族）：stats 轮询 reject 此前 `() => undefined` 吞错——
+    // 页面与诊断环均无痕。唯一变量 = statsFailMode（同一渲染路径、同一 remote）；
+    // 判别 = 环内出现 host-face-stats-rejected 且 detail 携带原始错误消息
+    // （旧实现下环内零该条目 ⇒ 此断言必红）。
+    const statsDiagOf = () => settingsReg.inject().health().diag.filter((entry) => entry.code === 'host-face-stats-rejected')
+    const statsDiagBefore = statsDiagOf().length
+    statsFailMode = true
+    try {
+      await renderInto(settingsReg.render({ ...settingsReg.inject(), remote: () => ({ ...remoteMock }) }), 'fix047-stats-rejected')
+      await settle()
+    } finally {
+      statsFailMode = false
+    }
+    const statsDiagAfter = statsDiagOf()
+    check('FIX-047-F16: stats 轮询 reject → 诊断环机录 host-face-stats-rejected + 原始错误消息（禁 `() => undefined` 吞错；R0 F-16——旧实现此断言必红）',
+      statsDiagBefore === 0 && statsDiagAfter.length > 0 && statsDiagAfter.every((entry) => entry.kind === 'host-face-rpc' && entry.face === 'remote.router' && String(entry.detail).includes('stats gateway rejected')))
+    // 同批引入的**边沿触发**语义 MUST 有判据（P4）：持续失败不逐拍追加（否则
+    // 64 条环上限被单一失败挤满、既有诊断被淘汰 = 观测面自伤）；成功一拍复位 ⇒
+    // 下一失败周期重新记一条。判别 = 同一失败周期再推 3 拍后条数不变；随后
+    // 「失败 → 成功一拍 → 再失败」恰 +1（旧实现吞错则两侧恒 0；若去掉边沿触发
+    // 则同周期 +3 ⇒ 此断言必红）。
+    const statsTimer = captured.timers.filter((timer) => timer.ms === 2000 && !timer.cleared).pop()
+    statsFailMode = true
+    for (let index = 0; index < 3; index += 1) statsTimer.fn()
+    await settle()
+    const statsDiagWithinEpisode = statsDiagOf().length
+    statsFailMode = false
+    statsTimer.fn()
+    await settle()
+    statsFailMode = true
+    statsTimer.fn()
+    await settle()
+    statsFailMode = false
+    check('FIX-047-F16b: 边沿触发——同失败周期 3 拍不追加（统计轮询 2s 拍不挤满 64 条环）+ 成功复位后新周期恰 +1',
+      statsDiagWithinEpisode === statsDiagAfter.length && statsDiagOf().length === statsDiagAfter.length + 1)
+
+    // F-10（R0 P3）：原夹具成功分支 faces/diag **恒空** ⇒ lib/schemas.js 的
+    // `faceHealthCodec` / `hostDiagEntryCodec` 形状面在渲染组零行使。唯一变量 =
+    // hostFaceMode='withEntries'（非空条目）+ 本地面置空（⇒ 文本面只可能来自 RPC
+    // 面）；判别 = faces 的 name/state/detail 与 diag 的 kind/face/code/detail
+    // 逐字段上屏（旧夹具下这些串不存在 ⇒ 此断言必红）。
+    hostFaceMode = 'withEntries'
+    const hfEntriesText = textOf(await renderInto(settingsReg.render({
+      ...settingsReg.inject(), remote: () => ({ ...remoteMock }), health: emptyHealth,
+    }), 'fix047-rpc-entries'))
+    check('FIX-047-F10: RPC 面非空 faces 条目逐条上屏（name/state/detail 三字段消费；R0 F-10——原夹具恒空此断言必红）',
+      hfEntriesText.includes('⚠ host-probe-alpha (face detail: codec 形状样例)') && hfEntriesText.includes('✓ host-probe-beta'))
+    check('FIX-047-F10: RPC 面非空 diag 条目逐条上屏（kind/face/code/detail 四字段消费；R0 F-10）',
+      hfEntriesText.includes('face-state host-probe-alpha (degraded) hostDiagEntryCodec 形状样例'))
+    hostFaceMode = 'ok'
+
+    // F-12（R0 P3）：effect 重跑后失败时陈旧 hostHealth 未清 ⇒ 旧 RPC 快照与失败
+    // 行并存。唯一变量 = 第二次取数形态（同前缀 ⇒ harness 复用同一组件实例、
+    // 状态跨渲染保留；第一次 = 成功且 faces 非空，第二次 = reject）；判别 = 第二次
+    // 渲染文本中旧面条目消失（旧实现下陈旧值仍在 ⇒ 此断言必红）。
+    hostFaceMode = 'withEntries'
+    const staleFirstTree = await renderInto(settingsReg.render({
+      ...settingsReg.inject(), remote: () => ({ ...remoteMock }), health: emptyHealth,
+    }), 'fix047-stale-cache')
+    const staleFirstText = textOf(staleFirstTree)
+    hostFaceMode = 'throw'
+    const staleAfterFailureText = textOf(await renderInto(settingsReg.render({
+      ...settingsReg.inject(), remote: () => ({ ...remoteMock }), health: emptyHealth,
+    }), 'fix047-stale-cache'))
+    hostFaceMode = 'ok'
+    check('FIX-047-F12: effect 重跑失败清理陈旧 RPC 快照（判别项 = 旧成功面的 faces 行消失，版本值由失败分支接管；R0 F-12——旧实现陈旧 faces 行仍在 ⇒ 此断言必红）',
+      staleFirstText.includes('host-probe-alpha') && staleAfterFailureText.includes('(Error)') && !staleAfterFailureText.includes('host-probe-alpha') && !staleAfterFailureText.includes('9.9.9-a'))
+
+    // F-11（R0 P3）：双源皆缺（health 面不可用 ⇒ faceHealth 恒 null + 取数失败 ⇒
+    // hostHealth 为 null）时旧早退条件把失败通知一并吞掉（卡片整体不渲染）。
+    // 唯一变量 = health 返回非对象；判别 = 失败短码与「宿主版本不可读」仍在文本中
+    // （旧实现下卡片为 null ⇒ 这些串零出现，此断言必红）。
+    hostFaceMode = 'throw'
+    const hfDoubleMissing = await renderInto(settingsReg.render({
+      ...settingsReg.inject(), remote: () => ({ ...remoteMock }), health: () => undefined,
+    }), 'fix047-double-missing')
+    const hfDoubleMissingTree = await settle()
+    const hfDoubleMissingText = textOf(hfDoubleMissingTree)
+    hostFaceMode = 'ok'
+    check('FIX-047-F11: 双源皆缺（health 面不可用 + 取数失败）时失败通知仍上屏且折叠态可见（R0 F-11——旧早退条件此断言必红）',
+      hfDoubleMissingText.includes('(Error)') && hfDoubleMissingText.includes(zh.hostHealthVersionsUnavailable)
+      && !hfDoubleMissingText.includes(zh.hostHealthOk) && summaryTextOf(hfDoubleMissingTree).includes(zh.hostHealthRpcFailed('Error')))
+
+    // N-2（R1 P3）：失败 ∧ 降级**并存**的折叠态取舍——本批按 R1 建议取「同时可见」
+    // 最小改法（lib/client.js summary 单点合成：失败短码后并列降级面计数；degraded
+    // 口径未改，仍只由 faces 派生）。唯一变量 = 本地面含一个非 ok 面；判别 = 折叠态
+    // 同时含失败短码与降级计数（旧实现折叠态只渲染失败文案，降级计数仅在展开体
+    // ⇒ 此断言必红）。
+    hostFaceMode = 'throw'
+    const hfBothTree = await renderInto(settingsReg.render({
+      ...settingsReg.inject(),
+      remote: () => ({ ...remoteMock }),
+      health: () => ({ faces: [{ name: 'probe-degraded', state: 'degraded', detail: 'stub' }], diag: [] }),
+    }), 'fix047-failure-with-degraded')
+    const hfBothSummary = summaryTextOf(hfBothTree)
+    hostFaceMode = 'ok'
+    check('FIX-047-N2: 失败 ∧ 降级并存 → 折叠态同时可见失败短码与降级面计数（R1 N-2 最小改法；旧实现折叠态只见失败文案此断言必红）',
+      hfBothSummary.includes(zh.hostHealthRpcFailed('Error')) && hfBothSummary.includes(zh.hostHealthWarn(1)) && !textOf(hfBothTree).includes(zh.hostHealthOk))
 
     hostFaceMode = 'ok'
   }
