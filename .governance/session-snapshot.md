@@ -3,6 +3,7 @@
 - **session_id**: 20260913-ANCHOR-GUARD-CLOSURE
 - **session_date**: 2026-09-13
 - **agent**: deepseek-flash @ DeepSeek Harness + software-project-governance v0.80.0
+- **工作流版本**: 0.80.0
 - **mode**: always-on × maximum-autonomy
 
 ## 当前状态
