@@ -732,6 +732,11 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     // FIX-040 W5：README 行号锚（L16/L158/L165，实测漂移 7 行）→ 关键词/小节名式。
     { file: ['lib', 'preset-defaults.js'], stale: ['README L158', 'README L16', 'README L165'], fresh: ['README「预设 Agent 默认模型」节', '留空 = 继承主 Agent 模型'] },
     { file: ['tests', 'preset-defaults.mjs'], stale: ['README L158', 'README L16', 'README L165'], fresh: ['README「留空 = 继承主 Agent 模型」句', 'README「特性」节'] },
+    // FIX-041 W3：同族 `README L125` 行号锚（实测已漂移 ~141 行——`:125` 现为安装提示句，
+    //   被引 qwen3.7-plus 事实句现位于 `README.md:266`「常见问题」节「视觉 agent 用什么
+    //   模型？」条）→ 关键词/小节名式；两处 shipped 引用同口径核验（全仓该族零残留）。
+    { file: ['lib', 'service.js'], stale: ['README L125'], fresh: ['README「常见问题」节「视觉 agent 用什么'] },
+    { file: ['tests', 'routing-paths.mjs'], stale: ['README L125'], fresh: ['README「常见问题」节「视觉 agent 用什么'] },
   ]
   for (const anchorCase of ANCHOR_CASES) {
     const filePath = join(ROOT_DIR, ...anchorCase.file)
