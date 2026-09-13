@@ -135,6 +135,44 @@ const arrayOf = (source, startMarker) => {
 /** 从代码块按正则提取消费字段（去重排序——动态提取，非手抄）。 */
 const fieldsIn = (block, pattern) => [...new Set([...block.matchAll(pattern)].map((match) => match[1]))].sort()
 
+/**
+ * S2/S5「对象归属声明」**完备性**判据（FIX-043 批 E / R1 P1-1 收口；先例 = host-abi-health.mjs §9h-3
+ * 「入表完备性」）。由来：`expectPackage` / `expectFile` / `expectSymbol` 是**判据自身的声明面**——
+ * 缺失时下游 `?? []` 归一使新判据**平凡满足**（R1 变异 M-B5 实证：删三字段 ⇒ exit 0 fail-open）。
+ * 本函数把「未声明 / 空数组 / 类型畸形」变为**判红**，使「静默省略」不再等价于「通过」。
+ * 返回空数组 = 声明完备。**非恒真谓词**：删任一字段 / 置空 / 改类型即非空（M-B5 同形变异判红）。
+ */
+const declarationGapsOf = (spec) => {
+  const gaps = []
+  if (typeof spec.expectPackage !== 'string' || spec.expectPackage.trim() === '') gaps.push('expectPackage')
+  for (const field of ['expectFile', 'expectSymbol']) {
+    const value = spec[field]
+    if (!Array.isArray(value) || value.length === 0 || value.some((token) => typeof token !== 'string' || token.trim() === '')) gaps.push(field)
+  }
+  return gaps
+}
+
+/**
+ * S2 专用：宿主符号 → 宿主文件映射（`expectSymbolHost`）的完备性 + **字段间自洽**。
+ * 该映射是「宿主符号可达性」核验的唯一输入 ⇒ 缺失/畸形即判红；且它 MUST 与 `expectFile` /
+ * `expectSymbol` 自洽（映射文件 ∈ expectFile；映射符号并集 === expectSymbol）——否则符号可只在
+ * `expectSymbol` 里声明而**逃逸宿主核验**（与 R1 M-B3「字段与锚脱钩」同族的静默面）。
+ */
+const symbolHostGapsOf = (spec) => {
+  const gaps = []
+  const hostMap = spec.expectSymbolHost
+  const malformed = !Array.isArray(hostMap) || hostMap.length === 0
+    || hostMap.some((entry) => typeof entry?.file !== 'string' || entry.file.trim() === ''
+      || !Array.isArray(entry.symbols) || entry.symbols.length === 0
+      || entry.symbols.some((token) => typeof token !== 'string' || token.trim() === ''))
+  if (malformed) return ['expectSymbolHost']
+  if (hostMap.some((entry) => !(spec.expectFile ?? []).includes(entry.file))) gaps.push('expectSymbolHost.file∉expectFile')
+  const mapped = [...new Set(hostMap.flatMap((entry) => entry.symbols))].sort()
+  const declared = [...new Set(spec.expectSymbol ?? [])].sort()
+  if (mapped.join('|') !== declared.join('|')) gaps.push('expectSymbolHost.symbols≠expectSymbol')
+  return gaps
+}
+
 // ── 冻结基线（唯一事实源 = 宿主 checkout 只读实读；刷新步骤见文件头）──────────
 /** llm 适配器契约（宿主 dsh-llm 的 LlmAdapter 类原型；六方法符号见下方基线常量，S7 增强组按方法名逐字核验）。 */
 const LLM_ADAPTER_PROTO_BASELINE = ['providerInfo', 'providerRetryPolicy', 'imageRequestPricing', 'listModels', 'resolveModel', 'prepareCall']
@@ -262,28 +300,36 @@ const SCOPED_HOOK_EVENTS = ['agent/pre-step', 'agent/created', 'agent/request']
  * 中逐字出现）；宿主可达时（与 S3/S7 共用 `hostTarget`，只读）再按**声明的包 ×
  * 声明的文件**做宿主文件存在性核验 ⇒ 锚对象不存在即红（fail-closed 的**有界**
  * 形态：宿主不可达时降级为 note，静态守卫不依赖宿主，BR-03 不变）。
- * **范围界定（不制造声明强度超事实）**：`expectSymbol` 只核验「该符号名在锚文本
- * 中逐字在位」（锚 = 人工刷新面，符号语义仍由 S7 增强组宿主可达时逐字核验，
- * 覆盖面见 S7 7c 段的具名清单）；`expectPackage`/`expectFile` 的宿主存在性核验
- * 仅覆盖**声明的文件**，不声称「锚文本内全部 token 都有对象」（如 face 1 的
- * `lib/types/agent.js` 即未列入 `expectFile`，其 selectionFor 面由 S7 7c 覆盖）。
+ * **范围界定（不制造声明强度超事实）**：`expectSymbol` 只判「该符号名在锚文本中逐字在位」
+ * （锚 = 人工刷新面）；宿主可达时按 `expectSymbolHost`（**符号 → 宿主文件**映射）逐符号核验
+ * 「该符号逐字在其声明的宿主文件内」——覆盖面 = 映射内声明的符号（= `expectSymbol` 全集，字段间
+ * 自洽由完备性判据机器锁定），**不声称**「锚文本内全部 token 都有对象」（face 1 的 anchor 另引
+ * `projectionState.pending` 语义链，其宿主核验由 S7 7c 段的具名清单覆盖）。
+ * FIX-043 批 E（R1 P3-2 收口）：anchor 内对 S7 判据的**引用渲染**统一为与 S7 逐字一致的**单引号**
+ * 形态；下面两个 anchor 因此以**双引号定界**——单引号定界下 `\'` 转义使源文本不再逐字等同判据串，
+ * 而 host-abi-health.mjs 的 9h R-1 fresh needle 是按**源文本**匹配的（P3-2 的引号差异即源于此）。
  */
 const HOST_SHAPE_ANCHORS = [
   {
     face: 'sessionController.selectModel',
-    anchor: 'dsh-api-session-controller 的 lib/index.js 的 selectModel(request) 面；语义锚 lib/types/agent.js 的 selectionFor(agent) → stateOf(session,"modelSelection") → projectionState.pending（S7 增强组核验 selectionFor(agent) / stateOf(agent.session,"modelSelection") / projectionState.pending 三项；selectModel 面不在 S7 判据内——由 lib/host-abi/llm-selection.js 消费面判据覆盖）',
+    anchor: "dsh-api-session-controller 的 lib/index.js 的 selectModel(request) 面；语义锚 lib/types/agent.js 的 selectionFor(agent) → stateOf(session, 'modelSelection') → projectionState.pending（S7 增强组核验 selectionFor(agent) / stateOf(agent.session, 'modelSelection') / projectionState.pending 三项；selectModel 面不在 S7 判据内——由 lib/host-abi/llm-selection.js 消费面判据覆盖）",
     expectPackage: 'dsh-api-session-controller',
-    expectFile: ['lib/index.js'],
+    expectFile: ['lib/index.js', 'lib/types/agent.js'],
     expectSymbol: ['selectModel(', 'selectionFor(', 'stateOf('],
+    expectSymbolHost: [
+      { file: 'lib/index.js', symbols: ['selectModel('] },
+      { file: 'lib/types/agent.js', symbols: ['selectionFor(', 'stateOf('] },
+    ],
     consumer: ['lib/host-abi/llm-selection.js'],
     signatures: ['controller.selectModel({ ...selection })', "get('sessionController')"],
   },
   {
     face: 'sessionProjections.stateOf(session, "modelSelection") → {lastUsed, pending}',
-    anchor: 'dsh-api-session-controller 的 lib/types/agent.js：stateOf(session,"modelSelection") → projectionState.pending（S7 增强组逐字核验）',
+    anchor: "dsh-api-session-controller 的 lib/types/agent.js：stateOf(session, 'modelSelection') → projectionState.pending（S7 增强组逐字核验）",
     expectPackage: 'dsh-api-session-controller',
     expectFile: ['lib/types/agent.js'],
     expectSymbol: ['stateOf(', 'projectionState.pending'],
+    expectSymbolHost: [{ file: 'lib/types/agent.js', symbols: ['stateOf(', 'projectionState.pending'] }],
     consumer: ['lib/prestep.js'],
     signatures: ["stateOf(agent?.session, 'modelSelection')", 'state.pending'],
     extra: [{ file: 'tests/fix-029-host-contract.mjs', signatures: ['types/agent.js:297-318', "key === 'modelSelection'"] }],
@@ -294,6 +340,10 @@ const HOST_SHAPE_ANCHORS = [
     expectPackage: 'dsh-client-ui-model-selection',
     expectFile: ['lib/types/client/service.d.ts', 'lib/types/client/directory.d.ts'],
     expectSymbol: ['directoryFor(', 'load('],
+    expectSymbolHost: [
+      { file: 'lib/types/client/service.d.ts', symbols: ['directoryFor('] },
+      { file: 'lib/types/client/directory.d.ts', symbols: ['load('] },
+    ],
     consumer: ['lib/host-abi/client-remotes.js'],
     signatures: ['directoryService.directoryFor(input.sessionId)', 'directory.load()'],
   },
@@ -420,6 +470,26 @@ if (hostTarget.root) {
   console.log('      · 不可达（DSH_HOST_SOURCE 未设且本地无 _npx 缓存）→ S3 宿主侧半边与 S7 组均记 skip（BR-03：静态守卫不依赖宿主）')
 }
 
+/**
+ * 宿主源码按需读取（**单一实现路径**：S2/S5 的「声明面 → 靶子」核验共用；只读、零写入、按路径缓存）。
+ * 返回 `null` = 宿主靶子不可达或该包×文件不存在 ⇒ 调用方按其语义降级（note / 跳过），BR-03 不变。
+ * 与 S7 增强靶子组自带 `hostRead` 的边界：S7 是**整套**读取（缺失即响亮失败），本函数只承担
+ * 「声明的对象归属是否在靶子中存在」这一核验面，避免 S2/S5 各自开第二条读取路径（P5 单点化）。
+ */
+const hostSourceOf = (() => {
+  const cache = new Map()
+  return (packageName, file) => {
+    // 声明面畸形（非字符串）时返回 null 而非裸抛（P8 / §9h-2c 先例：非法输入只判红，不崩栈）。
+    if (!hostTarget.root || typeof packageName !== 'string' || typeof file !== 'string') return null
+    const key = `${packageName}/${file}`
+    if (!cache.has(key)) {
+      const path = join(hostTarget.root, packageName, file)
+      cache.set(key, existsSync(path) ? readFileSync(path, 'utf8') : null)
+    }
+    return cache.get(key)
+  }
+})()
+
 // ── 基线副本机器一致性守卫（FIX-037 R0 P2-1）─────────────────────────────────
 // 双份常量的来由：host-version-snapshot.mjs 是独立入口（顶层执行 + process.exit），
 // 不可 import 复用「唯一权威」→ 本文件持副本。故「同源同值」MUST 有机器判据，否则
@@ -519,23 +589,27 @@ console.log('S2 宿主源码形状锚点（P10-④：形状签名 + 宿主源码
 // FIX-043 批 A 判定（锚形态判据改写）：由「路径:行号」改为「宿主包名 + 宿主文件 + 宿主符号
 //   （调用式）」——行号在宿主侧不可核验且必然漂移（W3.3 试点同法去行号）；「禁心智模型式无锚
 //   常量」语义不变。
-// FIX-043 批 B 判定（R0 P1-1 收口）：批 A 的三元 token 判据是**格式谓词**——凭空捏造的包名/
-//   文件/符号只要形态合规即通过（R0 M10 实证）。故本批把判据升级为「锚文本 ⇒ 声明的对象归属
-//   （expectPackage/expectFile/expectSymbol）」+「宿主可达时 ⇒ 声明的包×文件在宿主树中真实存在
-//   （只读 `existsSync`，与 S3/S7 共用同一 hostTarget 解析，P5 单点）」⇒ 捏造锚判红。
-//   **判别力边界（如实）**：`expectSymbol` 只判「符号名在锚文本中逐字在位」；锚文本是人工刷新面，
-//   符号语义仍由 S7 增强组（宿主可达时）逐字核验，覆盖面 = S7 7c 段具名符号清单（≠ 全部锚符号）。
-//   **可诊断性**：宿主文件存在性核验失败时 detail 输出缺失清单（P8，不静默吞错）。
+// FIX-043 批 E 判定（R1 P1-1 + P1-2 收口）：①**声明面完备性**——`expectPackage/expectFile/
+//   expectSymbol(/expectSymbolHost)` 缺失或畸形时，批 B 的判据因 `?? []` 归一而**平凡满足**
+//   （R1 M-B5 实证：删三字段 ⇒ exit 0）⇒ 增完备性判据，使「静默省略」判红。②**符号宿主可达性**——
+//   批 B 只核验「包×文件存在」（R1 M-B4 实证：真包 + 真文件 + 捏造符号仍 exit 0）⇒ 取处置 (a)：
+//   增 `expectSymbolHost`（符号 → 宿主文件映射，单点声明）并按**声明的文件**逐符号核验宿主源码
+//   （与 S5 的「包×文件 + 符号逐字」形态对齐）；宿主不可达 → note（BR-03 不变）。
+//   **可诊断性**：声明面缺口与宿主缺失清单均结构化输出（P8，不静默吞错）。
 {
-  const anchorFieldsOf = (spec, symbolPrefix) => ({
+  const anchorFieldsOf = (spec) => ({
     pkg: typeof spec.expectPackage === 'string' ? [spec.expectPackage] : (spec.expectPackage ?? []),
     files: spec.expectFile ?? [],
-    symbols: (spec.expectSymbol ?? []).map((name) => (symbolPrefix ? `${name}${symbolPrefix}` : name)),
+    symbols: spec.expectSymbol ?? [],
   })
   for (const anchorCase of HOST_SHAPE_ANCHORS) {
     const anchorHostForm = /dsh-[a-z0-9-]+/.test(anchorCase.anchor) && /[\w./-]+\.(?:js|mjs|ts)/.test(anchorCase.anchor) && /[A-Za-z_$][\w$]*\(/.test(anchorCase.anchor)
     check(`S2 形状锚点: ${anchorCase.face} 锚点带「宿主包名 + 宿主文件 + 宿主符号」（禁无锚心智模型常量）`, anchorHostForm, anchorCase.anchor)
-    const declared = anchorFieldsOf(anchorCase, '')
+    // 声明面完备性（FIX-043 批 E / R1 P1-1；先例 §9h-3「入表完备性」）——缺失/空/畸形/字段脱钩即红。
+    const declarationGaps = [...declarationGapsOf(anchorCase), ...symbolHostGapsOf(anchorCase)]
+    check(`S2 形状锚点: ${anchorCase.face} 对象归属声明完备（expectPackage/expectFile/expectSymbol/expectSymbolHost 齐全且字段间自洽——缺失即红，防判据平凡满足）`,
+      declarationGaps.length === 0, { declarationGaps })
+    const declared = anchorFieldsOf(anchorCase)
     const undeclared = [...declared.pkg, ...declared.files, ...declared.symbols].filter((token) => !anchorCase.anchor.includes(token))
     check(`S2 形状锚点: ${anchorCase.face} 锚文本含其声明的对象归属（expectPackage/expectFile/expectSymbol 逐项逐字在位——字段与锚脱钩即红）`,
       undeclared.length === 0, { undeclared, anchor: anchorCase.anchor })
@@ -543,8 +617,16 @@ console.log('S2 宿主源码形状锚点（P10-④：形状签名 + 宿主源码
       const absent = declared.pkg.flatMap((name) => declared.files.filter((file) => !existsSync(join(hostTarget.root, name, file))).map((file) => `${name}/${file}`))
       check(`S2 形状锚点: ${anchorCase.face} 声明的宿主包×文件在宿主靶子中存在（捏造包/文件即红；靶子 ${hostTarget.origin}）`,
         absent.length === 0, { absent, hostRoot: hostTarget.root })
+      // 符号宿主可达性（FIX-043 批 E / R1 P1-2 取处置 a；M-B4 同形：真包真文件 + 捏造符号曾 exit 0）。
+      // 声明面不完备时包名可能非字符串 ⇒ 用安全标签（上方完备性判据已判红，此处不裸抛、可诊断）。
+      const declaredPackage = typeof anchorCase.expectPackage === 'string' ? anchorCase.expectPackage : '<expectPackage 未声明>'
+      const absentSymbols = anchorCase.expectSymbolHost.flatMap((entry) => entry.symbols
+        .filter((symbol) => !(hostSourceOf(declaredPackage, entry.file) ?? '').includes(symbol))
+        .map((symbol) => `${declaredPackage}/${entry.file} :: ${symbol}`))
+      check(`S2 形状锚点: ${anchorCase.face} 声明的宿主符号逐字在宿主源码内（捏造符号即红；靶子 ${hostTarget.origin}）`,
+        absentSymbols.length === 0, { absentSymbols, hostRoot: hostTarget.root })
     } else {
-      note(`S2 形状锚点: ${anchorCase.face} 宿主靶子不可达 → 「声明包×文件存在性」核验跳过（锚文本字段判据仍生效；BR-03 静态守卫不依赖宿主）`)
+      note(`S2 形状锚点: ${anchorCase.face} 宿主靶子不可达 → 「声明包×文件存在性 + 符号逐字在位」核验跳过（锚文本字段判据仍生效；BR-03 静态守卫不依赖宿主）`)
     }
     let hits = 0
     for (const file of anchorCase.consumer) {
@@ -680,15 +762,15 @@ console.log('S5 字段级 wire schema 白名单断言（S-5：消费字段 ⊆ �
   //   宿主 lib/client.js 中出现」——`expectSymbol` 后缀 `_result` 由面键单点派生（与 S7 的
   //   `schemaCases` 同一约定），消除手抄漂移面（P5）。宿主不可达时降级为 note（BR-03 不变）。
   //   宿主源码按**按需**读取（仅在宿主可达时 `stat` 判在；符号核验走一次性读取，无重复大文件驻留）。
-  const hostApiFile = hostTarget.root ? join(hostTarget.root, 'dsh-api-remotes', 'lib', 'client.js') : null
-  const hostApiHas = (() => {
-    if (!hostApiFile || !existsSync(hostApiFile)) return null
-    const text = readFileSync(hostApiFile, 'utf8')
-    return (needle) => text.includes(needle)
-  })()
+  // FIX-043 批 E（R1 P1-1 同批收口，与 S2 同构）：增**声明面完备性**判据（缺失/空/畸形即红）。
+  //   读取路径收口到 `hostSourceOf`（S2/S5 单一实现路径，P5）——不再各自 `readFileSync`。
+  const hostApiText = hostSourceOf('dsh-api-remotes', 'lib/client.js')
   for (const [face, spec] of Object.entries(WIRE_SCHEMA_WHITELIST)) {
     const anchorHostForm = /dsh-api-remotes/.test(spec.anchor) && /lib\/client\.js/.test(spec.anchor) && spec.anchor.includes(`${face.replace('.', '_')}_result`)
     check(`S5 字段: ${face} 锚点带「宿主包名 + 宿主文件 + schema 符号」（S-5 单一声明源可复核）`, anchorHostForm, spec.anchor)
+    const declarationGaps = declarationGapsOf(spec)
+    check(`S5 字段: ${face} 对象归属声明完备（expectPackage/expectFile/expectSymbol 齐全——缺失即红，防判据平凡满足）`,
+      declarationGaps.length === 0, { declarationGaps })
     const declaredFiles = typeof spec.expectFile === 'string' ? [spec.expectFile] : (spec.expectFile ?? [])
     const declaredSymbols = (spec.expectSymbol ?? []).map((name) => `${name}_result`)
     const declared = [spec.expectPackage, ...declaredFiles, ...declaredSymbols]
@@ -699,8 +781,8 @@ console.log('S5 字段级 wire schema 白名单断言（S-5：消费字段 ⊆ �
       const absentFiles = declaredFiles.filter((file) => !existsSync(join(hostTarget.root, spec.expectPackage, file))).map((file) => `${spec.expectPackage}/${file}`)
       check(`S5 字段: ${face} 声明的宿主包×文件在宿主靶子中存在（捏造包/文件即红；靶子 ${hostTarget.origin}）`,
         absentFiles.length === 0, { absentFiles, hostRoot: hostTarget.root })
-      if (hostApiHas !== null) {
-        const absentSymbols = declaredSymbols.filter((name) => !hostApiHas(name))
+      if (hostApiText !== null) {
+        const absentSymbols = declaredSymbols.filter((name) => !hostApiText.includes(name))
         check(`S5 字段: ${face} 声明的 schema 符号逐字在宿主 lib/client.js 内（捏造符号即红）`,
           absentSymbols.length === 0, { absentSymbols })
       }
@@ -801,7 +883,7 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
     }
     // 7c 形状锚点源码在位（selectionFor / directoryFor / LlmAdapter 方法行）
     const agentTypes = hostRead('dsh-api-session-controller', 'lib', 'types', 'agent.js')
-    check('S7 增强: 宿主 selectionFor 锚在位（types/agent.js + stateOf(session,"modelSelection") + projectionState.pending）',
+    check("S7 增强: 宿主 selectionFor 锚在位（types/agent.js + stateOf(session, 'modelSelection') + projectionState.pending）",
       agentTypes.includes('selectionFor(agent)') && agentTypes.includes("stateOf(agent.session, 'modelSelection')") && agentTypes.includes('projectionState.pending'))
     const directoryTypes = hostRead('dsh-client-ui-model-selection', 'lib', 'types', 'client', 'service.d.ts')
     check('S7 增强: 宿主 modelDirectories 锚在位（directoryFor(sessionId: SessionId): ModelDirectory）', directoryTypes.includes('directoryFor(sessionId: SessionId): ModelDirectory'))

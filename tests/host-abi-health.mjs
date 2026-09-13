@@ -824,8 +824,13 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   **差额可复算（修订绑定时态口径）**：同一脚本在 **`61af16a`（W3 笔收口时点）** 复跑 =
     //   92 处 / 19 文件（H1 54 / H2 38）——差 = **13 处**「批前有 / `61af16a` 无」（= W3 试点清点的
     //   宿主锚位点：镜像对 2 + inject-manifest 1 + llm-selection 4 + host-route 1 + wrapper 1 +
-    //   client-render 2 + rpc-shadow-guard 2）**− 8 处**「`61af16a` 有 / 批前无」（= 本批新增守卫条目行
-    //   `:728/:729/:733/:796/:797/:798/:799/:814` 的备忘文本，其自身即行号形态）。工具 =
+    //   client-render 2 + rpc-shadow-guard 2）**− 8 处**「`61af16a` 有 / 批前无」（= FIX-042 新增的
+    //   `ANCHOR_CASES` 条目及其备忘文本：`tests/client-render.mjs` / `lib/host-abi/llm-selection.js` /
+    //   `lib/host-abi/inject-manifest.js` / `lib/oauth-llm.js` / `lib/wrapper.js` /
+    //   `tests/rpc-shadow-guard.mjs` / `lib/host-route.js` 七条目 + llm-selection 条目备忘注释一行
+    //   = 8 行 @`61af16a`；其文本自身即含行号形态 ⇒ 被该工具计入）。**FIX-043 批 E 处置**：原文本以
+    //   本文件**自身行号**枚举这 8 行（自指随增删行即漂移——FIX-042 时点与批 E 时点已不一致）⇒
+    //   按本文件 9h-4b 段「自指一律用判据名/块名」的口径改为上述**条目名式**。工具 =
     //   `.test-home/fix042-inventory-diff.mjs`（用法见其文件头；输入 `fix042-base.txt` / `fix042-head.txt`）。
     //   **自我引用注意**：本段注释与 ANCHOR_CASES 条目文本**自身即含行号形态** ⇒ 每增一行都会再次改变
     //   计数（R0 返工笔后同一脚本实测已给 94/19）——这正是「数字必须连**取数修订**引用」的实证：
@@ -859,16 +864,20 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   FIX-043 ⑥ 如实口径（FIX-042 R1 P3-2 收口——原句写「9 处自锚」与实测不符）：宿主锚（`dsh-*` /
     //   宿主 上下文，**非本仓自锚**）**不入本清单**：对象不在本仓库面，仓库级守卫不可解析宿主树
     //   （基线登记与人工复检义务见上方注释）。
-    //   **数字口径 + 取数时点绑定（FIX-043 批 B 复算修订——原句「8 处 / 包名邻近行分布」在两批清扫后
-    //   已失真，属 FIX-042 R0 P2-1 同族：不得沿用他时点数字）**：
+    //   **数字口径 + 取数时点绑定（FIX-043 批 B 首订；批 E 按 R1 P2-1 复算修订——原句「8 处 / 包名
+    //   邻近行分布」在两批清扫后已失真，属 FIX-042 R0 P2-1 同族：不得沿用他时点数字）**：
     //   口径 a = `git grep -oE 'lib/client\.js:[0-9]+(-[0-9]+)?' -- lib/client.js`（**匹配次数**，非行数）：
-    //     `6bc3841`（FIX-042 批前树）= **9** → `175d3e1` / `813c4a9` = **8** → **本批交付后 @工作树 = 0**
-    //     （本批清除的 7 处 `lib/client.js` 自指宿主锚 + 1 处 FIX-042 已清 = 差额来源可逐处追溯）。
-    //   口径 b = 上述 FIX-041 R0 F-3 的三种行号形态 matchAll（① 文件:行号 ② `L###` ③ 裸 `:NNN`）：
-    //     `813c4a9` = **40**（①12 / ②17 / ③11）→ **本批交付后 @工作树 = 24**（①0 / ②17 / ③7）
+    //     `6bc3841`（FIX-042 批前树）= **9** → `175d3e1` / `813c4a9` = **8** → **批 B 交付后 @工作树 = 0**
+    //     （差额链自洽：9 = **1 处 FIX-042 已清** + **批 B 清除的 8 处** `lib/client.js` 自指宿主锚；
+    //     批 E 复算修订——原写「本批清除的 7 处」为 off-by-one，R1 P2-1；批 E 未改 `lib/client.js`
+    //     ⇒ 起止值同批 B 时点）。
+    //   口径 b = 上述 FIX-041 R0 F-3 的三种行号形态 matchAll（① 文件:行号 ② `L###` ③ 裸 `:NNN`）——
+    //     **匹配次数口径**（同一行多锚各计一次；**两种口径不可混用**）：
+    //     `813c4a9` = **40**（①12 / ②17 / ③11）→ **批 B 后 @工作树 = 24**（①0 / ②17 / ③7）
     //     —— ① 归零；③ 余 7 处为**刻意保留**项（`ui-conversation` 跨包、`dynamicCordisContext` 同块、
     //     `ModelDirectory` generation 守卫/`store.subscribe` 三处**宿主靶子不可稳定符号化**⇒ 无实证
-    //     不引入新符号，P10-④），登记为后续批逐处判定。
+    //     不引入新符号，P10-④），登记为后续批逐处判定。**行数口径对照**（不得与上式混用）：
+    //     ② 行数 = **9**（同一行含多枚该形态锚时按 1 行计）vs 匹配次数 = 17；口径 b 整体行数 = **29 → 14**。
     //   **任何引用 MUST 按引用时点重跑并标注修订，不得沿用他时点数字、不得作长期基线。**
     { file: ['lib', 'host-abi', 'health.js'], stale: ['lib/preset-defaults.js:116-124', OLD_PRESETDIAG_LINE_ANCHOR], fresh: ['presetDiag/notePresetDiag'] },
     // FIX-043 ⑤（FIX-042 R1 P3-1 收口）：F-3 登记曾把被清扫的锚串**逐字**写入守卫 ⇒ 该 needle 成
@@ -886,11 +895,25 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   对象在本文件**；`ANCHOR_CASES` 的 stale 字段字面量清单、以及**他文件锚**的历史引用**不计入**）。
     //   自指一律用判据名/块名（如「9h-2b 的 ANCHOR_OBJECTS_3 校验块」）——行号式自指随增删行即失效，
     //   即 FIX-041 R1 P3-2 指出的失效机理。**FIX-042 R0 F-4 如实更正**：原句「本文件零处行号式自指」
-    //   未带口径 ⇒ 属**声明强度超过事实**（宽口径下另有多处他文件锚的历史引用）；本笔已把唯一一处
-    //   无归属的 `:118-119` 去行号（见 9h-2 表内注释），两口径计数由 `.test-home/fix042-w2-selfref.mjs`
-    //   机核（严格口径 = 指向本文件者；宽口径 = 注释行内全部行号式锚）。
+    //   未带口径 ⇒ 属**声明强度超过事实**（宽口径下另有多处他文件锚的历史引用）；FIX-042 W2 已把唯一
+    //   一处**无归属**的行号式锚去行号（原形为裸 `:NNN`，对象 = `tests/metrics.mjs` 的旧锚名段——
+    //   归属改写见 9h-2 表内注释；批 E 复算：该处行号残留 = 0），两口径计数由
+    //   `.test-home/fix042-w2-selfref.mjs` 机核（严格口径 = 指向本文件者；宽口径 = 注释行内全部行号式锚）。
     //   stale 侧 = 本批自本文件清除的旧行号式锚（拼接常量，见上）；fresh 侧 = 替代式符号名/代码串锚
     //   （同样拼接写出，规避自满足）。
+    //   **FIX-043 批 E 自指清扫 + 复算（取数时点 = 派发时 HEAD `2d65f6e` / 前批 `813c4a9`）**：口径 =
+    //   `git grep -nE '([A-Za-z0-9_./-]+\.(js|mjs)):[0-9]+(-[0-9]+)?' -- tests/host-abi-health.mjs`
+    //   （**行数口径**；括注**匹配次数**口径，两者不可混用）：`813c4a9` = **34 行 / 67 匹配次数** →
+    //   `2d65f6e` = **32 行 / 75 匹配次数**（批 B 改动本文件 ⇒ 两个数字 MUST 各绑其时点，不得沿用）。
+    //   逐处语义判定（判定表见 FIX-043 批 E 交付报告）结果：**上述 32 行内自指 = 0**——全部为 stale
+    //   数据单元的 needle 清单（`ANCHOR_CASES`，对象为他文件/宿主）与他文件锚（`lib/**`、`tests/**`）、
+    //   宿主锚（`dsh-*`）的历史引用（判定：保留 + 登记，本批不改其对象面）；**自指落在裸 `:NNN` 族**：
+    //   差额段对该 8 个本文件自身行的枚举（1 组，按上述口径**不计入** 32）⇒ 已改条目名式（见上方
+    //   「差额可复算」段）；另 3 处（无归属的历史登记去行号 / 宿主区间归属误标 / ⑥ 段落引用句失真）
+    //   已按判定更正。**零 grep 批量改写**：逐处读上下文后单点修改。**机核口径的已知边界**：`.test-home/fix042-w2-selfref.mjs` 的归属
+    //   解析取「同注释块内最近文件名 token」启发式 ⇒ 自指若同块紧邻他文件名即被误判为非自指
+    //   （批 E 实测：该脚本 严格口径报 0，而差额段 8 处**实为自指**——故自指判定 MUST 按语义复核，
+    //   不得只信该启发式）。
     { file: ['tests', 'host-abi-health.mjs'], stale: [OLD_PRESETDIAG_LINE_ANCHOR, OLD_CLIENT_SELF_ANCHOR_CLAIM], fresh: ['presetDiag/notePresetDiag ' + '纪律同构', FRESH_CLIENT_HOST_ANCHOR_CLAIM] },
     // FIX-042 W4：语义待定 5 项中「在仓且可改」的 2 处（第 3 处 `tests/smoke.mjs` 已并入上方既有条目）：
     //   ① tests/stats.mjs 的 `service.js` 的 `:2414-2561` 实为**历史迁移源**（现址为模态判定面，对象不符）
@@ -904,9 +927,13 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     // FIX-043 批 B：**隔行站点**登记批 A 两处已由本批收敛——`lib/client.js` 的宿主
     //   `dsh-host-apiproxy` 行号锚已改用本机宿主靶子实读可达的 `dsh-api-session-controller` 面
     //   （包 × 文件存在性由 `tests/host-contract.mjs` S2 判据核验）；`lib/service.js` 的
-    //   `:2582-2594` 同族站点**不在本批锁面**，归后续批（登记，不制造改动）。
-    //   **守卫自身面**（下方 ⑥ 段落注释中的 `:4281` / `dsh-host-apiproxy` 计数句）同属锁外，
-    //   其计数口径随本批收敛已失真——归后续批修正（P1-2 同族；本批不声称已修正）。
+    //   「`lib/service.js` 的模型信息面」（宿主 `dsh-host-apiproxy` 面、隔行线索）同族站点**不在本批
+    //   锁面**，归后续批（登记，不制造改动；该宿主包在本机装态中不存在 ⇒ 锚现值不可本仓核验）。
+    //   **守卫自身面（FIX-043 批 E 判定 → 处置）**：本段原登记「守卫自身面的宿主锚行号计数句已失真
+    //   ⇒ 归后续批修正」——批 E 实测该项**已闭合**：该行号引用（`lib/client.js` 侧宿主锚，原以
+    //   「文件 + 行号」形态出现、并误标为 ⑥ 段落内容）已由批 B 改写「隔行站点登记」时随条目名式
+    //   （「`lib/client.js` 的 `session.selectModel` 面」）一并清除——本文件内零残留，故不再挂后续批；
+    //   ⑥ 段落的计数句（口径 a / 口径 b）由批 E 按 R1 P2-1 复算修订（见上方 ⑥ 段落）。
     { file: ['lib', 'host-route.js'], stale: ['dsh-credentials-local resolve(:473)/set(:513)/unset(:517)'], fresh: ['宿主 dsh-credentials-local 的 `resolve`/`set`/`unset`'] },
     // FIX-043 批 A（锚族分批清扫 批 A 收口）：`tests/host-contract.mjs` 的 19 处行号式锚**逐处语义判定**
     //   后登记如下（判定表见交付报告；禁 grep 批量改写）。判定要点：**8 处是 `anchor:` 字段且被
@@ -950,8 +977,8 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
         '宿主 dsh-llm 的 LlmAdapter 类原型',
         'assembler.push/usage/finish/blocks 消费块',
         'API_REMOTE_FORWARDED_EVENTS 逐字核验',
-        'selectionFor(agent) → stateOf(session,"modelSelection") → projectionState.pending',
-        'stateOf(session,"modelSelection") → projectionState.pending（S7 增强组逐字核验）',
+        'selectionFor(agent) → stateOf(session, \'modelSelection\') → projectionState.pending',
+        'stateOf(session, \'modelSelection\') → projectionState.pending（S7 增强组逐字核验）',
         'llm_listConfigurableProviders_result schema',
         'llm_listProviders_result schema',
         'session_modelCatalog_result schema',
@@ -992,10 +1019,17 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   //   口径（为何不判「全文件出现次数 = 0」）：needle 必须在**某处**被定义，其定义处即登记数据单元
   //   （恒 +1）；要求全文件零出现等于要求全部 needle 一律拼接常量编码——对非自条目无可判据收益且
   //   损害可读性。故本条判「**非登记逐字复述 = 0**」（= 在守卫自身内的出现次数恰等于其登记处次数）；
+  //   「登记处次数」= **元素精确计数**（登记数据单元内**字面量元素值**的出现次数——FIX-043 批 E 按
+  //   R0 P1-3 由「整段子串计数」改写：后者会被「单元内注释复述他人 needle」旁路，见下 A1 实证）。
   //   **自条目**（file 指向本守卫者）另由 9h-4b 要求全文件出现次数 = 0——该处定义处本身即判据面，
   //   字面量登记会使判据恒红 / 判别力归零（先例：OLD_PRESETDIAG_LINE_ANCHOR 的拼接常量法）。
   //   可达性（非恒真谓词，双方向均实跑）：本判据落地时**自然红**——10 处 needle 被登记说明文本
-  //   逐字复述（逐处分段化后转绿）；9h-4b 由定向变异实证（自条目 needle 改字面量 → 判红）。
+  //   逐字复述（逐处分段化后转绿）；9h-4b 由定向变异实证（自条目 needle 改字面量 → 判红）；
+  //   元素精确计数形态由 A1 同形变异实证判红（仓库外副本：在 `stale` 数组首元素前插入含**他人
+  //   needle** 的块注释 ⇒ FAIL，detail 报「登记 1 处 / 守卫内 2 处」——整段子串计数时二者相等故
+  //   曾放行）。**本段注释自身亦受本条约束**：批 E 落地时首版注释因逐字写出两条 needle 与单元
+  //   标记串而被本判据/9h-4c 判红（needleRepetitions × 3 + staleUnitCount 28≠26）⇒ 已改为
+  //   分段/指代式表述——这正是「判据非恒真 + 守卫看护自身文本」的现场实证。
   //   9h-4c：登记数据单元解析完整性（单元数 === 条目数）——解析失配（引号/括号形态变化）会使本判据
   //   面静默失真（如 needle 被误判为「已登记」），故 fail-closed 判红而非静默降级（P8）。
   {
@@ -1014,15 +1048,60 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
       staleUnits.push(guardSource.slice(cursor, end + 1))
       cursor = end + 1
     }
-    const staleDataText = staleUnits.join('\n')
     const countOccurrences = (text, needle) => text.split(needle).length - 1
+    // **元素精确计数**（FIX-043 批 E / R0 P1-3 收口）：`registered` = needle 在**登记数据单元的
+    //   字面量元素值**内的出现次数。**元素** = 数组字面量顶层（字符串/注释之外）以 `,` 分隔的片段，
+    //   其「值」取纯字面量或字面量拼接（`'a' + 'b'`）的内容（`\n`/`\'` 等转义按 JS 语义解码）；
+    //   注释文本、标识符、片段外文本**一律不产生元素值**。理由（R0 变异 A1 实证的旁路）：在
+    //   `stale` 字段数组的**首元素前**插入含**他人 needle** 的块注释时，整段子串计数把该注释算作
+    //   「已登记」（registered 虚增 ⇒ 与 inGuard 相等 ⇒ 放行）；逐元素取字面量值后该注释不计入 ⇒
+    //   `inGuard > registered` 判红。**扫描器 MUST 注释/字符串感知**：needle 字面量自身含 `//`
+    //   （metrics 条目的注释串）与 `,`（宿主选择面双段锚，逗号在引号内）者真实存在 ⇒ 正则剥离 /
+    //   朴素 `split(',')` 都会误伤；元素值按**逐元素子串计数**（非 `===` 相等）——两条登记串互为
+    //   前缀/子串（宿主适配器两段锚）时两侧计数一致，不制造假红。
+    const staleElementValuesOf = (unitText) => {
+      const decodedEscapes = { n: '\n', t: '\t', r: '\r', '\\': '\\', "'": "'" }
+      const body = unitText.slice(unitText.indexOf('[') + 1, -1)
+      const values = []
+      let literal = ''
+      let valid = true
+      let seen = false
+      let mode = 'code'
+      const flush = () => {
+        if (valid && seen) values.push(literal)
+        literal = ''
+        valid = true
+        seen = false
+      }
+      for (let index = 0; index < body.length; index++) {
+        const char = body[index]
+        const next = body[index + 1]
+        if (mode === 'line') { if (char === '\n') mode = 'code'; continue }
+        if (mode === 'block') { if (char === '*' && next === '/') { mode = 'code'; index += 1 } ; continue }
+        if (mode === 'string') {
+          if (char === '\\') { literal += decodedEscapes[next] ?? next; index += 1; continue }
+          if (char === "'") { mode = 'code'; continue }
+          literal += char
+          continue
+        }
+        if (char === '/' && next === '/') { mode = 'line'; index += 1; continue }
+        if (char === '/' && next === '*') { mode = 'block'; index += 1; continue }
+        if (char === "'") { mode = 'string'; seen = true; continue }
+        if (char === ',') { flush(); continue }
+        if (char === '+' || /\s/.test(char)) continue
+        valid = false
+      }
+      flush()
+      return values
+    }
+    const registeredLiteralText = staleUnits.flatMap((unit) => staleElementValuesOf(unit)).join('\n')
     const needleRepetitions = []
     const selfLiteralNeedles = []
     for (const anchorCase of ANCHOR_CASES) {
       const fileKey = anchorCase.file.join('/')
       const selfTarget = fileKey === 'tests/host-abi-health.mjs'
       for (const needle of anchorCase.stale) {
-        const registered = countOccurrences(staleDataText, needle)
+        const registered = countOccurrences(registeredLiteralText, needle)
         const inGuard = countOccurrences(guardSource, needle)
         if (inGuard > registered) needleRepetitions.push(`${fileKey} :: 「${needle}」登记 ${registered} 处 / 守卫内 ${inGuard} 处`)
         if (selfTarget && inGuard !== 0) selfLiteralNeedles.push(needle)
