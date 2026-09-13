@@ -711,7 +711,10 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   const ANCHOR_CASES = [
     { file: ['lib', 'host-abi', 'ctx-services.js'], stale: ['preset-defaults.js:163', 'preset-defaults.js:194', 'preset-defaults.js:214', 'prestep.js:193', 'wrapper.js:516', 'oauth-llm.js:449', 'service.js:927', 'host-route.js:248'], fresh: ['safeListModels', 'sessionSelectFaceOf', 'agentsRegistryOf', 'agentPresetsServiceOf', 'llmFaceOf'] },
     { file: ['lib', 'host-abi', 'events.js'], stale: ['host-route.js:263-270'], fresh: ['syncHostRoute'] },
-    { file: ['lib', 'stats.js'], stale: ['host-route.js:55'], fresh: ['host-abi/version.js'] },
+    // FIX-041 R0 F-2：同族在仓漂移锚收口——lib/stats.js 引 `lib/oauth-llm.js:43`，该行现已
+    //   漂移为无关注释（`export const OAUTH_PROVIDER` 实在 :47）⇒ 按 FIX-041 W2 同形去行号
+    //   改**符号名式**；本条目一并扩 stale/fresh（原条目只覆盖 `host-route.js:55` 一串）。
+    { file: ['lib', 'stats.js'], stale: ['host-route.js:55', 'lib/oauth-llm.js:43'], fresh: ['host-abi/version.js', 'OAUTH_PROVIDER'] },
     { file: ['tests', 'fix-031-attribution.mjs'], stale: ['host-route.js HOST_ROUTE_PROVIDER'], fresh: ['host-abi/version.js HOST_ROUTE_PROVIDER'] },
     { file: ['tests', 'client-render.mjs'], stale: ['lib/host-route.js HOST_ROUTE_PROVIDER'], fresh: ['lib/host-abi/version.js HOST_ROUTE_PROVIDER'] },
     // FIX-040 W8a：llm-selection.js 三处行号锚（R0 P3-3，:99/:179 已实测漂移）→ 符号名式。
