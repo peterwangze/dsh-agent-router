@@ -1979,12 +1979,12 @@ export async function runClientRender(check) {
 
   // FIX-028（宿主 0.1.1-rc.8 → 0.1.2-rc.1 兼容修复）判别组：
   // 缺陷事实：connection.api 已被宿主移除（dsh-client-connection 0.1.2-rc.1
-  // lib/client.js:4754-4825 无 api 字段）→ 旧 apply() `connection.api` 恒
+  // 的 connection handle 面已无 `api` 字段）→ 旧 apply() `connection.api` 恒
   // undefined → 设置页整页「加载失败: Cannot read properties of undefined
   // (reading 'llm')」（用户截图 sha256:61a445ce…）。修复 = hostApiFace 适配层
   // （remote.* → 旧信封；EVO-020/B2 起迁域更名 createClientRemotes 并翻转
   // 为降级语义）+ 模块 inject 声明命名空间面（宿主官方先例
-  // dsh-client-ui-settings-models lib/client.js:2842-2848）。判定矩阵：
+  // dsh-client-ui-settings-models 的 static `inject` 声明）。判定矩阵：
   //  F28-S 结构守卫：inject 含五个 remote.* 命名空间声明且不含 connection；
   //  F28-B 行为全链：经 settingsReg.inject()（宿主等同注入路径，非直塞旧
   //     apiMock）渲染整页 → 无「加载失败」错误面板 + 适配 api 数据面正确

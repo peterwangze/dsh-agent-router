@@ -8,7 +8,7 @@
  *   `statsSnapshot()` 委托）。
  * - 宿主 typert 网关按 `descriptor.implementation ?? descriptor.method`
  *   经 `Reflect.get(receiver, implementation)` 解析方法并断言函数类型
- *   （dsh-api-gateway/lib/index.js:101-103）。`Reflect.get(service, 'stats')`
+ *   （宿主 dsh-api-gateway 的 `Reflect.get(receiver, implementation)` 解析面）。`Reflect.get(service, 'stats')`
  *   命中实例字段（StatsStore 对象）→ 非函数 → RPC router/stats 返回
  *   method-unavailable → 设置页统计面板每 2s 轮询静默失败恒 0。
  * - 修复：ROUTER_DESCRIPTORS 中 stats 条目声明 `implementation:
@@ -38,7 +38,7 @@ const service = new RouterService(new Context())
 service.attach({ get: () => ({ enabled: true, agents: {} }) })
 
 // ── 1. 网关绑定契约守卫：每个描述符经 implementation ?? method 解析后
-//      必须得到可调用方法（与 dsh-api-gateway/lib/index.js:101-103 同语义）。
+//      必须得到可调用方法（与宿主 dsh-api-gateway 的同一解析语义）。
 console.log('descriptor → callable binding (gateway contract):')
 for (const descriptor of ROUTER_DESCRIPTORS) {
   const key = descriptor.implementation ?? descriptor.method

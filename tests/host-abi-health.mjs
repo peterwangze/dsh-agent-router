@@ -725,9 +725,12 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     // FIX-042 W1（扩充既有条目，P5：同文件不重复登记）：`agentPresetsServiceOf` 先例锚原写
     //   `lib/preset-defaults.js:100-108`（实测漂移——该区间非定义；定义实在
     //   lib/host-abi/ctx-services.js 的 `export function agentPresetsServiceOf`）⇒ 归属文件式。
-    { file: ['tests', 'client-render.mjs'], stale: ['lib/host-route.js HOST_ROUTE_PROVIDER', 'lib/preset-defaults.js:100-108'], fresh: ['lib/host-abi/version.js HOST_ROUTE_PROVIDER', 'agentPresetsServiceOf 先例，定义在'] },
+    { file: ['tests', 'client-render.mjs'], stale: ['lib/host-route.js HOST_ROUTE_PROVIDER', 'lib/preset-defaults.js:100-108', 'lib/client.js:4754-4825', 'lib/client.js:2842-2848'], fresh: ['lib/host-abi/version.js HOST_ROUTE_PROVIDER', 'agentPresetsServiceOf 先例，定义在', 'connection handle 面已无 `api` 字段', 'dsh-client-ui-settings-models 的 static `inject` 声明'] },
     // FIX-040 W8a：llm-selection.js 三处行号锚（R0 P3-3，:99/:179 已实测漂移）→ 符号名式。
-    { file: ['lib', 'host-abi', 'llm-selection.js'], stale: ['preset-defaults.js:226-238', 'preset-defaults.js:209-240', 'preset-defaults.js:303-307'], fresh: ['lib/preset-defaults.js', 'sessionSelectFaceOf', 'sessionNeverProduced', 'inheritedRouteOf', 'LLM_FACE_METHODS'] },
+    // FIX-042 W3.3（扩充同条目）：该文件头部/中段 5 处**宿主锚**去行号改包名+符号名式
+    //   （@deepseek-ai/dsh-llm 类定义与三方法 / dsh-api-session-controller 选择面 /
+    //   dsh-host-apiproxy 空白判据）——宿主对象不可机器核验（见基线登记），此处只判本仓锚串形态。
+    { file: ['lib', 'host-abi', 'llm-selection.js'], stale: ['preset-defaults.js:226-238', 'preset-defaults.js:209-240', 'preset-defaults.js:303-307', '@deepseek-ai/dsh-llm lib/index.js:1698', 'registerAdapter :1780', 'registration :2177', 'listModels :2018', 'index.js:605, 2502-2503', 'dsh-host-apiproxy L1187-1189'], fresh: ['lib/preset-defaults.js', 'sessionSelectFaceOf', 'sessionNeverProduced', 'inheritedRouteOf', 'LLM_FACE_METHODS', '宿主 @deepseek-ai/dsh-llm 的类定义', '宿主 dsh-api-session-controller', '宿主 dsh-host-apiproxy 的空白判据'] },
     // FIX-040 W4：metrics.mjs 的 12 处 smoke.mjs:<行号> 证据锚（实测偏 ~1038~1200）→ 断言名式。
     //   fresh 只列**连续**锚串（本项判「清单内连续锚串」这一形态，不判跨行/合并写作/片段形态）。
     //   如实界定（R1 P3-2(new)）：跨行/合并形态的**入表完备性**由 9h-3 覆盖；其**对象存活**是否
@@ -771,17 +774,29 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   （13/17/11），其中余留者**全部**为宿主包锚。**口径差异说明**：不同正则粒度会给出
     //   不同数字（如审查员口径把 `L5682-5760` 只计为 `L5682`、并排除 `/:342` 形态 ⇒
     //   13/17/8 = 38）——**数字必须连口径引用**，且随文本增删自动变化，不得作长期基线。
-    { file: ['lib', 'client.js'], stale: ['lib/oauth-llm.js:43', 'presetDiagnostics :2109', 'health.js:35-48', 'OAUTH_ROUTE_PROVIDER :36', '权威单点 :124-125'], fresh: ['lib/oauth-llm.js `export const', 'presetDiagnostics 方法存在性先例', 'lib/host-abi/health.js noteHostDiag', 'HOST_FACE_ERROR_CODES 三错误码'] },
+    { file: ['lib', 'client.js'], stale: ['lib/oauth-llm.js:43', 'presetDiagnostics :2109', 'health.js:35-48', 'OAUTH_ROUTE_PROVIDER :36', '权威单点 :124-125', 'lib/client.js:4754-4825'], fresh: ['lib/oauth-llm.js `export const', 'presetDiagnostics 方法存在性先例', 'lib/host-abi/health.js noteHostDiag', 'HOST_FACE_ERROR_CODES 三错误码', 'connection handle 面只有 isLoopback'] },
+    //   **宿主锚核验基线登记**（FIX-042 W3.2，落于本注释处）：
+    //     基线 = 依赖声明 `^0.1.5-rc.2`（package.json dependencies/peerDependencies 的
+    //     `@deepseek-ai/dsh-*` 面；本机实装抽样 = **0.1.5-rc.2**，宿主 checkout 实测见
+    //     .governance/arch-004-compatibility-design.md §1 与 tests/host-version-snapshot.mjs）。
+    //     **仓库级守卫不可解析宿主树 ⇒ 本清单不覆盖宿主锚、不声称机器覆盖**（宿主锚的数量与
+    //     对象符号只由 W3 清点表登记，机器判据仅覆盖「本仓文本内的锚串形态」）。
+    //     **人工复检义务**：宿主升级后 MUST 按 `tests/host-contract.mjs` 头部
+    //     「如何刷新本套件（宿主升级后…）」程序、与 `tests/host-version-snapshot.mjs` 刷新步骤
+    //     同步执行，逐处重核宿主锚的对象符号（存在性 + 语义）并同步改写本仓注释与基线常量。
+    //     试点口径（FIX-042 W3.3）：宿主锚去行号改**符号名/包名式**（如
+    //     `dsh-client-connection` 的 connection handle 面、`dsh-api-gateway` 的
+    //     `Reflect.get(receiver, implementation)` 解析面）——不引入未实证的宿主符号。
     // FIX-042 W1/W2：在仓漂移锚收口批（8 文件）的看护接线——FIX-041 R1 §三.3 硬前置「逐处语义
     //   判定」已逐处执行（判定表见 FIX-042 交付报告 W1），本段只登记**判定后**的 stale/fresh 对：
     //   stale = 本轮清除的旧行号式锚串（零残留即绿）；fresh = 替代式符号名/代码串锚（在位即绿）。
     //   宿主锚（`dsh-*` / 宿主 上下文，含 lib/client.js 内 9 处 `lib/client.js:<NNN>`）**不入本
-    //   清单**：对象不在本仓库面，仓库级守卫不可解析宿主树（基线登记与人工复检义务见下方注释）。
+    //   清单**：对象不在本仓库面，仓库级守卫不可解析宿主树（基线登记与人工复检义务见上方注释）。
     { file: ['lib', 'host-abi', 'health.js'], stale: ['lib/preset-defaults.js:116-124', OLD_PRESETDIAG_LINE_ANCHOR], fresh: ['presetDiag/notePresetDiag'] },
-    { file: ['lib', 'host-abi', 'inject-manifest.js'], stale: ['（:5060 先例', 'lib/client.js:5060'], fresh: ['`const inject ='] },
+    { file: ['lib', 'host-abi', 'inject-manifest.js'], stale: ['（:5060 先例', 'lib/client.js:5060', 'dsh-client-modules lib/client.js:265-268'], fresh: ['const inject =', '宿主 dsh-client-modules 的包表行'] },
     { file: ['lib', 'oauth-llm.js'], stale: ['runCodexResponsesChat :2906-2929'], fresh: ['`runCodexResponsesChat`'] },
-    { file: ['lib', 'wrapper.js'], stale: ['stream 直传分支（下方 :353）'], fresh: ['`stream()` 的图片块保真直传分支'] },
-    { file: ['tests', 'rpc-shadow-guard.mjs'], stale: ['lib/service.js:673', 'lib/service.js:3172'], fresh: ['`this.stats = new StatsStore(...)`（lib/service.js）', '`statsSnapshot()` 委托'] },
+    { file: ['lib', 'wrapper.js'], stale: ['stream 直传分支（下方 :353）', 'dsh-llm lib/index.js:1527'], fresh: ['`stream()` 的图片块保真直传分支', '宿主 dsh-llm 的 `registration()` 实现'] },
+    { file: ['tests', 'rpc-shadow-guard.mjs'], stale: ['lib/service.js:673', 'lib/service.js:3172', 'dsh-api-gateway/lib/index.js:101-103'], fresh: ['`this.stats = new StatsStore(...)`（lib/service.js）', '`statsSnapshot()` 委托', '宿主 dsh-api-gateway 的 `Reflect.get(receiver, implementation)` 解析面'] },
     // FIX-042 W2：**本守卫自身**的锚注释同口径看护（W2 机核实测：本文件零处行号式自指——自指
     //   一律用判据名/块名，如「9h-2b 的 ANCHOR_OBJECTS_3 校验块」；行号式自指随增删行即失效，
     //   即 FIX-041 R1 P3-2 指出的失效机理）。stale 侧 = 本批自本文件清除的旧行号式锚（拼接常量，
@@ -794,6 +809,9 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //      preset schema 保存形状）⇒ 改为归属文件式（假设文本仍可 grep：`会话已含图`）。
     { file: ['tests', 'stats.mjs'], stale: ['service.js:2414-2561'], fresh: ['EVO-003 迁移前 RouterService 内联聚合'] },
     { file: ['tests', 'fix-012-image-takeover.mjs'], stale: ['lib/client.js:3226'], fresh: ['lib/client.js 的旧假设'] },
+    // FIX-042 W3.3：宿主锚有界试点（本仓文本侧判据——去行号改包名+符号名式；宿主对象核验不可机器化，
+    //   见上方基线登记）。lib/host-route.js 为本批新增条目（其余试点文件已并入各自既有条目）。
+    { file: ['lib', 'host-route.js'], stale: ['dsh-credentials-local resolve(:473)/set(:513)/unset(:517)'], fresh: ['宿主 dsh-credentials-local 的 `resolve`/`set`/`unset`'] },
   ]
   for (const anchorCase of ANCHOR_CASES) {
     const filePath = join(ROOT_DIR, ...anchorCase.file)

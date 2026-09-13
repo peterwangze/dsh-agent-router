@@ -4968,7 +4968,7 @@ window.__ModuleLoader__.load({
     // 「加载失败: Cannot read properties of undefined (reading 'llm')」。
     // RCA（宿主源码实证）：
     //  · 旧面 `connection.api` 已被宿主移除——dsh-client-connection 0.1.2-rc.1
-    //    lib/client.js:4754-4825 的 connection handle 只有 isLoopback /
+    //    connection handle 面只有 isLoopback /
     //    generation / state / rpc / reconnect / registerGenerationSource /
     //    start，无 api 字段；本包旧 apply() `const api = connection.api` →
     //    undefined → load() 内 api.llm.providers 抛「Cannot read properties
