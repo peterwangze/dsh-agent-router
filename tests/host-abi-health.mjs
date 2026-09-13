@@ -737,15 +737,26 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     { file: ['tests', 'preset-defaults.mjs'], stale: ['README L158', 'README L16', 'README L165'], fresh: ['README「留空 = 继承主 Agent 模型」句', 'README「特性」节'] },
     // FIX-041 W3：同族 `README L125` 行号锚（实测已漂移 ~141 行——`:125` 现为安装提示句，
     //   被引 qwen3.7-plus 事实句现位于 `README.md:266`「常见问题」节「视觉 agent 用什么
-    //   模型？」条）→ 关键词/小节名式；两处 shipped 引用同口径核验（全仓该族零残留）。
+    //   模型？」条）→ 关键词/小节名式；两处引用同口径核验。**限定语**（FIX-041 R0 F-5）：
+    //   「零残留」只在 **shipped 面（lib/** + tests/**）**成立——`docs/release/` 两处历史
+    //   发布文档（`release-checklist-v0.3.2.md:30` / `version-plan-v0.3.2.md:82`）与
+    //   `CHANGELOG.md:25`（已发布节冻结）仍含同族 `README L<n>` 锚，属**历史快照**（锚指向
+    //   当时的 README 行号），刻意不清扫。
     { file: ['lib', 'service.js'], stale: ['README L125'], fresh: ['README「常见问题」节「视觉 agent 用什么'] },
     { file: ['tests', 'routing-paths.mjs'], stale: ['README L125'], fresh: ['README「常见问题」节「视觉 agent 用什么'] },
     // FIX-041 W2：镜像对中**可在本仓核验**的行号锚/自身锚已符号名化（6 处）——stale 零
     //   残留 + 替代式锚在位。镜像侧（tests/served-client.js）**不重复登记**：§3 的字节
     //   恒等判据（`served-client mirror stays byte-identical to lib/client.js`）是更强的
     //   保证（逐字节相等 ⇒ 内容判据自动传递），重复登记只增表面不增判别力。
-    //   宿主包锚（余 41 处，目标在 node_modules/$DSH_HOME 下 dsh-* 包内）刻意不入本清单
-    //   ——不在本仓库面，仓库级守卫不可解析（见 FIX-041 W4 报告与建议方案）。
+    //   宿主包锚刻意不入本清单——不在本仓库面，仓库级守卫不可解析（见 FIX-041 W4 报告）。
+    //   **存量计数口径**（FIX-041 R0 F-3 收口：使数字可复算，不得只留精确数）——对
+    //   `lib/client.js` 全文逐行 `matchAll` 三种行号形态，统计**匹配次数**（非行数；同一行
+    //   可含多锚）：① `/[A-Za-z0-9_@\/.-]*[A-Za-z0-9_-]\.(js|mjs|ts|tsx|sh|ps1):\d+(-\d+)?/g`
+    //   ② `/\bL\d{2,4}(?:[-–]\d{2,4})?/g` ③ `/(?:^|[^A-Za-z0-9_]):\d{2,4}(\/\d{1,4})?([-–]\d{2,4})?/g`。
+    //   本批交付**前**（`524a30d^`）= **47**（15/17/15）；交付**后**（符号名化 6 处）= **41**
+    //   （13/17/11），其中余留者**全部**为宿主包锚。**口径差异说明**：不同正则粒度会给出
+    //   不同数字（如审查员口径把 `L5682-5760` 只计为 `L5682`、并排除 `/:342` 形态 ⇒
+    //   13/17/8 = 38）——**数字必须连口径引用**，且随文本增删自动变化，不得作长期基线。
     { file: ['lib', 'client.js'], stale: ['lib/oauth-llm.js:43', 'presetDiagnostics :2109', 'health.js:35-48', 'OAUTH_ROUTE_PROVIDER :36', '权威单点 :124-125'], fresh: ['lib/oauth-llm.js `export const', 'presetDiagnostics 方法存在性先例', 'lib/host-abi/health.js noteHostDiag', 'HOST_FACE_ERROR_CODES 三错误码'] },
   ]
   for (const anchorCase of ANCHOR_CASES) {
@@ -846,13 +857,18 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     // 9h-2d（FIX-040 R2 P3-2(new) 收口）：**同源重复**判据——对象串在其**声明源**内
     //   MUST **恰出现 1 次**。9h-2b 的三类只覆盖「非声明源 / 锚文本」碰撞：若在声明源
     //   **自身**的注释里复制一份对象串、同时删掉真断言，字符串包含式判别仍判绿（残留
-    //   盲区；R1 的实际缺陷即该类碰撞的跨源变体，已由 9h-2b ③ 堵住）——要求「恰 1 次」
+    //   盲区；FIX-040 R1 的实际缺陷即该类碰撞的跨源变体，已由 9h-2b ③ 堵住）——要求「恰 1 次」
     //   把该残留形式化关闭：同源多一份同串 ⇒ 对象存活证据不再唯一 ⇒ 判红。
     //   现状基线：**21/21 对象在其声明源内均恰 1 次**（零暴露、零误红；独立复算见 FIX-041
     //   取证件 .test-home/fix041-occurrence-count.mjs）。
     //   落地形态说明：FIX-040 R2 将该类表述为「9h-2b 第四类」；此处落地为**独立判据 9h-2d**
     //   （不折叠进 9h-2b 聚合谓词）——①判据彼此独立，独立 check 的失败定位更细；②断言
     //   计数如实体现新增判据；③不重复判别（9h-2b 仍判原三类，无并存双路径）。
+    //   **告警面与 9h-2 的重叠**（FIX-041 R0 F-4 披露）：谓词 `count !== 1` **含 `count === 0`**
+    //   ——即「对象被删/改名」时本项与 9h-2 的 `deadAnchors` **同时判红**（同一根因两条 FAIL）。
+    //   这是**有意的冗余双报**（方向偏严、不引入假阴性），**不是**并存双实现：对象存活核验
+    //   仍只有 9h-2 一条实现路径；9h-2 判据本体（含「非声明源命中」语义边界）**不得**因本项
+    //   而简化或删除。本项 detail 因此语义为「同源计数总览」（`×0` 与 `×N≥2` 均入表）。
     const duplicateInSource = ANCHOR_OBJECTS_3
       .map(([, assertion, origin]) => ({ origin, assertion, count: (ANCHOR_SOURCES[origin] ?? '').split(assertion).length - 1 }))
       .filter((entry) => entry.count !== 1)
