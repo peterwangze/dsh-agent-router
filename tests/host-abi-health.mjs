@@ -458,7 +458,7 @@ console.log('B4 ctx-services batch (scatter whitelist + cumulative bindings):')
     const bundleExports2 = bundlePayload2.factory((name) => (name === 'react' ? reactStub2 : null))
     const dirsMissingCtx = { get: () => undefined, remote: {} }
     const dirsEnvelope = await createClientRemotes(dirsMissingCtx).api.sessions.models({ sessionId: 's1' })
-    check('F-3: modelDirectories 缺面 → host-face-missing 短码（对齐 :124-125 三错误码降级体系）', dirsEnvelope.result.ok === false && dirsEnvelope.result.error.code === 'host-face-missing')
+    check('F-3: modelDirectories 缺面 → host-face-missing 短码（对齐 lib/client.js 的 HOST_FACE_ERROR_CODES 三错误码降级体系）', dirsEnvelope.result.ok === false && dirsEnvelope.result.error.code === 'host-face-missing')
     check('F-3: 缺面记 face-degraded 诊断事件（noteHostDiag 上行，P8）', hostDiagnostics().entries.some((entry) => entry.kind === 'face-degraded' && entry.face === 'modelDirectories' && entry.code === 'host-face-missing'))
     const dirsMirror = await bundleExports2.createClientRemotes(dirsMissingCtx).api.sessions.models({ sessionId: 's1' })
     check('F-3 镜像 parity: 缺面降级信封与权威单点逐字相等（JSON 级）', JSON.stringify(dirsMirror) === JSON.stringify(dirsEnvelope))
@@ -725,9 +725,13 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   const FRESH_CLIENT_HOST_ANCHOR_CLAIM = '非本仓' + '自锚'
   const ANCHOR_CASES = [
     { file: ['lib', 'host-abi', 'ctx-services.js'], stale: ['preset-defaults.js:163', 'preset-defaults.js:194', 'preset-defaults.js:214', 'prestep.js:193', 'wrapper.js:516', 'oauth-llm.js:449', 'service.js:927', 'host-route.js:248'], fresh: ['safeListModels', 'sessionSelectFaceOf', 'agentsRegistryOf', 'agentPresetsServiceOf', 'llmFaceOf'] },
-    { file: ['lib', 'host-abi', 'events.js'], stale: ['host-route.js:263-270'], fresh: ['syncHostRoute'] },
+    // FIX-043 批 F（扩充既有条目；批 C 清除锚接线）：宿主转发事件白名单锚由「行号区间 + 裸行号」
+    //   改为「常量名 + 条目内」式（批 C 逐处判定：宿主 `remote-events.js` 全表 19 项，原行号区间
+    //   为本表定义段 ⇒ 现值准确，改形态以降漂移面）。裸锚登记带**同句上下文**（R3 六项要求 ①；
+    //   裸 `:NNN` 单写必歧义）。对象不可本仓核验（宿主面）⇒ 本条目只判位于本仓文本内的锚串形态。
+    { file: ['lib', 'host-abi', 'events.js'], stale: ['host-route.js:263-270', 'remote-events.js:12-32', '在表（:21）'], fresh: ['syncHostRoute', '`API_REMOTE_FORWARDED_EVENTS` 实读 19 项', '在该表条目内'] },
     // FIX-041 R0 F-2：同族在仓漂移锚收口——lib/stats.js 引 `lib/oauth-llm.js` 的 `:43`，该行现已
-    //   漂移为无关注释（`export const OAUTH_PROVIDER` 实在 `:47`）⇒ 按 FIX-041 W2 同形去行号
+    //   漂移为无关注释（`export const OAUTH_PROVIDER` 实在该文件内）⇒ 按 FIX-041 W2 同形去行号
     //   改**符号名式**；本条目一并扩 stale/fresh（原条目只覆盖 `host-route.js` 的 `:55` 一串）。
     //   FIX-043 ⑤ 卫生：被清锚串**不得在登记说明里逐字复述**——一律分段写出（9h-4 机器判据看护）。
     { file: ['lib', 'stats.js'], stale: ['host-route.js:55', 'lib/oauth-llm.js:43'], fresh: ['host-abi/version.js', 'OAUTH_PROVIDER'] },
@@ -735,7 +739,48 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     // FIX-042 W1（扩充既有条目，P5：同文件不重复登记）：`agentPresetsServiceOf` 先例锚原写
     //   `lib/preset-defaults.js` 的 `:100-108`（实测漂移——该区间非定义；定义实在
     //   lib/host-abi/ctx-services.js 的 `export function agentPresetsServiceOf`）⇒ 归属文件式。
-    { file: ['tests', 'client-render.mjs'], stale: ['lib/host-route.js HOST_ROUTE_PROVIDER', 'lib/preset-defaults.js:100-108', 'lib/client.js:4754-4825', 'lib/client.js:2842-2848'], fresh: ['lib/host-abi/version.js HOST_ROUTE_PROVIDER', 'agentPresetsServiceOf 先例，定义在', 'connection handle 面已无 `api` 字段', 'dsh-client-ui-settings-models 的 static `inject` 声明'] },
+    {
+      file: ['tests', 'client-render.mjs'],
+      stale: [
+        'lib/host-route.js HOST_ROUTE_PROVIDER',
+        'lib/preset-defaults.js:100-108',
+        'lib/client.js:4754-4825',
+        'lib/client.js:2842-2848',
+        'service.js:193',
+        'dsh-client-ui-model-selection lib/client.js:170',
+        '宿主 lib/client.js:193',
+        'directoryFor :187',
+        'directory.d.ts:52',
+        '首项，lib/index.js:19',
+        'remote-events.js:21',
+        '157-161 static inject',
+        ':729-736 模块级 inject',
+        ':799 exports.inject',
+        '按 fiber.inject 声明门控 L342',
+        'get 为可选查找 L335',
+        'L581 waitingFor',
+      ],
+      fresh: [
+        'lib/host-abi/version.js HOST_ROUTE_PROVIDER',
+        'agentPresetsServiceOf 先例，定义在',
+        'connection handle 面已无 `api` 字段',
+        'dsh-client-ui-settings-models 的 static `inject` 声明',
+        'dsh-client-ui-model-selection 的',
+        'super(ctx, "modelDirectories")',
+        'directoryFor(sessionId)',
+        'directoryFor「resolved no scope」',
+        '首项 agent-preset/selected',
+        '白名单锚 API_REMOTE_FORWARDED_EVENTS',
+        'ModelDirectory.load',
+        'static inject / 模块级 inject + exports.inject',
+        'dynamicCordisContext',
+        'waitingFor',
+      ],
+      notes: [
+        '未闭合（批 D 自报 → 批 F 固化在仓；R4 §2.4-② 实读复核）：本文件 wire-schema 块的行号式锚（`L####` 族）**实测部分漂移**、本批未收敛——原 claim 的 settings/describe 区间**起界错位**（该区间首三条实为 credentials unset 参数 / settings canOpenAgentPresetDirectory 结果的 schema，describe 结果 schema 实在其后 3 行）；另一组 `L####` 实为 parameters 段（llm/listProviders 结果 schema 实在别处）。逐 schema 符号名重建归后续批（本批不制造改动）。',
+        '保留：`L5774-5778`（presets/authorable/hasDocument 三字段的宿主形状引用）亦未收敛，与上同一根因（宿主 schema 引用的行号式锚待逐 schema 符号名重建）。',
+      ],
+    },
     // FIX-040 W8a：llm-selection.js 三处行号锚（R0 P3-3，:99/:179 已实测漂移）→ 符号名式。
     // FIX-042 W3.3（扩充同条目）：该文件头部/中段 5 处**宿主锚**去行号改包名+符号名式
     //   （@deepseek-ai/dsh-llm 类定义与三方法 / dsh-api-session-controller 选择面 /
@@ -745,11 +790,48 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   fresh 只列**连续**锚串（本项判「清单内连续锚串」这一形态，不判跨行/合并写作/片段形态）。
     //   如实界定（R1 P3-2(new)）：跨行/合并形态的**入表完备性**由 9h-3 覆盖；其**对象存活**是否
     //   被核验取决于该名是否在 9h-2 表内（表内 = 按声明单源核验；表外 = 无核验）——不声称闭环。
-    { file: ['tests', 'metrics.mjs'], stale: ['smoke.mjs:1162-1177', 'smoke.mjs:1316-1326', 'smoke.mjs:816-820', 'smoke.mjs:1473-1480', 'smoke.mjs:1669-1682', 'smoke.mjs:1500-1507', 'smoke.mjs:1153-1157', 'smoke.mjs:846-868', 'smoke.mjs:1557-1569', 'smoke.mjs:848-867', 'smoke.mjs:1266', 'smoke.mjs:1680-1681'], fresh: ['smoke.mjs「image turn config passes through unchanged (no whole-turn routing)」', 'smoke.mjs「wrapper takes over default model」', 'smoke.mjs「vision call returns text without echoing injected images (B)」', 'smoke.mjs「native multimodal delegate sees raw image (preserveImageInput)」', 'smoke.mjs §7.7 pre-step「image turn on wrapper route injects plugin reminder」', 'smoke.mjs「collectMarkers dedupes by attachment」', 'smoke.mjs「tool parameters schema」', 'smoke.mjs「attachmentIds resolution (M2)」节', 'smoke.mjs「follow-up text turn injects memory segment into system」', 'smoke.mjs「wrapper delegate sees route_agent'] },
+    {
+      file: ['tests', 'metrics.mjs'],
+      stale: [
+        'smoke.mjs:1162-1177',
+        'smoke.mjs:1316-1326',
+        'smoke.mjs:816-820',
+        'smoke.mjs:1473-1480',
+        'smoke.mjs:1669-1682',
+        'smoke.mjs:1500-1507',
+        'smoke.mjs:1153-1157',
+        'smoke.mjs:846-868',
+        'smoke.mjs:1557-1569',
+        'smoke.mjs:848-867',
+        'smoke.mjs:1266',
+        'smoke.mjs:1680-1681',
+        'index.js:4832-4835',
+      ],
+      fresh: [
+        'smoke.mjs「image turn config passes through unchanged (no whole-turn routing)」',
+        'smoke.mjs「wrapper takes over default model」',
+        'smoke.mjs「vision call returns text without echoing injected images (B)」',
+        'smoke.mjs「native multimodal delegate sees raw image (preserveImageInput)」',
+        'smoke.mjs §7.7 pre-step「image turn on wrapper route injects plugin reminder」',
+        'smoke.mjs「collectMarkers dedupes by attachment」',
+        'smoke.mjs「tool parameters schema」',
+        'smoke.mjs「attachmentIds resolution (M2)」节',
+        'smoke.mjs「follow-up text turn injects memory segment into system」',
+        'smoke.mjs「wrapper delegate sees route_agent',
+        'dsh-vision-router 同款：adapterHandlesImages 分支',
+      ],
+      notes: [
+        '对象参考面限制（如实登记，**不得作为机器核验通过的依据**）：本条目 fresh 侧所指对象 = 本地参考副本 `.tmp-research/dsh-vision-router`（**在仓库路径内、版本控制外**，`.gitignore` 忽略；`dsh-vision-router` 在宿主装态**不存在**，`Test-Path` 为假）⇒ 仓库级守卫**不可机器核验该对象**，本条目只判「本仓文本内的锚串形态」；副本与上游是否同源无校验面。',
+        '9h-3 兼容：本批新增于目标文件的文本**不含**「」引号段（该形态由「候选锚名入表完备性」判据扫描，误加即判红）。',
+      ],
+    },
     // FIX-040 W2/W8b：smoke.mjs 的旧式锚（行号区间 / 自锚）→ 符号名或内容式指代。
     // FIX-042 W4（扩充既有条目）：`check` 三参形态锚原写 `host-contract.mjs` 的 `:82-88`（实测 HIT，但属
     //   行号式）⇒ 去行号改签名式（C5 半条）。
-    { file: ['tests', 'smoke.mjs'], stale: ['install-entry.mjs:74-77', 'typert contribution registered` 断言行\n  // （符号名式锚；原写死行号', 'host-contract.mjs:82-88'], fresh: ['powerShellHosts', 'typert contribution registered', '紧随的 `19 invocations` 断言行', 'host-contract.mjs 的 `check(label, condition, detail)`'] },
+    // FIX-043 批 F（扩充既有条目；批 D 清除锚接线）：本文件（`tests/smoke.mjs`）内三组宿主锚由批 D
+    //   逐处判定后去行号——改「包名 + 符号名 / 函数名」式；其中两处来自 `dsh-llm` 边界投影段的裸行号
+    //   锚，按 R3 六项要求 ① 一律带**同句上下文**登记（裸行号单写必与同数字短串歧义）。
+    { file: ['tests', 'smoke.mjs'], stale: ['install-entry.mjs:74-77', 'typert contribution registered` 断言行\n  // （符号名式锚；原写死行号', 'host-contract.mjs:82-88', 'index.js:128-135 register / 269-279 match', '宿主 lib/index.js:2251', ':721-729，图片块逐个替换为', 'textOnlyImageText :541-543'], fresh: ['powerShellHosts', 'typert contribution registered', '紧随的 `19 invocations` 断言行', 'host-contract.mjs 的 `check(label, condition, detail)`', 'register(route) 支持 kind', 'match(pathname)', 'dsh-llm 的 adapterStream', 'projectImagesForTextModel', 'textOnlyImageText'] },
     // FIX-040 W2/W3：install-entry.mjs 引用侧符号锚在位（其 install.sh 行号锚已符号化）。
     { file: ['tests', 'install-entry.mjs'], stale: ['install.sh:94-101', 'install.sh:113-131', '拷贝/链接回退语义仅 win32 可判定'], fresh: ['powerShellHosts', 'lstatOrUndefined', 'PS1_OFFLINE_APPLICABLE', 'PS1_PLATFORM_DETAIL', '源码自带依赖目录', '绝不对真实目录 rm -rf'] },
     // FIX-040 W3：install.sh 契约面引用位（ci.yml 头部契约 + README 覆盖边界）同口径核验。
@@ -769,7 +851,11 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     // FIX-042 W1（扩充既有条目）：`lib/service.js` 裸 `:4074` 锚原指向「设备码会话取消」，
     //   实测 :4074 属 `oauthTokenExchange` 的 tokenRef 解析（对象不符）；同一事实在
     //   `exchangeDeviceCode` 的落盘前 cancelled 复查 ⇒ 符号名式。
-    { file: ['lib', 'service.js'], stale: ['README L125', ':4074 的设备码会话取消'], fresh: ['README「常见问题」节「视觉 agent 用什么', '`exchangeDeviceCode` 的落盘前 cancelled 复查'] },
+    // FIX-043 批 F（扩充既有条目；批 C 判定为**刻意保留**项）：本文件两处宿主锚（§四 保留锚）的
+    //   对象 `dsh-host-apiproxy` 在本机 DSH 0.1.5-rc.2 装态**不存在**（无实读对象）⇒ 原锚与其承载的
+    //   语义**一并保留 + 显式登记**（不静默改指）；二者 MUST NOT 入 stale 侧（入表即判红）。
+    //   fresh 侧新增「失效登记句」在位判据——登记句本身离开文本即红（登记不是一次性动作）。
+    { file: ['lib', 'service.js'], stale: ['README L125', ':4074 的设备码会话取消'], fresh: ['README「常见问题」节「视觉 agent 用什么', '`exchangeDeviceCode` 的落盘前 cancelled 复查', '对象已消失、无实读对象'] },
     { file: ['tests', 'routing-paths.mjs'], stale: ['README L125'], fresh: ['README「常见问题」节「视觉 agent 用什么'] },
     // FIX-041 W2：镜像对中**可在本仓核验**的行号锚/自身锚已符号名化（6 处）——stale 零
     //   残留 + 替代式锚在位。镜像侧（tests/served-client.js）**不重复登记**：§3 的字节
@@ -782,7 +868,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   ② `/\bL\d{2,4}(?:[-–]\d{2,4})?/g` ③ `/(?:^|[^A-Za-z0-9_]):\d{2,4}(\/\d{1,4})?([-–]\d{2,4})?/g`。
     //   本批交付**前**（`524a30d^`）= **47**（15/17/15）；交付**后**（符号名化 6 处）= **41**
     //   （13/17/11），其中余留者**全部**为宿主包锚。**口径差异说明**：不同正则粒度会给出
-    //   不同数字（如审查员口径把 `L5682-5760` 只计为 `L5682`、并排除 `/:342` 形态 ⇒
+    //   不同数字（如审查员口径把 `L5682-5760` 只计为 `L5682`、并排除 `lib/client.js` 的 `/:342` 形态 ⇒
     //   13/17/8 = 38）——**数字必须连口径引用**，且随文本增删自动变化，不得作长期基线。
     // FIX-043 批 B（锚族分批清扫 批 B 收口）：**镜像对 24 处**（`lib/client.js` 12 处 ↔
     //   `tests/served-client.js` 12 处）行号式锚**逐处语义判定**后登记（判定表见交付报告；
@@ -803,7 +889,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   （基线登记与人工复检义务见上方注释）；本批新增的宿主可达面机器判据在
     //   `tests/host-contract.mjs` S2/S5（`expectPackage`/`expectFile`/`expectSymbol` + 靶子文件
     //   存在性核验——R0 P1-1 收口，宿主可达时生效）。
-    { file: ['lib', 'client.js'], stale: ['lib/oauth-llm.js:43', 'presetDiagnostics :2109', 'health.js:35-48', 'OAUTH_ROUTE_PROVIDER :36', '权威单点 :124-125', 'lib/client.js:4754-4825', 'lib/index.js:2596-2630', ':2749-2760', 'dsh-llm-pi-ai index.js:1721', 'lib/client.js:889-911', 'remote-events.js:12-32', 'lib/client.js:581', 'lib/client.js:2842-2848', 'lib/client.js:4493-4499', 'lib/client.js:175-179', 'lib/index.js:19', 'lib/client.js:170', 'lib/client.js:752', 'lib/client.js:193', ':991-992/:2556-2588'], fresh: ['lib/oauth-llm.js `export const', 'presetDiagnostics 方法存在性先例', 'lib/host-abi/health.js noteHostDiag', 'HOST_FACE_ERROR_CODES 三错误码', 'connection handle 面只有 isLoopback', 'joinProviderDirectory 同构镜像', 'API_REMOTE_FORWARDED_EVENTS（19 项转发事件）', 'waitingFor 记录按 fiber.inject 过滤', '的 static inject（remote.credentials/llm/settings）', '的 inject 数组声明', '的 ctx.remote.$on 订阅', '的 directoryFor 面）的 directoryFor(sessionId).load()', 'scope.modelDirectories 属性面', 'directoryFor「resolved no scope」', 'dsh-llm-pi-ai 的 streamWithSnapshot()', 'session.selectModel 面）：session.selectModel 仅 resolveCallConfig', '的 prompt 侧准入'] },
+    { file: ['lib', 'client.js'], stale: ['lib/oauth-llm.js:43', 'presetDiagnostics :2109', 'health.js:35-48', 'OAUTH_ROUTE_PROVIDER :36', '权威单点 :124-125', 'lib/client.js:4754-4825', 'lib/index.js:2596-2630', ':2749-2760', 'dsh-llm-pi-ai index.js:1721', 'lib/client.js:889-911', 'remote-events.js:12-32', 'lib/client.js:581', 'lib/client.js:2842-2848', 'lib/client.js:4493-4499', 'lib/client.js:175-179', 'lib/index.js:19', 'lib/client.js:170', 'lib/client.js:752', 'lib/client.js:193', ':991-992/:2556-2588', '（同表 :21，凭据引用变化转发事件）', 'ui-conversation :16041-16056', '声明门控，:313-314/:342', '（generation 守卫，宿主 :47/:53）', '订阅该 store（宿主 :292）'], fresh: ['lib/oauth-llm.js `export const', 'presetDiagnostics 方法存在性先例', 'lib/host-abi/health.js noteHostDiag', 'HOST_FACE_ERROR_CODES 三错误码', 'connection handle 面只有 isLoopback', 'joinProviderDirectory 同构镜像', 'API_REMOTE_FORWARDED_EVENTS（19 项转发事件）', 'waitingFor 记录按 fiber.inject 过滤', '的 static inject（remote.credentials/llm/settings）', '的 inject 数组声明', '的 ctx.remote.$on 订阅', '的 directoryFor 面）的 directoryFor(sessionId).load()', 'scope.modelDirectories 属性面', 'directoryFor「resolved no scope」', 'dsh-llm-pi-ai 的 streamWithSnapshot()', 'session.selectModel 面）：session.selectModel 仅 resolveCallConfig', '的 prompt 侧准入', '其对**同批三命名', '`createModelsOperations(ctx)` 绑定的', '（FIX-043 批 C 按 R1 P2-2 裁定取'] },
     //   **宿主锚核验基线登记**（FIX-042 W3.2，落于本注释处）：
     //     基线 = 依赖声明 `^0.1.5-rc.2`（package.json dependencies/peerDependencies 的
     //     `@deepseek-ai/dsh-*` 面；本机实装抽样 = **0.1.5-rc.2**，宿主 checkout 实测见
@@ -867,28 +953,52 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   **数字口径 + 取数时点绑定（FIX-043 批 B 首订；批 E 按 R1 P2-1 复算修订——原句「8 处 / 包名
     //   邻近行分布」在两批清扫后已失真，属 FIX-042 R0 P2-1 同族：不得沿用他时点数字）**：
     //   口径 a = `git grep -oE 'lib/client\.js:[0-9]+(-[0-9]+)?' -- lib/client.js`（**匹配次数**，非行数）：
-    //     `6bc3841`（FIX-042 批前树）= **9** → `175d3e1` / `813c4a9` = **8** → **批 B 交付后 @工作树 = 0**
+    //     `6bc3841`（FIX-042 批前树）= **9** → `175d3e1` / `813c4a9` = **8** → **批 B 交付后 @`cfe7756` = 0**
     //     （差额链自洽：9 = **1 处 FIX-042 已清** + **批 B 清除的 8 处** `lib/client.js` 自指宿主锚；
     //     批 E 复算修订——原写「本批清除的 7 处」为 off-by-one，R1 P2-1；批 E 未改 `lib/client.js`
-    //     ⇒ 起止值同批 B 时点）。
+    //     ⇒ 起止值同批 B 时点）。**批 C 后 @`2ea0bc9` = 0**（该形态不在批 C 清除面 ⇒ 值不变，时点已标明）。
     //   口径 b = 上述 FIX-041 R0 F-3 的三种行号形态 matchAll（① 文件:行号 ② `L###` ③ 裸 `:NNN`）——
     //     **匹配次数口径**（同一行多锚各计一次；**两种口径不可混用**）：
-    //     `813c4a9` = **40**（①12 / ②17 / ③11）→ **批 B 后 @工作树 = 24**（①0 / ②17 / ③7）
-    //     —— ① 归零；③ 余 7 处为**刻意保留**项（`ui-conversation` 跨包、`dynamicCordisContext` 同块、
-    //     `ModelDirectory` generation 守卫/`store.subscribe` 三处**宿主靶子不可稳定符号化**⇒ 无实证
-    //     不引入新符号，P10-④），登记为后续批逐处判定。**行数口径对照**（不得与上式混用）：
-    //     ② 行数 = **9**（同一行含多枚该形态锚时按 1 行计）vs 匹配次数 = 17；口径 b 整体行数 = **29 → 14**。
+    //     `813c4a9`（批 A 前树）= **40**（①12 / ②17 / ③11）→ **批 B 后 @`cfe7756` = 24**（①0 / ②17 / ③7）
+    //     → **批 C 后 @`2ea0bc9` = 17**（①0 / ②17 / ③0）——①③ 双归零；② 不变（该形态不在本批清除面）。
+    //     **③ 族逐处标注（FIX-043 批 F 收口 R2 P2-2）**：**已删除原总括断言**——原文把该 7 处一律定性为
+    //     「宿主锚无法符号化 ⇒ 无实证不引入新符号、刻意保留」，该定性**无实证支持**且与本段自陈的
+    //     「登记为后续批逐处判定」自相矛盾（R1 P2-3 / R2 P2-2）。现按批 C 的逐处判定结果标注（判定证据 =
+    //     `.governance/review-FIX-043-R3-input.md` §1.2 / §2.2，宿主只读实读逐处）；**5 行 / 7 token
+    //     全部可符号化并已收敛**：
+    //       · `:2138`「同表 `:21` 出处引用」→ **准确**（宿主 `dsh-api-remotes/lib/types/remote-events.js`
+    //         的转发事件表第 `:21` 条确为 `credentials/reference-updated`）⇒ 去行号改符号式
+    //         （`API_REMOTE_FORWARDED_EVENTS 条目内`）；
+    //       · `:4310`「`ui-conversation` 的 `:16041-16056`」→ **不准**（该区间实为
+    //         `dsh-client-ui-conversation` 的 InputBar JSX 渲染段，`PropsHooks` 在该包 0 命中）
+    //         ⇒ 改代码串式（宿主 `ctx.uiSession.provide({ hooks, props })` 面）；
+    //       · `:5453`「`:313-314/:342`」→ **准确**（`dsh-cordis-client-runner` 的 JSDoc +
+    //         `readService(prop, true)`）⇒ 去行号改符号式（`宿主 readService(prop, true) 面`）；
+    //       · `:5561`「`:47/:53`」→ **漂移**（`generation === this.generation` 实位于 `:48/:55/:61`，
+    //         原 `:47`/`:53` 为无关语句）⇒ 改符号式（`generation === this.generation 守卫`）；
+    //       · `:5562`「`:292`」→ **不准**（该行实为 `directoryFor` 的 JSDoc；真实订阅点 =
+    //         `:128` / `:131` / `:314` / `:409`）⇒ 改符号式（`宿主 directory.store.subscribe +
+    //         ModelSelect 的 uSES 订阅`）。
+    //     **行数口径对照**（不得与上式混用）：② 行数 = **9**（同一行含多枚该形态锚时按 1 行计；
+    //     三时点不变）vs 匹配次数 = 17；口径 b 整体行数 = **29 → 14（批 B）→ 9（批 C）**。
     //   **任何引用 MUST 按引用时点重跑并标注修订，不得沿用他时点数字、不得作长期基线。**
     { file: ['lib', 'host-abi', 'health.js'], stale: ['lib/preset-defaults.js:116-124', OLD_PRESETDIAG_LINE_ANCHOR], fresh: ['presetDiag/notePresetDiag'] },
     // FIX-043 ⑤（FIX-042 R1 P3-1 收口）：F-3 登记曾把被清扫的锚串**逐字**写入守卫 ⇒ 该 needle 成
     //   「自碰撞死 needle」（守卫自身 +1、目标文件 0）。改**拼接常量**登记——needle 值与判据
     //   （`source.includes(needle)`）完全不变，而守卫文本内不再存在该连续串（由 9h-4/9h-4b 看护）。
     { file: ['lib', 'host-abi', 'inject-manifest.js'], stale: [':5060 先例', 'lib/client.js:5060', 'dsh-client-modules ' + 'lib/client.js:265-268'], fresh: ['const inject =', '宿主 dsh-client-modules 的包表行'] },
-    { file: ['lib', 'oauth-llm.js'], stale: ['runCodexResponsesChat :2906-2929'], fresh: ['`runCodexResponsesChat`'] },
+    // FIX-043 批 F（扩充既有条目；批 C 清除锚接线）：本文件三组锚**均已漂移**——宿主 dsh-system-prompt
+    //   的 tool provider schemas 解构面（原行号区间现值 `getContextOrder` JSDoc）、dsh-llm-pi-ai 的
+    //   `toolsOf` 读法（原区间现值 context 模块注释）、宿主 `LlmAdapter` 空体默认三处 ⇒ 批 C 实读判定后
+    //   改**代码串 / 符号名式**（P10-④：零新增未实证符号；对象逐字实读）。
+    { file: ['lib', 'oauth-llm.js'], stale: ['runCodexResponsesChat :2906-2929', 'dsh-system-prompt lib/index.js:254-258', 'dsh-llm-pi-ai lib/index.js:1123-1128', 'lib/index.js:1645', 'lib/index.js:1996-1998', ':1639 "must answer synchronously', '（:1645 空体', 'Pricing schema :171-178'], fresh: ['`runCodexResponsesChat`', 'result.schemas.map(({ name, description', 'toolsOf(options)', '`imageRequestPricing(_provider, _model)` 空体默认', 'LlmRuntime.imageRequestPricing 经'] },
     // FIX-042 R0 F-3（扩充同条目）：`lib/wrapper.js:266` 的宿主锚（全角括号形态的 `:1397-1403`）为清单外**真漂移**
     //   （审查员宿主树实读：`dsh-llm resolveModelInfoFor` 在 `:2046`、`adapter.resolveModel` 在 `:2047`；
     //   `:1397-1403` 现为 `assembleAssistantStream`）⇒ 去行号改符号链式（与 W3.3 试点同法）。
-    { file: ['lib', 'wrapper.js'], stale: ['stream 直传分支（下方 :353）', 'dsh-llm lib/index.js:1527', '（:1397-1403）'], fresh: ['`stream()` 的图片块保真直传分支', '宿主 dsh-llm 的 `registration()` 实现', '`resolveModelInfo → resolveModelInfoFor → adapter.resolveModel` 链'] },
+    // FIX-043 批 F（扩充既有条目；批 C 清除锚接线）：宿主 `LlmAdapter` 空体默认契约方法的四处行号式
+    //   锚（含宿主 JSDoc 注释行与 `LlmRuntime` 消费点）已由批 C 去行号 ⇒ 与 `lib/oauth-llm.js` 条目
+    //   同对象的**连续串**在本条目重复登记（P5：同对象同形态不因文件而异，两处消费面各自登记）。
+    { file: ['lib', 'wrapper.js'], stale: ['stream 直传分支（下方 :353）', 'dsh-llm lib/index.js:1527', '（:1397-1403）', 'lib/index.js:1645', ':1639 "must answer synchronously without', '（:1996-1998）', '默认语义 :1645'], fresh: ['`stream()` 的图片块保真直传分支', '宿主 dsh-llm 的 `registration()` 实现', '`resolveModelInfo → resolveModelInfoFor → adapter.resolveModel` 链', '`imageRequestPricing(_provider, _model)` 空体默认'] },
     { file: ['tests', 'rpc-shadow-guard.mjs'], stale: ['lib/service.js:673', 'lib/service.js:3172', 'dsh-api-gateway/lib/index.js:101-103'], fresh: ['`this.stats = new StatsStore(...)`（lib/service.js）', '`statsSnapshot()` 委托', '宿主 dsh-api-gateway 的 `Reflect.get(receiver, implementation)` 解析面'] },
     // FIX-042 W2（**结论口径经 F-4 更正与限定**）：**本守卫自身**的锚注释同口径看护——结论限定为
     //   「本文件无**指向本文件自身位置**的行号式自指」（口径：注释行内 `:NNN` / `L###` 且**被指
@@ -914,6 +1024,25 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   解析取「同注释块内最近文件名 token」启发式 ⇒ 自指若同块紧邻他文件名即被误判为非自指
     //   （批 E 实测：该脚本 严格口径报 0，而差额段 8 处**实为自指**——故自指判定 MUST 按语义复核，
     //   不得只信该启发式）。
+    //   **FIX-043 批 F：宽口径他文件裸锚收敛（R2 P2-3 判定面的收口）**——本文件「注释散文中的行号式
+    //   锚」逐处语义判定，收敛判据 = **同一句内可唯一确定对象**（点名对象文件 / 宿主包，或所在登记单元
+    //   的 `file` 字段唯一确定）。**逐处读上下文后单点修改，零 grep 批量改写**。本批收敛 2 处**无归属**者：
+    //     (a) 某 check 标签内的「三错误码降级体系」引用（原为裸行号、未点名对象）⇒ 补归属并改符号名式
+    //         （`lib/client.js` 的 `HOST_FACE_ERROR_CODES`）；
+    //     (b) `lib/stats.js` 条目注中「`export const OAUTH_PROVIDER` 实在 <行号>」⇒ 去行号改「实在该文件内」。
+    //   保留 = **有归属**者，逐类登记：(1) **登记数据单元内的字面量**（对象由该单元 `file` 唯一确定，
+    //   且属判据输入而非散文引用）；(2) **历史登记注**（同句已点名对象文件 / 宿主包；去行号会丢历史
+    //   信息）；(3) **宿主锚注**（同句已点名宿主包）；(4) 本批 ⑥ 段落的**逐处标注**（每站点自带对象与
+    //   判定结论）。
+    //   **计数**（口径 = FIX-041 R0 F-3 的第 ③ 形态正则；取数时点 = 本批交付工作树 —— 该数字随本文件
+    //   增删自动变化，**不得作长期基线**，引用 MUST 连口径 + 时点）：
+    //     全文件 = **53 行 / 101 处**；其中**登记数据单元内** = 25 行 / 56 处；**单元外**（散文 + 拼接
+    //     常量片段）= 28 行 / 45 处 —— 单元外逐行均已归入上述四类，**「无归属」者 = 0**。
+    //   判定面口径分层（补 R2 P2-3 的「声明面与判定面等宽」要求）：层 A = 带文件名自指（本文件路径 +
+    //   行号）全文件 = 0；层 B = 行号族**逐处归属复核**（结论：无一处指向本文件）；层 C = 历史自指原位
+    //   比对（批 A 前树中指向本文件的 8 个行号，在本文件同模式命中 = 0）。**自指判定 MUST 按语义复核**
+    //   ——`.test-home/fix042-w2-selfref.mjs` 的「同注释块内最近文件名 token」启发式有已知盲区（批 E
+    //   实证其结论与语义判定相反），**禁用该启发式结论替代人工判定**。
     { file: ['tests', 'host-abi-health.mjs'], stale: [OLD_PRESETDIAG_LINE_ANCHOR, OLD_CLIENT_SELF_ANCHOR_CLAIM], fresh: ['presetDiag/notePresetDiag ' + '纪律同构', FRESH_CLIENT_HOST_ANCHOR_CLAIM] },
     // FIX-042 W4：语义待定 5 项中「在仓且可改」的 2 处（第 3 处 `tests/smoke.mjs` 已并入上方既有条目）：
     //   ① tests/stats.mjs 的 `service.js` 的 `:2414-2561` 实为**历史迁移源**（现址为模态判定面，对象不符）
@@ -921,7 +1050,10 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   ② tests/fix-012-image-takeover.mjs 的 `lib/client.js` 的 `:3226` 指**已勘正的旧注释**（现址为
     //      preset schema 保存形状）⇒ 改为归属文件式（假设文本仍可 grep：`会话已含图`）。
     { file: ['tests', 'stats.mjs'], stale: ['service.js:2414-2561'], fresh: ['EVO-003 迁移前 RouterService 内联聚合'] },
-    { file: ['tests', 'fix-012-image-takeover.mjs'], stale: ['lib/client.js:3226'], fresh: ['lib/client.js 的旧假设'] },
+    // FIX-043 批 F（扩充既有条目；批 D 清除锚接线）：本文件三组宿主锚由批 D 判定为「包不存在 + 归属
+    //   勘正」（`dsh-host-apiproxy` 在本机装态不存在 ⇒ 改用 `dsh-api-session-controller` 的 prompt 侧
+    //   准入面）+「行号漂移」⇒ 去行号改符号/错误码式；两处裸 `:NNN` 按 R3 六项要求 ① 带同句上下文。
+    { file: ['tests', 'fix-012-image-takeover.mjs'], stale: ['lib/client.js:3226', 'dsh-host-apiproxy lib/index.js:2749-2760', '（:2596-2630）', '（:2749-2760）', 'dsh-llm-pi-ai lib/index.js:1721'], fresh: ['lib/client.js 的旧假设', 'dsh-api-session-controller 的 prompt 侧准入', 'selectModel(request) 面', 'MODEL_DOES_NOT_SUPPORT_IMAGES', 'UNSUPPORTED_CONTENT 判定'] },
     // FIX-042 W3.3：宿主锚有界试点（本仓文本侧判据——去行号改包名+符号名式；宿主对象核验不可机器化，
     //   见上方基线登记）。lib/host-route.js 为本批新增条目（其余试点文件已并入各自既有条目）。
     // FIX-043 批 B：**隔行站点**登记批 A 两处已由本批收敛——`lib/client.js` 的宿主
@@ -934,7 +1066,10 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   「文件 + 行号」形态出现、并误标为 ⑥ 段落内容）已由批 B 改写「隔行站点登记」时随条目名式
     //   （「`lib/client.js` 的 `session.selectModel` 面」）一并清除——本文件内零残留，故不再挂后续批；
     //   ⑥ 段落的计数句（口径 a / 口径 b）由批 E 按 R1 P2-1 复算修订（见上方 ⑥ 段落）。
-    { file: ['lib', 'host-route.js'], stale: ['dsh-credentials-local resolve(:473)/set(:513)/unset(:517)'], fresh: ['宿主 dsh-credentials-local 的 `resolve`/`set`/`unset`'] },
+    // FIX-043 批 F（扩充既有条目；批 C 清除锚接线）：宿主 `dsh-settings` 的 `mutate`/`write` 两处行号式锚
+    //   已由批 C 判定为**已漂移**（原区间已不含其所描述字面量 / `write()` 实体不在原区间）⇒ 改
+    //   「方法签名 + 文件/包名」式；宿主对象不在本仓库面 ⇒ 本条目只判本仓文本内的锚串形态。
+    { file: ['lib', 'host-route.js'], stale: ['dsh-credentials-local resolve(:473)/set(:513)/unset(:517)', 'dsh-settings lib/index.js:430-436', 'write()（:439-470）'], fresh: ['宿主 dsh-credentials-local 的 `resolve`/`set`/`unset`', '`mutate(ns, ops, expectedRevision)` 契约', '`write(ns, input, mode,'] },
     // FIX-043 批 A（锚族分批清扫 批 A 收口）：`tests/host-contract.mjs` 的 19 处行号式锚**逐处语义判定**
     //   后登记如下（判定表见交付报告；禁 grep 批量改写）。判定要点：**8 处是 `anchor:` 字段且被
     //   S2/S5 的「锚形态」判据消费** ⇒ 改前先在代码内把该两条判据由「路径:行号」改写为「宿主包名 +
@@ -995,7 +1130,168 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
         '锚宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表',
       ],
       notes: [
-        '未闭合（本批保留）：`extra` 签名锚含 `types/agent.js` 的 `:297-318`（宿主锚 + 跨文件逐字在位断言——源串在 tests/fix-029-host-contract.mjs 与 lib/prestep.js 亦在位；单侧去行号会使该断言红 / 改判据语义 ⇒ 需三处同步，属锁外文件）——移交后续批（tests 其余 / lib 其余）。',
+        '保留定判（FIX-043 批 F 逐处判定；原登记为批 A 的「未闭合（本批保留）」项，`:270` 系批 A 批前树行号 → 批 A 插入后现址 = 本文件 S2 `extra` 行）⇒ **维持保留**，理由 = `extra` 签名锚含 `types/agent.js` 的 `:297-318`，为**判据承载锚**（非「不可符号化」）：机器锁 2 处 = 本行 needle + 对象文件 `tests/fix-029-host-contract.mjs`（`includes()` 原文、不经注释剥离 ⇒ 单侧去行号即判红）；`lib/prestep.js` 同串为 P5 收敛纪律锁（无守卫绑定）。收敛 MUST 三处同步且**先改判据**。R4 §2.1 独立复算谓词：现文 `[true,true]` / 去行号 `[false,true]`。行内逐处理由另见本文件 S2 该 face 处注释。',
+      ],
+    },
+
+    // ═══ FIX-043 批 F 新增条目（9 个文件级条目：`lib/**` 面 4 新建 + `tests/**` 面 5 新建）══════════
+    // 依据 = `.governance/fix-043-anchor-cases-requirements.md` §一（A~J，lib 面）与 §二（tests 面 9 文件），
+    // 逐条按**本批引用时点**（工作树 `ce8d908` + 批 F 改动）重跑并与载体交叉核对；条目值经批 F **三向
+    // 核验**（stale：批前树在位 × 现树缺席；fresh：现树在位）——核验命令/输出见本批交付证据。**与载体
+    // 字面不符者按实况修正**（例：`createModelsOperations` 的登记串实为带反引号形态；`index.js:605,2502`
+    // 补归属前缀以降歧义），逐条差异列入交付报告。
+    // 约定（R3 六项条目录入要求）：① 裸 `:NNN` 族登记**一律带同句上下文**（裸登记必歧义）；② §四 的
+    // 两处保留锚 MUST NOT 入本表；③ 镜像侧（`tests/served-client.js`）**不重复登记**（§3 字节恒等判据
+    // 更强）；④ R2 P2-2 总括断言已随本批删除并改逐处标注（见上方 ⑥ 段落）；⑤ 本表条目数 26 → **35**，
+    // `9h-4c` 的单元数判据随之变化（按引用时点重跑，不得沿用他时点数字）；⑥ 跨文件同锚旧形态已同步
+    // （`tests/fix-029-host-contract.mjs` 见下）。
+
+    // ── lib 面 4 新建（批 C 清除锚接线）──
+    {
+      file: ['lib', 'index.js'],
+      stale: [
+        'lib/index.js:128-135',
+        'lib/index.js:269-279',
+        'lib/attachments.js:38',
+      ],
+      fresh: [
+        "route.kind === 'exact' ? this.exact : this.prefixes",
+        '`match(pathname)` 对 exact 未命中作最长前缀优先',
+        'lib/attachments.js 的 ATTACHMENT_ID_RE',
+      ],
+      notes: [
+        '**双归属说明**（防误读）：前两处 stale 锚写出的 `lib/index.js` 指**宿主** `dsh-host-webserver` 的同名文件（非本仓同名文件）；第三处为**在仓** `lib/attachments.js` 的引用。三处均经批 C 宿主/在仓只读实读判定（前两处实读为 gzip 中间件与路由查表 ⇒ 现值非所声称对象；第三处现值准确），改符号/代码串式以降漂移面。',
+      ],
+    },
+    {
+      file: ['lib', 'prestep.js'],
+      stale: [
+        'vision-router index.js:4803-4806',
+        'index.js:4832-4835',
+      ],
+      fresh: [
+        'activateDeepTools()',
+        'adapterHandlesImages',
+      ],
+      notes: [
+        '保留（MUST NOT 入 stale 侧）：`types/agent.js` 的 `:297-318` 判据承载锚**刻意保留**——受 `tests/host-contract.mjs` 的 S2 `extra.signatures` 跨文件逐字在位断言约束（收敛 MUST 三处同步且**先改判据**；逐处理由见 `tests/fix-029-host-contract.mjs` 条目的对应 notes）。',
+        '对象参考面限制：两处 stale 锚的对象 = 本地参考副本 `.tmp-research/dsh-vision-router`（**在仓库路径内、版本控制外**；该包在宿主装态不存在）⇒ 仓库级守卫**不可机器核验该对象**，本条目只判本仓文本内的锚串形态。',
+      ],
+    },
+    {
+      file: ['lib', 'oauth-credentials.js'],
+      stale: [
+        'openai-codex.js:30',
+        'openai-codex.js:31',
+      ],
+      fresh: [
+        '`openai-codex.js` 中 `DEVICE_REDIRECT_URI`',
+        '`openai-codex.js` 中 `DEVICE_CODE_TIMEOUT_SECONDS`',
+      ],
+      notes: [
+        '归属：两处 stale 锚的对象 = 宿主 `@earendil-works/pi-ai` 的 `dist/auth/oauth/openai-codex.js`（批 C 宿主**只读**实读：两常量现值**准确**）⇒ 去行号改「文件 + 常量名」式以去漂移面。',
+      ],
+    },
+    {
+      file: ['lib', 'host-abi', 'client-remotes.js'],
+      stale: [
+        'PROVIDER lib/client.js:36 镜像先例',
+        'settings-models lib/client.js:889-911',
+      ],
+      fresh: [
+        '`OAUTH_ROUTE_PROVIDER` 镜像先例',
+        '`joinProviderDirectory(registered, directory)` 同构镜像',
+      ],
+      notes: [
+        '**双归属**：第一处 stale 锚的在仓对象 = `lib/client.js` 的 `OAUTH_ROUTE_PROVIDER` 常量（镜像**先例**，故改「常量名 + 镜像先例」式）；第二处的对象 = 宿主 `dsh-client-ui-settings-models` 的 `joinProviderDirectory`（改「符号签名 + 同构镜像」式；宿主只读实读该区间现值为该函数定义与返回）。',
+      ],
+    },
+
+    // ── tests 面 5 新建（批 D 清除锚接线 + 未闭合项在仓登记）──
+    {
+      file: ['tests', 'fix-029-host-contract.mjs'],
+      stale: [
+        'dsh-api-session-controller index.js:605,2502',
+        'dsh-llm lib/index.js:1698/1780/2177/2018',
+      ],
+      fresh: [
+        'selectModel(request) 面 + Remote("selectModel") 注册',
+        'registerAdapter/registration/listModels 三方法齐备实证',
+      ],
+      notes: [
+        '保留（MUST NOT 入 stale 侧）：`types/agent.js` 的 `:297-318`（本文件头部）为**机器锁**——`tests/host-contract.mjs` 的 S2 `extra.signatures` 对**本文件原文**做 `includes()`（不经注释剥离）⇒ 单侧去行号即判红；改锚 MUST 三处同步（守卫 needle + 本文件 + lib/prestep.js 的 P5 纪律锁）。',
+        '未闭合（批 D 自报 → 批 F **固化在仓**；R4 §2.4-①b 实读复核）：本文件头部的 `dsh-client-ui-conversation` 的 `:16041-16056` 锚**对象不成立**——`PropsHooks` 在该宿主包内 **0 命中**，该区间实为 InputBar JSX 渲染段。按 P10-④ **不按心智模型替换**，真实归属待定位后一并收敛；**该锚仍在位 ⇒ MUST NOT 入 stale 侧（入表即判红）**。在仓登记**两处**：本 notes + 本文件头部行内判定注释（R3 §2.4(3) 要求的**跨文件同步**——同锚旧形态两处判定自此一致，均为「不准 + 维持原锚 + 待定位」）。',
+      ],
+    },
+    {
+      file: ['tests', 'oauth-main-model.mjs'],
+      stale: [
+        'dsh-system-prompt lib/index.js:254-258',
+        'dsh-llm-pi-ai lib/index.js:1123-1128',
+      ],
+      fresh: [
+        'assemble() 工具 schema 消费面',
+        'toolsOf(options) 映射面',
+      ],
+      notes: [
+        '与 `lib/oauth-llm.js` 条目为**同对象的双消费面**（该处 = 生产代码注释，本处 = 判别夹具注释）⇒ 两侧**各自登记**（P5：同对象不因文件而异；不作镜像式去重，避免单侧漏看护）；宿主对象不在本仓库面 ⇒ 只判本仓文本内的锚串形态。',
+      ],
+    },
+    {
+      file: ['tests', 'adapter-parity.mjs'],
+      stale: [
+        'lib/index.js:1681-1686',
+        'adapterStream :2232',
+        '（新增，:1645）',
+        '（回归原型，:1681）',
+        'lib/index.js:1996-1998',
+        '宿主 :1645 默认语义',
+        '宿主注释 :1639',
+        ':1645）。契约：同步零 I/O',
+        ':1996-1998 直调缺方法即同型断裂',
+        'LlmRuntime.imageRequestPricing :1996-1998 逐路由',
+        '宿主 :1996 消费面同构',
+        'lib/types/types.d.ts:171-178',
+        '，:159-164）',
+      ],
+      fresh: [
+        'LlmAdapter 的 prepareCall',
+        'adapterStream 的 prepared 缺省分支',
+        'LlmAdapter 默认「declares none」',
+        'prepareCall（回归原型）',
+        'LlmRuntime.imageRequestPricing 消费点',
+        'LlmAdapter.imageRequestPricing 默认语义',
+        'LlmRuntime.imageRequestPricing 消费面同构',
+        'LlmImageRequestPricing 方法式',
+        'LlmImageRequestPrice',
+        'must answer',
+      ],
+      notes: [
+        '裸锚登记形态（R3 六项要求 ①）：载体原列的裸「宿主 + 行号」短串**不作 needle**，一律扩写为**同句上下文**串（否则与他处同数字短串歧义）；同对象的多站点（原 3 处默认语义 + 2 处消费点 + 2 处契约枚举）合并为**可覆盖全部站点的上下文子串**，不逐站点重复登记。',
+      ],
+    },
+    {
+      file: ['tests', 'fix-010-gui-fidelity.mjs'],
+      stale: [
+        'lib/index.js:554）→ GUI 渲染标记文本',
+      ],
+      fresh: [
+        'session.append("user/message", message) 持久化点',
+      ],
+      notes: [
+        '裸锚登记形态（R3 六项要求 ① + 载体 §二 自碰撞提示）：该行号短串**不作 needle**，登记串加「同句后续」上下文（判别力 ≥ 短串且零歧义）。宿主对象的行号在批 D 已勘正（原锚为 JSDoc，持久化点实在别处）。',
+      ],
+    },
+    {
+      file: ['tests', 'run-all.mjs'],
+      stale: [
+        'host-contract.mjs:96-99',
+      ],
+      fresh: [
+        '`stripComments` 同法',
+      ],
+      notes: [
+        '**在仓对象**条目（非宿主面）：对象 = 本仓 `tests/host-contract.mjs` 的 `stripComments` 实现，可机器核验；本条目只判本仓文本内的锚串形态 + 替代式指代在位。',
       ],
     },
   ]

@@ -332,6 +332,15 @@ const HOST_SHAPE_ANCHORS = [
     expectSymbolHost: [{ file: 'lib/types/agent.js', symbols: ['stateOf(', 'projectionState.pending'] }],
     consumer: ['lib/prestep.js'],
     signatures: ["stateOf(agent?.session, 'modelSelection')", 'state.pending'],
+    // FIX-043 批 F（`:270` 保留项的逐处判定 → **维持保留**，理由如下；原址 `175d3e1:tests/host-contract.mjs` 的
+    //   `:270` 经批 A 插入变更后现址 = 本 `extra` 行）：
+    //   该签名锚为**判据承载锚**，不是「宿主锚无法符号化」类的无实证保留项——机器绑定结构 =
+    //     · **机器锁 1**：本行（S2 的 needle 声明）；
+    //     · **机器锁 2**：对象文件 `tests/fix-029-host-contract.mjs`（`:638-641` 对该文件**原文**做
+    //       `includes()`，**不经** `stripComments` ⇒ 注释内的锚串同样受断言约束；单侧去行号即判红）；
+    //     · **P5 收敛纪律锁**：`lib/prestep.js` 的同一串（**无**守卫绑定，实测 0 命中）——改锚 MUST 三处同步。
+    //   处置依令：**先改判据再改锚**，且判据/对象侧均在 tests 面 ⇒ 本批不动该串。R4 §2.1 已独立复算谓词
+    //   （现文 `[true,true]` / 假设去行号 `[false,true]`）。登记面 = `tests/host-abi-health.mjs` 的本文件条目 `notes`。
     extra: [{ file: 'tests/fix-029-host-contract.mjs', signatures: ['types/agent.js:297-318', "key === 'modelSelection'"] }],
   },
   {
@@ -620,7 +629,12 @@ console.log('S2 宿主源码形状锚点（P10-④：形状签名 + 宿主源码
       // 符号宿主可达性（FIX-043 批 E / R1 P1-2 取处置 a；M-B4 同形：真包真文件 + 捏造符号曾 exit 0）。
       // 声明面不完备时包名可能非字符串 ⇒ 用安全标签（上方完备性判据已判红，此处不裸抛、可诊断）。
       const declaredPackage = typeof anchorCase.expectPackage === 'string' ? anchorCase.expectPackage : '<expectPackage 未声明>'
-      const absentSymbols = anchorCase.expectSymbolHost.flatMap((entry) => entry.symbols
+      // FIX-043 批 F / R2 P2-1 收口：`expectSymbolHost` **省略/畸形**时先归一为空表，再 `.flatMap`——
+      //   否则运行时裸抛 TypeError 并**截断其后全部诊断输出**（判据仍 fail-closed：对偶的
+      //   `symbolHostGapsOf` 完备性判据已在上方判红，故本处只承担「不崩栈 + 诊断完整」的 P8 义务）。
+      //   `entry.symbols` 同法兜底（畸形条目不得击穿诊断面）；`hostSourceOf` 对非字符串 file 已返 null。
+      const symbolHostMap = Array.isArray(anchorCase.expectSymbolHost) ? anchorCase.expectSymbolHost : []
+      const absentSymbols = symbolHostMap.flatMap((entry) => (Array.isArray(entry?.symbols) ? entry.symbols : [])
         .filter((symbol) => !(hostSourceOf(declaredPackage, entry.file) ?? '').includes(symbol))
         .map((symbol) => `${declaredPackage}/${entry.file} :: ${symbol}`))
       check(`S2 形状锚点: ${anchorCase.face} 声明的宿主符号逐字在宿主源码内（捏造符号即红；靶子 ${hostTarget.origin}）`,

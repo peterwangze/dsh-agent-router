@@ -16,6 +16,12 @@
 //   dsh-client-ui-plan inject(sessionId)），不再提供 input（快照 prop）——
 //   宿主注入面 = ctx.uiSession.provide({hooks:['conversation','input'],...})
 //   （PropsHooks：input → useInput，dsh-client-ui-conversation :16041-16056）。
+//   **FIX-043 批 F 判定（未闭合；与 `lib/client.js` 侧同判 = 跨文件同步）**：上行行号锚的**对象不成立**
+//   ——`PropsHooks` 在该宿主包内 **0 命中**，该区间实为 InputBar 的 JSX 渲染段（批 C 宿主只读实读判定
+//   「不准」；该包真实注入面在别处）。按 P10-④「不得虚构宿主符号」⇒ 本处**维持原锚 + 显式登记**，
+//   **不按心智模型改指**；真实归属待定位后与 `lib/client.js` 侧一并收敛。登记面 =
+//   `tests/host-abi-health.mjs` 的本文件条目 `notes`（同条另有 `types/agent.js` 的 `:297-318`
+//   判据承载锚的保留登记）。
 //   ModelTakeover 读 props.input.imageIds → undefined → imageCount 恒 0 →
 //   takeoverArmed 永不成立（贴图不接管，用户被迫手动切换）。
 //
