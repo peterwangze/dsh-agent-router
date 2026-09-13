@@ -784,7 +784,26 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   （13/17/11），其中余留者**全部**为宿主包锚。**口径差异说明**：不同正则粒度会给出
     //   不同数字（如审查员口径把 `L5682-5760` 只计为 `L5682`、并排除 `/:342` 形态 ⇒
     //   13/17/8 = 38）——**数字必须连口径引用**，且随文本增删自动变化，不得作长期基线。
-    { file: ['lib', 'client.js'], stale: ['lib/oauth-llm.js:43', 'presetDiagnostics :2109', 'health.js:35-48', 'OAUTH_ROUTE_PROVIDER :36', '权威单点 :124-125', 'lib/client.js:4754-4825'], fresh: ['lib/oauth-llm.js `export const', 'presetDiagnostics 方法存在性先例', 'lib/host-abi/health.js noteHostDiag', 'HOST_FACE_ERROR_CODES 三错误码', 'connection handle 面只有 isLoopback'] },
+    // FIX-043 批 B（锚族分批清扫 批 B 收口）：**镜像对 24 处**（`lib/client.js` 12 处 ↔
+    //   `tests/served-client.js` 12 处）行号式锚**逐处语义判定**后登记（判定表见交付报告；
+    //   禁 grep 批量改写）。口径 = 批 A 同口径 `git grep -nE
+    //   '([A-Za-z0-9_./-]+\.(js|mjs)):[0-9]+(-[0-9]+)?' -- <文件>`（行数口径）：批前 @`813c4a9`
+    //   = 每文件 **12**；本批交付后同命令 = 每文件 **0**——引用 MUST 按引用时点重跑并标注修订，
+    //   不得沿用他时点数字、不得作长期基线。
+    //   判定要点（逐处）：**12 处全部为宿主包锚**（对象不在本仓库面），其中 **11 处的宿主对象已在
+    //   本机宿主靶子逐字实读**（`_npx/1e7f6d9597241db0/node_modules/@deepseek-ai`，只读）⇒ 按
+    //   FIX-042 W3.3 试点同法去行号改「包名 + 文件 + 符号名」式；**1 处为跨文件归属勘正**——
+    //   `:2596-2630` 原属宿主 `dsh-host-apiproxy`（该包在本机 DSH 0.1.5-rc.2 装态中**不存在**，
+    //   历史 P3-1/P2-2 直接读源码的采样为更早宿主构造）⇒ 改用本轮实读可达且语义同源的
+    //   `dsh-api-session-controller` 的 `session.selectModel` 面 + prompt 侧准入 + pi-ai
+    //   `streamWithSnapshot()`；**零新增未实证宿主符号**（P10-④）。**镜像侧不重复登记**：
+    //   §3 的字节恒等判据（`served-client mirror stays byte-identical to lib/client.js`）是更强的
+    //   保证（逐字节相等 ⇒ 内容判据自动传递；本批实测两侧 blob 同一 `7913db8c`）。
+    //   宿主锚对象不可本仓核验 ⇒ 本条目只判**本仓文本内的锚串形态**，不声称机器覆盖宿主对象
+    //   （基线登记与人工复检义务见上方注释）；本批新增的宿主可达面机器判据在
+    //   `tests/host-contract.mjs` S2/S5（`expectPackage`/`expectFile`/`expectSymbol` + 靶子文件
+    //   存在性核验——R0 P1-1 收口，宿主可达时生效）。
+    { file: ['lib', 'client.js'], stale: ['lib/oauth-llm.js:43', 'presetDiagnostics :2109', 'health.js:35-48', 'OAUTH_ROUTE_PROVIDER :36', '权威单点 :124-125', 'lib/client.js:4754-4825', 'lib/index.js:2596-2630', ':2749-2760', 'dsh-llm-pi-ai index.js:1721', 'lib/client.js:889-911', 'remote-events.js:12-32', 'lib/client.js:581', 'lib/client.js:2842-2848', 'lib/client.js:4493-4499', 'lib/client.js:175-179', 'lib/index.js:19', 'lib/client.js:170', 'lib/client.js:752', 'lib/client.js:193', ':991-992/:2556-2588'], fresh: ['lib/oauth-llm.js `export const', 'presetDiagnostics 方法存在性先例', 'lib/host-abi/health.js noteHostDiag', 'HOST_FACE_ERROR_CODES 三错误码', 'connection handle 面只有 isLoopback', 'joinProviderDirectory 同构镜像', 'API_REMOTE_FORWARDED_EVENTS（19 项转发事件）', 'waitingFor 记录按 fiber.inject 过滤', '的 static inject（remote.credentials/llm/settings）', '的 inject 数组声明', '的 ctx.remote.$on 订阅', '的 directoryFor 面）的 directoryFor(sessionId).load()', 'scope.modelDirectories 属性面', 'directoryFor「resolved no scope」', 'dsh-llm-pi-ai 的 streamWithSnapshot()', 'session.selectModel 面）：session.selectModel 仅 resolveCallConfig', '的 prompt 侧准入'] },
     //   **宿主锚核验基线登记**（FIX-042 W3.2，落于本注释处）：
     //     基线 = 依赖声明 `^0.1.5-rc.2`（package.json dependencies/peerDependencies 的
     //     `@deepseek-ai/dsh-*` 面；本机实装抽样 = **0.1.5-rc.2**，宿主 checkout 实测见
@@ -823,23 +842,34 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   **8** 文件（5 lib + `tests/rpc-shadow-guard.mjs` + `tests/client-render.mjs` + 镜像侧
     //   `tests/served-client.js`）/ 条目 24→**25** / 断言 **174**；4 笔合计 **15** 文件（`--numstat` 口径）。
     //   **隔行站点登记**（FIX-042 R0 F-3）：对象在同块**隔行**（非同/上一行）的宿主锚未入 97 ——
-    //   `lib/client.js:4281`（宿主 dsh-host-apiproxy `lib/index.js:2596-2630`）、`lib/service.js:1326`
-    //   （同上宿主面 `:2582-2594`）、`lib/wrapper.js:266`（**本批已按 W3.3 同法**去行号改符号名式：
-    //   宿主 dsh-llm 的 `resolveModelInfo → resolveModelInfoFor → adapter.resolveModel` 链——该处
-    //   为清单外**真漂移**，审查员以宿主树只读实证 `:1397-1403` 现为 `assembleAssistantStream`）。
-    //   前两处本轮**不改**（宿主锚不可本仓核验、同句无具名宿主符号 ⇒ 避免新幻觉引用），后续批以
-    //   逐处语义判定收敛。
+    //   三处站点为「`lib/client.js` 的 `session.selectModel` 面」（宿主 `dsh-host-apiproxy` 面、
+    //   隔行线索）、「`lib/service.js` 的模型信息面」（同上宿主面）、「`lib/wrapper.js` 的模型解析链」
+    //   （**FIX-042 已按 W3.3 同法**去行号改符号名式：宿主 dsh-llm 的
+    //   `resolveModelInfo → resolveModelInfoFor → adapter.resolveModel` 链——该处为清单外**真漂移**，
+    //   审查员以宿主树只读实证原锚现为 `assembleAssistantStream`）。
+    //   **FIX-043 批 B 收敛（登记修订）**：第一处（`lib/client.js`）本批已收敛——原宿主
+    //   `dsh-host-apiproxy` 在本机 DSH 0.1.5-rc.2 装态中**不存在**（靶子实读判在），故改用本轮
+    //   实读可达且语义同源的 `dsh-api-session-controller` 的 `session.selectModel` 面 +
+    //   prompt 侧准入 + pi-ai `streamWithSnapshot()`，包×文件存在性由 `tests/host-contract.mjs`
+    //   S2 判据机器核验；**第二处（`lib/service.js`）不在本批锁面，归后续批**（如实登记，不制造
+    //   跨文件改动）；第三处已于 FIX-042 收敛。
     // FIX-042 W1/W2：在仓漂移锚收口批（8 文件）的看护接线——FIX-041 R1 §三.3 硬前置「逐处语义
     //   判定」已逐处执行（判定表见 FIX-042 交付报告 W1），本段只登记**判定后**的 stale/fresh 对：
     //   stale = 本轮清除的旧行号式锚串（零残留即绿）；fresh = 替代式符号名/代码串锚（在位即绿）。
     //   FIX-043 ⑥ 如实口径（FIX-042 R1 P3-2 收口——原句写「9 处自锚」与实测不符）：宿主锚（`dsh-*` /
-    //   宿主 上下文，含 `lib/client.js` 内 **8 处** `lib/client.js:<NNN>`——**全部为宿主包锚**
-    //   （包名在邻近行：7 处紧邻上一行、1 处为上二行同句续行），**非本仓自锚**）**不入本清单**：
-    //   对象不在本仓库面，仓库级守卫不可解析宿主树（基线登记与人工复检义务见上方注释）。
-    //   **数字口径 + 取数时点绑定**：口径 = `git grep -oE 'lib/client\.js:[0-9]+(-[0-9]+)?'
-    //   -- lib/client.js`（匹配次数）；取数修订 `175d3e1` 实测 = **8 处**（FIX-042 批前树 `6bc3841`
-    //   = 9 处，差额 1 处 = `lib/client.js` 的 `:4754-4825` 已随 FIX-042 W1/W2 清扫）——历史数字
-    //   （R0 / FIX-041 R1 记为 9 处）**不得沿用**，引用 MUST 按引用时点重跑并标注修订。
+    //   宿主 上下文，**非本仓自锚**）**不入本清单**：对象不在本仓库面，仓库级守卫不可解析宿主树
+    //   （基线登记与人工复检义务见上方注释）。
+    //   **数字口径 + 取数时点绑定（FIX-043 批 B 复算修订——原句「8 处 / 包名邻近行分布」在两批清扫后
+    //   已失真，属 FIX-042 R0 P2-1 同族：不得沿用他时点数字）**：
+    //   口径 a = `git grep -oE 'lib/client\.js:[0-9]+(-[0-9]+)?' -- lib/client.js`（**匹配次数**，非行数）：
+    //     `6bc3841`（FIX-042 批前树）= **9** → `175d3e1` / `813c4a9` = **8** → **本批交付后 @工作树 = 0**
+    //     （本批清除的 7 处 `lib/client.js` 自指宿主锚 + 1 处 FIX-042 已清 = 差额来源可逐处追溯）。
+    //   口径 b = 上述 FIX-041 R0 F-3 的三种行号形态 matchAll（① 文件:行号 ② `L###` ③ 裸 `:NNN`）：
+    //     `813c4a9` = **40**（①12 / ②17 / ③11）→ **本批交付后 @工作树 = 24**（①0 / ②17 / ③7）
+    //     —— ① 归零；③ 余 7 处为**刻意保留**项（`ui-conversation` 跨包、`dynamicCordisContext` 同块、
+    //     `ModelDirectory` generation 守卫/`store.subscribe` 三处**宿主靶子不可稳定符号化**⇒ 无实证
+    //     不引入新符号，P10-④），登记为后续批逐处判定。
+    //   **任何引用 MUST 按引用时点重跑并标注修订，不得沿用他时点数字、不得作长期基线。**
     { file: ['lib', 'host-abi', 'health.js'], stale: ['lib/preset-defaults.js:116-124', OLD_PRESETDIAG_LINE_ANCHOR], fresh: ['presetDiag/notePresetDiag'] },
     // FIX-043 ⑤（FIX-042 R1 P3-1 收口）：F-3 登记曾把被清扫的锚串**逐字**写入守卫 ⇒ 该 needle 成
     //   「自碰撞死 needle」（守卫自身 +1、目标文件 0）。改**拼接常量**登记——needle 值与判据
@@ -871,6 +901,12 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     { file: ['tests', 'fix-012-image-takeover.mjs'], stale: ['lib/client.js:3226'], fresh: ['lib/client.js 的旧假设'] },
     // FIX-042 W3.3：宿主锚有界试点（本仓文本侧判据——去行号改包名+符号名式；宿主对象核验不可机器化，
     //   见上方基线登记）。lib/host-route.js 为本批新增条目（其余试点文件已并入各自既有条目）。
+    // FIX-043 批 B：**隔行站点**登记批 A 两处已由本批收敛——`lib/client.js` 的宿主
+    //   `dsh-host-apiproxy` 行号锚已改用本机宿主靶子实读可达的 `dsh-api-session-controller` 面
+    //   （包 × 文件存在性由 `tests/host-contract.mjs` S2 判据核验）；`lib/service.js` 的
+    //   `:2582-2594` 同族站点**不在本批锁面**，归后续批（登记，不制造改动）。
+    //   **守卫自身面**（下方 ⑥ 段落注释中的 `:4281` / `dsh-host-apiproxy` 计数句）同属锁外，
+    //   其计数口径随本批收敛已失真——归后续批修正（P1-2 同族；本批不声称已修正）。
     { file: ['lib', 'host-route.js'], stale: ['dsh-credentials-local resolve(:473)/set(:513)/unset(:517)'], fresh: ['宿主 dsh-credentials-local 的 `resolve`/`set`/`unset`'] },
     // FIX-043 批 A（锚族分批清扫 批 A 收口）：`tests/host-contract.mjs` 的 19 处行号式锚**逐处语义判定**
     //   后登记如下（判定表见交付报告；禁 grep 批量改写）。判定要点：**8 处是 `anchor:` 字段且被
@@ -922,7 +958,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
         'settings_describe_result schema',
         'credentials_describe_result schema',
         'agentPresets_list_result schema',
-        'directoryFor(sessionId: SessionId) 面',
+        'directoryFor(sessionId: SessionId): ModelDirectory 面',
         '设计 §5.1(a)',
         '锚点带「宿主包名 + 宿主文件 + 宿主符号」',
         '锚点带「宿主包名 + 宿主文件 + schema 符号」',
