@@ -3,7 +3,7 @@
 - **session_id**: 20260913-GOV010-DATA-HEALTH-PM
 - **session_date**: 2026-09-13
 - **agent**: deepseek-flash @ DeepSeek Harness + software-project-governance v0.80.0
-- **工作流版本**: 0.80.0
+- **工作流版本**: 0.81.0
 - **最新已发布版本**: v0.5.0（2026-09-12，tag `2a119f9` + GitHub Release `dsh-agent-router-0.5.0.tar.gz`）
 - **mode**: always-on × maximum-autonomy（**文件策略 = danger-full-access**，用户本会话切换；approval prompts 已禁用）
 
