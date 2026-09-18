@@ -238,8 +238,10 @@ const makeConversation = (kindsById) => ({
 })
 // 新形态经 useInput hook 注入（宿主现行 standardProps 面——props.input 恒
 // undefined，FIX-029-B 同款驱动）；conversation = kind 解析面 fake。
-const takeoverNew = (api, sessionId, snapshot, pathKey, conversation) =>
-  renderInto(react.createElement(bundleExports.ModelTakeover, { sessionId, useInput: (sel) => sel(snapshot), api, conversation }), pathKey)
+// FIX-049 新形态经 useInput hook 注入时可选携带 router（按需能力刷新注入面，
+// 见下方 fix-049 块）——既有调用方不传 = undefined = 无刷新面，行为不变。
+const takeoverNew = (api, sessionId, snapshot, pathKey, conversation, router) =>
+  renderInto(react.createElement(bundleExports.ModelTakeover, { sessionId, useInput: (sel) => sel(snapshot), api, conversation, router }), pathKey)
 
 console.log('fix-012 image-conditional takeover (RED on old code — armed only by switch):')
 {
@@ -311,7 +313,7 @@ console.log('fix-048 attachmentIds InputState dual-form counting (RED on imageId
   await takeoverNew(n5.api, 'n5', attState(['att-img-3']), 'takeover-n5', makeConversation({ 'att-img-3': 'image' }))
   check('N5a: 新形态贴图即切（armedBy=image）', twinSelect(n5.calls))
   n5.calls.length = 0
-  await takeoverNew(n5.api, 'n5', attState([]), 'takeover-n5', makeConversation({}))
+  await takeoverNew(n5.api, 'n5', inputStateOf([]), 'takeover-n5', makeConversation({}))
   check('N5b: 新形态发送后保持（归零零还原调用）', n5.calls.length === 0)
 
   // N6 capabilitySuppressed 语义保持（新形态）：多模态主模型 + 新形态贴图 →
@@ -474,6 +476,108 @@ console.log('fix-018 capability-gated takeover (RED on old code — armed ignore
   bundleExports.setRouterCatalog({ ...catalogOf(false), defaults: { ...MM }, mainModelImage: { acceptsImage: false, source: 'probe-failed', provider: MM.provider, model: MM.model } })
   await takeover(f5.api, 'f5', ['img-1'], 'takeover-f5')
   check('F18-5b: 能力快照反转为不支持 → effect 重跑补接管（deps 看护）', mmTwinSelect(f5.calls))
+}
+
+console.log('fix-049 capability snapshot drift window (RED on stale-snapshot-only gating):')
+{
+  // FIX-049（用户报障 2026-09-18 真机复验第二轮）：原生多模态模型
+  // （deepseek-official/deepseek-flash——宿主声明 image，vision agent 当日带图
+  // 调用成功佐证）会话内选中后贴图，仍自动跳「+多模态」twin。
+  // 根因：currentModelAcceptsImage 门控（FIX-018）消费的 catalog.mainModelImage
+  // 按默认选择计算、随 ~30s 轮询刷新——会话内切模型后立即贴图必落「快照 vs
+  // 当前」不匹配窗口 → 门控按保守侧放行切换；FIX-012「image 来源接管永不自动
+  // 还原」使误切停留永久化。修复（方向 A，最小侵入）：armed 且未 wrapped 且
+  // 快照与当前选择不匹配/缺失时，按需直调 router/catalog RPC 取新鲜判定
+  // （服务端 mainModelImageCapability 每次 RPC 实时重算：host-declared 无缓存；
+  // self-certified 的 60s TTL 按 provider\0model\0modality 分键——新选中模型
+  // 必走新鲜探测，见 lib/wrapper.js sourceAcceptsModality），新鲜判定命中 →
+  // suppress 直传主模型（FIX-018 意图在时序上成立）；刷新不可达/失败/超时/
+  // 仍不匹配 → 保守回落既有切换（宁多切不漏图不破坏）。防抖：同 sessionId +
+  // 同快照签名 + 同当前选择不重复刷（30s 轮询兜底保留）。
+  const MM2 = { provider: 'deepseek-official', model: 'deepseek-flash' } // 原生多模态（宿主声明 image）
+  const mm2TwinSelect = (calls) => calls.some((call) => call.provider === 'deepseek-official-router' && call.model === MM2.model)
+  // 漂移窗口夹具：快照 = 旧默认选择（纯文本 NATIVE 判定），当前 = 新选中多模态 MM2。
+  const STALE = { ...catalogOf(false), defaults: { ...NATIVE }, mainModelImage: { acceptsImage: false, source: 'probe-failed', provider: NATIVE.provider, model: NATIVE.model } }
+  const FRESH = { ...catalogOf(false), defaults: { ...MM2 }, mainModelImage: { acceptsImage: true, source: 'host-declared', provider: MM2.provider, model: MM2.model } }
+
+  // D49-0 装配契约（fix-029 C 组同款源码级守卫——装配层漏透传 = 组件恒走
+  // 无刷新保守切换，FIX-029-B 同型事故面）：ModelTakeover 装配透传 router +
+  // router-model-takeover 槽位 inject 提供 router: routerRemote。旧代码两处皆缺 → RED。
+  const d49Mount = source.indexOf('el(ModelTakeover, {')
+  const d49Wiring = d49Mount > 0 ? source.slice(d49Mount, source.indexOf('}))', d49Mount)) : ''
+  check('D49-0a: ModelTakeover 装配透传 router（FIX-049 按需刷新注入面）', /router:\s*props\.router/.test(d49Wiring))
+  const d49InjectAt = source.indexOf("id: 'router-model-takeover'")
+  const d49Inject = d49InjectAt > 0 ? source.slice(d49InjectAt, source.indexOf('}, (props)', d49InjectAt)) : ''
+  check('D49-0b: model-takeover 槽位 inject 提供 router: routerRemote', /router:\s*routerRemote/.test(d49Inject))
+
+  // D49-1 核心判别（旧代码必败）：漂移窗口内贴图 → 按需刷新命中 → 不切 twin。
+  let d49FreshCalls = 0
+  const freshRemote = () => ({ catalog: async () => { d49FreshCalls += 1; return { ok: true, value: FRESH } } })
+  const d1 = makeApi(MM2)
+  bundleExports.setRouterCatalog(STALE)
+  await takeoverNew(d1.api, 'd49-1', inputStateOf(['att-img-9']), 'takeover-d49-1', makeConversation({ 'att-img-9': 'image' }), freshRemote)
+  check('D49-1: 快照漂移窗口贴图 → 按需刷新命中 → 不切 twin（旧代码必败）', d1.calls.length === 0 && d49FreshCalls === 1)
+
+  // D49-2 刷新失败 → 保守回落既有接管（宁多切不漏图不破坏——图经 twin 必可达）。
+  let d49FailCalls = 0
+  const failingRemote = () => ({ catalog: async () => { d49FailCalls += 1; throw new Error('catalog rpc down') } })
+  const d2 = makeApi(MM2)
+  bundleExports.setRouterCatalog(STALE)
+  await takeoverNew(d2.api, 'd49-2', inputStateOf(['att-img-10']), 'takeover-d49-2', makeConversation({ 'att-img-10': 'image' }), failingRemote)
+  check('D49-2: 刷新失败 → 保守回落既有接管（图经 twin 必可达）', d49FailCalls === 1 && mm2TwinSelect(d2.calls))
+
+  // D49-3 防抖：同 sessionId + 同快照签名 + 同当前选择不重复刷——切换失败
+  // （selectModel ok:false，停留原生）后贴图数变化触发 effect 重跑，第二次判定
+  // 不得再发 catalog RPC（30s 轮询兜底保留）。旧代码无刷新面 → RPC 计数 0 → RED。
+  let d49DebounceCalls = 0
+  const debounceRemote = () => ({ catalog: async () => { d49DebounceCalls += 1; throw new Error('catalog rpc down') } })
+  const d3 = makeApi(MM2)
+  const d3Attempts = []
+  d3.api.sessions.selectModel = async (payload) => { d3Attempts.push({ ...payload }); return { result: { ok: false, error: { message: 'deliberate' } } } }
+  bundleExports.setRouterCatalog(STALE)
+  await takeoverNew(d3.api, 'd49-3', inputStateOf(['att-img-11']), 'takeover-d49-3', makeConversation({ 'att-img-11': 'image' }), debounceRemote)
+  await takeoverNew(d3.api, 'd49-3', inputStateOf(['att-img-11', 'att-img-12']), 'takeover-d49-3', makeConversation({ 'att-img-11': 'image', 'att-img-12': 'image' }), debounceRemote)
+  check('D49-3: 同会话同快照防抖——第二次触发零重复 catalog RPC（切换重试仍在）', d49DebounceCalls === 1 && d3Attempts.length === 2)
+
+  // D49-4 suppress 后发送路径（FIX-012 语义不回退）：刷新命中 suppress（未接管、
+  // 无记忆）→ attachmentIds 归零（发送）→ 零 selectModel（无还原可言）。
+  let d49SendCalls = 0
+  const sendRemote = () => ({ catalog: async () => { d49SendCalls += 1; return { ok: true, value: FRESH } } })
+  const d4 = makeApi(MM2)
+  bundleExports.setRouterCatalog(STALE)
+  await takeoverNew(d4.api, 'd49-4', inputStateOf(['att-img-13']), 'takeover-d49-4', makeConversation({ 'att-img-13': 'image' }), sendRemote)
+  check('D49-4a: 贴图（漂移窗口）→ 刷新命中 suppress 不切（旧代码必败）', d4.calls.length === 0)
+  await takeoverNew(d4.api, 'd49-4', inputStateOf([]), 'takeover-d49-4', makeConversation({}), sendRemote)
+  check('D49-4b: suppress 后发送（归零）→ 零 selectModel（FIX-012 无还原语义保持）', d4.calls.length === 0)
+
+  // D49-5 回归护栏（非 RED 判别——新旧代码皆过）：快照确实命中（等过刷新周期）
+  // 时行为不变——suppress 短路在前 → 零多余 catalog RPC（不刷新）+ 不切 twin。
+  let d49HitCalls = 0
+  const hitRemote = () => ({ catalog: async () => { d49HitCalls += 1; return { ok: true, value: FRESH } } })
+  const d5 = makeApi(MM2)
+  bundleExports.setRouterCatalog(FRESH)
+  await takeoverNew(d5.api, 'd49-5', inputStateOf(['att-img-14']), 'takeover-d49-5', makeConversation({ 'att-img-14': 'image' }), hitRemote)
+  check('D49-5: 快照已命中 → suppress 生效且零按需刷新（行为不变护栏）', d5.calls.length === 0 && d49HitCalls === 0)
+
+  // D49-6 判定缺失触发（旧代码必败）：快照无 mainModelImage（旧服务端/无默认
+  // 选择形态）+ 按需刷新拿到新鲜命中 → suppress 不切。
+  let d49MissingCalls = 0
+  const missingRemote = () => ({ catalog: async () => { d49MissingCalls += 1; return { ok: true, value: FRESH } } })
+  const d6 = makeApi(MM2)
+  bundleExports.setRouterCatalog(catalogOf(false)) // 无 mainModelImage
+  await takeoverNew(d6.api, 'd49-6', inputStateOf(['att-img-15']), 'takeover-d49-6', makeConversation({ 'att-img-15': 'image' }), missingRemote)
+  check('D49-6: 能力判定缺失 → 按需刷新命中 → 不切 twin（旧代码必败）', d6.calls.length === 0 && d49MissingCalls === 1)
+
+  // D49-7 刷新超时 → 保守切换保持（图必可达；竞速上限
+  // CAPABILITY_REFRESH_TIMEOUT_MS）。真实计时器等待上限——确定性由 timer 语义
+  // 保证（非负载相关）；hangRemote 永不 resolve，超时前零判定。
+  const d7 = makeApi(MM2)
+  let d7HangCalls = 0
+  const hangRemote = () => ({ catalog: () => new Promise(() => { d7HangCalls += 1 }) })
+  bundleExports.setRouterCatalog(STALE)
+  await takeoverNew(d7.api, 'd49-7', inputStateOf(['att-img-16']), 'takeover-d49-7', makeConversation({ 'att-img-16': 'image' }), hangRemote)
+  await new Promise((resolve) => setTimeout(resolve, 2400))
+  check('D49-7: 刷新超时 → 保守回落既有接管（图经 twin 必可达）', d7HangCalls === 1 && mm2TwinSelect(d7.calls))
 }
 
 if (renderErrors.length > 0) {
