@@ -209,7 +209,37 @@ function makeApi(initial = NATIVE) {
 }
 const twinSelect = (calls) => calls.some((call) => call.provider === TWIN.provider && call.model === TWIN.model)
 const nativeSelect = (calls) => calls.some((call) => call.provider === NATIVE.provider && call.model === NATIVE.model)
+// FIX-048 标注：本 helper 为**旧宿主形态回落**测试通道——props.input.imageIds
+// （宿主 0.1.2-rc.x 前契约，长度即图片数）。现行宿主 0.1.5-rc.1 的 InputState
+// （attachmentIds 统一编址）经下方 inputStateOf/takeoverNew 新形态通道驱动。
 const takeover = (api, sessionId, imageIds, pathKey) => renderInto(react.createElement(bundleExports.ModelTakeover, { sessionId, input: { imageIds }, api }), pathKey)
+
+// ── FIX-048 新形态夹具（逐字段锚定宿主 InputState 契约，禁心智模型桩——P10-④）──
+// 权威宿主契约（2026-09-18 只读实读，宿主 npx checkout 实跑版 0.1.5-rc.1，包
+// @deepseek-ai/dsh-client-ui-conversation）：
+//  - `lib/types/client/contract/input.d.ts` 的 `export interface InputState`：
+//    字段 draft / attachmentIds / draftRev / phase / claim / occurrences /
+//    queue；附件 = 不透明 `attachmentIds: readonly DraftAttachmentId[]`
+//    （M2 image/file 统一编址），**无 imageIds 字段**（宿主消费点 = 同包
+//    lib/client.js 的 InputBar：resolveDraftAttachments(input.attachmentIds)）。
+//  - kind 解析面：`lib/types/client/service.d.ts` 的
+//    `resolveDraftAttachments(ids): readonly ComposerAttachment[]`
+//    （ConversationController 以 `conversation` 名注册 plugin ctx——宿主
+//    lib/client.js `super(ctx, "conversation")`）；`ComposerAttachment.kind:
+//    'image' | 'file'`（`lib/types/client/contract/slots.d.ts` 的
+//    ComposerImageAttachment / ComposerFileAttachment）。
+const inputStateOf = (attachmentIds) => ({
+  draft: '', attachmentIds, draftRev: 1, phase: 'plain', occurrences: [], queue: [],
+})
+const makeConversation = (kindsById) => ({
+  resolveDraftAttachments: (ids) => ids.map((id) => (kindsById[id] ?? 'file') === 'image'
+    ? { kind: 'image', id, file: {}, previewUrl: '' }
+    : { kind: 'file', id, file: {} }),
+})
+// 新形态经 useInput hook 注入（宿主现行 standardProps 面——props.input 恒
+// undefined，FIX-029-B 同款驱动）；conversation = kind 解析面 fake。
+const takeoverNew = (api, sessionId, snapshot, pathKey, conversation) =>
+  renderInto(react.createElement(bundleExports.ModelTakeover, { sessionId, useInput: (sel) => sel(snapshot), api, conversation }), pathKey)
 
 console.log('fix-012 image-conditional takeover (RED on old code — armed only by switch):')
 {
@@ -233,6 +263,64 @@ console.log('fix-012 image-conditional takeover (RED on old code — armed only 
   bundleExports.setRouterCatalog(catalogOf(true))
   await takeover(q4.api, 'q4', [], 'takeover-q4')
   check('Q4: 无图 + takeoverDefaultModel=true → 接管（FIX-002 开启语义保持）', twinSelect(q4.calls))
+}
+
+console.log('fix-048 attachmentIds InputState dual-form counting (RED on imageIds-only code):')
+{
+  // FIX-048：宿主 0.1.5-rc.1 M2 附件统一编址——InputState.attachmentIds 取代
+  // imageIds（全宿主树 grep 零 imageIds 命中），旧代码只读 imageIds → imageCount
+  // 恒 0 → 贴图永不武装（用户报障 2026-09-18：宿主准入拦「当前模型不支持图片」）。
+  // kind 判定取方案 A（解析面可达 → 仅 image-kind 计数，「贴图即切」指图片）+
+  // 方案 B 保守回落（面不可达 → attachmentIds.length，宁多切不漏图——file-only
+  // 亦武装，wrapper 对无图轮零改写委托原生模型；取舍披露见 lib/client.js
+  // inputImageCountOf 注释）。失效窗口 EV-158（2026-09-07 真机验证通过）→ 宿主
+  // M2 演进 → 桩形态未锚定宿主源码（P10-④）恒绿的教训由本组修正。
+  const attState = inputStateOf
+
+  // N1 核心判别（新形态 + kind 解析面）：现行宿主 InputState 含 image-kind
+  // 附件 + 开关 false → 贴图自动切 twin 恢复。旧代码必败（imageCount 恒 0）。
+  const n1 = makeApi()
+  bundleExports.setRouterCatalog(catalogOf(false))
+  await takeoverNew(n1.api, 'n1', attState(['att-img-1']), 'takeover-n1', makeConversation({ 'att-img-1': 'image' }))
+  check('N1: attachmentIds(image-kind) + 开关 false → 自动接管 twin（旧代码必败）', twinSelect(n1.calls))
+
+  // N2 方案 A：file-only 附件 → 不武装（kind 解析面可达时精确语义；保守回落
+  // 只属于面不可达形态，二者不同时成立——见 N4）。
+  const n2 = makeApi()
+  bundleExports.setRouterCatalog(catalogOf(false))
+  await takeoverNew(n2.api, 'n2', attState(['att-file-1']), 'takeover-n2', makeConversation({ 'att-file-1': 'file' }))
+  check('N2: attachmentIds(file-only) + 开关 false → 不武装（方案 A kind 精确语义）', n2.calls.length === 0)
+
+  // N3 混合附件（file+image）→ ≥1 个 image-kind 即武装。
+  const n3 = makeApi()
+  bundleExports.setRouterCatalog(catalogOf(false))
+  await takeoverNew(n3.api, 'n3', attState(['att-file-2', 'att-img-2']), 'takeover-n3', makeConversation({ 'att-img-2': 'image' }))
+  check('N3: attachmentIds(file+image 混合) → 接管 twin', twinSelect(n3.calls))
+
+  // N4 方案 B 保守回落：kind 解析面不可达（conversation 缺失）+ attachmentIds
+  // 非空 → 武装（kind 未知，宁多切不漏图；降级 warn 可观测——P8）。
+  const n4 = makeApi()
+  bundleExports.setRouterCatalog(catalogOf(false))
+  await takeoverNew(n4.api, 'n4', attState(['att-file-3']), 'takeover-n4', undefined)
+  check('N4: 解析面不可达 + attachmentIds 非空 → 保守武装（方案 B 回落）', twinSelect(n4.calls))
+
+  // N5 发送后保持（新形态）：attachmentIds 归零 → 零还原调用（FIX-012「贴图即
+  // 切、发送后保持」在 kind 解析形态下不回退；image 来源永不自动还原）。
+  const n5 = makeApi()
+  bundleExports.setRouterCatalog(catalogOf(false))
+  await takeoverNew(n5.api, 'n5', attState(['att-img-3']), 'takeover-n5', makeConversation({ 'att-img-3': 'image' }))
+  check('N5a: 新形态贴图即切（armedBy=image）', twinSelect(n5.calls))
+  n5.calls.length = 0
+  await takeoverNew(n5.api, 'n5', attState([]), 'takeover-n5', makeConversation({}))
+  check('N5b: 新形态发送后保持（归零零还原调用）', n5.calls.length === 0)
+
+  // N6 capabilitySuppressed 语义保持（新形态）：多模态主模型 + 新形态贴图 →
+  // 图直传主模型不切 twin（FIX-018 门控消费同一 imageCount，kind 形态下等价）。
+  const MM = { provider: 'chatgpt-oauth', model: 'gpt-5.6-terra' }
+  const n6 = makeApi(MM)
+  bundleExports.setRouterCatalog({ ...catalogOf(false), defaults: { ...MM }, mainModelImage: { acceptsImage: true, source: 'host-declared', provider: MM.provider, model: MM.model } })
+  await takeoverNew(n6.api, 'n6', attState(['att-img-4']), 'takeover-n6', makeConversation({ 'att-img-4': 'image' }))
+  check('N6: 多模态主模型 + 新形态贴图 → 不切 twin（capabilitySuppressed 语义保持）', n6.calls.length === 0)
 }
 
 console.log('fix-012 send/remove keep twin (host selectModel has NO image-content rejection):')

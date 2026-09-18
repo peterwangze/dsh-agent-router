@@ -951,6 +951,19 @@ console.log('F. takeover 客户端会话级:')
   }
   const listeners = []
   const registrations = []
+  // FIX-048 夹具形态：主路径改用现行宿主 InputState（attachmentIds 统一编址，
+  // 经 useInput hook 注入——宿主 0.1.5-rc.1 现行 standardProps 面；字段清单锚
+  // @deepseek-ai/dsh-client-ui-conversation lib/types/client/contract/input.d.ts
+  // 的 export interface InputState）；conversation = kind 解析面 fake（service.d.ts
+  // 的 resolveDraftAttachments(ids): readonly ComposerAttachment[]，kind:
+  // 'image'|'file' 见 contract/slots.d.ts）。旧宿主形态（props.input.imageIds——
+  // 0.1.2-rc.x 前契约）保留为回落断言（F10）。
+  const inputStateOf = (attachmentIds) => ({ draft: '', attachmentIds, draftRev: 1, phase: 'plain', occurrences: [], queue: [] })
+  const conversationFaceOf = (kinds = {}) => ({
+    resolveDraftAttachments: (ids) => ids.map((id) => (kinds[id] ?? 'file') === 'image'
+      ? { kind: 'image', id, file: {}, previewUrl: '' }
+      : { kind: 'file', id, file: {} }),
+  })
   const ctx = {
     effect: (fn) => { fn(); return () => {} },
     locale: { register: () => () => {}, bind: () => (key) => key },
@@ -969,8 +982,8 @@ console.log('F. takeover 客户端会话级:')
   check('[F0c] ModelTakeover 槽位注册成功', registrations.some((reg) => reg && reg.id === 'router-model-takeover' && typeof reg.render === 'function'))
   const takeoverReg = registrations.find((reg) => reg && reg.id === 'router-model-takeover')
   const fireCatalogRefresh = async () => { for (const entry of listeners) if (entry.event === 'settings/document-updated') entry.listener(); await flushAsync() }
-  const mount = async (sessionId, prefix, imageIds = []) => {
-    mountOnce(takeoverReg.render({ sessionId, input: { imageIds }, api: apiMock }), prefix)
+  const mount = async (sessionId, prefix, attachmentIds = [], conversation = conversationFaceOf()) => {
+    mountOnce(takeoverReg.render({ sessionId, useInput: (sel) => sel(inputStateOf(attachmentIds)), conversation, api: apiMock }), prefix)
     await flushAsync()
   }
   check('[F0d] 挂载零渲染异常', hookError === null)
@@ -1004,6 +1017,24 @@ console.log('F. takeover 客户端会话级:')
   selectCalls.length = 0
   await mount('sess-man', 'f4')
   check('[F4] 开关 false：手动 twin 不被撤销', selectCalls.length === 0 && sessionCurrent.get('sess-man').provider === 'gateway-router')
+
+  // [F9]（FIX-048 核心判别——新形态）：开关 false + 现行宿主 InputState 的
+  // attachmentIds 含 image-kind 附件（经 conversation.resolveDraftAttachments
+  // 解析 kind）→ 贴图自动接管。旧代码只读 imageIds → count 恒 0 → 不接管 → 必败红。
+  catalogSwitch = false
+  await fireCatalogRefresh()
+  sessionCurrent.set('sess-img', { provider: 'openai', model: 'gpt-4o' })
+  selectCalls.length = 0
+  await mount('sess-img', 'f9', ['att-img-9'], conversationFaceOf({ 'att-img-9': 'image' }))
+  check('[F9] 开关 false：新形态 attachmentIds(image-kind) 贴图自动接管', selectCalls.length === 1 && selectCalls[0].provider === 'openai-router' && selectCalls[0].model === 'gpt-4o')
+
+  // [F10]（FIX-048 旧宿主形态回落）：props.input.imageIds（0.1.2-rc.x 前契约）
+  // → 长度即图片数 → 同样武装（双形态回落语义不回退）。
+  sessionCurrent.set('sess-img-legacy', { provider: 'openai', model: 'gpt-4o' })
+  selectCalls.length = 0
+  mountOnce(takeoverReg.render({ sessionId: 'sess-img-legacy', input: { imageIds: ['legacy-1'] }, api: apiMock }), 'f10')
+  await flushAsync()
+  check('[F10] 旧宿主形态回落：imageIds 长度即图片数（武装保持）', selectCalls.length === 1 && selectCalls[0].provider === 'openai-router')
 
   // F5 判别（per-session 记忆隔离）：双会话各自接管（不同原生来源）→ 关回后各自还原。
   // 若来源记忆是全局单值（非 per-session Map）：B 的接管覆写来源 → A 挂载时

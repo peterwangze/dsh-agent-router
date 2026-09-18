@@ -1097,6 +1097,21 @@ export async function runClientRender(check) {
     catalogMode = 'withVision'
   }
 
+  // FIX-048 夹具形态：现行宿主 InputState（attachmentIds 统一编址，经 useInput
+  // hook 注入——宿主 0.1.5-rc.1 现行 standardProps 面；字段清单锚
+  // @deepseek-ai/dsh-client-ui-conversation lib/types/client/contract/input.d.ts
+  // 的 export interface InputState）；conversation = kind 解析面 fake（service.d.ts
+  // 的 resolveDraftAttachments(ids): readonly ComposerAttachment[]，kind:
+  // 'image'|'file' 见 contract/slots.d.ts）。旧宿主形态（input.imageIds——
+  // 0.1.2-rc.x 前契约）保留为显式回落断言（下方 legacy 条目）。
+  // 作用域：两个接管断言块（开启/幂等/停用 + FIX-002-R7 F3）共用本层定义。
+  const inputStateOf = (attachmentIds) => ({ draft: '', attachmentIds, draftRev: 1, phase: 'plain', occurrences: [], queue: [] })
+  const conversationFaceOf = (kinds = {}) => ({
+    resolveDraftAttachments: (ids) => ids.map((id) => (kinds[id] ?? 'file') === 'image'
+      ? { kind: 'image', id, file: {}, previewUrl: '' }
+      : { kind: 'file', id, file: {} }),
+  })
+
   // 模型接管（无 UI 条目）：视觉开启 → 自动切包装组；已接管幂等；关闭 → 切回原 provider。
   {
     const takeoverReg = captured.registrations.find((reg) => reg && reg.id === 'router-model-takeover')
@@ -1106,11 +1121,11 @@ export async function runClientRender(check) {
       // 开启接管：纯文本当前选中 → 自动切到包装组。
       sessionCurrent = { provider: 'openai', model: 'gpt-4o' }
       sessionSelectCalls.length = 0
-      await renderInto(takeoverReg.render({ sessionId: 'sess-1', input: { imageIds: [] }, api: apiMock }), 'takeover')
+      await renderInto(takeoverReg.render({ sessionId: 'sess-1', useInput: (sel) => sel(inputStateOf([])), conversation: conversationFaceOf(), api: apiMock }), 'takeover')
       check('takeover switches to wrap route', sessionSelectCalls.some((call) => call.provider === 'openai-router' && call.model === 'gpt-4o'))
       // 已接管：草稿变化（如贴图）重渲染不重复切（幂等，零竞态）。
       const before = sessionSelectCalls.length
-      await renderInto(takeoverReg.render({ sessionId: 'sess-1', input: { imageIds: ['draft-1'] }, api: apiMock }), 'takeover')
+      await renderInto(takeoverReg.render({ sessionId: 'sess-1', useInput: (sel) => sel(inputStateOf(['att-1'])), conversation: conversationFaceOf({ 'att-1': 'image' }), api: apiMock }), 'takeover')
       check('takeover idempotent when already wrapped', sessionSelectCalls.length === before)
       // 关闭全部多模态 agent：包装组当前选中 → 切回原 provider。
       sessionCurrent = { provider: 'openai-router', model: 'gpt-4o' }
@@ -1118,7 +1133,7 @@ export async function runClientRender(check) {
       catalogMode = 'none'
       listener && listener.listener()
       await new Promise((resolve) => setImmediate(resolve))
-      await renderInto(takeoverReg.render({ sessionId: 'sess-1', input: { imageIds: [] }, api: apiMock }), 'takeover')
+      await renderInto(takeoverReg.render({ sessionId: 'sess-1', useInput: (sel) => sel(inputStateOf([])), conversation: conversationFaceOf(), api: apiMock }), 'takeover')
       check('takeover restores original provider on disable', sessionSelectCalls.some((call) => call.provider === 'openai' && call.model === 'gpt-4o'))
       catalogMode = 'withVision'
       listener && listener.listener()
@@ -1142,7 +1157,7 @@ export async function runClientRender(check) {
       //    length===0 必败 → 判别成立。
       sessionCurrent = { provider: 'openai', model: 'gpt-4o' }
       sessionSelectCalls.length = 0
-      await renderInto(takeoverReg.render({ sessionId: 'sess-off', input: { imageIds: [] }, api: apiMock }), 'takeover-off')
+      await renderInto(takeoverReg.render({ sessionId: 'sess-off', useInput: (sel) => sel(inputStateOf([])), conversation: conversationFaceOf(), api: apiMock }), 'takeover-off')
       check('takeover off: no session takeover without switch (F3-1)', sessionSelectCalls.length === 0)
       // ② 开关 false → 不撤销用户手动选的 twin：挂载 / 贴图（imageCount 0→1）/
       //    会话切换（新 sessionId，子代理场景）三类 effect 触发均零 selectModel。
@@ -1154,14 +1169,21 @@ export async function runClientRender(check) {
       //    的渲染不会重跑 effect（deps 去重语义），那会退化成 vacuous pass。
       const manualTwin = () => { sessionCurrent = { provider: 'openai-router', model: 'gpt-4o' }; sessionSelectCalls.length = 0 }
       manualTwin()
-      await renderInto(takeoverReg.render({ sessionId: 'sess-off', input: { imageIds: [] }, api: apiMock }), 'takeover-off-2')
+      await renderInto(takeoverReg.render({ sessionId: 'sess-off', useInput: (sel) => sel(inputStateOf([])), conversation: conversationFaceOf(), api: apiMock }), 'takeover-off-2')
       check('takeover off: manual twin untouched on mount (F3-2)', sessionSelectCalls.length === 0)
       manualTwin()
-      await renderInto(takeoverReg.render({ sessionId: 'sess-off', input: { imageIds: ['draft-9'] }, api: apiMock }), 'takeover-off-2')
+      await renderInto(takeoverReg.render({ sessionId: 'sess-off', useInput: (sel) => sel(inputStateOf(['att-9'])), conversation: conversationFaceOf({ 'att-9': 'image' }), api: apiMock }), 'takeover-off-2')
       check('takeover off: paste does not revoke manual twin (F3-2)', sessionSelectCalls.length === 0)
       manualTwin()
-      await renderInto(takeoverReg.render({ sessionId: 'sess-off-2', input: { imageIds: [] }, api: apiMock }), 'takeover-off-2')
+      await renderInto(takeoverReg.render({ sessionId: 'sess-off-2', useInput: (sel) => sel(inputStateOf([])), conversation: conversationFaceOf(), api: apiMock }), 'takeover-off-2')
       check('takeover off: session switch does not revoke manual twin (F3-2)', sessionSelectCalls.length === 0)
+      // FIX-048 旧宿主形态回落断言：props.input.imageIds（0.1.2-rc.x 前契约）
+      // 长度即图片数 → 武装语义不回退（新形态为主、旧形态显式回落，无只测旧
+      // 形态假绿）。
+      sessionCurrent = { provider: 'openai', model: 'gpt-4o' }
+      sessionSelectCalls.length = 0
+      await renderInto(takeoverReg.render({ sessionId: 'sess-off-legacy', input: { imageIds: ['legacy-1'] }, api: apiMock }), 'takeover-off-legacy')
+      check('takeover legacy imageIds form still arms (FIX-048 fallback)', sessionSelectCalls.some((call) => call.provider === 'openai-router' && call.model === 'gpt-4o'))
       takeoverSwitch = true
       if (listener) listener.listener()
       await new Promise((resolve) => setImmediate(resolve))

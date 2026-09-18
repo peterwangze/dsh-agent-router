@@ -193,13 +193,14 @@ const BLOCK_ASSEMBLER_PROTO_BASELINE = ['push', 'ensure', 'assemble', 'mustGet',
  */
 const HOST_VERSION_BASELINE = Object.freeze({ dsh: '0.1.5-rc.1', dshPackages: '0.1.5-rc.2' })
 /**
- * 版本一致性判据的关键包 = `dsh` CLI + **S7 直读四包**（`dsh-api-remotes` /
- * `dsh-api-session-controller` / `dsh-client-ui-model-selection` / `dsh-llm`）+ **S3 判据两包**
+ * 版本一致性判据的关键包 = `dsh` CLI + **S7 直读包**（`dsh-api-remotes` /
+ * `dsh-api-session-controller` / `dsh-client-ui-model-selection` / `dsh-llm` /
+ * `dsh-client-ui-conversation`——FIX-048 增 InputState 形状锚同族靶子）+ **S3 判据两包**
  * （`dsh-client-ui-settings` / `dsh-client-locale`；`dsh-api-remotes` 为 S3/S7 共用）——
  * R0 P2-2 点名场景「早于 `dsh-client-ui-settings` 的旧缓存副本使 S3 半边报红而版本判据
  * 仍打绿」由此同源可判（FIX-037 R0 P2-2 收口）。
  */
-const HOST_KEY_PACKAGES = ['dsh', 'dsh-api-remotes', 'dsh-api-session-controller', 'dsh-client-ui-model-selection', 'dsh-llm', 'dsh-client-ui-settings', 'dsh-client-locale']
+const HOST_KEY_PACKAGES = ['dsh', 'dsh-api-remotes', 'dsh-api-session-controller', 'dsh-client-ui-model-selection', 'dsh-client-ui-conversation', 'dsh-llm', 'dsh-client-ui-settings', 'dsh-client-locale']
 
 /** remote.* 面方法形状基线（宿主 dsh-api-remotes TYPERT_REMOTE 描述符实读；域内 CLIENT_REMOTE_FACES 为代码侧权威）。 */
 const CLIENT_REMOTE_FACES_BASELINE = {
@@ -904,6 +905,27 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
     const llmIndex = hostRead('dsh-llm', 'lib', 'index.js')
     const llmMissing = LLM_ADAPTER_PROTO_BASELINE.filter((method) => !new RegExp(`\\b${method}\\(`).test(llmIndex))
     check('S7 增强: 宿主 LlmAdapter 契约方法源码在位（6 方法声明——快照基线可溯源）', llmMissing.length === 0, llmMissing)
+    // 7d（FIX-048）InputState 形状锚（P10-④ 的静态半边：客户端输入快照桩形态
+    //  锚定宿主源码）。FIX-048 根因 = 宿主 0.1.5-rc.1 M2 附件统一编址后
+    //  InputState 以 attachmentIds 承载附件（image/file 统一），插件只读旧
+    //  imageIds 字段 → imageCount 恒 0 → 贴图接管静默失效（EV-158 窗口）。
+    //  正向锚 = attachmentIds 字段声明逐字在位；负向锚 = 宿主契约文件重现
+    //  imageIds 字段声明即红（提示契约再漂移需人工评估——届时按实读重评双
+    //  形态回落策略，非机械改码）。kind 解析面（方案 A 依赖）与 kind 判别字段
+    //  一并锚定，与服务面消费（lib/client.js 的 conversation.resolveDraftAttachments）
+    //  构成同源证据链。
+    const inputContract = hostRead('dsh-client-ui-conversation', 'lib', 'types', 'client', 'contract', 'input.d.ts')
+    const inputStateBlock = (inputContract.match(/export interface InputState \{[\s\S]*?\n\}/) ?? [''])[0]
+    check('S7 增强: 宿主 InputState 含 attachmentIds 字段声明（FIX-048 正向锚——M2 统一编址形态）',
+      inputStateBlock.includes('readonly attachmentIds: readonly DraftAttachmentId[]'))
+    check('S7 增强: 宿主 InputState 契约文件零 imageIds 字段声明（FIX-048 负向锚——重现即红，契约再漂移需人工评估）',
+      inputStateBlock !== '' && !/readonly imageIds\s*:/.test(inputContract))
+    const conversationService = hostRead('dsh-client-ui-conversation', 'lib', 'types', 'client', 'service.d.ts')
+    check('S7 增强: 宿主 conversation 服务声明 resolveDraftAttachments kind 解析面（FIX-048 方案 A 面锚）',
+      conversationService.includes('resolveDraftAttachments(ids: readonly DraftAttachmentId[]): readonly ComposerAttachment[]'))
+    const composerSlots = hostRead('dsh-client-ui-conversation', 'lib', 'types', 'client', 'contract', 'slots.d.ts')
+    check("S7 增强: 宿主 ComposerAttachment kind 判别字段在位（FIX-048 kind 语义锚——kind: 'image' | kind: 'file'）",
+      composerSlots.includes("kind: 'image'") && composerSlots.includes("kind: 'file'"))
   }
 }
 

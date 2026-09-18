@@ -37,12 +37,15 @@
 //     A4: 投影服务缺失/未注册（旧宿主形态）→ 回落既有 header 链（行为不变）；
 //     A5: pending=null（选择已被 request/header 消费）→ 回落 header 链。
 //   B-组（ModelTakeover useInput hook 面）：
-//     B1: 仅 useInput（新宿主真实形态，快照含 imageIds）→ 贴图接管 twin
-//         （旧实现读 props.input undefined → 不接管 → 必败红）；
+//     B1: 仅 useInput（0.1.2-rc.x 旧宿主形态回落：快照含 imageIds）→ 贴图接管
+//         twin（旧实现读 props.input undefined → 不接管 → 必败红）；
 //     B2: useInput 快照 imageIds 变化（贴图→发送）→ imageCount 驱动与既有
 //         input prop 形态同源（发送后保持语义不回退）；
 //     B3: 双形态兼容——props.input（旧宿主/旧夹具形态）仍驱动（不破坏
 //         FIX-012 既有语义）。
+//     B5/B6（FIX-048）：现行宿主 0.1.5-rc.1 InputState.attachmentIds 统一编址
+//         形态（image-kind 经 conversation.resolveDraftAttachments 解析）→
+//         贴图接管恢复；file-only 不武装（方案 A kind 精确语义）。
 //
 // 门控：独立运行（node tests/fix-029-host-contract.mjs），exit 0 全绿。
 import { readFileSync } from 'node:fs'
@@ -299,8 +302,10 @@ const twinSelect = (calls) => calls.some((call) => call.provider === TWIN.provid
 
 console.log('fix-029 B: ModelTakeover useInput slot face (RED on current code — props.input only):')
 {
-  // B1：新宿主真实形态——只有 useInput（selector hook），无 input 快照 prop。
-  //    旧实现读 props.input → undefined → imageCount=0 → 不接管（必败红）。
+  // B1：0.1.2-rc.x 宿主形态回落通道——useInput hook + 快照含 imageIds（0.1.5-rc.1
+  //    M2 附件统一编址前的旧契约；FIX-048 起该形态为旧宿主回落测试，现行
+  //    InputState.attachmentIds 形态见 B5/B6）。旧实现读 props.input → undefined
+  //    → imageCount=0 → 不接管（必败红——历史判别保留）。
   const b1 = makeApi()
   bundleExports.setRouterCatalog(catalogOf(false))
   await renderInto(react.createElement(bundleExports.ModelTakeover, {
@@ -308,7 +313,7 @@ console.log('fix-029 B: ModelTakeover useInput slot face (RED on current code �
     useInput: (sel) => sel({ imageIds: ['img-1'] }),
     api: b1.api,
   }), 'takeover-b1')
-  check('B1: 仅 useInput（新宿主形态）+ 贴图 → 自动接管 twin（旧实现必败：读 props.input 不武装）', twinSelect(b1.calls))
+  check('B1: useInput+imageIds（0.1.2-rc.x 旧宿主形态回落）+ 贴图 → 自动接管 twin', twinSelect(b1.calls))
 
   // B2：useInput 快照 imageIds 空态（无图）→ 永不切换（FIX-002 主权不回退）。
   const b2 = makeApi()
@@ -346,6 +351,35 @@ console.log('fix-029 B: ModelTakeover useInput slot face (RED on current code �
     api: b4.api,
   }), 'takeover-b4')
   check('B4: useInput 形态发送后保持 twin（imageCount 归零零还原）', b4.calls.length === 0)
+
+  // B5（FIX-048 核心判别）：现行宿主 InputState（0.1.5-rc.1 M2 附件统一编址，
+  //     字段清单锚 @deepseek-ai/dsh-client-ui-conversation 的
+  //     lib/types/client/contract/input.d.ts `export interface InputState`：
+  //     draft/attachmentIds/draftRev/phase/claim/occurrences/queue）+ kind 解析面
+  //     （conversation 服务面 resolveDraftAttachments——service.d.ts 实读）→
+  //     image-kind 附件贴图接管 twin。旧代码只读 imageIds → imageCount 恒 0 →
+  //     不接管（必败红）。
+  const b5 = makeApi()
+  bundleExports.setRouterCatalog(catalogOf(false))
+  await renderInto(react.createElement(bundleExports.ModelTakeover, {
+    sessionId: 'b5',
+    useInput: (sel) => sel({ draft: '', attachmentIds: ['att-img-1'], draftRev: 1, phase: 'plain', occurrences: [], queue: [] }),
+    conversation: { resolveDraftAttachments: (ids) => ids.map((id) => ({ kind: 'image', id, file: {}, previewUrl: '' })) },
+    api: b5.api,
+  }), 'takeover-b5')
+  check('B5: InputState.attachmentIds(image-kind)+解析面 → 接管 twin（FIX-048，旧代码必败）', twinSelect(b5.calls))
+
+  // B6（FIX-048 方案 A）：attachmentIds 全为 file-kind → 不武装（「贴图即切」
+  //     指图片；解析面可达 = kind 精确语义，保守回落只属于面不可达形态）。
+  const b6 = makeApi()
+  bundleExports.setRouterCatalog(catalogOf(false))
+  await renderInto(react.createElement(bundleExports.ModelTakeover, {
+    sessionId: 'b6',
+    useInput: (sel) => sel({ draft: '', attachmentIds: ['att-file-1'], draftRev: 1, phase: 'plain', occurrences: [], queue: [] }),
+    conversation: { resolveDraftAttachments: (ids) => ids.map((id) => ({ kind: 'file', id, file: {} })) },
+    api: b6.api,
+  }), 'takeover-b6')
+  check('B6: InputState.attachmentIds(file-only) → 不武装（方案 A kind 精确语义）', b6.calls.length === 0)
 }
 
 if (renderErrors.length > 0) {
@@ -368,11 +402,17 @@ console.log('fix-029 C: assembly prop wiring (RED if wiring dropped):')
     check('C1: 装配点透传 useInput（props.useInput → 组件）', /useInput:\s*props\.useInput/.test(wiring))
     check('C2: 装配点透传 sessionId', /sessionId:\s*props\.sessionId/.test(wiring))
     check('C3: 装配点透传 api', /api:\s*props\.api/.test(wiring))
+    // FIX-048：kind 解析面经 conversation 服务（conversationFace = () =>
+    // ctx.get('conversation')，AttachButton 同款 inject 先例）——装配层漏透传
+    // = 组件内解析面恒缺失 → 恒走方案 B 保守回落（file-only 亦武装）。C5 判别
+    // 于未实现侧必败红。
+    check('C5: 装配点透传 conversation（FIX-048 kind 解析面）', /conversation:\s*props\.conversation/.test(wiring))
   }
   const served = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'served-client.js'), 'utf8')
   const servedMount = served.indexOf('el(ModelTakeover, {')
   const servedWiring = servedMount > 0 ? served.slice(servedMount, served.indexOf('}))', servedMount)) : ''
   check('C4: served-client 镜像装配同步透传 useInput', servedMount > 0 && /useInput:\s*props\.useInput/.test(servedWiring))
+  check('C6: served-client 镜像装配同步透传 conversation（FIX-048）', servedMount > 0 && /conversation:\s*props\.conversation/.test(servedWiring))
 }
 
 // ── D 组：EVO-021（ARCH-004 B3 / 设计 §3 D1-2 + ADR-ARCH-004-B）负向守卫：
