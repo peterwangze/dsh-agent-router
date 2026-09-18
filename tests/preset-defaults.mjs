@@ -82,6 +82,13 @@
 //     makeApiProxy 夹具保留专供 N1/零调用类断言。
 //   - G1 拒绝注入键随实现前移为 'sessionController'（面解析 try/catch
 //     判据不变）；D6 转义为「apiProxy 残面不被采信」守卫。
+// Rework（FIX-052，预设统计归属错乱——归属键重构为**会话预设身份不变量**）：
+//   - L9 语义重定：旧「live 罗盘优先」（EVO-017 / EV-159 终态）由用户裁决取代
+//     ——归属 = 会话身份映射（该会话自己的 agent-preset/selected 事件链）→
+//     header 创建期快照兜底 → live 罗盘仅最后兜底 + 诊断披露（判别测试 =
+//     tests/fix-052-preset-attribution.mjs 三类扰动 + 三桶正例）；
+//   - L10/L11 断言不变（罗盘不可用/抛错时归属仍由 header 快照给出——新链下
+//     header 本就在罗盘之前，两断言语义更强而非放宽）。
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -1160,7 +1167,8 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
 
 // ── L. EVO-017 判别：预设作用域请求遥测（installRequestTelemetry）──────────
 // 用户统计分级需求（2026-09-05）授权的观测豁免：agent/request 只读旁路——
-// 不改 config（主权）、按 header.agentPreset + origin 归属记 scope 统计、
+// 不改 config（主权）、按会话预设身份 + origin 归属记 scope 统计（FIX-052 链：
+// 会话身份映射 → header 创建期快照 → live 罗盘仅最后兜底 + 诊断披露）、
 // 异常零影响请求链。判别：旧实现（无本函数）导出缺失 → RED；新实现全绿。
 {
   let installRequestTelemetry = null
@@ -1271,12 +1279,16 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     return !(ctx.listeners['agent/request'] ?? []).some((entry) => true)
   })
 
-  // L9 归属错乱修正判别（用户实证 2026-09-06：标准模式会话主会话调用被误归
-  // 旧预设 governance，subagent 正确归 standard）：根因 = header.agentPreset
-  // 是创建时冻结快照（切换预设只 append 会话事件不更新 header）；修复 =
-  // 罗盘 live 解析（composedPreset(agent.ctx)——当前生效预设）优先，header
-  // 仅兜底。判别：header=旧预设 + live=新预设 → 归新预设（旧实现必败）。
-  await dcheck('L9 归属修正：live 预设优先于 header 冻结快照（旧实现必败）', async () => {
+  // L9 归属链语义重定（FIX-052——取代 EVO-017 / EV-159 的「live 罗盘优先」终态）：
+  // 旧链把宿主 live 挂载匹配（composedPreset → standingMountFor 对
+  // livePresetMounts() 的运行时扫描，dsh-agent-presets L787-793/L1550-1552）
+  // 当权威源 → 预设重装 / 部署默认变更即漂移（用户报障 2026-09-18：novel 会话
+  // 记入 governance 桶、governance 会话记入 standard 桶）。用户裁决：归属键 MUST
+  // 绑定会话预设身份不变量；新链 = 会话身份映射 → header 创建期快照 → live 罗盘
+  // **仅最后兜底 + 诊断披露**。判别：本节点只装遥测（无 agent/created 播种 →
+  // 无身份映射）→ 归属取 header 冻结快照（罗盘 'standard' 不夺权），分叉经
+  // 'preset-attribution-divergence' 可观测；旧实现返回 'standard' 必败（RED）。
+  await dcheck('L9 归属链重定（FIX-052）：header 快照优先于 live 罗盘 + 分叉诊断可观测（旧「罗盘优先」实现必败）', async () => {
     if (typeof installRequestTelemetry !== 'function') return false
     const scopes = []
     const service = { isEnabled: () => true, stats: { recordScope: (event) => scopes.push(event) } }
@@ -1284,7 +1296,9 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     installRequestTelemetry(ctx, service)
     const handler = (ctx.listeners['agent/request'] ?? [])[0]
     await handler({ agent: scopeAgent({ preset: 'governance', origin: 'main', id: 's-l9' }) }, async () => ({ provider: 'opencode-go-local', model: 'omen-alpha' }))
-    return scopes.length === 1 && scopes[0].preset === 'standard'
+    const diverged = presetDiagnostics().entries.filter((entry) => entry.session === 's-l9' && entry.kind === 'preset-attribution-divergence')
+    return scopes.length === 1 && scopes[0].preset === 'governance' && diverged.length === 1
+      && String(diverged[0].detail ?? '').includes('standard')
   })
 
   // L10 罗盘不可用回落 header（旧宿主/服务缺失形态——双向兼容）。
