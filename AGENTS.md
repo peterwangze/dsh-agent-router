@@ -1,64 +1,57 @@
-## Governance Bootstrap（由 software-project-governance 插件注入）
+# Governance Bootstrap（DSH — 强制）
 
-> @bootstrap-version: 0.81.0（模板最低引导版本——低于 SKILL frontmatter active_version 即陈旧，先升级本段再继续）
+> @bootstrap-version: 0.83.0
+>
+> 本文件是 software-project-governance 工作流在 DeepSeek Harness 上的项目级原生入口（thin pointer）。dsh 会把本文件自动注入到以本项目为工作区的每个会话。完整规则在 `software-project-governance` skill 内；本文件不重复 workflow 规则。
 
-### 每次会话第一动作
-读取 `.governance/plan-tracker.md`，确认当前阶段、Gate 状态、活跃风险。如 `.governance/` 不存在，提醒先初始化。
+治理插件仓库根目录：`D:/AI/agent/claude/coding/project_management_workflow`（下称 `<plugin_root>`）。
 
-触发模式行为：
-- always-on → 执行完整检查，治理面板可正常输出
-- on-demand → 仅读 plan-tracker，治理面板仅在用户显式调用时展开
-- silent-track → 后台跟踪，仅在 Gate 失败或风险 escalation 到期时打断
+## 第一动作（每会话）
 
-操作权限模式行为：
-- maximum-autonomy → 除关键决策外一切操作自动执行（含 git commit+push）
-- default-confirm → 危险操作（push --force/reset --hard/rm -rf/API 调用/数据库变更）需确认
+1. 若会话 skill 目录中有 `software-project-governance` → 调用 `skill` 工具加载它。`skill` 返回的 resourceBase 即该 skill 所在目录（`<plugin_root>/skills/software-project-governance`）。
+2. 用 `pwsh` 执行：
 
-治理开关——用户随时动态切换：
-- "切换到最高权限模式" / "切换到默认确认模式"
-- "切换到始终在线" / "切换到按需调用" / "切换到静默跟踪"
-- "当前模式" → 输出当前 trigger_mode × permission_mode
+   ```powershell
+   python "<plugin_root>/skills/software-project-governance/infra/resolve_entry.py" --json
+   ```
 
-每次会话输出一句确认（模式自适应）：
-- always-on: `Governance: {mode} | stage: {stage}, Gate {gate}: {status}, {risk_count} risk(s)`
-- on-demand: `Governance: on-demand x {permission_mode}`
-- silent-track: 不输出
+3. `resolved_root_ok == false` → MUST STOP，展示 `diagnostic`，不呈现治理状态（DEC-080 / RISK-038 fail-closed）。
+4. 无该 skill → 提醒用户安装治理预设（`python "<plugin_root>/adapters/dsh/launch.py" --install`），本会话降级为普通任务执行，不宣称治理生效。
 
-**治理数据归档**（版本 bump / 发布收尾后自动触发）:
-运行 `python <plugin_home>/infra/archive.py migrate --auto --dry-run` 检查持续归档触发器（`<plugin_home>` 来自 resolve_entry.py）:
-- 首次迁移: archive/index.md 不存在 AND plan-tracker > 80KB AND ≥2 已发布版本
-- 发布强制: 新版本标记已发布后，除最新已发布版本外仍有热文件历史 task
-- task 增量: 可归档 completed task 达到阈值
-- 90 天兜底: 长期未归档且仍有可归档历史数据
-→ dry-run 显示需要归档: 运行 `python <plugin_home>/infra/archive.py migrate --auto`，再运行 `python <plugin_home>/infra/verify_workflow.py check-archive-integrity`
-→ 归档完整性失败: 阻断发布完成 / Gate 完成
+## SELF-CHECK（任何输出之前自问）
 
-- IF .governance/archive/index.md 存在 → 已归档条目可通过索引查询
-- 交叉验证时: 归档文件中的证据 = 有效证据——不可误判为缺失
+1. 读了 `.governance/plan-tracker.md`？否 → 立即停止，先读。
+2. 知道当前阶段/Gate/模式？否 → 读 plan-tracker `## 项目配置`。
+3. 即将输出问句（吗？/？/要不要/是否）？→ 删除问句，改用 `ask_user_question` 工具。
+4. 到达交互边界（呈现选项/完成工作单元/用户需选择）？→ MUST `ask_user_question`。
+5. 任务标记已完成，或收到含 NEEDS_CHANGE 的审查结论 → 复审与推荐是 MUST 义务（关键行为契约：复审必达 / 完成必推荐 / 选项必带依据——加载 skill 后见 SKILL.md「关键行为契约」段）。
 
-### 干活前检查
-- 这个任务在计划跟踪表里吗？不在就先入账
-- 做完后需要补什么证据？先想清楚
-- 这个任务会不会影响别的阶段？影响就先记风险
+## 模式确认（每次会话一句，模式自适应）
 
-### 提问规则（强制）
-AskUserQuestion 是唯一合法的用户提问方式。禁止内联文字提问。
+- **always-on** → `Governance: {trigger_mode} x {permission_mode} | stage: {stage}, Gate {gate}: {status}, {risk_count} risk(s)`
+- **on-demand** → `Governance: on-demand x {permission_mode}`（仅用户显式调用时展开完整状态）
+- **silent-track** → 不输出治理面板/风险统计/任务进度表
 
-永远停下来用 AskUserQuestion 的关键决策：
-- 范围变更 / 架构决策 / 发布决策 / 风险接受 / 外部依赖变更 / Profile 或模式变更 / 阶段跳跃
+## Agent Team（DSH 映射）
 
-自动执行不提问：
-- 任务排序 / 证据格式 / git commit / 治理记录更新 / 微小实现选择 / Gate 自评（仅失败时告知）
+- 用 `subagent` 工具 spawn 角色 agent。角色定义在 `<plugin_root>/agents/<role>.md`；调度模板在 `<plugin_root>/skills/software-project-governance/references/agent-dispatch-template.md`。
+- 所有用户交互通过 `ask_user_question`；sub-agent 不与用户直接交互。
 
-### 收工前检查
-1. 输出本轮完成事项摘要
-2. 补证据到 `.governance/evidence-log.md`
-3. 用 AskUserQuestion 确认下一步优先级
+## Git hooks
 
-- 完整治理交互（状态/恢复/升级/异常修复）→ 使用 /governance 命令
+`.git/hooks/{pre-commit,commit-msg,post-commit}` 缺失 → 提醒一次性安装：
 
-### 详细规则
-完整行为协议见 `software-project-governance` skill。以上规则不依赖 SKILL.md 加载。
+```powershell
+Copy-Item "<plugin_root>/skills/software-project-governance/infra/hooks/*" .git/hooks/
+```
+
+## 版本升级（DSH 无 /plugin update 概念）
+
+```powershell
+git -C "<plugin_root>" pull; python "<plugin_root>/adapters/dsh/launch.py" --sync
+```
+
+下次会话自动完成其余升级动作。
 
 ## 项目质量原则（project-principles 投影）
 
