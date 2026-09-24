@@ -1,0 +1,752 @@
+{
+  "files": {
+    "decision-log.md": {
+      "rows": {
+        "DEC-001": [
+          "72bd5771495a48537384de1856e2ba3f"
+        ],
+        "DEC-002": [
+          "c58d4c204a2743486814442b0a3003ff"
+        ],
+        "DEC-003": [
+          "51d3055a1b67b8c6735facc5dc6a2a8a"
+        ],
+        "DEC-004": [
+          "f5936f43b702ec4bdd99325898429472"
+        ],
+        "DEC-005": [
+          "b23d35cd9b195ef9330eb83538999464"
+        ],
+        "DEC-006": [
+          "42ddb27b27c8bbf962c47be0caeadf39"
+        ],
+        "DEC-007": [
+          "3f61440eb35bab776c5899f359487792"
+        ],
+        "DEC-008": [
+          "76995355d9bbd9b38de170c362610b14"
+        ],
+        "DEC-009": [
+          "04617d501694af86c21d5a9bfea9f4ea"
+        ],
+        "DEC-010": [
+          "96a561aea63824f62b3436fb1d61022c"
+        ],
+        "DEC-011": [
+          "b529408e3ed57661fb02084a670a804a"
+        ],
+        "DEC-012": [
+          "0dde4bee6e007dbfbb5d86343c8d0b73"
+        ],
+        "DEC-013": [
+          "0f852f248630822482d4641021f630a7"
+        ],
+        "DEC-014": [
+          "3d353d953958039eb3c80ab239377183"
+        ],
+        "DEC-015": [
+          "9943df755a0da1d76ce961b81a8be605"
+        ],
+        "DEC-016": [
+          "e3750e89a912e42679e9689ffc4c7b3a"
+        ],
+        "DEC-017": [
+          "ee456d28c5c51ac4431d3e270b846ff9"
+        ],
+        "DEC-018": [
+          "ee672fc5645f9e01fec8b13a2feec720"
+        ],
+        "DEC-019": [
+          "a50988416e630e344f723f9d28711dda"
+        ],
+        "DEC-020": [
+          "152946c3003890a23ad9f8671214c3ab"
+        ],
+        "DEC-021": [
+          "44430e9f3010c9f847d7a696339e6b3a"
+        ],
+        "DEC-022": [
+          "3aa2fd64996976fc52ab79fb6d6bf04d"
+        ],
+        "DEC-023": [
+          "ffc03415bbb917a0c8dc2b9d5b444e5f"
+        ],
+        "DEC-024": [
+          "ebd82b5fe4280fefb0b62f0a578df2f5"
+        ],
+        "DEC-025": [
+          "ee40e507c1dd0aecaf96af1658873962"
+        ],
+        "DEC-026": [
+          "dbefb7ef6488555a8c71350e01c9b210"
+        ],
+        "DEC-027": [
+          "55ceb523857924518d223dcbafabc4b4"
+        ],
+        "DEC-029": [
+          "d0e24b31eb5b730180d2a3368eb6908a"
+        ],
+        "DEC-030": [
+          "bbc07ba2a2d3bdf10982b127723f6289"
+        ],
+        "DEC-031": [
+          "24fb3d4f4078e76c0c8454c40542d4f3"
+        ],
+        "DEC-032": [
+          "3fb6d9ad3df645ab68ba96bb3ce2de53"
+        ]
+      },
+      "sha256": "1ca66ec82886b9516f827c8e1f87d233a5228018edcee884076262bd7c705fa8"
+    },
+    "evidence-log.md": {
+      "rows": {
+        "REVIEW-ARCH-004-R0": [
+          "c533f22b138e2d0f923eaaaeee8d573d"
+        ],
+        "REVIEW-ARCH-004-R1": [
+          "f9722c78782ad3b3fc4c41be0007266a"
+        ],
+        "REVIEW-AUDIT-001-R0": [
+          "0ecc43432ad39691a7981c97a3999890"
+        ],
+        "REVIEW-DEV-002-R1": [
+          "a0735014ee40d6ecefd64cb3cb0030ce"
+        ],
+        "REVIEW-DOC-001-R0": [
+          "fe337f5004b530b0dd4396202e0976e8"
+        ],
+        "REVIEW-EVO-002-R6": [
+          "7c0ac15bb8c9d5df5d0f0e9d9cbc6959"
+        ],
+        "REVIEW-EVO-002-R7": [
+          "c16c2975f15fb6321ee5bf642dbe4ba2"
+        ],
+        "REVIEW-EVO-002-R8": [
+          "7264c122c057cd6d97199bacef14db05"
+        ],
+        "REVIEW-EVO-003-R1": [
+          "f5dd184a1ad5c21c0bd6871ff75b1cbb"
+        ],
+        "REVIEW-EVO-003-R2": [
+          "786dc73496da094b75463b42289b09b9"
+        ],
+        "REVIEW-EVO-004-R0": [
+          "a474952be472e2184dab65ab6fe7790e"
+        ],
+        "REVIEW-EVO-005-R0": [
+          "6d70e00be84dbf7cd355c49b70bd9f08"
+        ],
+        "REVIEW-EVO-006-R0": [
+          "6fc1fe4ec37f9e559a1316c49f70296b"
+        ],
+        "REVIEW-EVO-007-R0": [
+          "21c587ddcf584e5ef93975ef85513cbc"
+        ],
+        "REVIEW-EVO-007-R1": [
+          "db4c16718e3f20700db2e8b231c8b870"
+        ],
+        "REVIEW-EVO-008-R0": [
+          "126dfef3937857c61b563ed596ba61f9"
+        ],
+        "REVIEW-EVO-008-R1": [
+          "3c875bac73d9e0d39fe1ea6dc7c8ef5d"
+        ],
+        "REVIEW-EVO-009-R0": [
+          "26d777f442e45a9b3407d3fcd577d30c"
+        ],
+        "REVIEW-EVO-009-R1": [
+          "79375c383df597d2e0d70e40015cc1ca"
+        ],
+        "REVIEW-EVO-010-R0": [
+          "1d9a392d34b1a06bb923a9e14370011c"
+        ],
+        "REVIEW-EVO-010-R1": [
+          "f16a8d9dd918d5ca82ef7a46fbc1a15c"
+        ],
+        "REVIEW-EVO-011-R0": [
+          "f15f0e8f7bfb8c4c3f4f49bdb7a3574f"
+        ],
+        "REVIEW-EVO-012-R0": [
+          "6527b9c82f34ac31d011a7be4687bd34"
+        ],
+        "REVIEW-EVO-012-R1": [
+          "4ce601e4b2629040b178a7c81c9d0b6b"
+        ],
+        "REVIEW-EVO-013-R0": [
+          "4e7b2bdcc0709a99dd18a650c37d28bd"
+        ],
+        "REVIEW-EVO-013-R1": [
+          "0a66aff95c8b5bde0eec35512020ec13"
+        ],
+        "REVIEW-EVO-014-R0": [
+          "8ae9639d1816e57528a62b9666e36a9a"
+        ],
+        "REVIEW-EVO-014-R1": [
+          "57e544c31344e59f326df07dd5d5fee7"
+        ],
+        "REVIEW-EVO-014-R2": [
+          "7fcadead38aeb0e30c3ab35b4b28feb2"
+        ],
+        "REVIEW-EVO-015-R0": [
+          "ccacb606985702bb44187bee5e176dab"
+        ],
+        "REVIEW-EVO-018-R0": [
+          "d8db341174fc0e13d330a3bc961e56cc"
+        ],
+        "REVIEW-EVO-019-R0": [
+          "63516093231bfb244b96207b3ed6e5b9"
+        ],
+        "REVIEW-EVO-020-R0": [
+          "1ad77024b2ff38652d0ec111a658b3d8"
+        ],
+        "REVIEW-EVO-021-R0": [
+          "b9a27beb556916913de668f928bfb73c"
+        ],
+        "REVIEW-EVO-022-R0": [
+          "0e143086fbe2dd765db74bd8e596e4be"
+        ],
+        "REVIEW-EVO-023-R0": [
+          "fb74fd4188ab00b428304d95d98f3ab8"
+        ],
+        "REVIEW-EVO-024-R0": [
+          "100637707b574d0f6a3686e288bd1de2"
+        ],
+        "REVIEW-FIX-002-R7": [
+          "9e165cf543ef650e5690ecf23995a489"
+        ],
+        "REVIEW-FIX-002-R8": [
+          "f8726dc52cc53141a26f1bd10ab72efa"
+        ],
+        "REVIEW-FIX-003-R1": [
+          "b5c90e65e9dbc21ec9cd9f09f1c62566"
+        ],
+        "REVIEW-FIX-004-R0": [
+          "0129fd0a062c3033eb887b63cbfcb4d7"
+        ],
+        "REVIEW-FIX-005-R1": [
+          "fe44889d3964fdefd6b5bee90ffba457"
+        ],
+        "REVIEW-FIX-006-R0": [
+          "b4be3b2cf020b3840402ea16ee45e141"
+        ],
+        "REVIEW-FIX-007-R0": [
+          "a25e17b969325e873eba8b3929acc5b1"
+        ],
+        "REVIEW-FIX-009-R0": [
+          "ce48593db71e4c420cfa27a75b66d7df"
+        ],
+        "REVIEW-FIX-010-R0": [
+          "cd6e62ffadd44d96a57779214ee8cae6"
+        ],
+        "REVIEW-FIX-011-R0": [
+          "2b0fdb712accee8e696a0d869b4a7429"
+        ],
+        "REVIEW-FIX-012-R0": [
+          "6aa2cab95125c9e7fc3991c3ab8d5184"
+        ],
+        "REVIEW-FIX-012-R1": [
+          "9f70ad80423dbe35cee16608518ce080"
+        ],
+        "REVIEW-FIX-013-R0": [
+          "a84a65cd51d2f3154653eb0d11085f6c"
+        ],
+        "REVIEW-FIX-015-R0": [
+          "d31f1d9c3b5caa6ad1619ccbf63324a7"
+        ],
+        "REVIEW-FIX-016-R0": [
+          "062f5a7d7bba68da0a7c1c04cc1b2c80"
+        ],
+        "REVIEW-FIX-017-R0": [
+          "8471369a48d6890a652c5174c67e6b43"
+        ],
+        "REVIEW-FIX-018-R0": [
+          "f5d352a77b478f2e9d5850d1dc74c7fd"
+        ],
+        "REVIEW-FIX-019-R0": [
+          "fae27d4160c8548d7f40069f9c8797f6"
+        ],
+        "REVIEW-FIX-019-R1": [
+          "3c50f7850f9dce22b5cce01bdc5680b0"
+        ],
+        "REVIEW-FIX-021-R0": [
+          "ab043610bd85d75613f88c2925b1832d"
+        ],
+        "REVIEW-FIX-022-R0": [
+          "d671bc55e9041c3d98e3b1852d37b521"
+        ],
+        "REVIEW-FIX-023-R0": [
+          "60d50868f6a303b3596e0a694d544524"
+        ],
+        "REVIEW-FIX-024-R0": [
+          "aabc4ca45786df44c109611448d3ba09"
+        ],
+        "REVIEW-FIX-025-R0": [
+          "be2127949cd0fd67491bccbec15f425e"
+        ],
+        "REVIEW-FIX-026-R0": [
+          "b120f2bf0aa57b247442fbc8cd677059"
+        ],
+        "REVIEW-FIX-027-R0": [
+          "54707cea883a495cb0fadb911f29e187"
+        ],
+        "REVIEW-FIX-031-R0": [
+          "ef14e91750e2eadfa523699340fba9f3"
+        ],
+        "REVIEW-FIX-031-R1": [
+          "583a6b5f593e6d5bfd848d9eb017821a"
+        ],
+        "REVIEW-FIX-031-R2": [
+          "26a7600dc28790e110a2f6e08411a89d"
+        ],
+        "REVIEW-FIX-031-R3": [
+          "cf6d33317057e0dde15cc1aae5f2d622"
+        ],
+        "REVIEW-FIX-031-R4": [
+          "c6c3ba318ea4259ed14a02579701cfce"
+        ],
+        "REVIEW-FIX-031-R5": [
+          "c559518199d83eae4ac001b32611389e"
+        ],
+        "REVIEW-FIX-031-R6": [
+          "cdbca8ee10bc015427bfec92252cfd9c"
+        ],
+        "REVIEW-FIX-032-R0": [
+          "c5aa54ab4d37439886fc74ac8dc49dd7"
+        ],
+        "REVIEW-FIX-033-R0": [
+          "700476c9b513d7de82f907ac580e5648"
+        ],
+        "REVIEW-FIX-034-R0": [
+          "8fbac0d5203d57c840fb14304193affa"
+        ],
+        "REVIEW-FIX-035-R0": [
+          "7ce77d846a642fe4e8bcc08aa251b988"
+        ],
+        "REVIEW-FIX-036-R0": [
+          "f2fbde91f54a02811a4d3b09976839a7"
+        ],
+        "REVIEW-FIX-037-R0": [
+          "646973d6edf6ab59cafd453ec753da36"
+        ],
+        "REVIEW-FIX-037-R1": [
+          "27c3459f1bb5a9b091490b2bbd0ec6d0"
+        ],
+        "REVIEW-FIX-037-R2": [
+          "e408b089355a931cc96449a82a1b39e8"
+        ],
+        "REVIEW-FIX-038-R0": [
+          "66da4a268b996d115af6ff04f8383985"
+        ],
+        "REVIEW-FIX-038-R1": [
+          "1310e70c8ad8e44bf510eed217cf3776"
+        ],
+        "REVIEW-FIX-040-R0": [
+          "2b798beb41914804ac2bde08eabaf880"
+        ],
+        "REVIEW-FIX-040-R1": [
+          "b565b4be5497f07f7b35bc5278925341"
+        ],
+        "REVIEW-FIX-040-R2": [
+          "30556f9b10c6d8f4560527b654ec9f51"
+        ],
+        "REVIEW-FIX-041-R0": [
+          "d7c7cafb36a2cc1c59028a43396787be"
+        ],
+        "REVIEW-FIX-041-R1": [
+          "8321592e7baedd66e814d8ad0d26d21f"
+        ],
+        "REVIEW-FIX-042-R0": [
+          "9af14fcea9678bd4dd409900a0025178"
+        ],
+        "REVIEW-FIX-042-R1": [
+          "a6e6483986a9a2a38ac3e765a60fe205"
+        ],
+        "REVIEW-FIX-043-R0": [
+          "f5560c015a36175048cca9efcdc6265c"
+        ],
+        "REVIEW-FIX-043-R1": [
+          "d73e852bb190985bf955a586be738be8"
+        ],
+        "REVIEW-FIX-043-R2": [
+          "0db76e98e9c3559f1fc84eb3598a5e27"
+        ],
+        "REVIEW-FIX-043-R3": [
+          "7ed04d14ac22d5f1aaa1276e8dd470db"
+        ],
+        "REVIEW-FIX-043-R4": [
+          "43843fcaedd9a9a947823a01eabfbf67"
+        ],
+        "REVIEW-FIX-043-R5": [
+          "a6178dbc198f1bdc723a8fd89b43e7a8"
+        ],
+        "REVIEW-FIX-044-R0": [
+          "c85655d55ea4623d9a8ddd70cd825c45"
+        ],
+        "REVIEW-FIX-045-R0": [
+          "7edf334d308badc0526c2c5839f89ad3"
+        ],
+        "REVIEW-FIX-045-R1": [
+          "3b2102756e8946b1519469db57f143c9"
+        ],
+        "REVIEW-FIX-046-R0": [
+          "e76236a639324b0242cfded94f68bb9b"
+        ],
+        "REVIEW-FIX-046-R1": [
+          "6df17ed1270b1666b846e07408d80027"
+        ],
+        "REVIEW-FIX-047-R0": [
+          "8d5a96909376854fb5c0888ee89206fb"
+        ],
+        "REVIEW-FIX-047-R1": [
+          "a865733b4b28ec6650a8010e6562fc12"
+        ],
+        "REVIEW-FIX-048-R0": [
+          "5b0b705b5ad7d32af499cb6b4a954183"
+        ],
+        "REVIEW-FIX-049-R0": [
+          "a651ef8993158655d23306f59c7ee5a9"
+        ],
+        "REVIEW-FIX-052-R0-CODEREVIEWER": [
+          "2e36ccba3bf8cf7a0e379261fbb47acd"
+        ],
+        "REVIEW-REL-002-R0": [
+          "97922ffea4e199eea747e7c0d91cd1ee",
+          "9b51527fbb5eccc3be9c294080f75749"
+        ],
+        "REVIEW-REL-003-R0": [
+          "1469bc5c739324ec615399d731481425"
+        ],
+        "REVIEW-REL-003-R1": [
+          "7f0135f945121ad30e91b9a2d16be123",
+          "91c498eb17a4f55add5a14c252081463"
+        ],
+        "REVIEW-REL-003-R2": [
+          "bcf26df4bd30f314f2b2e2f466306d1d"
+        ],
+        "REVIEW-REL-004-R0": [
+          "1766760d9e95abf4f4bcccba98d1f30c"
+        ],
+        "REVIEW-REL-004-R1": [
+          "90dd1ccce0220341f444b86d7aecf0cc"
+        ],
+        "REVIEW-REL-005-R0": [
+          "b09a12e2cde6fc448d24b01cee6e9892"
+        ],
+        "REVIEW-REL-005-R1": [
+          "36cfd8ae25346a4d92d5e3c98a3e7bd9"
+        ],
+        "REVIEW-REL-006-R0": [
+          "aad86ee9cebf88633ca1ca93283ec3c6"
+        ],
+        "REVIEW-REL-007-R0": [
+          "3b46b15d49a7d6b57d71fdaa7c443f4c"
+        ],
+        "REVIEW-REL-008-R0": [
+          "c0d70b233e58f72f63b5b93992c31d17"
+        ],
+        "REVIEW-REL-008-R1": [
+          "9f1e0aaa19ed47fb5467b5e94c006506"
+        ],
+        "REVIEW-REL-008-R2": [
+          "a162602904ccce8eabe772cfbb236cdc"
+        ],
+        "REVIEW-REL-008-R3": [
+          "bc11f270650ec78354c914093648387a"
+        ],
+        "REVIEW-REL-009-R0": [
+          "cc8a9d22abe0dbcc9a6814ef0623e9d9"
+        ],
+        "REVIEW-REL-011-R0": [
+          "92bec16ced725baec3a650f4c108f875"
+        ],
+        "REVIEW-REL-012-R0": [
+          "7160fc7e1e49fb9057191eda32cb6a4f"
+        ],
+        "REVIEW-REL-012-R1": [
+          "9a75bc270dcb6f407ab9438d578b57c5"
+        ],
+        "REVIEW-REL-012-R2": [
+          "377e36f54675369e0e5874bc35d8f737"
+        ]
+      },
+      "sha256": "4d8b34013631a6f901375e89206403d8a01df3d2b8072d9802b8b29ca4773d8f"
+    },
+    "plan-tracker.md": {
+      "rows": {
+        "ARCH-001": [
+          "4d91c7ff97ee10aad4ee3b546966266d"
+        ],
+        "ARCH-002": [
+          "12fff7434a579b67133a919c332c0bee"
+        ],
+        "ARCH-004": [
+          "3ee8f1558fe18b065e86231321ece5a2"
+        ],
+        "DEV-001": [
+          "82ba5d9ef02d330e076f6bbb1604188c"
+        ],
+        "DEV-002": [
+          "25a0b70db324451a9d6a9d30a48e0741"
+        ],
+        "DEV-003": [
+          "041ac9a421a04e6f0f2d428de4c8282b"
+        ],
+        "EVO-001": [
+          "c944edddb05c75b9bcd758db12ff012e"
+        ],
+        "EVO-002": [
+          "40770dd837d9e997deb7cdbc76d06cfc",
+          "4d74abdcd279991dd75e0c0d66be5fcf"
+        ],
+        "EVO-003": [
+          "99239152d2be21232a78028ac0eefed7",
+          "beb3ad571f5e13036920da5eb019ca7a"
+        ],
+        "EVO-004": [
+          "9f08d4ffc2b3f65aa1504dd948ba57fa",
+          "de0942a03dd7db00ac659c8804bb2068"
+        ],
+        "EVO-005": [
+          "4bceab57966cf208e2120a84f7b47ebc",
+          "99d04752d426b536a1e3561a9f34c0c4",
+          "a550f1fc83bad297751337b2e1fb6455"
+        ],
+        "EVO-006": [
+          "3890158e37d741abd3652035fc144fcc",
+          "bab1b00160a0cffccbbf8e879ef62650"
+        ],
+        "EVO-008": [
+          "5008b62b3f6956ac5f1b80eda40a7eac",
+          "e272295ecf8fa53f2c037591d13cee2c"
+        ],
+        "EVO-016": [
+          "9c4d327950e4b2ad95adcae6f0096585"
+        ],
+        "EVO-017": [
+          "7ac65635d9362337de4359a5f37a8143"
+        ],
+        "EVO-018": [
+          "7d976975be2912837c8af9a299d22ecc"
+        ],
+        "EVO-019": [
+          "77f44079b40a78b977a55eeeb9604396"
+        ],
+        "EVO-020": [
+          "ad9192f87c9a184dd6ce6eade78a607c"
+        ],
+        "EVO-021": [
+          "b620d302165644b7e95e3a7f3599b387"
+        ],
+        "EVO-022": [
+          "0f9eba06ef5c257b28c6f34c17985d50"
+        ],
+        "EVO-023": [
+          "9a861232202ef2c42a64371a20b152c9"
+        ],
+        "EVO-024": [
+          "0054ffae01353521fe606fb79b29bf5a"
+        ],
+        "FIX-001": [
+          "fad214f10e18c023608ea3462e6a4005"
+        ],
+        "FIX-002": [
+          "57c8471dc6f87068cb681d7ef7f7645f"
+        ],
+        "FIX-003": [
+          "85b63d9cf97f556a7d0928105581c773",
+          "9a6343ea734ec6d56500abd4a4f73d1f"
+        ],
+        "FIX-004": [
+          "2d1e96116bc157c2cff45eb9a7ec422e",
+          "5bc378b1398342a640f17f32ab47d520"
+        ],
+        "FIX-005": [
+          "4479d5c8148d9373a29029583d990359",
+          "5b9722b95a8b45131bac94e46b12c441"
+        ],
+        "FIX-006": [
+          "35283b835254726b3752a4dad68250ef",
+          "700a1035d9630e8d1531464bf5c5673f",
+          "d8c843358fb5d7a092160ba4943af7d6"
+        ],
+        "FIX-007": [
+          "5eceabd287aaec62b5e387aa6d9d453d",
+          "de6931f1cec07740981eeecd6cee3d20"
+        ],
+        "FIX-009": [
+          "d3c8860e3ea72d1064b11cfd018cc24a"
+        ],
+        "FIX-010": [
+          "01e2c1a8097d306cbd186d87ebb42084"
+        ],
+        "FIX-011": [
+          "27941d7cc57d221c66762109623fd60d",
+          "39548829f9cb59ee10c6e330a9a22742"
+        ],
+        "FIX-012": [
+          "a70714cfaa7b3d993db730794992c9b8",
+          "c99d22af64f3f989cf8390e43d3f079b"
+        ],
+        "FIX-013": [
+          "6b30a5ddbd7ee9c98aec1b1c76320b28",
+          "ebe502d8b4edc50e23f2f9b359075e65"
+        ],
+        "FIX-028": [
+          "e110fbd67bb683b98fe9d446678ed94f"
+        ],
+        "FIX-030": [
+          "e844a3c877882daec6dd4e8da376c509"
+        ],
+        "FIX-031": [
+          "3e407be377ac0046e0fa8ec1e72a6200"
+        ],
+        "FIX-032": [
+          "781cf5e685d63c86f68ef6d384310504"
+        ],
+        "FIX-033": [
+          "01546e1d4a77844fbeec651665957ade"
+        ],
+        "FIX-034": [
+          "43685c4e03bdcd7f5ae3dd91ab4b5f00"
+        ],
+        "FIX-035": [
+          "ec8bef064b957eb1f59bf0e4c51f507b"
+        ],
+        "FIX-036": [
+          "5e02a294cf39da566c50ccac0ed056c4"
+        ],
+        "FIX-037": [
+          "33608e07f0162cc232fea2ab17bc48cb"
+        ],
+        "FIX-038": [
+          "d5c3f80469ecd42c8f5f84c0ec2e881c"
+        ],
+        "FIX-039": [
+          "9b4acef86f065c859cd5a2885f35ee7a"
+        ],
+        "FIX-040": [
+          "60c1a8273fa13b5abc35e1d24d8a9a92"
+        ],
+        "FIX-041": [
+          "f48c1bf33bbfe5d99bdf5c7dbba3970b"
+        ],
+        "FIX-042": [
+          "393d31ea6e140d9e11313831d4ec3e05"
+        ],
+        "FIX-043": [
+          "98569a0ae6300a9a3bb57eeacbf360b7"
+        ],
+        "FIX-044": [
+          "e0fd67b1e1775ddd14a616056c76dc00"
+        ],
+        "FIX-045": [
+          "14b1ec4a3cad2342ccbd7a94a68095dd"
+        ],
+        "FIX-046": [
+          "115950397840337df2ca12011ff48cad"
+        ],
+        "FIX-047": [
+          "98c845540f7d8d4d4bcf2c09ec3641c8"
+        ],
+        "FIX-048": [
+          "d8cef803612946fefe34f5f4bf509349"
+        ],
+        "FIX-049": [
+          "0201b183f88ea754e5d4e0b0f796d6dc"
+        ],
+        "FIX-052": [
+          "31426ba36340497d47aeca7ac048a8bd"
+        ],
+        "GOV-001": [
+          "53be57896bb73b3ab53b12c7f1ec8edc"
+        ],
+        "GOV-002": [
+          "f4cc8192dc80f1c8370282f371380f08"
+        ],
+        "GOV-003": [
+          "33d718815f51e901b11709893d9c3452",
+          "6cecfb61611f45d7ec9ceaaa211ea0bd"
+        ],
+        "GOV-004": [
+          "01aa96f40a3be883e33b8ad8e1e5665b",
+          "41177523a7581cad5e4c1503c0c76c4a"
+        ],
+        "GOV-005": [
+          "ff738a54052498447b67e6231661c231"
+        ],
+        "GOV-006": [
+          "e0508e835f58b22a53624eb58235f2df"
+        ],
+        "GOV-007": [
+          "9a8532ff047019bae1c272cbfadb121b"
+        ],
+        "GOV-008": [
+          "0a95cd721d65a34a17c3b3dc084989d6"
+        ],
+        "GOV-009": [
+          "ea661e4154e5685b7d7ed78e5ff03e53"
+        ],
+        "GOV-010": [
+          "e9cdc5d677243de86f03fdd4b81dc495"
+        ],
+        "GOV-011": [
+          "38f506286b52160d3634f0cf0a4cd12d"
+        ],
+        "GOV-012": [
+          "6066b4ed502fc3dbab24b536d4715b72"
+        ],
+        "GOV-013": [
+          "2ea5a121e33250fd11202600e00369c1"
+        ],
+        "MIG-001": [
+          "ec7ae8b44d80d4162efc55f726167ea0"
+        ],
+        "OPS-001": [
+          "19b47b79ad9d66dad9acfd5e53baa7ab",
+          "44b0d682c49df19cd98e669481e80f7a"
+        ],
+        "REL-001": [
+          "0d39023cb016e89933107e697dd6f55d"
+        ],
+        "REL-002": [
+          "3c90fba0dbf92d436f45afe340b7d71e",
+          "415aab139b34da35eb69518c190e30bd",
+          "c21ec83770d840d944a737e042c5f643"
+        ],
+        "REL-003": [
+          "4f39c6044ae5cabe9d4a18f429471c65",
+          "83bb66756e4ea34e2f9297c87368548b"
+        ],
+        "REL-004": [
+          "33efdef34e79b4f5a0e671c30a893055",
+          "e2b2928e01b5f0f531fad78e77478bef"
+        ],
+        "REL-012": [
+          "e86189f7f8071268f9a1d67dcc323f2c"
+        ],
+        "REQ-001": [
+          "9aaf5daac017b93737b0ea6937c2a508"
+        ],
+        "REQ-002": [
+          "ad8a21a0b0dfc55533bb2dfa4face77c"
+        ],
+        "REQ-003": [
+          "42a3afc7bd3b2a89d7446785f3d0b9e3"
+        ],
+        "RES-001": [
+          "0a5d8172a2f52cd9f6458264623cdbd7"
+        ],
+        "RES-002": [
+          "8a5bcc1eb31e0b0fc8e12b60955f4ce2"
+        ],
+        "RES-003": [
+          "58c672f52926fbf91e75a9e983387b10"
+        ]
+      },
+      "sha256": "0f902d195ae6fabbf718b33c5f427e942e5a722277a8dc10fa13230187b230a2"
+    }
+  },
+  "schema_version": 1,
+  "tool": "governance-write-guard/row-family-reconciliation",
+  "updated_at": "2026-09-24T08:35:28"
+}
