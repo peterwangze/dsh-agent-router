@@ -1,41 +1,40 @@
 # Governance Bootstrap（DSH — 强制）
 
-> @bootstrap-version: 0.83.0
+> @bootstrap-version: 0.98.0
 >
-> 本文件是 software-project-governance 工作流在 DeepSeek Harness 上的项目级原生入口（thin pointer）。dsh 会把本文件自动注入到以本项目为工作区的每个会话。完整规则在 `software-project-governance` skill 内；本文件不重复 workflow 规则。
-
-治理插件仓库根目录：`D:/AI/agent/claude/coding/project_management_workflow`（下称 `<plugin_root>`）。
+> 本文件是 software-project-governance 工作流在 DeepSeek Harness 上的项目级原生入口（thin pointer），自动注入以本项目为工作区的每个会话。完整规则在 `software-project-governance` skill 内，本文件不重复 workflow 规则。治理插件仓库根目录：`D:/AI/agent/claude/coding/project_management_workflow`（下称 `<plugin_root>`）。
 
 ## 第一动作（每会话）
 
-1. 若会话 skill 目录中有 `software-project-governance` → 调用 `skill` 工具加载它。`skill` 返回的 resourceBase 即该 skill 所在目录（`<plugin_root>/skills/software-project-governance`）。
-2. 用 `pwsh` 执行：
-
-   ```powershell
-   python "<plugin_root>/skills/software-project-governance/infra/resolve_entry.py" --json
-   ```
-
+1. 会话 skill 目录有 `software-project-governance` → 调用 `skill` 工具加载（resourceBase 即 `<plugin_root>/skills/software-project-governance`）。
+2. 用 `pwsh` 执行：`python "<plugin_root>/skills/software-project-governance/infra/resolve_entry.py" --json`
 3. `resolved_root_ok == false` → MUST STOP，展示 `diagnostic`，不呈现治理状态（DEC-080 / RISK-038 fail-closed）。
-4. 无该 skill → 提醒用户安装治理预设（`python "<plugin_root>/adapters/dsh/launch.py" --install`），本会话降级为普通任务执行，不宣称治理生效。
+4. `resolved_root_ok == true` → `governance-bootstrap --format json` 取热数据，立即呈现最小状态行 + `ask_user_question` 首次交互（FEAT-034）；深检后置为按需执行，推进类动作前 MUST 补齐。
+5. 无该 skill → 提醒用户安装治理预设（`python "<plugin_root>/adapters/dsh/launch.py" --install`），本会话降级为普通任务执行，不宣称治理生效。
+
+## 行为灰度开关（FEAT-040——legacy 回退通道）
+
+`GOVERNANCE_LEGACY_BEHAVIOR=1`（会话级）或 plan-tracker `## 项目配置` 的 `behavior_profile: legacy`（项目级；env 优先）→ 只回退性能行为（快路径/首次交互前置/≤8 字段视图/Scenario 按需）。**安全语义不回退**：升级确认门／异常不隐藏／fail-closed／真实环境防护／复审必达。生效形态见 `governance-bootstrap` 的 `behavior` 面。
 
 ## SELF-CHECK（任何输出之前自问）
 
-1. 读了 `.governance/plan-tracker.md`？否 → 立即停止，先读。
-2. 知道当前阶段/Gate/模式？否 → 读 plan-tracker `## 项目配置`。
-3. 即将输出问句（吗？/？/要不要/是否）？→ 删除问句，改用 `ask_user_question` 工具。
-4. 到达交互边界（呈现选项/完成工作单元/用户需选择）？→ MUST `ask_user_question`。
-5. 任务标记已完成，或收到含 NEEDS_CHANGE 的审查结论 → 复审与推荐是 MUST 义务（关键行为契约：复审必达 / 完成必推荐 / 选项必带依据——加载 skill 后见 SKILL.md「关键行为契约」段）。
+1. 读了 `.governance/plan-tracker.md`？知道阶段/Gate/模式？任一未知 → 立即停止，先读。
+2. 即将输出问句？→ 改用 `ask_user_question`。到达交互边界？→ MUST `ask_user_question`（完整 SELF-CHECK：SKILL.md「Bootstrap 规程明细」§B0）。
+3. 任务标记已完成，或收到含 NEEDS_CHANGE 的审查结论 → 复审与推荐是 MUST 义务（关键行为契约：复审必达 / 完成必推荐 / 选项必带依据 / 推荐必标需求源 / 发现即闭环——加载 skill 后见 SKILL.md「关键行为契约」段）。
 
 ## 模式确认（每次会话一句，模式自适应）
 
 - **always-on** → `Governance: {trigger_mode} x {permission_mode} | stage: {stage}, Gate {gate}: {status}, {risk_count} risk(s)`
-- **on-demand** → `Governance: on-demand x {permission_mode}`（仅用户显式调用时展开完整状态）
-- **silent-track** → 不输出治理面板/风险统计/任务进度表
+- **on-demand** → `Governance: on-demand x {permission_mode}`（仅用户显式调用时展开完整状态）；**silent-track** → 不输出治理面板/风险统计/任务进度表
 
 ## Agent Team（DSH 映射）
 
 - 用 `subagent` 工具 spawn 角色 agent。角色定义在 `<plugin_root>/agents/<role>.md`；调度模板在 `<plugin_root>/skills/software-project-governance/references/agent-dispatch-template.md`。
 - 所有用户交互通过 `ask_user_question`；sub-agent 不与用户直接交互。
+
+## Git hooks / 版本升级（DSH 无 /plugin update 概念）
+
+`.git/hooks/{pre-commit,commit-msg,post-commit}` 缺失 → 提醒一次性安装：`Copy-Item "<plugin_root>/skills/software-project-governance/infra/hooks/*" .git/hooks/`。升级：`git -C "<plugin_root>" pull` 后**重启 dsh**——bundle 宿主行 `ensurePreset()` 按包版本幂等重渲染用户根预设（DSH 无 `/plugin update`；`launch.py --sync` 仅限显式重定向 `DSH_HOME` 的隔离环境，对真实用户根设计性拒绝 exit 2），下次会话自动完成其余。
 
 ## Git hooks
 
