@@ -58,6 +58,24 @@
  *     parity 由 S1c/S5 双向锁定；
  *  2. 跑 `node tests/host-contract.mjs` 确认绿，再跑全量门控 `node tests/run-all.mjs`。
  *
+ * 基线参数化（ARCH-005 R3——看护矩阵化，设计 §2-B 四维-c / §6 R3 行）：
+ *  - 版本数据**单源消费** HOST_BASELINE_REGISTRY（tests/host-version-snapshot.mjs 文本
+ *    提取——该文件为独立入口不可 import；R0 批曾持 HOST_VERSION_BASELINE 副本 + 机器
+ *    锁定「主基线项相等」，R3 起随参数化**删除副本**：提取/选择失败即红并收口退出，
+ *    「刷新漏改副本」的漂移面从机制上消失，P5）；
+ *  - `DSH_BASELINE` 环境变量选择**目标基线**（值 = 档案 id（'0.1.5'/'0.2.0'）或 status
+ *    关键词（'frozen'/'primary'）；未设/空白 = 默认 primary——本地默认行为不变）。
+ *    选择只作用于**靶子面**：版本一致性判据（FIX-037 ③）与 S7/S5/S2 的**宿主侧**判据
+ *    按所选基线档案项判定；**声明面**判据（S3 的 HOST_DECLARED_RANGE 等）恒取 primary
+ *    项——frozen 选择不放松声明面（与 host-version-snapshot F-1 收紧同族纪律）；
+ *  - 锚/S5 条目 `since` 字段成文分代（R3 交付②，与 R0 白名单逐项 since 注记同族）：
+ *    条目当前形态定型于哪代基线；所选基线**低于**条目 since 时该条目的宿主侧判据记
+ *    **可见 skip**（非静默——如 frozen 基线下 agentPresets.list 的 {presets} 白名单
+ *    形态〔0.2.0 收缩定型〕对 0.1.5 树合法不同），静态/插件面判据不受影响恒跑；
+ *  - S7 7a 的期望集按**逐事件 since**（lib/host-abi/events.js 镜像数组行内注记——R0
+ *    登记形态）分代过滤：所选基线低于事件 since 时该事件不入期望集（0.1.5 表 19 项 ⊂
+ *    镜像 27 项在 frozen 基线下判 19 ⊆ 19）；宿主侧超集照旧绿 + 打印增量，消费项除名即红。
+ *
  * 独立入口：node tests/host-contract.mjs（exit 0/1）。
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
@@ -187,16 +205,59 @@ const MESSAGE_EXPORTS_BASELINE = ['CONTEXT_SUMMARY_MAX_CHARS', 'boundContextSumm
 const BLOCK_ASSEMBLER_PROTO_BASELINE = ['push', 'ensure', 'assemble', 'mustGet', 'assembled', 'blocks', 'interruptedBlocks', 'usage', 'finish', 'replayState', 'message']
 
 /**
- * 宿主关键包版本基线（FIX-037 ③ / FIX-036 R0 P2-2）——权威 = `tests/host-version-snapshot.mjs`
- * 的 `HOST_BASELINE_REGISTRY` **主基线项**（status primary；宿主升级后按该文件头注释一并刷新；
- * **刷新点共四处**，第四处即本副本）。ARCH-005 R0 起口径 =「主基线项相等」：靶子版本一致性
- * 判据对**主基线**（当前 0.2.0-rc.2——npm 全局树）求等；frozen 历史基线（0.1.5）不在本判据面。
- * 本副本存在的原因：该文件为独立入口（顶层执行 + `process.exit`）无法被 import 复用——
- * 「同源同值」由下方机器一致性断言锁定（任一处刷新漏改即红，FIX-037 R0 P2-1），非人工纪律。
- * 用途：靶子解析只保证「确定性」不保证「指向运行宿主」，版本一致是靶子可信的最低证据——
- * 不等即显式告警 + note（可见 skip）。
+ * 宿主基线档案（ARCH-005 R3——P5 单源：**文本提取**消费权威注册表，无版本常量副本）。
+ * 权威 = `tests/host-version-snapshot.mjs` 的 `HOST_BASELINE_REGISTRY`（该文件为独立入口
+ * 〔顶层执行 + `process.exit`〕不可 import 复用——R0 批曾持 HOST_VERSION_BASELINE 副本 +
+ * 「主基线项相等」机器锁定；R3 起随基线参数化删除副本：下方提取/选择失败即**判红收口退出**
+ * 〔fail-closed，先例 host-version-snapshot 的 F-3 前置优雅判红〕，「刷新漏改副本」的漂移面
+ * 从机制上消失）。宿主升级后按该文件头注释刷新（R3 起刷新点不含本文件版本常量——已无副本）。
+ * 用途：①primaryBaseline = 主基线项（声明面口径 HOST_DECLARED_RANGE / S3 派生）；②
+ * targetBaseline = DSH_BASELINE 所选**目标基线**（靶子面判据：版本一致性〔FIX-037 ③〕
+ * + S7/S5/S2 宿主侧判据按档案项与条目 since 分代）——选择规则与 host-version-snapshot §0b
+ * 一致：值 = 档案 id 或 status 关键词，未设/空白 = 默认 primary（本地默认行为不变），
+ * 未知值即红（P8：基线切换失败可观测，不静默回退默认）。
  */
-const HOST_VERSION_BASELINE = Object.freeze({ dsh: '0.2.0-rc.2', dshPackages: '0.2.0-rc.2' })
+const HOST_BASELINE_REGISTRY = (() => {
+  const literal = arrayOf(stripComments(readTest('host-version-snapshot.mjs')), 'const HOST_BASELINE_REGISTRY = Object.freeze(')
+  if (!literal) return null
+  try {
+    const parsed = new Function(`return ${literal}`)()
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null
+  } catch { return null /* 提取失败 → 下方判据红（fail-closed） */ }
+})()
+const primaryBaseline = HOST_BASELINE_REGISTRY?.find((entry) => entry?.status === 'primary') ?? null
+const DSH_BASELINE_RAW = String(process.env.DSH_BASELINE ?? '').trim()
+const targetBaseline = DSH_BASELINE_RAW === ''
+  ? primaryBaseline
+  : HOST_BASELINE_REGISTRY?.find((entry) => entry?.id === DSH_BASELINE_RAW || entry?.status === DSH_BASELINE_RAW) ?? null
+// 提取与选择的 fail-closed 判据（先例 host-version-snapshot F-3——提取失败时版本一致性
+// 判据与 HOST_DECLARED_RANGE 均失去数据源，继续跑只会产出失真结论，故显式判红后收口
+// 退出，不静默降级——P8）。
+{
+  const registryShapeOk = Array.isArray(HOST_BASELINE_REGISTRY)
+    && HOST_BASELINE_REGISTRY.every((entry) => ['id', 'status', 'dsh', 'dshPackages'].every((key) => typeof entry?.[key] === 'string' && entry[key].trim() !== ''))
+  check('基线档案: HOST_BASELINE_REGISTRY 自 host-version-snapshot.mjs 文本提取成功且形态完备（ARCH-005 R3 单源消费——无版本常量副本可漏改；提取失败即红）',
+    registryShapeOk, { extracted: HOST_BASELINE_REGISTRY })
+  const primaryCount = Array.isArray(HOST_BASELINE_REGISTRY) ? HOST_BASELINE_REGISTRY.filter((entry) => entry?.status === 'primary').length : -1
+  check('基线档案: 注册表恰一 primary 项（主基线锚定——声明面/版本判据的数据前提；R0 批「基线副本」机器锁定的 R3 后继形态）',
+    primaryCount === 1, { primaryCount })
+  check(`基线选择: DSH_BASELINE=${DSH_BASELINE_RAW || '<unset → primary>'} 解析为在册基线（值 = 档案 id / status 关键词；未知值即红——P8 基线切换失败可观测）`,
+    targetBaseline !== null, { valid: (HOST_BASELINE_REGISTRY ?? []).map((entry) => `${entry?.id}/${entry?.status}`) })
+  if (!registryShapeOk || primaryCount !== 1 || targetBaseline === null) {
+    console.error(`\n${failures} FAILURE(S) (${passed} passed) — 基线档案提取/选择失败，收口退出（fail-closed：后续判据失去可信数据源，不产出失真结论）`)
+    process.exit(1)
+  }
+}
+/**
+ * 基线代际比较（since 分代判定的谓词）：`since` 取档案 id 形态（'0.1.5'/'0.2.0'）或
+ * 逐事件注记的完整版本（'0.1.5-rc.2'）——按 major.minor 数值序比较（prerelease 后缀
+ * 不参与分代：0.1.5 与 0.1.5-rc.2 同代，与 R0 白名单注记口径一致）。
+ */
+const minorOf = (version) => String(version).split('.').slice(0, 2).map(Number)
+const baselineIncludes = (since) => {
+  const [a, b] = [minorOf(since), minorOf(targetBaseline.id)]
+  return a[0] < b[0] || (a[0] === b[0] && a[1] <= b[1])
+}
 /**
  * 版本一致性判据的关键包 = `dsh` CLI + **S7 直读包**（`dsh-api-remotes` /
  * `dsh-api-session-controller` / `dsh-client-ui-model-selection` / `dsh-llm` /
@@ -280,12 +341,12 @@ const PEER_DEP_BASELINE = [
   '@deepseek-ai/dsh-credentials',
 ]
 /**
- * 声明面记录性口径（F-2 / R0 审查承接）：**注册表派生**——`^` + HOST_VERSION_BASELINE.dshPackages。
- * 该副本与 `tests/host-version-snapshot.mjs` 的 HOST_BASELINE_REGISTRY 主基线项由下方
- * 「基线副本」机器断言锁定同源同值（刷新漏改任一侧即红）——主基线刷新时本口径随动，
- * 杜绝「声明范围第五份硬拷贝」的漏改面（R0 批时此处曾为独立字符串常量）。
+ * 声明面记录性口径（F-2 / R0 审查承接）：**注册表派生**——`^` + 主基线项（primaryBaseline，
+ * ARCH-005 R3 起经文本提取自 HOST_BASELINE_REGISTRY——无第五份硬拷贝）的 dshPackages。
+ * **恒取 primary 项**（不随 DSH_BASELINE 所选目标基线变——frozen 选择不放松声明面，
+ * 与 host-version-snapshot F-1 收紧同族纪律）；主基线刷新时本口径随动。
  */
-const HOST_DECLARED_RANGE = `^${HOST_VERSION_BASELINE.dshPackages}`
+const HOST_DECLARED_RANGE = `^${primaryBaseline.dshPackages}`
 /** cordis.patch.yml 两宿主行（宿主对不存在条目仅 stderr 警告——静默面守卫）。 */
 const PATCH_ROWS_BASELINE = [
   { id: 'router', name: 'dsh-agent-router' },
@@ -333,10 +394,18 @@ const SCOPED_HOOK_EVENTS = ['agent/pre-step', 'agent/created', 'agent/request']
  * FIX-043 批 E（R1 P3-2 收口）：anchor 内对 S7 判据的**引用渲染**统一为与 S7 逐字一致的**单引号**
  * 形态；下面两个 anchor 因此以**双引号定界**——单引号定界下 `\'` 转义使源文本不再逐字等同判据串，
  * 而 host-abi-health.mjs 的 9h R-1 fresh needle 是按**源文本**匹配的（P3-2 的引号差异即源于此）。
+ *
+ * ARCH-005 R3（交付②——since 分代成文，与 R0 白名单逐项 since 注记同族）：每条锚声明其
+ * 当前形态**定型于哪代基线**（`since` = 档案 id；三锚均 ARCH-004 期定型于 0.1.5-rc.2 实读，
+ * 0.2.0 复核存续）。所选目标基线（DSH_BASELINE）低于 since 时该锚的**宿主侧**判据（包×文件
+ * 存在性 + 符号逐字在位）记可见 skip（分代判定——锚形态对更老宿主合法不同）；静态判据
+ * （锚形态/声明完备性/消费签名）与所选基线无关恒跑。since 缺失或 ∉ 档案 id 集 → 下方
+ * 「锚分代」判据红（fail-closed，防「静默省略 = 恒适用」——declarationGapsOf 同族）。
  */
 const HOST_SHAPE_ANCHORS = [
   {
     face: 'sessionController.selectModel',
+    since: '0.1.5',
     anchor: "dsh-api-session-controller 的 lib/index.js 的 selectModel(request) 面；语义锚 lib/types/agent.js 的 selectionFor(agent) → stateOf(session, 'modelSelection') → projectionState.pending（S7 增强组核验 selectionFor(agent) / stateOf(agent.session, 'modelSelection') / projectionState.pending 三项；selectModel 面不在 S7 判据内——由 lib/host-abi/llm-selection.js 消费面判据覆盖）",
     expectPackage: 'dsh-api-session-controller',
     expectFile: ['lib/index.js', 'lib/types/agent.js'],
@@ -350,6 +419,7 @@ const HOST_SHAPE_ANCHORS = [
   },
   {
     face: 'sessionProjections.stateOf(session, "modelSelection") → {lastUsed, pending}',
+    since: '0.1.5',
     anchor: "dsh-api-session-controller 的 lib/types/agent.js：stateOf(session, 'modelSelection') → projectionState.pending（S7 增强组逐字核验）",
     expectPackage: 'dsh-api-session-controller',
     expectFile: ['lib/types/agent.js'],
@@ -370,6 +440,7 @@ const HOST_SHAPE_ANCHORS = [
   },
   {
     face: 'modelDirectories.directoryFor(sessionId).load()',
+    since: '0.1.5',
     anchor: 'dsh-client-ui-model-selection 的 lib/types/client/service.d.ts 的 directoryFor(sessionId: SessionId): ModelDirectory 面；lib/types/client/directory.d.ts 的 ModelDirectoryState 与 load()（S7 增强组核验 directoryFor(sessionId: SessionId): ModelDirectory 一项）',
     expectPackage: 'dsh-client-ui-model-selection',
     expectFile: ['lib/types/client/service.d.ts', 'lib/types/client/directory.d.ts'],
@@ -392,9 +463,18 @@ const HOST_SHAPE_ANCHORS = [
  * `expectFile` / `expectSymbol`，与 S2 同构）——宿主可达时按「声明的包 × 声明的
  * 文件」核验宿主文件存在性，并核验声明的 schema 符号确在宿主 `lib/client.js` 内
  * 出现（S5 的符号本就是宿主源码里的 `<面键>_result$schema` 声明，可逐字定位）。
+ *
+ * ARCH-005 R3（交付②——since 分代成文）：每条声明其 schema 白名单**当前形态**定型于
+ * 哪代基线。五面 0.1.5-rc.2 定型、0.2.0 复核逐字段相同（本批复读 frozen 树实证）；
+ * `agentPresets.list` 的 {presets} 收缩形态**定型于 0.2.0**（0.1.5 树实读顶层字段为
+ * {presets,authorable}——authorable 移除且插件从未消费，R0 登记）⇒ 所选基线低于 since
+ * 时：本表白名单形态对更老宿主合法不同——**宿主侧**判据（包×文件/符号存在性）与 S7 7b
+ * 顶层字段判等均记可见 skip（分代判定）；静态判据（锚形态/声明完备性/消费 ⊆ 白名单）
+ * 与所选基线无关恒跑。since 缺失或 ∉ 档案 id 集 → 下方「锚分代」判据红（fail-closed）。
  */
 const WIRE_SCHEMA_WHITELIST = {
   'llm.listConfigurableProviders': {
+    since: '0.1.5',
     anchor: 'dsh-api-remotes 的 lib/client.js 的 llm_listConfigurableProviders_result schema（S7 增强组按符号逐字核验）',
     expectPackage: 'dsh-api-remotes',
     expectFile: ['lib/client.js'],
@@ -403,6 +483,7 @@ const WIRE_SCHEMA_WHITELIST = {
     dynamic: { file: 'lib/host-abi/client-remotes.js', marker: 'function joinProviderDirectoryHost(', pattern: /entry\.([A-Za-z_]\w*)/g },
   },
   'llm.listProviders': {
+    since: '0.1.5',
     anchor: 'dsh-api-remotes 的 lib/client.js 的 llm_listProviders_result schema（S7 增强组按符号逐字核验）',
     expectPackage: 'dsh-api-remotes',
     expectFile: ['lib/client.js'],
@@ -411,6 +492,7 @@ const WIRE_SCHEMA_WHITELIST = {
     dynamic: { file: 'lib/host-abi/client-remotes.js', marker: 'function joinProviderDirectoryHost(', pattern: /provider\.([A-Za-z_]\w*)/g },
   },
   'session.modelCatalog': {
+    since: '0.1.5',
     anchor: 'dsh-api-remotes 的 lib/client.js 的 session_modelCatalog_result schema（S7 增强组按符号逐字核验）',
     expectPackage: 'dsh-api-remotes',
     expectFile: ['lib/client.js'],
@@ -419,6 +501,7 @@ const WIRE_SCHEMA_WHITELIST = {
     dynamic: { file: 'lib/host-abi/client-remotes.js', marker: "models: guard('remote.session'", pattern: /catalog\.([A-Za-z_]\w*)/g },
   },
   'settings.describe': {
+    since: '0.1.5',
     anchor: 'dsh-api-remotes 的 lib/client.js 的 settings_describe_result schema（S7 增强组按符号逐字核验）',
     expectPackage: 'dsh-api-remotes',
     expectFile: ['lib/client.js'],
@@ -427,6 +510,7 @@ const WIRE_SCHEMA_WHITELIST = {
     dynamic: { file: 'lib/host-abi/client-remotes.js', marker: "describe: guard('remote.settings'", pattern: /\bvalue\.([A-Za-z_]\w*)/g },
   },
   'credentials.describe': {
+    since: '0.1.5',
     anchor: 'dsh-api-remotes 的 lib/client.js 的 credentials_describe_result schema（record<string, {configured, source?, writable}>；S7 增强组按符号逐字核验）',
     expectPackage: 'dsh-api-remotes',
     expectFile: ['lib/client.js'],
@@ -435,6 +519,7 @@ const WIRE_SCHEMA_WHITELIST = {
     frozen: { consumed: ['configured'], presence: [{ file: 'lib/client.js', pattern: /\?\.configured === true/ }], note: '域内整体透传宿主 map；字段级消费在浏览器镜像账号卡（configured 判定）' },
   },
   'agentPresets.list': {
+    since: '0.2.0',
     anchor: 'dsh-api-remotes 的 lib/client.js 的 agentPresets_list_result schema（S7 增强组按符号逐字核验）',
     expectPackage: 'dsh-api-remotes',
     expectFile: ['lib/client.js'],
@@ -442,6 +527,43 @@ const WIRE_SCHEMA_WHITELIST = {
     schema: ['presets'],
     frozen: { consumed: ['presets'], presence: [{ file: 'lib/host-abi/client-remotes.js', pattern: /presets: \[\]/ }], note: '域内整体透传 {presets}；authorable 未被消费（ARCH-005 R0 实读：宿主 0.2.0-rc.2 该 schema 顶层字段已收缩为 {presets}——authorable 移除且插件从未消费，非断裂，基线随主基线登记刷新）' },
   },
+}
+
+// ── 锚分代完备性 + 逐事件 since 注记解析（ARCH-005 R3 交付②——分代判定的输入面看护）──
+// 两者都是 fail-closed：分代判定（baselineIncludes）失去输入时若静默按「恒适用」/
+// 「恒全量」判定，会把「条目属于更高代际」伪装成「在本基线也成立」（§9h-3 入表
+// 完备性同族——静默省略 ≠ 通过）。
+{
+  const validSinceIds = HOST_BASELINE_REGISTRY.map((entry) => entry.id)
+  const anchorSinceGaps = HOST_SHAPE_ANCHORS
+    .filter((spec) => !validSinceIds.includes(spec.since))
+    .map((spec) => `${spec.face}: since=${String(spec.since)}`)
+  check('锚分代: HOST_SHAPE_ANCHORS 逐条 since ∈ 档案 id 集（ARCH-005 R3 成文——缺失/未知代际即红，防静默省略 = 恒适用）',
+    anchorSinceGaps.length === 0, anchorSinceGaps)
+  const schemaSinceGaps = Object.entries(WIRE_SCHEMA_WHITELIST)
+    .filter(([, spec]) => !validSinceIds.includes(spec.since))
+    .map(([face, spec]) => `${face}: since=${String(spec.since)}`)
+  check('锚分代: WIRE_SCHEMA_WHITELIST 逐条 since ∈ 档案 id 集（同上——分代判定 fail-closed）',
+    schemaSinceGaps.length === 0, schemaSinceGaps)
+}
+/**
+ * 转发事件逐项 since 注记（ARCH-005 R3——S7 7a 分代判定的输入）：注记面 =
+ * `lib/host-abi/events.js` 镜像数组的**行内注释**（R0 登记形态：`'事件名', // since <版本>`）。
+ * 镜像**值面**由 S1e 值级 parity 锁定；本处补「注记面」判据——镜像逐项有注记 + 注记不指向
+ * 镜像外事件（陈旧注记即红）。分代比较按 major.minor（minorOf——'0.1.5-rc.2' 与 '0.1.5'
+ * 同代），与锚/S5 的 since = 档案 id 口径互通。
+ */
+const FORWARDED_EVENT_SINCE = new Map()
+for (const match of readHostAbi('events.js').matchAll(/^\s*'([^']+)',\s*\/\/\s*since\s+(\d+\.\d+\.\d+(?:-rc\.\d+)?)/gm)) {
+  FORWARDED_EVENT_SINCE.set(match[1], match[2])
+}
+{
+  const unannotated = FORWARDED_EVENT_ALLOWLIST.filter((event) => !FORWARDED_EVENT_SINCE.has(event))
+  check('锚分代: FORWARDED_EVENT_ALLOWLIST 逐项有 since 注记（lib/host-abi/events.js 行内注释——S7 7a 分代判定输入完备；缺注记即红）',
+    unannotated.length === 0, unannotated)
+  const staleAnnotations = [...FORWARDED_EVENT_SINCE.keys()].filter((event) => !FORWARDED_EVENT_ALLOWLIST.includes(event))
+  check('锚分代: since 注记零陈旧项（注记事件 ⊆ 镜像——镜像除名后遗留注记即红）',
+    staleAnnotations.length === 0, staleAnnotations)
 }
 
 const pkg = JSON.parse(readFileSync(join(ROOT_DIR, 'package.json'), 'utf8'))
@@ -459,11 +581,13 @@ const clientStripped = stripComments(clientSource)
 // _npx 多缓存共存时按目录名**降序**取首个命中——readdirSync 顺序非契约
 // （P2-2：非确定性选择会把 RISK-003 预警指向非运行宿主副本 → 不可复现的假红/假绿）；
 // 解析结果与实际读取路径打印在启动行（可诊断性——先例：本文件原有 S7 skip note）。
-// 版本一致性判据（FIX-037 ③，FIX-036 R0 P2-2 补强；ARCH-005 R0 起对主基线项）：
+// 版本一致性判据（FIX-037 ③，FIX-036 R0 P2-2 补强；ARCH-005 R3 起对 **DSH_BASELINE 所选
+// 目标基线档案项**——默认 primary，本地默认行为不变）：
 // 本机两候选可同为基线版本，但「降序确定性」不等于「指向运行宿主」——故追加关键包
 // 版本比对并打印（选定靶子 + 全部候选），不一致即显式告警 + note（走可见 skip 面，
 // 门控日志可判定 S3/S7 结论的适用范围；不引入宿主硬依赖红——BR-03「静态守卫不依赖
 // 宿主」不变）。
+console.log(`基线选择: DSH_BASELINE=${DSH_BASELINE_RAW || '<unset → primary>'} → ${targetBaseline.id}(${targetBaseline.status})（靶子面判据按该档案项判定；声明面恒取 primary ${primaryBaseline.id}——ARCH-005 R3）`)
 console.log('宿主靶子解析（S3 宿主侧包表半边 + S7 增强组共用；只读宿主源码，零写入）:')
 const hostTarget = (() => {
   const candidates = []
@@ -506,7 +630,7 @@ const hostTarget = (() => {
     return null
   }
   const versionsOf = (candidate) => Object.fromEntries(HOST_KEY_PACKAGES.map((name) => [name, versionOf(candidate, name)]))
-  const expectedOf = (name) => (name === 'dsh' ? HOST_VERSION_BASELINE.dsh : HOST_VERSION_BASELINE.dshPackages)
+  const expectedOf = (name) => (name === 'dsh' ? targetBaseline.dsh : targetBaseline.dshPackages)
   const versions = hit ? versionsOf(hit) : null
   const mismatches = versions
     ? HOST_KEY_PACKAGES.filter((name) => versions[name] !== expectedOf(name)).map((name) => `${name}@${versions[name] ?? 'absent'} ≠ ${expectedOf(name)}`)
@@ -524,16 +648,16 @@ const versionLine = (versions) => HOST_KEY_PACKAGES.map((name) => `${name}@${ver
 if (hostTarget.root) {
   const others = hostTarget.candidates.filter(({ root }) => root !== hostTarget.root).map(({ origin }) => origin)
   console.log(`      · 靶子 = ${hostTarget.root}（来源 ${hostTarget.origin}；候选 ${hostTarget.candidates.length} 个${others.length > 0 ? `，降序取首命中，未选：${others.join(' / ')}` : ''}）`)
-  console.log(`      · 靶子关键包版本: ${versionLine(hostTarget.versions)}（基线 dsh ${HOST_VERSION_BASELINE.dsh} / dsh-* ${HOST_VERSION_BASELINE.dshPackages}）`)
+  console.log(`      · 靶子关键包版本: ${versionLine(hostTarget.versions)}（基线[${targetBaseline.id}/${targetBaseline.status}] dsh ${targetBaseline.dsh} / dsh-* ${targetBaseline.dshPackages}）`)
   for (const candidate of hostTarget.candidates) {
     if (candidate.root === hostTarget.root) continue
     console.log(`      · 未选候选 ${candidate.origin}: ${versionLine(hostTarget.versionsOf(candidate.root))}`)
   }
   if (hostTarget.mismatches.length > 0) {
     console.log(`      · 版本一致性告警（FIX-037 ③）: ${hostTarget.mismatches.join('; ')}`)
-    note(`S3/S7 宿主靶子版本一致性: 关键包 ≠ HOST_BASELINE（${hostTarget.mismatches.join('; ')}）→ 靶子可能非运行宿主副本（RISK-003 预警对象不确定），S3/S7 结论仅对该副本成立`)
+    note(`S3/S7 宿主靶子版本一致性: 关键包 ≠ 所选基线 ${targetBaseline.id}(${targetBaseline.status})（${hostTarget.mismatches.join('; ')}）→ 靶子可能非所选基线副本（RISK-003 预警对象不确定），S3/S7 结论仅对该副本成立`)
   } else {
-    console.log('      · 版本一致性: 关键包版本 === HOST_VERSION_BASELINE（靶子与实测基线同版——RISK-003 预警对象可判定）')
+    console.log(`      · 版本一致性: 关键包版本 === 所选基线 ${targetBaseline.id} 档案项（靶子与所选实测基线同版——RISK-003 预警对象可判定）`)
   }
 } else {
   console.log('      · 不可达（DSH_HOST_SOURCE 未设且本地无 _npx 缓存）→ S3 宿主侧半边与 S7 组均记 skip（BR-03：静态守卫不依赖宿主）')
@@ -559,24 +683,12 @@ const hostSourceOf = (() => {
   }
 })()
 
-// ── 基线副本机器一致性守卫（FIX-037 R0 P2-1；ARCH-005 R0 起对**主基线项**）──────
-// 双份常量的来由：host-version-snapshot.mjs 是独立入口（顶层执行 + process.exit），
-// 不可 import 复用「唯一权威」→ 本文件持副本。故「同源同值」MUST 有机器判据，否则
-// 宿主升级刷新漏改本副本 → 版本判据永久误报失配（噪声化告警稀释 ③ 的信号价值）。
-// 判据（ARCH-005 R0 起档案化）：从权威文件剥注释文本中提取 HOST_BASELINE_REGISTRY
-// 数组字面量，取其中 status:'primary' 的**主基线项**，逐键（dsh/dshPackages）与本
-// 副本比对；提取失败（注册表缺失/无 primary 项/键改名）同样判红（fail-closed——
-// 不因提取为空而静默通过）。
-{
-  const snapshotRegistry = arrayOf(stripComments(readTest('host-version-snapshot.mjs')), 'const HOST_BASELINE_REGISTRY = Object.freeze(')
-  const primaryEntry = (snapshotRegistry.match(/\{[^{}]*status:\s*'primary'[^{}]*\}/) ?? [''])[0]
-  const snapshotValueOf = (key) => new RegExp(`\\b${key}:\\s*'([^']+)'`).exec(primaryEntry)?.[1] ?? null
-  const baselineDiffs = Object.keys(HOST_VERSION_BASELINE)
-    .filter((key) => snapshotValueOf(key) !== HOST_VERSION_BASELINE[key])
-    .map((key) => `${key}: host-contract=${HOST_VERSION_BASELINE[key]} vs host-version-snapshot=${snapshotValueOf(key) ?? 'absent'}`)
-  check('基线副本: HOST_VERSION_BASELINE === host-version-snapshot.mjs HOST_BASELINE_REGISTRY 主基线项（双份常量机器锁定——刷新漏改任一即红；刷新点共四处）',
-    baselineDiffs.length === 0, baselineDiffs)
-}
+// ── 基线档案单源消费说明（ARCH-005 R3）────────────────────────────────────────
+// R0 批此处曾持「基线副本机器一致性守卫」（HOST_VERSION_BASELINE 副本 vs 权威文件
+// HOST_BASELINE_REGISTRY 主基线项的文本比对锁定，FIX-037 R0 P2-1）。R3 起副本删除、
+// 改为文件头部**直接文本提取**整个注册表并按 DSH_BASELINE 选择目标基线（提取/选择
+// 失败即红收口——见上方「基线档案」判据组）：「双份常量机器锁定」的义务由「单份
+// 常量 + 提取判据」承接，刷新漏改面从机制上消失（P5：同一数据单一路径）。
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('S1 契约快照四类面（宿主面形状漂移即红；宿主新增方法自动入集 = RISK-003 预警）:')
@@ -685,7 +797,7 @@ console.log('S2 宿主源码形状锚点（P10-④：形状签名 + 宿主源码
     const undeclared = [...declared.pkg, ...declared.files, ...declared.symbols].filter((token) => !anchorCase.anchor.includes(token))
     check(`S2 形状锚点: ${anchorCase.face} 锚文本含其声明的对象归属（expectPackage/expectFile/expectSymbol 逐项逐字在位——字段与锚脱钩即红）`,
       undeclared.length === 0, { undeclared, anchor: anchorCase.anchor })
-    if (hostTarget.root) {
+    if (hostTarget.root && baselineIncludes(anchorCase.since)) {
       const absent = declared.pkg.flatMap((name) => declared.files.filter((file) => !existsSync(join(hostTarget.root, name, file))).map((file) => `${name}/${file}`))
       check(`S2 形状锚点: ${anchorCase.face} 声明的宿主包×文件在宿主靶子中存在（捏造包/文件即红；靶子 ${hostTarget.origin}）`,
         absent.length === 0, { absent, hostRoot: hostTarget.root })
@@ -702,6 +814,10 @@ console.log('S2 宿主源码形状锚点（P10-④：形状签名 + 宿主源码
         .map((symbol) => `${declaredPackage}/${entry.file} :: ${symbol}`))
       check(`S2 形状锚点: ${anchorCase.face} 声明的宿主符号逐字在宿主源码内（捏造符号即红；靶子 ${hostTarget.origin}）`,
         absentSymbols.length === 0, { absentSymbols, hostRoot: hostTarget.root })
+    } else if (hostTarget.root) {
+      // ARCH-005 R3 分代：锚形态定型于更高代际——对所选基线的宿主侧核验记可见 skip
+      // （静态判据——锚形态/声明完备性/消费签名——不受影响恒跑；非静默降级）。
+      note(`S2 形状锚点: ${anchorCase.face} since=${anchorCase.since} > 所选基线 ${targetBaseline.id} → 宿主侧「包×文件/符号」核验记 skip（锚形态定型于更高代际——ARCH-005 R3 分代判定；静态判据仍生效）`)
     } else {
       note(`S2 形状锚点: ${anchorCase.face} 宿主靶子不可达 → 「声明包×文件存在性 + 符号逐字在位」核验跳过（锚文本字段判据仍生效；BR-03 静态守卫不依赖宿主）`)
     }
@@ -854,7 +970,7 @@ console.log('S5 字段级 wire schema 白名单断言（S-5：消费字段 ⊆ �
     const undeclared = declared.filter((token) => typeof token !== 'string' || !spec.anchor.includes(token))
     check(`S5 字段: ${face} 锚文本含其声明的对象归属（expectPackage/expectFile/expectSymbol 逐项逐字在位）`,
       undeclared.length === 0, { undeclared, anchor: spec.anchor })
-    if (hostTarget.root && spec.expectPackage) {
+    if (hostTarget.root && spec.expectPackage && baselineIncludes(spec.since)) {
       const absentFiles = declaredFiles.filter((file) => !existsSync(join(hostTarget.root, spec.expectPackage, file))).map((file) => `${spec.expectPackage}/${file}`)
       check(`S5 字段: ${face} 声明的宿主包×文件在宿主靶子中存在（捏造包/文件即红；靶子 ${hostTarget.origin}）`,
         absentFiles.length === 0, { absentFiles, hostRoot: hostTarget.root })
@@ -863,6 +979,12 @@ console.log('S5 字段级 wire schema 白名单断言（S-5：消费字段 ⊆ �
         check(`S5 字段: ${face} 声明的 schema 符号逐字在宿主 lib/client.js 内（捏造符号即红）`,
           absentSymbols.length === 0, { absentSymbols })
       }
+    } else if (hostTarget.root && !baselineIncludes(spec.since)) {
+      // ARCH-005 R3 分代：白名单形态定型于更高代际——对所选基线的宿主侧核验记可见 skip
+      // （如 frozen 基线下 agentPresets.list 的 {presets} 形态对 0.1.5 树合法不同——其
+      // 0.1.5 顶层字段为 {presets,authorable}；静态判据——锚形态/声明完备性/消费 ⊆ 白名单——
+      // 不受影响恒跑）。
+      note(`S5 字段: ${face} since=${spec.since} > 所选基线 ${targetBaseline.id} → 「声明包×文件/schema 符号」核验记 skip（白名单形态定型于更高代际——ARCH-005 R3 分代判定；静态判据仍生效）`)
     } else {
       note(`S5 字段: ${face} 宿主靶子不可达 → 「声明包×文件/schema 符号」核验跳过（锚文本字段判据仍生效；BR-03）`)
     }
@@ -926,10 +1048,19 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
     //   判据 = 镜像 ⊆ 宿主实读表（宿主侧除名消费事件即红）；宿主侧超集（additive 增量）为绿 +
     //   打印增量清单（吸收留痕——基线登记义务的可见提示，不制造人工刷新红）。引号形态以靶子
     //   实读为准（0.2.0 树该文件为单引号面——复审 R1 P3-3 仲裁，现行正则可命中）。
+    //   ARCH-005 R3：期望集按**逐事件 since** 分代（注记面 = lib/host-abi/events.js 镜像数组行内
+    //   注记，R0 登记形态；解析完备性由「锚分代」判据组锁定）——所选基线低于事件 since 时该事件
+    //   不入期望集（frozen 基线下 0.2.0 新增 8 项不期望存在于 0.1.5 宿主表 ⇒ 判 19 ⊆ 19），
+    //   宿主侧超集照旧绿 + 打印增量，消费项除名即红。
     const eventsSource = hostRead('dsh-api-remotes', 'lib', 'types', 'remote-events.js')
     const hostEvents = [...eventsSource.matchAll(/event:\s*'([^']+)'/g)].map((match) => match[1])
-    const mirrorMissing = FORWARDED_EVENT_ALLOWLIST.filter((event) => !hostEvents.includes(event))
-    check(`S7 增强: 白名单镜像 ⊆ 宿主 API_REMOTE_FORWARDED_EVENTS（单向消费断言——镜像 ${FORWARDED_EVENT_ALLOWLIST.length} 项全部在宿主 ${hostEvents.length} 项实读表内；宿主除名消费事件即红）`, mirrorMissing.length === 0, mirrorMissing)
+    const expectedMirror = FORWARDED_EVENT_ALLOWLIST.filter((event) => baselineIncludes(FORWARDED_EVENT_SINCE.get(event)))
+    const futureMirror = FORWARDED_EVENT_ALLOWLIST.filter((event) => !baselineIncludes(FORWARDED_EVENT_SINCE.get(event)))
+    const mirrorMissing = expectedMirror.filter((event) => !hostEvents.includes(event))
+    check(`S7 增强: 白名单镜像 ⊆ 宿主 API_REMOTE_FORWARDED_EVENTS（单向消费断言——所选基线 ${targetBaseline.id} 期望 ${expectedMirror.length} 项全部在宿主 ${hostEvents.length} 项实读表内；宿主除名消费事件即红）`, mirrorMissing.length === 0, mirrorMissing)
+    if (futureMirror.length > 0) {
+      note(`S7 增强: 镜像 ${futureMirror.length} 项 since > 所选基线 ${targetBaseline.id}，不入本基线期望集（ARCH-005 R3 分代判定——期望集按所选基线的 since 注记面派生，不对宿主 ${hostEvents.length} 项实读表的代际作判定）: [${futureMirror.join(', ')}]`)
+    }
     const hostExtras = hostEvents.filter((event) => !FORWARDED_EVENT_ALLOWLIST.includes(event))
     console.log(`      · 宿主侧超集增量（单向断言消化面——待登记进镜像基线）: ${hostExtras.length} 项${hostExtras.length > 0 ? ` [${hostExtras.join(', ')}]` : ''}`)
     // 7b 字段级 wire schema 宿主声明源（逐面取值级字段表）
@@ -960,6 +1091,13 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
     //   S5 的 `anchorHostForm` 判据同一表达式）——消除两处手抄映射的漂移面（P5 单点化）。
     const schemaCases = Object.keys(WIRE_SCHEMA_WHITELIST).map((face) => [`${face.replace('.', '_')}_result`, face])
     for (const [schemaName, face] of schemaCases) {
+      if (!baselineIncludes(WIRE_SCHEMA_WHITELIST[face].since)) {
+        // ARCH-005 R3 分代：白名单形态定型于更高代际（agentPresets.list 的 {presets} 收缩
+        // 定型于 0.2.0——0.1.5 树实读为 {presets,authorable}）→ 对所选基线的顶层字段判等
+        // 记可见 skip；S5 静态判据（消费 ⊆ 白名单）与所选基线无关恒跑。
+        note(`S7 增强: 宿主 schema ${face} since=${WIRE_SCHEMA_WHITELIST[face].since} > 所选基线 ${targetBaseline.id} → 顶层字段判等记 skip（白名单形态定型于更高代际——ARCH-005 R3 分代判定）`)
+        continue
+      }
       const fields = topLevelFields(schemaBlockOf(schemaName))
       const expected = WIRE_SCHEMA_WHITELIST[face].schema
       check(`S7 增强: 宿主 schema ${face} 顶层字段 === 白名单（${fields.join(',')}）`, deepEqual(fields, expected), fields)

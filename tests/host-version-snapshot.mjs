@@ -37,12 +37,22 @@
  * 2. 同步更新多处：本文件 HOST_BASELINE_REGISTRY（新增档案项：旧主基线降级
  *    frozen、新项 status primary）、package.json 对应版本范围与 inject 清单
  *    （若有包消亡/新增）、README「宿主兼容性（实测基线）」小节、
- *    tests/host-contract.mjs 的 HOST_VERSION_BASELINE 副本（**主基线项相等**——
- *    S7/S3 靶子版本一致性判据用；两处常量由该文件「基线副本」断言机器锁定，
- *    漏改即红）；
+ *    tests/host-contract.mjs（ARCH-005 R3 起经**文本提取**消费本注册表——无第二份
+ *    版本常量可漏改，提取/选择失败即红；其靶子面判据按 DSH_BASELINE 所选档案项
+ *    判定，声明面判据恒取 primary 项）；
  * 3. 跑 node tests/host-version-snapshot.mjs 确认绿，再跑全量门禁
  *    node tests/*.mjs 确认零回退。
  * 本测试不假设宿主 checkout 路径存在于测试环境——基线以常量形态记录于此。
+ *
+ * 基线选择（ARCH-005 R3——看护矩阵化）：环境变量 `DSH_BASELINE` 选择**目标基线**
+ * （值 = 档案 id（如 '0.1.5'/'0.2.0'）或 status 关键词（'frozen'/'primary'）；未设/空白 =
+ * 默认 primary——本地默认行为不变）。选择只作用于**靶子面/契约面**判据（消费方 =
+ * tests/host-contract.mjs 的版本一致性判据与 S7/S5/S2 宿主侧判据——后者按条目 since
+ * 分代，所选基线低于条目 since 时记可见 skip）；本套件的声明面断言（§0-§5）**恒判
+ * primary**（F-1 收紧不因非默认选择放松——DSH_BASELINE=frozen 不是把 package.json
+ * 回退 frozen 范围的合法通道）。未知值 → §0b 显式判红并收口退出（P8 fail-closed：
+ * 基线切换失败可观测，不静默回退默认）。CI 矩阵 job（.github/workflows/ci.yml 的
+ * guard-matrix）按本注册表解析 pinned 版本安装宿主关键包后以同门控命令消费该机制。
  *
  * 独立入口：node tests/host-version-snapshot.mjs（exit 0/1）。
  */
@@ -59,8 +69,9 @@ const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
 //   嵌套 scope，2026-10-17 实施时单点复读：dsh 主包与全部 dsh-* 包 0.2.0-rc.2；cordis/schemastery
 //   随树非 0.2.0-rc.2——4.0.5 / 3.18.5〔设计 F-B / 复审 R1 F-3 三方仲裁 3.18.5，本批复读复核〕）。
 //   R1 安装同步后本仓树 = 主基线 0.2.0-rc.2；cordis/schemastery 按插件自持范围解析 4.0.1/3.18.1。
-// 主基线项 = tests/host-contract.mjs 的 HOST_VERSION_BASELINE 副本（靶子版本一致性判据），
-// 同源同值由该文件「基线副本」机器断言锁定（主基线项相等——任一侧刷新漏改即红）。
+// 本档案 = 唯一事实源（ARCH-005 R3 起 tests/host-contract.mjs 亦经文本提取消费本注册表
+// ——无第二份版本常量，提取/选择失败即红；「双份常量机器锁定」纪律（F-J）随之退役为
+// 「单份常量 + 提取判据」）。
 const HOST_BASELINE_REGISTRY = Object.freeze([
   { id: '0.1.5', status: 'frozen', dsh: '0.1.5-rc.1', dshPackages: '0.1.5-rc.2', cordis: '4.0.2', schemastery: '3.18.2' },
   { id: '0.2.0', status: 'primary', dsh: '0.2.0-rc.2', dshPackages: '0.2.0-rc.2', cordis: '4.0.5', schemastery: '3.18.5' },
@@ -76,6 +87,19 @@ const HOST_BASELINE = Object.freeze(HOST_BASELINE_REGISTRY.find((entry) => entry
  * 前置优雅判红，不会崩栈。
  */
 const primaryDeclaredRange = `^${HOST_BASELINE?.dshPackages ?? ''}`
+
+/**
+ * 目标基线选择（ARCH-005 R3——看护矩阵化）：`DSH_BASELINE` 环境变量（值 = 档案 id
+ * 或 status 关键词；未设/空白 = 默认 primary——本地默认行为不变）。选择结果只供
+ * **靶子面/契约面**消费方使用（tests/host-contract.mjs 的版本一致性判据 + 其 S7/S5/S2
+ * 宿主侧判据按所选档案项与条目 since 分代判定）；本套件的声明面断言（§0-§5）恒判
+ * primary——非默认选择不是把声明面回退 frozen 的通道（F-1 收紧不放松）。未知值在
+ * 下方 §0b 显式判红并收口退出（P8 fail-closed：基线切换失败可观测，不静默回退默认）。
+ */
+const DSH_BASELINE_RAW = String(process.env.DSH_BASELINE ?? '').trim()
+const SELECTED_BASELINE = DSH_BASELINE_RAW === ''
+  ? HOST_BASELINE
+  : HOST_BASELINE_REGISTRY.find((entry) => entry.id === DSH_BASELINE_RAW || entry.status === DSH_BASELINE_RAW) ?? null
 
 /** 记录性声明口径：^ + 实测基线值（D1-5：不做 enforcement 依赖）。 */
 const declaredRange = (version) => `^${version}`
@@ -165,6 +189,21 @@ if (HOST_BASELINE === undefined) {
   process.exit(1)
 }
 
+// ── 0b. 目标基线选择（ARCH-005 R3）：DSH_BASELINE 解析 + fail-closed ──────────
+// 选择只作用于靶子面/契约面（消费方 host-contract）；声明面断言恒判 primary（F-1）。
+// 未知值必须显式判红收口——静默回退默认会把「切错基线」伪装成「没切」（P8）。
+check(`DSH_BASELINE '${DSH_BASELINE_RAW || '<unset>'}' resolves to a registry entry (id or status keyword; unset → primary)`, SELECTED_BASELINE !== null)
+if (SELECTED_BASELINE === null) {
+  // 失败计数单记：上方 check() 已 failures++（P3-1 收口——此前此处手动再 ++ 致双记，
+  // 与 F-3 块「裸 console.error + 手动单计」形态区分：本块判据经 check 承载）。
+  console.error(`FAIL  DSH_BASELINE='${DSH_BASELINE_RAW}' matches no registry entry (valid: ${HOST_BASELINE_REGISTRY.map((entry) => `${entry.id}/${entry.status}`).join(', ')}) — fail-closed, sections 1-5 skipped (P8: baseline switch failure must be observable, never a silent fallback to primary)`)
+  console.error(`\n${failures} FAILURE(S) (${passed} passed)`)
+  process.exit(1)
+}
+if (SELECTED_BASELINE !== HOST_BASELINE) {
+  console.log(`  --  DSH_BASELINE=${SELECTED_BASELINE.id}(${SELECTED_BASELINE.status}) selected — target-face parameterization (ARCH-005 R3); declaration-face sections 1-5 below stay PRIMARY-anchored (F-1 not relaxed by non-default selection)`)
+}
+
 // ── 1. inject 静态比对（D1-1 死行守卫 + D3(c) 声明漂移静态校验，B0 即生效）──
 console.log('dsh.client.inject manifest vs baseline:')
 check('inject declares exactly the 3 baseline-surviving packages in order', JSON.stringify(pkg.dsh?.client?.inject) === JSON.stringify(INJECT_BASELINE))
@@ -203,6 +242,6 @@ check(`README records schemastery baseline ${declaredEntry?.schemastery}`, readm
 check('README declares peerDeps as 记录性 (record-only, no enforcement reliance)', readme.includes('记录性'))
 check('README points authoritative guard to tests/host-version-snapshot.mjs', readme.includes('tests/host-version-snapshot.mjs'))
 
-console.log(`baseline registry: ${HOST_BASELINE_REGISTRY.map((entry) => `${entry.id}(${entry.status}: dsh=${entry.dsh} dsh-*=${entry.dshPackages} cordis=${entry.cordis} schemastery=${entry.schemastery})`).join(' | ')} | declared=${commonDeclaredRange ?? '<split/absent>'} -> ${declaredEntry?.id ?? '<none>'}`)
+console.log(`baseline registry: ${HOST_BASELINE_REGISTRY.map((entry) => `${entry.id}(${entry.status}: dsh=${entry.dsh} dsh-*=${entry.dshPackages} cordis=${entry.cordis} schemastery=${entry.schemastery})`).join(' | ')} | declared=${commonDeclaredRange ?? '<split/absent>'} -> ${declaredEntry?.id ?? '<none>'} | selected(DSH_BASELINE)=${DSH_BASELINE_RAW || '<unset>'} -> ${SELECTED_BASELINE.id}(${SELECTED_BASELINE.status})`)
 console.log(failures === 0 ? `\nALL HOST VERSION SNAPSHOT TESTS PASSED (${passed} assertions)` : `\n${failures} FAILURE(S) (${passed} passed)`)
 process.exit(failures === 0 ? 0 : 1)

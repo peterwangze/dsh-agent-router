@@ -98,6 +98,35 @@
 #   解析的 peer 记录）；若未来新增对宿主 checkout 的硬依赖，须在本步骤显式锁版本
 #   安装宿主基线（0.1.5-rc.2）或标注为后续步骤——不得让门控静默降级。
 # - 首跑属 push 后动作（本批次只落结构 + 本地等价命令实证，不触发远端 CI）。
+#
+# guard-matrix（ARCH-005 R3——看护矩阵化，设计 §6 R3 行 / §2-B 四维-c）：
+# - 双基线矩阵门控——每基线一 job，跑与 guard job **同一条门控命令**
+#   `node tests/run-all.mjs`；基线选择经 `DSH_BASELINE` 环境变量（两测试套件按 R3 机制
+#   消费：靶子面判据按所选基线档案项判定，声明面恒判 primary）。
+# - pinned 宿主安装（供应链纪律 = 精确版本 pin + registry 拉取）：npm pack
+#   HOST_KEY_PACKAGES（dsh 主包 + 7 个 dsh-* 判据包）到 job 环境（$RUNNER_TEMP）+
+#   `DSH_HOST_SOURCE` 指向 → host-contract 的 S3 宿主侧半边 / S7 增强组在 CI
+#   不再 skip（guard job 无宿主树，两面恒 skip——R3 目标由本 job 承载）。
+# - **版本单源（P5）**：matrix 的基线 id 列表与各 job 的 pinned 版本**不写 yaml 字面量**
+#   ——一律由 `tests/host-version-snapshot.mjs` 的 HOST_BASELINE_REGISTRY 运行时解析
+#   （resolve-baselines job 产出 id 集 → matrix 消费；guard-matrix 内每 job 再按
+#   DSH_BASELINE 解析 dsh / dshPackages 两值）。
+# - **树形态 = 恰好 HOST_KEY_PACKAGES 8 包**（刻意不含 dsh-typert-registry /
+#   dsh-settings）：rpc-shadow-guard §6 与 settings-config-migration §3 的真树判据是
+#   0.2.0 专属**行为**断言（A2/A3 批：validateCodec create() 强制 / settings Config
+#   volatile 面），对 0.1.5 树必然红且不可按 DSH_BASELINE 分代（其判据面无 since 档案）
+#   ——缺包时两者按既有 BR-03 可见 skip 语义降级（与 guard job 无宿主树时同行为，
+#   判据面不丢失，仅不在矩阵 job 内重复承载）。
+# - 预期 skip 形态（判据取**相对 guard job 增量**，绝对值随平台组合变化）：
+#   primary job = guard 的 skip 面 − host-contract×2（S3 半边 + S7 组转实跑）；
+#   frozen job 在其上另有 host-version-snapshot×1（选择提示行）+ host-contract×3
+#   （S5/S7b agentPresets 分代 skip×2 + S7 7a 未来项注记×1——DSH_BASELINE=frozen 的
+#   如实分代语义，非降级）。
+# - **独立禁用开关（workflow 层——设计 §6 R3 行「matrix job 可独立禁用」）**：repo
+#   variable `R3_BASELINE_MATRIX = 'disabled'` → guard-matrix 整体跳过（guard job 与
+#   resolve-baselines 不受影响；矩阵失败不阻塞主门控语义——两 job 互不 fail-fast）。
+# - 首跑属 push 后动作（本批只落结构 + 本地等价命令实证：pack 树构造脚本与两基线
+#   套件实跑已在本地复演，见 ARCH-005 R3 批交付证据）。
 name: ci
 
 on:
@@ -131,4 +160,115 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: gate (all suites, aggregated exit code)
+        run: node tests/run-all.mjs
+
+  # ── ARCH-005 R3：基线 id 集单源解析（matrix 消费——P5：基线数据不复制进 yaml）────
+  resolve-baselines:
+    name: 基线档案 id 解析（HOST_BASELINE_REGISTRY 单源）
+    runs-on: ubuntu-latest
+    outputs:
+      ids: ${{ steps.ids.outputs.ids }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: extract baseline ids from tests/host-version-snapshot.mjs
+        id: ids
+        run: |
+          IDS=$(node -e '
+            const { readFileSync } = require("node:fs")
+            const src = readFileSync("tests/host-version-snapshot.mjs", "utf8")
+              .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
+              .replace(/(^|[^:])\/\/[^\n]*/g, (line) => line.replace(/[^\n]/g, " "))
+            const marker = "const HOST_BASELINE_REGISTRY = Object.freeze("
+            if (src.indexOf(marker) < 0) { console.error("HOST_BASELINE_REGISTRY marker not found"); process.exit(1) }
+            const open = src.indexOf("[", src.indexOf(marker))
+            if (open < 0) { console.error("HOST_BASELINE_REGISTRY array literal not found"); process.exit(1) }
+            let depth = 0, end = -1
+            for (let index = open; index < src.length; index++) {
+              if (src[index] === "[") depth += 1
+              else if (src[index] === "]") { depth -= 1; if (depth === 0) { end = index; break } }
+            }
+            const registry = new Function("return " + src.slice(open, end + 1))()
+            if (!Array.isArray(registry) || registry.length === 0) { console.error("HOST_BASELINE_REGISTRY unparsable"); process.exit(1) }
+            process.stdout.write(JSON.stringify(registry.map((entry) => entry.id)))
+          ')
+          echo "ids=$IDS" >> "$GITHUB_OUTPUT"
+          echo "resolved baseline ids: $IDS"
+
+  # ── ARCH-005 R3：双基线矩阵门控（pinned 宿主 + DSH_HOST_SOURCE 指向 + 同门控命令）──
+  guard-matrix:
+    if: ${{ vars.R3_BASELINE_MATRIX != 'disabled' }}
+    needs: resolve-baselines
+    name: 基线矩阵门控 ${{ matrix.baseline }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        baseline: ${{ fromJSON(needs.resolve-baselines.outputs.ids) }}
+    env:
+      DSH_BASELINE: ${{ matrix.baseline }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: setup node (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      # pinned 版本单源解析（P5）：按 DSH_BASELINE 从 HOST_BASELINE_REGISTRY 取
+      # dsh / dshPackages 实测值——yaml 内零版本字面量，宿主升级只刷注册表即可。
+      - name: resolve pinned host versions from HOST_BASELINE_REGISTRY (single source)
+        run: |
+          node -e '
+            const { readFileSync, appendFileSync } = require("node:fs")
+            const src = readFileSync("tests/host-version-snapshot.mjs", "utf8")
+              .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
+              .replace(/(^|[^:])\/\/[^\n]*/g, (line) => line.replace(/[^\n]/g, " "))
+            if (src.indexOf("const HOST_BASELINE_REGISTRY = Object.freeze(") < 0) { console.error("HOST_BASELINE_REGISTRY marker not found"); process.exit(1) }
+            const open = src.indexOf("[", src.indexOf("const HOST_BASELINE_REGISTRY = Object.freeze("))
+            let depth = 0, end = -1
+            for (let index = open; index < src.length; index++) {
+              if (src[index] === "[") depth += 1
+              else if (src[index] === "]") { depth -= 1; if (depth === 0) { end = index; break } }
+            }
+            const registry = new Function("return " + src.slice(open, end + 1))()
+            const entry = registry.find((item) => item.id === process.env.DSH_BASELINE || item.status === process.env.DSH_BASELINE)
+            if (!entry) { console.error("no HOST_BASELINE_REGISTRY entry for DSH_BASELINE=" + process.env.DSH_BASELINE); process.exit(1) }
+            appendFileSync(process.env.GITHUB_ENV, "DSH_MAIN_VERSION=" + entry.dsh + "\nDSH_PACKAGES_VERSION=" + entry.dshPackages + "\n")
+            console.log("baseline " + entry.id + "(" + entry.status + "): dsh@" + entry.dsh + " dsh-*@" + entry.dshPackages)
+          '
+
+      # pinned 宿主树（npm registry 精确版本拉取）：恰好 host-contract 的
+      # HOST_KEY_PACKAGES 8 包（形态依据见文件头「树形态」注记——刻意不含
+      # dsh-typert-registry / dsh-settings，避免 0.2.0 专属行为判据在旧基线树上报红）。
+      - name: pinned host tree (npm pack HOST_KEY_PACKAGES to $RUNNER_TEMP)
+        run: |
+          set -e
+          TREE="$RUNNER_TEMP/host-baseline-tree/@deepseek-ai"
+          mkdir -p "$TREE"
+          cd "$RUNNER_TEMP"
+          for name in dsh-api-remotes dsh-api-session-controller dsh-client-ui-model-selection dsh-client-ui-conversation dsh-llm dsh-client-ui-settings dsh-client-locale; do
+            npm pack --silent "@deepseek-ai/$name@${DSH_PACKAGES_VERSION}"
+            mkdir -p "$TREE/$name"
+            tar -xzf "deepseek-ai-$name-${DSH_PACKAGES_VERSION}.tgz" -C "$TREE/$name" --strip-components=1
+          done
+          npm pack --silent "@deepseek-ai/dsh@${DSH_MAIN_VERSION}"
+          mkdir -p "$TREE/dsh"
+          tar -xzf "deepseek-ai-dsh-${DSH_MAIN_VERSION}.tgz" -C "$TREE/dsh" --strip-components=1
+          echo "pinned host tree ($DSH_BASELINE) ready:"
+          ls "$TREE"
+
+      - name: gate (all suites, aggregated exit code — same entrypoint as guard job)
+        env:
+          DSH_HOST_SOURCE: ${{ runner.temp }}/host-baseline-tree/@deepseek-ai
         run: node tests/run-all.mjs
