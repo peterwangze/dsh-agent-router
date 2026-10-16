@@ -268,7 +268,7 @@ const FORWARDED_EVENT_BASELINE = [
 const CLIENT_PACKAGE_INJECT_BASELINE = ['@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-api-remotes']
 /** 客户端 fiber inject 九面基线（inject-manifest 域 FIBER_INJECT 镜像源 = lib/client.js inject 数组）。 */
 const FIBER_INJECT_BASELINE = ['slots', 'locale', 'remote', 'remote.llm', 'remote.settings', 'remote.credentials', 'remote.agentPresets', 'remote.session', 'modelDirectories']
-/** peerDeps 8 项宿主供给包（记录性声明口径 = ^ + 实测基线 0.1.5-rc.2）。 */
+/** peerDeps 8 项宿主供给包（记录性声明口径见下方 HOST_DECLARED_RANGE——注册表派生）。 */
 const PEER_DEP_BASELINE = [
   '@deepseek-ai/dsh-attachment',
   '@deepseek-ai/dsh-agent',
@@ -279,7 +279,13 @@ const PEER_DEP_BASELINE = [
   '@deepseek-ai/dsh-system-prompt',
   '@deepseek-ai/dsh-credentials',
 ]
-const HOST_DECLARED_RANGE = '^0.1.5-rc.2'
+/**
+ * 声明面记录性口径（F-2 / R0 审查承接）：**注册表派生**——`^` + HOST_VERSION_BASELINE.dshPackages。
+ * 该副本与 `tests/host-version-snapshot.mjs` 的 HOST_BASELINE_REGISTRY 主基线项由下方
+ * 「基线副本」机器断言锁定同源同值（刷新漏改任一侧即红）——主基线刷新时本口径随动，
+ * 杜绝「声明范围第五份硬拷贝」的漏改面（R0 批时此处曾为独立字符串常量）。
+ */
+const HOST_DECLARED_RANGE = `^${HOST_VERSION_BASELINE.dshPackages}`
 /** cordis.patch.yml 两宿主行（宿主对不存在条目仅 stderr 警告——静默面守卫）。 */
 const PATCH_ROWS_BASELINE = [
   { id: 'router', name: 'dsh-agent-router' },

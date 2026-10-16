@@ -94,9 +94,12 @@
         ],
         "DEC-032": [
           "3fb6d9ad3df645ab68ba96bb3ce2de53"
+        ],
+        "DEC-33": [
+          "9d8b654adf050107b2108b29943d69f8"
         ]
       },
-      "sha256": "1ca66ec82886b9516f827c8e1f87d233a5228018edcee884076262bd7c705fa8"
+      "sha256": "3639051f39bc764c2377b7253a72eda156a412a277ddf9e4accfeeab554d33ca"
     },
     "evidence-log.md": {
       "rows": {
@@ -117,6 +120,9 @@
         ],
         "REVIEW-ARCH-005-R2": [
           "020c29b2f192c411a3ce947763521e6c"
+        ],
+        "REVIEW-ARCH-005-R3": [
+          "e324f155965f8aa6f5d5d5f49fc5fc1e"
         ],
         "REVIEW-AUDIT-001-R0": [
           "0ecc43432ad39691a7981c97a3999890"
@@ -481,7 +487,7 @@
           "377e36f54675369e0e5874bc35d8f737"
         ]
       },
-      "sha256": "c3304b6e0f9b8457bac1157ca5aec6b892dbd556ad3e081f46c3598af9e7a387"
+      "sha256": "3573ba1e86f68e1403924b4c6a64e7c752d882f4a512d213726fbe87106a7523"
     },
     "plan-tracker.md": {
       "rows": {
@@ -766,5 +772,5 @@
   },
   "schema_version": 1,
   "tool": "governance-write-guard/row-family-reconciliation",
-  "updated_at": "2026-10-17T00:38:06"
+  "updated_at": "2026-10-17T01:11:20"
 }

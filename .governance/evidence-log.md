@@ -776,3 +776,5 @@
 | TRIAGE-ARCH-005 | ARCH-005 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析）〔用户点名〕 | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/ARCH-005.json） | ARCH-005.json | change-triage | 2026-10-17 | G11 | TRIAGED |
 
 | REVIEW-ARCH-005-R3 | ARCH-005 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 3） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-ARCH-005-R3-R0BATCH-input.md; review-ARCH-005-R3.md; report_sha256=2a1494715e81; commit=a0ce595150ee | Code Reviewer | 2026-10-17 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| REVIEW-ARCH-005-R4 | ARCH-005 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 4） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-ARCH-005-R4-R1BATCH-input.md; review-ARCH-005-R4.md; report_sha256=8258419d6493; commit=bd17cac87186 | Code Reviewer | 2026-10-17 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
