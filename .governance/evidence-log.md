@@ -772,3 +772,7 @@
 | REVIEW-ARCH-005-R2 | ARCH-005 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 2） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-ARCH-005-R2-REQ-input.md; review-ARCH-005-R2.md; report_sha256=93fae7b1d1d8; commit=fba63ea93ea3 | Requirement Reviewer | 2026-10-17 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
 
 | REVIEW-ARCH-005-R1-DESIGN-REVIEWER | ARCH-005 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 1） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-ARCH-005-R1-DES-input.md; review-ARCH-005-R1-design-reviewer.md; report_sha256=78e686f414bf; commit=fba63ea93ea3 | Design Reviewer | 2026-10-17 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| TRIAGE-ARCH-005 | ARCH-005 | 变更控制 | change-triage CLI 机器写入 triage 记录（依赖/优先级/冲突/版本/执行副作用五步分析）〔用户点名〕 | 事实依据：change-triage 输出摘要（机器写入；命令输出 JSON 快照见 change-triage/ARCH-005.json） | ARCH-005.json | change-triage | 2026-10-17 | G11 | TRIAGED |
+
+| REVIEW-ARCH-005-R3 | ARCH-005 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 3） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-ARCH-005-R3-R0BATCH-input.md; review-ARCH-005-R3.md; report_sha256=2a1494715e81; commit=a0ce595150ee | Code Reviewer | 2026-10-17 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |

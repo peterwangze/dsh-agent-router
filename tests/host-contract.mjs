@@ -3,12 +3,14 @@
  *
  * 定位：D3 三层防线的最外一层（静态层）——**不依赖宿主 checkout 存在**。
  * 宿主面基线与源码锚点以「静态常量 + 宿主源码锚（包名/文件/符号）」冻结（先例
- * tests/host-version-snapshot.mjs 的 HOST_BASELINE），因此本套件在用户侧 /
- * 异构 CI 环境（BR-03：插件装在别处、宿主 cache 路径漂移）同样可跑；宿主
- * checkout 可达时（环境变量 DSH_HOST_SOURCE / DSH_HOST_PACKAGES 优先，本地 _npx
- * 缓存探测兜底）追加 S7 增强靶子组：直读宿主源码逐字核验常量（缺失只记 skip，
- * 不失败）。靶子解析为**单一实现路径**且**确定性**（多 _npx 缓存共存时按目录名
- * 降序取首命中——readdirSync 顺序非契约，非确定性选择会把 RISK-003 预警指向非
+ * tests/host-version-snapshot.mjs 的 HOST_BASELINE_REGISTRY 主基线项），因此本套件
+ * 在用户侧 / 异构 CI 环境（BR-03：插件装在别处、宿主 cache 路径漂移）同样可跑；宿主
+ * checkout 可达时（环境变量 DSH_HOST_SOURCE / DSH_HOST_PACKAGES 优先，**npm 全局树**
+ * 探测 [%APPDATA% 路径 + `npm root -g` 兜底——ARCH-005 R0 修 F-A：宿主 0.2.0 起经
+ * npm 全局安装供给，旧 `_npx` 候选链对 0.2.0 树失明]，本地 _npx 缓存降序兜底）
+ * 追加 S7 增强靶子组：直读宿主源码逐字核验常量（缺失只记 skip，
+ * 不失败）。靶子解析为**单一实现路径**且**确定性**（同类多候选共存时按声明序/
+ * 目录名降序取首命中——readdirSync 顺序非契约，非确定性选择会把 RISK-003 预警指向非
  * 运行宿主副本，产生不可复现的假红/假绿），并在启动行打印实际读取路径（可诊断）。
  * 同一靶子同时供 S3 宿主侧包表半边使用（设计 §5.1(a)「inject 声明 vs 宿主
  * node_modules 实际包表」——插件自身 node_modules 不含 client inject 包）。
@@ -20,7 +22,7 @@
  * 五守卫（设计 §5.1 第 1-5 条）：
  *  S1 契约快照四类面：llm 适配器契约（含 twin + oauth-llm 枚举，复用
  *     adapter-parity F2 动态枚举模式）/ 宿主协议对象导出面 / remote 面方法形状
- *     （CLIENT_REMOTE_FACES）/ ctx 服务面（CTX_SERVICES）/ 转发事件白名单（19 项）
+ *     （CLIENT_REMOTE_FACES）/ ctx 服务面（CTX_SERVICES）/ 转发事件白名单（27 项）
  *  S2 宿主源码形状锚点（P10-④：桩形态锚定宿主源码；高风险非导出面以形状
  *     签名断言，宿主漂移即红）
  *  S3 声明面比对：package.json `dsh.client.inject` + peerDeps 8 项 vs
@@ -61,6 +63,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { spawnSync } from 'node:child_process'
 import { LlmAdapter, BlockAssembler } from '@deepseek-ai/dsh-llm'
 import * as dshMessage from '@deepseek-ai/dsh-llm/message'
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -185,13 +188,15 @@ const BLOCK_ASSEMBLER_PROTO_BASELINE = ['push', 'ensure', 'assemble', 'mustGet',
 
 /**
  * 宿主关键包版本基线（FIX-037 ③ / FIX-036 R0 P2-2）——权威 = `tests/host-version-snapshot.mjs`
- * 的 `HOST_BASELINE`（宿主升级后按该文件头注释一并刷新；**刷新点共四处**，第四处即本副本）。
+ * 的 `HOST_BASELINE_REGISTRY` **主基线项**（status primary；宿主升级后按该文件头注释一并刷新；
+ * **刷新点共四处**，第四处即本副本）。ARCH-005 R0 起口径 =「主基线项相等」：靶子版本一致性
+ * 判据对**主基线**（当前 0.2.0-rc.2——npm 全局树）求等；frozen 历史基线（0.1.5）不在本判据面。
  * 本副本存在的原因：该文件为独立入口（顶层执行 + `process.exit`）无法被 import 复用——
  * 「同源同值」由下方机器一致性断言锁定（任一处刷新漏改即红，FIX-037 R0 P2-1），非人工纪律。
  * 用途：靶子解析只保证「确定性」不保证「指向运行宿主」，版本一致是靶子可信的最低证据——
  * 不等即显式告警 + note（可见 skip）。
  */
-const HOST_VERSION_BASELINE = Object.freeze({ dsh: '0.1.5-rc.1', dshPackages: '0.1.5-rc.2' })
+const HOST_VERSION_BASELINE = Object.freeze({ dsh: '0.2.0-rc.2', dshPackages: '0.2.0-rc.2' })
 /**
  * 版本一致性判据的关键包 = `dsh` CLI + **S7 直读包**（`dsh-api-remotes` /
  * `dsh-api-session-controller` / `dsh-client-ui-model-selection` / `dsh-llm` /
@@ -224,7 +229,12 @@ const CTX_SERVICES_BASELINE = {
   agents: ['get'],
   agentPresets: ['composedPreset'],
 }
-/** 宿主转发事件白名单（宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表 19 项，逐字逐序；S7 增强组经 API_REMOTE_FORWARDED_EVENTS 逐字核验）。 */
+/**
+ * 宿主转发事件白名单（宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表 27 项，逐字逐序；
+ * ARCH-005 R0 随 0.2.0-rc.2 主基线登记刷新——19→27 纯增量，新增 8 项与 lib/host-abi/events.js
+ * 镜像同步（每项 since 注记在镜像侧）；S7 增强组经 API_REMOTE_FORWARDED_EVENTS 单向消费断言核验：
+ * 镜像 ⊆ 宿主实读表，宿主侧超集绿 + 打印增量清单，宿主侧除名消费项即红）。
+ */
 const FORWARDED_EVENT_BASELINE = [
   'agent-preset/selected',
   'approval/request',
@@ -234,6 +244,9 @@ const FORWARDED_EVENT_BASELINE = [
   'api-session/removed',
   'api-session/status',
   'commands/change',
+  'deepseek-account/session-expired',
+  'deepseek-account/model-sign-in-required',
+  'credentials/record-updated',
   'credentials/reference-updated',
   'goal/activation-changed',
   'cordis/request-run',
@@ -243,7 +256,12 @@ const FORWARDED_EVENT_BASELINE = [
   'cordis/inspect-query',
   'cordis/inspect-query-resolved',
   'llm/adapters-updated',
+  'permission-presets/catalog-changed',
+  'plugin-manager/changed',
+  'plugin-manager/install-log',
+  'plugin-manager/install-state',
   'settings/document-updated',
+  'schedule/changed',
   'user-questions/request',
 ]
 /** 客户端 inject 三包基线（@deepseek-ai/dsh-client-runtime 0.1.5 起宿主消亡，B0/D1-1 已删）。 */
@@ -415,8 +433,8 @@ const WIRE_SCHEMA_WHITELIST = {
     expectPackage: 'dsh-api-remotes',
     expectFile: ['lib/client.js'],
     expectSymbol: ['agentPresets_list'],
-    schema: ['presets', 'authorable'],
-    frozen: { consumed: ['presets'], presence: [{ file: 'lib/host-abi/client-remotes.js', pattern: /presets: \[\]/ }], note: '域内整体透传 {presets}；authorable 未被消费（不越界断言）' },
+    schema: ['presets'],
+    frozen: { consumed: ['presets'], presence: [{ file: 'lib/host-abi/client-remotes.js', pattern: /presets: \[\]/ }], note: '域内整体透传 {presets}；authorable 未被消费（ARCH-005 R0 实读：宿主 0.2.0-rc.2 该 schema 顶层字段已收缩为 {presets}——authorable 移除且插件从未消费，非断裂，基线随主基线登记刷新）' },
   },
 }
 
@@ -427,19 +445,40 @@ const clientStripped = stripComments(clientSource)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 宿主靶子解析（S3 宿主侧包表半边 + S7 增强组**共用单一实现路径**；只读零写入）
-// 优先级：DSH_HOST_SOURCE > DSH_HOST_PACKAGES > 本地 _npx 缓存探测。
+// 优先级：DSH_HOST_SOURCE > DSH_HOST_PACKAGES > npm 全局树 > 本地 _npx 缓存降序。
+// npm 全局树候选（ARCH-005 R0 修 F-A）：宿主 0.2.0 起经 `npm i -g` 供给——scope 目录 =
+// `%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai`（APPDATA 探测），
+// 自定义 prefix 环境以 `npm root -g` 兜底（仅 APPDATA 路径未命中时才 spawn——常径零子进程）；
+// 该树 dsh 主包在 scope 目录**外两层**（候选携带 dshRoot 使版本一致性判据可读主包）。
 // _npx 多缓存共存时按目录名**降序**取首个命中——readdirSync 顺序非契约
 // （P2-2：非确定性选择会把 RISK-003 预警指向非运行宿主副本 → 不可复现的假红/假绿）；
 // 解析结果与实际读取路径打印在启动行（可诊断性——先例：本文件原有 S7 skip note）。
-// 版本一致性判据（FIX-037 ③，FIX-036 R0 P2-2 补强）：本机两候选可同为基线版本，
-// 但「降序确定性」不等于「指向运行宿主」——故追加关键包版本比对并打印（选定靶子 +
-// 全部候选），不一致即显式告警 + note（走可见 skip 面，门控日志可判定 S3/S7 结论的
-// 适用范围；不引入宿主硬依赖红——BR-03「静态守卫不依赖宿主」不变）。
+// 版本一致性判据（FIX-037 ③，FIX-036 R0 P2-2 补强；ARCH-005 R0 起对主基线项）：
+// 本机两候选可同为基线版本，但「降序确定性」不等于「指向运行宿主」——故追加关键包
+// 版本比对并打印（选定靶子 + 全部候选），不一致即显式告警 + note（走可见 skip 面，
+// 门控日志可判定 S3/S7 结论的适用范围；不引入宿主硬依赖红——BR-03「静态守卫不依赖
+// 宿主」不变）。
 console.log('宿主靶子解析（S3 宿主侧包表半边 + S7 增强组共用；只读宿主源码，零写入）:')
 const hostTarget = (() => {
   const candidates = []
   if (process.env.DSH_HOST_SOURCE) candidates.push({ root: process.env.DSH_HOST_SOURCE, origin: 'DSH_HOST_SOURCE' })
   if (process.env.DSH_HOST_PACKAGES) candidates.push({ root: process.env.DSH_HOST_PACKAGES, origin: 'DSH_HOST_PACKAGES' })
+  // npm 全局树候选（ARCH-005 R0 / F-A）：APPDATA 标准路径优先；未命中再 `npm root -g` 兜底。
+  const globalNpmScopeRoots = []
+  if (process.env.APPDATA) {
+    globalNpmScopeRoots.push(join(process.env.APPDATA, 'npm', 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', '@deepseek-ai'))
+  }
+  if (!globalNpmScopeRoots.some((root) => existsSync(root))) {
+    try {
+      const npmRoot = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['root', '-g'], { encoding: 'utf8', timeout: 10_000, shell: true, windowsHide: true })
+      const prefix = npmRoot.status === 0 ? String(npmRoot.stdout ?? '').trim() : ''
+      if (prefix) globalNpmScopeRoots.push(join(prefix, '@deepseek-ai', 'dsh', 'node_modules', '@deepseek-ai'))
+    } catch { /* npm 不可用 → 跳过兜底（静态守卫不依赖宿主，BR-03） */ }
+  }
+  for (const scopeRoot of globalNpmScopeRoots) {
+    // dsh 主包目录 = scope 目录上两层（<prefix>/node_modules/@deepseek-ai/dsh）——版本判据用。
+    candidates.push({ root: scopeRoot, dshRoot: join(scopeRoot, '..', '..'), origin: `npm-global(${scopeRoot})` })
+  }
   if (process.env.LOCALAPPDATA) {
     try {
       const npxRoot = join(process.env.LOCALAPPDATA, 'npm-cache', '_npx')
@@ -449,17 +488,31 @@ const hostTarget = (() => {
     } catch { /* 无 _npx 缓存 → 仅显式候选（不失败：静态守卫不依赖宿主，BR-03） */ }
   }
   const hit = candidates.find(({ root }) => existsSync(join(root, 'dsh-api-remotes', 'lib', 'client.js')))
-  /** 读包版本（缺包/坏 package.json → null，不抛——只让一致性判据显式失配）。 */
-  const versionOf = (root, name) => {
-    try { return JSON.parse(readFileSync(join(root, name, 'package.json'), 'utf8')).version ?? null } catch { return null }
+  /** 读包版本（缺包/坏 package.json → null，不抛——只让一致性判据显式失配）。
+   *  dsh 主包对 npm-global 候选经 dshRoot 读取（scope 目录内无 dsh 主包副本）。 */
+  const versionOf = (candidate, name) => {
+    const paths = name === 'dsh' && candidate.dshRoot
+      ? [join(candidate.root, name, 'package.json'), join(candidate.dshRoot, 'package.json')]
+      : [join(candidate.root, name, 'package.json')]
+    for (const path of paths) {
+      try { return JSON.parse(readFileSync(path, 'utf8')).version ?? null } catch { /* 试下一路径 */ }
+    }
+    return null
   }
-  const versionsOf = (root) => Object.fromEntries(HOST_KEY_PACKAGES.map((name) => [name, versionOf(root, name)]))
+  const versionsOf = (candidate) => Object.fromEntries(HOST_KEY_PACKAGES.map((name) => [name, versionOf(candidate, name)]))
   const expectedOf = (name) => (name === 'dsh' ? HOST_VERSION_BASELINE.dsh : HOST_VERSION_BASELINE.dshPackages)
-  const versions = hit ? versionsOf(hit.root) : null
+  const versions = hit ? versionsOf(hit) : null
   const mismatches = versions
     ? HOST_KEY_PACKAGES.filter((name) => versions[name] !== expectedOf(name)).map((name) => `${name}@${versions[name] ?? 'absent'} ≠ ${expectedOf(name)}`)
     : []
-  return { root: hit?.root ?? null, origin: hit?.origin ?? null, candidates, versions, versionsOf, mismatches }
+  return {
+    root: hit?.root ?? null,
+    origin: hit?.origin ?? null,
+    candidates,
+    versions,
+    versionsOf: (root) => versionsOf(candidates.find((candidate) => candidate.root === root) ?? { root }),
+    mismatches,
+  }
 })()
 const versionLine = (versions) => HOST_KEY_PACKAGES.map((name) => `${name}@${versions[name] ?? 'absent'}`).join(' / ')
 if (hostTarget.root) {
@@ -500,19 +553,22 @@ const hostSourceOf = (() => {
   }
 })()
 
-// ── 基线副本机器一致性守卫（FIX-037 R0 P2-1）─────────────────────────────────
+// ── 基线副本机器一致性守卫（FIX-037 R0 P2-1；ARCH-005 R0 起对**主基线项**）──────
 // 双份常量的来由：host-version-snapshot.mjs 是独立入口（顶层执行 + process.exit），
 // 不可 import 复用「唯一权威」→ 本文件持副本。故「同源同值」MUST 有机器判据，否则
 // 宿主升级刷新漏改本副本 → 版本判据永久误报失配（噪声化告警稀释 ③ 的信号价值）。
-// 判据：从权威文件剥注释文本中按块提取 HOST_BASELINE，逐键与本副本比对；提取失败
-// （块缺失/键改名）同样判红（fail-closed——不因提取为空而静默通过）。
+// 判据（ARCH-005 R0 起档案化）：从权威文件剥注释文本中提取 HOST_BASELINE_REGISTRY
+// 数组字面量，取其中 status:'primary' 的**主基线项**，逐键（dsh/dshPackages）与本
+// 副本比对；提取失败（注册表缺失/无 primary 项/键改名）同样判红（fail-closed——
+// 不因提取为空而静默通过）。
 {
-  const snapshotBaseline = blockOf(stripComments(readTest('host-version-snapshot.mjs')), 'const HOST_BASELINE = Object.freeze(')
-  const snapshotValueOf = (key) => new RegExp(`\\b${key}:\\s*'([^']+)'`).exec(snapshotBaseline)?.[1] ?? null
+  const snapshotRegistry = arrayOf(stripComments(readTest('host-version-snapshot.mjs')), 'const HOST_BASELINE_REGISTRY = Object.freeze(')
+  const primaryEntry = (snapshotRegistry.match(/\{[^{}]*status:\s*'primary'[^{}]*\}/) ?? [''])[0]
+  const snapshotValueOf = (key) => new RegExp(`\\b${key}:\\s*'([^']+)'`).exec(primaryEntry)?.[1] ?? null
   const baselineDiffs = Object.keys(HOST_VERSION_BASELINE)
     .filter((key) => snapshotValueOf(key) !== HOST_VERSION_BASELINE[key])
     .map((key) => `${key}: host-contract=${HOST_VERSION_BASELINE[key]} vs host-version-snapshot=${snapshotValueOf(key) ?? 'absent'}`)
-  check('基线副本: HOST_VERSION_BASELINE === host-version-snapshot.mjs HOST_BASELINE（双份常量机器锁定——刷新漏改任一即红；刷新点共四处）',
+  check('基线副本: HOST_VERSION_BASELINE === host-version-snapshot.mjs HOST_BASELINE_REGISTRY 主基线项（双份常量机器锁定——刷新漏改任一即红；刷新点共四处）',
     baselineDiffs.length === 0, baselineDiffs)
 }
 
@@ -579,10 +635,10 @@ console.log('S1 契约快照四类面（宿主面形状漂移即红；宿主新�
     && probes.map((item) => item.name.slice(4)).sort().join(',') === Object.keys(CTX_SERVICES).sort().join(','))
 }
 
-// S1e 转发事件白名单（19 项 + 镜像 parity + 判定函数）
+// S1e 转发事件白名单（27 项 + 镜像 parity + 判定函数；ARCH-005 R0 随 0.2.0-rc.2 基线登记刷新）
 {
-  check('S1e 契约快照: FORWARDED_EVENT_ALLOWLIST === 宿主 19 项基线（逐字逐序——锚宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表）',
-    FORWARDED_EVENT_ALLOWLIST.length === 19 && deepEqual(FORWARDED_EVENT_ALLOWLIST, FORWARDED_EVENT_BASELINE), FORWARDED_EVENT_ALLOWLIST)
+  check('S1e 契约快照: FORWARDED_EVENT_ALLOWLIST === 宿主 27 项基线（逐字逐序——锚宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表，0.2.0-rc.2 主基线）',
+    FORWARDED_EVENT_ALLOWLIST.length === 27 && deepEqual(FORWARDED_EVENT_ALLOWLIST, FORWARDED_EVENT_BASELINE), FORWARDED_EVENT_ALLOWLIST)
   const mirrorLiteral = arrayOf(clientStripped, 'FORWARDED_EVENT_ALLOWLIST = [')
   let mirror = null
   if (mirrorLiteral) {
@@ -860,10 +916,16 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
   } else {
     const hostRoot = hostTarget.root
     const hostRead = (...parts) => readFileSync(join(hostRoot, ...parts), 'utf8')
-    // 7a 转发事件白名单宿主声明源（单一声明源 parity）
+    // 7a 转发事件白名单宿主声明源（ARCH-005 R0：全等 → **单向消费断言**——设计 §2-B 四维-c / F-D：
+    //   判据 = 镜像 ⊆ 宿主实读表（宿主侧除名消费事件即红）；宿主侧超集（additive 增量）为绿 +
+    //   打印增量清单（吸收留痕——基线登记义务的可见提示，不制造人工刷新红）。引号形态以靶子
+    //   实读为准（0.2.0 树该文件为单引号面——复审 R1 P3-3 仲裁，现行正则可命中）。
     const eventsSource = hostRead('dsh-api-remotes', 'lib', 'types', 'remote-events.js')
     const hostEvents = [...eventsSource.matchAll(/event:\s*'([^']+)'/g)].map((match) => match[1])
-    check(`S7 增强: 宿主 API_REMOTE_FORWARDED_EVENTS === 白名单镜像（${hostEvents.length} 项逐字逐序）`, deepEqual(hostEvents, FORWARDED_EVENT_ALLOWLIST))
+    const mirrorMissing = FORWARDED_EVENT_ALLOWLIST.filter((event) => !hostEvents.includes(event))
+    check(`S7 增强: 白名单镜像 ⊆ 宿主 API_REMOTE_FORWARDED_EVENTS（单向消费断言——镜像 ${FORWARDED_EVENT_ALLOWLIST.length} 项全部在宿主 ${hostEvents.length} 项实读表内；宿主除名消费事件即红）`, mirrorMissing.length === 0, mirrorMissing)
+    const hostExtras = hostEvents.filter((event) => !FORWARDED_EVENT_ALLOWLIST.includes(event))
+    console.log(`      · 宿主侧超集增量（单向断言消化面——待登记进镜像基线）: ${hostExtras.length} 项${hostExtras.length > 0 ? ` [${hostExtras.join(', ')}]` : ''}`)
     // 7b 字段级 wire schema 宿主声明源（逐面取值级字段表）
     const hostClientLines = hostRead('dsh-api-remotes', 'lib', 'client.js').split(/\r?\n/)
     const schemaBlockOf = (fileName) => {

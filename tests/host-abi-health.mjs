@@ -239,7 +239,7 @@ console.log('domain skeleton probes (real probing behavior):')
   check('disarmed gate resumes dispatch', aCalls === 2 && bCalls === 3)
   disposeAll()
   check('disposeAll removes the shared listeners', (listeners.get('settings/updated') ?? []).length === 0)
-  check('FORWARDED_EVENT_ALLOWLIST mirrors host API_REMOTE_FORWARDED_EVENTS (D-2 anchor: reference-updated in, dead name out)', FORWARDED_EVENT_ALLOWLIST.includes('credentials/reference-updated') && !FORWARDED_EVENT_ALLOWLIST.includes('credentials/updated') && FORWARDED_EVENT_ALLOWLIST.length === 19)
+  check('FORWARDED_EVENT_ALLOWLIST mirrors host API_REMOTE_FORWARDED_EVENTS (D-2 anchor: reference-updated in, dead name out; ARCH-005 R0: 27 items at 0.2.0-rc.2 primary baseline)', FORWARDED_EVENT_ALLOWLIST.includes('credentials/reference-updated') && !FORWARDED_EVENT_ALLOWLIST.includes('credentials/updated') && FORWARDED_EVENT_ALLOWLIST.length === 27)
   // 6e. inject-manifest：单一事实源 + fiber 面探测（§4.3 域 5）。
   check('FIBER_INJECT is the client.js fiber inject mirror (single source, B2/B6 static comparison)', (() => {
     const declared = readFileSync(join(ROOT_DIR, 'lib', 'client.js'), 'utf8').match(/const inject = \[([^\]]+)\]/)
@@ -729,7 +729,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   改为「常量名 + 条目内」式（批 C 逐处判定：宿主 `remote-events.js` 全表 19 项，原行号区间
     //   为本表定义段 ⇒ 现值准确，改形态以降漂移面）。裸锚登记带**同句上下文**（R3 六项要求 ①；
     //   裸 `:NNN` 单写必歧义）。对象不可本仓核验（宿主面）⇒ 本条目只判位于本仓文本内的锚串形态。
-    { file: ['lib', 'host-abi', 'events.js'], stale: ['host-route.js:263-270', 'remote-events.js:12-32', '在表（:21）'], fresh: ['syncHostRoute', '`API_REMOTE_FORWARDED_EVENTS` 实读 19 项', '在该表条目内'] },
+    { file: ['lib', 'host-abi', 'events.js'], stale: ['host-route.js:263-270', 'remote-events.js:12-32', '在表（:21）'], fresh: ['syncHostRoute', '`API_REMOTE_FORWARDED_EVENTS` 实读 27 项', '在该表条目内'] },
     // FIX-041 R0 F-2：同族在仓漂移锚收口——lib/stats.js 引 `lib/oauth-llm.js` 的 `:43`，该行现已
     //   漂移为无关注释（`export const OAUTH_PROVIDER` 实在该文件内）⇒ 按 FIX-041 W2 同形去行号
     //   改**符号名式**；本条目一并扩 stale/fresh（原条目只覆盖 `host-route.js` 的 `:55` 一串）。
@@ -922,7 +922,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   （基线登记与人工复检义务见上方注释）；本批新增的宿主可达面机器判据在
     //   `tests/host-contract.mjs` S2/S5（`expectPackage`/`expectFile`/`expectSymbol` + 靶子文件
     //   存在性核验——R0 P1-1 收口，宿主可达时生效）。
-    { file: ['lib', 'client.js'], stale: ['lib/oauth-llm.js:43', 'presetDiagnostics :2109', 'health.js:35-48', 'OAUTH_ROUTE_PROVIDER :36', '权威单点 :124-125', 'lib/client.js:4754-4825', 'lib/index.js:2596-2630', ':2749-2760', 'dsh-llm-pi-ai index.js:1721', 'lib/client.js:889-911', 'remote-events.js:12-32', 'lib/client.js:581', 'lib/client.js:2842-2848', 'lib/client.js:4493-4499', 'lib/client.js:175-179', 'lib/index.js:19', 'lib/client.js:170', 'lib/client.js:752', 'lib/client.js:193', ':991-992/:2556-2588', '（同表 :21，凭据引用变化转发事件）', 'ui-conversation :16041-16056', '声明门控，:313-314/:342', '（generation 守卫，宿主 :47/:53）', '订阅该 store（宿主 :292）'], fresh: ['lib/oauth-llm.js `export const', 'presetDiagnostics 方法存在性先例', 'lib/host-abi/health.js noteHostDiag', 'HOST_FACE_ERROR_CODES 三错误码', 'connection handle 面只有 isLoopback', 'joinProviderDirectory 同构镜像', 'API_REMOTE_FORWARDED_EVENTS（19 项转发事件）', 'waitingFor 记录按 fiber.inject 过滤', '的 static inject（remote.credentials/llm/settings）', '的 inject 数组声明', '的 ctx.remote.$on 订阅', '的 directoryFor 面）的 directoryFor(sessionId).load()', 'scope.modelDirectories 属性面', 'directoryFor「resolved no scope」', 'dsh-llm-pi-ai 的 streamWithSnapshot()', 'session.selectModel 面）：session.selectModel 仅 resolveCallConfig', '的 prompt 侧准入', '其对**同批三命名', '`createModelsOperations(ctx)` 绑定的', '（FIX-043 批 C 按 R1 P2-2 裁定取'] },
+    { file: ['lib', 'client.js'], stale: ['lib/oauth-llm.js:43', 'presetDiagnostics :2109', 'health.js:35-48', 'OAUTH_ROUTE_PROVIDER :36', '权威单点 :124-125', 'lib/client.js:4754-4825', 'lib/index.js:2596-2630', ':2749-2760', 'dsh-llm-pi-ai index.js:1721', 'lib/client.js:889-911', 'remote-events.js:12-32', 'lib/client.js:581', 'lib/client.js:2842-2848', 'lib/client.js:4493-4499', 'lib/client.js:175-179', 'lib/index.js:19', 'lib/client.js:170', 'lib/client.js:752', 'lib/client.js:193', ':991-992/:2556-2588', '（同表 :21，凭据引用变化转发事件）', 'ui-conversation :16041-16056', '声明门控，:313-314/:342', '（generation 守卫，宿主 :47/:53）', '订阅该 store（宿主 :292）'], fresh: ['lib/oauth-llm.js `export const', 'presetDiagnostics 方法存在性先例', 'lib/host-abi/health.js noteHostDiag', 'HOST_FACE_ERROR_CODES 三错误码', 'connection handle 面只有 isLoopback', 'joinProviderDirectory 同构镜像', 'API_REMOTE_FORWARDED_EVENTS（27 项转发事件', 'waitingFor 记录按 fiber.inject 过滤', '的 static inject（remote.credentials/llm/settings）', '的 inject 数组声明', '的 ctx.remote.$on 订阅', '的 directoryFor 面）的 directoryFor(sessionId).load()', 'scope.modelDirectories 属性面', 'directoryFor「resolved no scope」', 'dsh-llm-pi-ai 的 streamWithSnapshot()', 'session.selectModel 面）：session.selectModel 仅 resolveCallConfig', '的 prompt 侧准入', '其对**同批三命名', '`createModelsOperations(ctx)` 绑定的', '（FIX-043 批 C 按 R1 P2-2 裁定取'] },
     //   **宿主锚核验基线登记**（FIX-042 W3.2，落于本注释处）：
     //     基线 = 依赖声明 `^0.1.5-rc.2`（package.json dependencies/peerDependencies 的
     //     `@deepseek-ai/dsh-*` 面；本机实装抽样 = **0.1.5-rc.2**，宿主 checkout 实测见
@@ -1144,7 +1144,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
       fresh: [
         '宿主 dsh-llm 的 LlmAdapter 类原型',
         'assembler.push/usage/finish/blocks 消费块',
-        'API_REMOTE_FORWARDED_EVENTS 逐字核验',
+        'API_REMOTE_FORWARDED_EVENTS 单向消费断言核验',
         'selectionFor(agent) → stateOf(session, \'modelSelection\') → projectionState.pending',
         'stateOf(session, \'modelSelection\') → projectionState.pending（S7 增强组逐字核验）',
         'llm_listConfigurableProviders_result schema',

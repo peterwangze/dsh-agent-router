@@ -23,6 +23,54 @@
         ".governance/arch-005-decoupling-design.md",
         ".governance/arch-005-host-diff-inventory.md"
       ]
+    },
+    "op-dca880a8493943f793736498f3f31729": {
+      "schema_version": 1,
+      "command": "decision-append",
+      "task_id": "",
+      "input_fingerprint": "ec6330ad8369d08899b87c64df6d495601498dcc52fa490b9f90bdc759cbaba2",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-dca880a8493943f793736498f3f31729",
+        "code": "ok",
+        "new_revision": 41627,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-17T00:44:17",
+      "updated_at": "2026-10-17T00:44:17",
+      "authority": {
+        "state": "MD_ACTIVE",
+        "epoch": 0,
+        "generation": 0,
+        "backend": "md"
+      }
+    },
+    "op-6bfdfdc860a3467db6dfb66a15a2c5c2": {
+      "schema_version": 1,
+      "command": "locks-release",
+      "task_id": "ARCH-005",
+      "input_fingerprint": "7bb15d47391c9e03ba555bfa52ec82dbd19a3d75f2428c03b0e5163e48cfbae6",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-6bfdfdc860a3467db6dfb66a15a2c5c2",
+        "code": "ok",
+        "new_revision": 49,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-17T00:44:44",
+      "updated_at": "2026-10-17T00:44:44",
+      "released_files": [
+        ".governance/arch-005-decoupling-design.md",
+        ".governance/arch-005-host-diff-inventory.md"
+      ]
     }
   }
 }
