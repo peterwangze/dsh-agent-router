@@ -51,6 +51,18 @@
  *    （后续订阅重试 attach——静默死订阅消除）+ event-subscribe-failed 诊断
  *    （code=attach-threw + consumer 标签 + 错误摘要，P8）+ 失败消费者 dispose
  *    降级 no-op（不悬挂）+ 浏览器镜像同型 parity（失败零复用/重试自愈）。
+ * 11. ARCH-005 R2（设计 §2-B 四维-b / §6 R2 行）：运行面版本协商三态
+ *    （matched / compatible-unknown / incompatible）——hostCapabilityProfile
+ *    判定序（任一关键面非 ok → incompatible，先于版本——不把故障伪装成
+ *    「只是没测过」；版本组合 ∈ 基线档案 → matched；否则 compatible-unknown
+ *    + 一次性 host-version-unknown 诊断事件〔同版本组合只记一次〕）+ 基线
+ *    档案表与 tests/host-version-snapshot.mjs HOST_BASELINE_REGISTRY 的**值级
+ *    机器锁定**（P5 单源——import 评估结论见 §R2-a 注释：测试文件为顶层执行
+ *    套件不可被产品代码 import，采用「测试侧权威登记 + 运行面投影」同形双表
+ *    + 解析锁定断言，F-J「双份常量机器锁定」纪律同构）+ RPC 四合一字段
+ *    （capabilityProfile）+ 徽章三态渲染判别（render 期零 probe——探针计数
+ *    断言；两 regime 边界：gate-block 拒载态三态不可达，本节只覆盖
+ *    gate-pass-unknown regime）。
  *
  * 红演示证据（任务验收 2）：实现前自然红（模块缺失套件失败）+ 绿后判别红
  * （R1：HOST_DIAG_LIMIT 临时 64→128 → 环形有界断言红；R2：HostHealthCard
@@ -1810,6 +1822,226 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   }
 
   void eventsSourceB5
+}
+
+// ── 11. ARCH-005 R2：运行面协商三态（hostCapabilityProfile + 基线档案 + 徽章渲染）──
+console.log('R2 capability negotiation tri-state (matched / compatible-unknown / incompatible):')
+{
+  const versionModuleR2 = await import('../lib/host-abi/version.js')
+  const { hostCapabilityProfile, HOST_BASELINE_REGISTRY, HOST_CAPABILITY_STATES } = versionModuleR2
+
+  // R2-a. 基线档案单源（P5 硬门槛）：与 tests/host-version-snapshot.mjs 的
+  //   HOST_BASELINE_REGISTRY 值级机器锁定。**import 评估结论（显式登记）**：产品
+  //   代码不可 import 该测试文件——它是顶层执行套件（import 即全量跑测；断言失败
+  //   时 process.exit(1) 会击穿宿主进程），且依赖方向禁止 lib → tests ⇒ 采用
+  //   「权威源（测试侧宿主树实读登记处）+ 运行面投影（version.js 常量）」的同形
+  //   双表，由本断言解析锁定：任一侧漂移（宿主升级漏刷 / 单侧手滑改值）即红——
+  //   F-J「双份常量机器锁定」纪律同构（host-contract 的 HOST_VERSION_BASELINE
+  //   副本同款先例）。R3 批并行中重构该文件时本判据随之显红（fail-visible，
+  //   非静默分叉）。
+  const snapshotSourceR2 = readFileSync(join(ROOT_DIR, 'tests', 'host-version-snapshot.mjs'), 'utf8')
+  const declPosR2 = snapshotSourceR2.indexOf('HOST_BASELINE_REGISTRY =')
+  const arrayStartR2 = declPosR2 === -1 ? -1 : snapshotSourceR2.indexOf('[', declPosR2)
+  const arrayEndR2 = arrayStartR2 === -1 ? -1 : snapshotSourceR2.indexOf('])', arrayStartR2)
+  const canonicalOf = (entry) => JSON.stringify(Object.keys(entry).sort().map((key) => [key, entry[key]]))
+  const parsedRegistryR2 = []
+  if (arrayStartR2 !== -1 && arrayEndR2 !== -1) {
+    for (const match of snapshotSourceR2.slice(arrayStartR2, arrayEndR2).matchAll(/\{([^}]*)\}/g)) {
+      const entry = {}
+      for (const pair of match[1].matchAll(/([A-Za-z0-9_]+)\s*:\s*'([^']*)'/g)) entry[pair[1]] = pair[2]
+      parsedRegistryR2.push(entry)
+    }
+  }
+  check('R2-a: 基线档案表与 HOST_BASELINE_REGISTRY（snapshot 权威源）值级相等（P5 单源——任一侧漂移即红；解析失败亦红非静默）',
+    Array.isArray(HOST_BASELINE_REGISTRY) && parsedRegistryR2.length > 0
+    && parsedRegistryR2.every((entry) => ['id', 'status', 'dsh', 'dshPackages', 'cordis', 'schemastery'].every((key) => typeof entry[key] === 'string' && entry[key]))
+    && JSON.stringify(parsedRegistryR2.map(canonicalOf)) === JSON.stringify(HOST_BASELINE_REGISTRY.map(canonicalOf)),
+    { parsed: parsedRegistryR2, lib: HOST_BASELINE_REGISTRY })
+  check('R2-a: 协商态词汇表 = 恰三态（matched/compatible-unknown/incompatible）',
+    JSON.stringify(HOST_CAPABILITY_STATES) === JSON.stringify(['matched', 'compatible-unknown', 'incompatible']), HOST_CAPABILITY_STATES)
+
+  // R2-b. matched：版本组合 ∈ 档案（primary 与 frozen 两档案边界）且面全绿。
+  const okFacesR2 = [{ name: 'ctx:llm', state: 'ok' }, { name: 'llm:adapter', state: 'ok' }]
+  const primaryR2 = HOST_BASELINE_REGISTRY.find((entry) => entry.status === 'primary')
+  const frozenR2 = HOST_BASELINE_REGISTRY.find((entry) => entry.status === 'frozen')
+  const versionsOfR2 = (value) => ({ llm: value, tools: value, typertProtocol: value })
+  const matchedPrimaryR2 = hostCapabilityProfile({ versions: versionsOfR2(primaryR2.dshPackages), faces: okFacesR2 })
+  check('R2-b: 版本 ∈ 主基线档案 + 面全绿 → matched（baselineId = primary id）',
+    matchedPrimaryR2.state === 'matched' && matchedPrimaryR2.baselineId === primaryR2.id)
+  check('R2-b 边界: 版本 ∈ frozen 历史档案项 + 面全绿 → matched（档案边界含 frozen——∈ 档案即实测过）',
+    hostCapabilityProfile({ versions: versionsOfR2(frozenR2.dshPackages), faces: okFacesR2 }).state === 'matched')
+  check('R2-b 边界: 单键漂移的混合组合不算 ∈ 档案（→ compatible-unknown，不误判 matched）',
+    hostCapabilityProfile({ versions: { llm: frozenR2.dsh, tools: primaryR2.dshPackages, typertProtocol: primaryR2.dshPackages }, faces: okFacesR2 }).state === 'compatible-unknown')
+
+  // R2-c. compatible-unknown（gate-pass-unknown regime 可达态）：∉ 档案但面全绿 →
+  //   黄态 + 一次性诊断事件（同版本组合只记一次——§7.1 去重语义）。
+  const diagCountR2 = (needle) => hostDiagnostics().entries.filter((entry) => entry.kind === 'host-version-unknown' && String(entry.detail).includes(needle)).length
+  const unknownFirstR2 = hostCapabilityProfile({ versions: versionsOfR2('0.2.1-alpha.5'), faces: okFacesR2 })
+  check('R2-c: 版本 ∉ 档案 + 面全绿 → compatible-unknown + baselineId 空（gate-pass-unknown regime）',
+    unknownFirstR2.state === 'compatible-unknown' && unknownFirstR2.baselineId === '')
+  check('R2-c: unknown 一次性诊断事件（kind=host-version-unknown，版本组合入 detail——P8 可观测）',
+    diagCountR2('llm=0.2.1-alpha.5') === 1)
+  hostCapabilityProfile({ versions: versionsOfR2('0.2.1-alpha.5'), faces: okFacesR2 })
+  hostCapabilityProfile({ versions: versionsOfR2('0.2.1-alpha.5'), faces: [{ name: 'ctx:llm', state: 'ok' }] })
+  check('R2-c: 同版本组合只记一次（重复调用零追加——去重与既有诊断环形纪律一致）',
+    diagCountR2('llm=0.2.1-alpha.5') === 1)
+  hostCapabilityProfile({ versions: versionsOfR2('9.9.9-z'), faces: okFacesR2 })
+  check('R2-c: 不同未知组合各记一次（换组合 → 新事件）', diagCountR2('llm=9.9.9-z') === 1)
+
+  // R2-d. incompatible：任一关键面 degraded/missing → incompatible（判定序先于版本）。
+  const degradedFacesR2 = [
+    { name: 'ctx:llm', state: 'ok' },
+    { name: 'ctx:settings', state: 'degraded', detail: 'host-face-shape: mutate' },
+    { name: 'session:select', state: 'missing', detail: 'host-face-missing' },
+  ]
+  check('R2-d: 版本 ∈ 档案但任一面 degraded/missing → incompatible（面先于版本——不把故障伪装成「只是没测过」）',
+    hostCapabilityProfile({ versions: versionsOfR2(primaryR2.dshPackages), faces: degradedFacesR2 }).state === 'incompatible')
+  check('R2-d: 版本 ∉ 档案且面 degraded → incompatible 且不记 unknown 事件（unknown 判据收紧）',
+    (() => {
+      const outcome = hostCapabilityProfile({ versions: versionsOfR2('8.8.8-y'), faces: degradedFacesR2 })
+      return outcome.state === 'incompatible' && diagCountR2('llm=8.8.8-y') === 0
+    })())
+
+  // R2-e. 缺版本边界：版本读取降级（'unknown'）∉ 档案 → 诚实黄态；空面快照（注册期
+  //   诚实空态）+ 版本 ∈ 档案 → matched（B1 空注册表语义不破）。
+  check('R2-e: 版本读取降级（unknown 键）+ 面全绿 → compatible-unknown（缺版本面边界，不误绿）',
+    hostCapabilityProfile({ versions: { llm: 'unknown', tools: 'unknown', typertProtocol: 'unknown' }, faces: okFacesR2 }).state === 'compatible-unknown')
+  check('R2-e: 空面快照 + 版本 ∈ 档案 → matched（faces [] 空态视为无已知降级面）',
+    hostCapabilityProfile({ versions: versionsOfR2(primaryR2.dshPackages), faces: [] }).state === 'matched')
+
+  // R2-f. 默认实读路径：hostVersionsOf / faceHealthSnapshot 单点复用 + 纯缓存读
+  //   （零 probe 调用——§7.1 三时机纪律不破）。
+  {
+    let probeCallsR2 = 0
+    registerFaceProbes([{ name: 'r2:count', probe: () => { probeCallsR2 += 1; return { state: 'ok' } } }])
+    runFaceProbes({ get: () => undefined })
+    const baselineRunsR2 = probeCallsR2
+    const liveR2 = hostCapabilityProfile()
+    check('R2-f: 默认路径复用 hostVersionsOf/faceHealthSnapshot（读数与单点逐字相等）+ 纯缓存读零 probe',
+      JSON.stringify(liveR2.versions) === JSON.stringify(hostVersionsOf())
+      && JSON.stringify(liveR2.faces) === JSON.stringify(faceHealthSnapshot())
+      && probeCallsR2 === baselineRunsR2)
+  }
+
+  // R2-g. RPC 四合一全链：RouterService.hostFaceDiagnostics() 附 capabilityProfile
+  //   字段（strict wire codec 通过；真实仓内版本 ∈ 主基线 → matched——R1 安装同步
+  //   后本仓树 = 0.2.0-rc.2）。
+  {
+    const fullFacesR2 = {
+      llm: { registerAdapter: () => {}, registration: () => ({}), listModels: async () => [] },
+      credentials: { resolve: async () => undefined },
+      settings: { get: () => undefined, mutate: async () => {} },
+      fs: {},
+      attachments: {},
+      subagents: {},
+      agentDefaultModel: { currentSelection: () => null, saveSelection: () => {} },
+      sessionController: { selectModel: async () => ({}) },
+      sessionProjections: { stateOf: () => null },
+      agents: { get: () => ({}) },
+      agentPresets: { composedPreset: () => 'p' },
+    }
+    const rootR2 = new Context()
+    for (const [name, value] of Object.entries(fullFacesR2)) rootR2.provide(name, value)
+    const serviceR2 = new RouterService(rootR2)
+    serviceR2.attach({ get: () => ({ enabled: true, agents: {} }) })
+    const payloadR2 = serviceR2.hostFaceDiagnostics()
+    check('R2-g: RPC 结果附 capabilityProfile{state,baselineId}（三态词汇内）且整体过 strict wire codec',
+      !!payloadR2.capabilityProfile && typeof payloadR2.capabilityProfile.state === 'string'
+      && HOST_CAPABILITY_STATES.includes(payloadR2.capabilityProfile.state)
+      && typeof payloadR2.capabilityProfile.baselineId === 'string'
+      && !!wireCodecs.hostFaceDiagnosticsResult.parse(payloadR2))
+    // 返工 F-3 判据锁定：capabilityProfile 为 codec **必填**字段——缺字段 parse
+    // 必须红（服务端供数恒在场；旧服务端容忍由渲染层 null-guard 承载，不经 codec
+    // optional 位——防后来者仿 mainModelImage 例回退 optional）。
+    check('R2-g F-3: capabilityProfile 为 codec 必填字段（缺字段 parse 判红）', (() => {
+      try {
+        wireCodecs.hostFaceDiagnosticsResult.parse({ hostVersions: { llm: '0.2.0-rc.2', tools: '0.2.0-rc.2', typertProtocol: '0.2.0-rc.2' }, faces: [], diag: [] })
+        return false
+      } catch { return true }
+    })())
+    check('R2-g 真实锚: 本仓实装版本组合 ∈ 主基线档案 → RPC 协商态 matched（baselineId = primary id）',
+      payloadR2.hostVersions.llm === primaryR2.dshPackages
+      && payloadR2.capabilityProfile.state === 'matched'
+      && payloadR2.capabilityProfile.baselineId === primaryR2.id,
+      { hostVersions: payloadR2.hostVersions, capabilityProfile: payloadR2.capabilityProfile })
+  }
+
+  // R2-h. 徽章三态渲染判别（浏览器镜像 HostHealthCard）+ render 期零 probe（探针
+  //   计数断言——渲染只消费快照数据，capabilityProfile 经 RPC 一次性 effect 进
+  //   hostHealth 状态缓存，render 体零 probe/零 RPC）。
+  {
+    const reactStubR2 = {
+      createElement: (type, props, ...children) => ({ type, props: { ...(props ?? {}), ...(children.length > 0 ? { children: children.flat(Infinity) } : {}) } }),
+      useState: () => [null, () => {}],
+      useEffect: () => {},
+      useCallback: (fn) => fn,
+      useRef: () => ({ current: null }),
+    }
+    let bundleR2 = null
+    new Function('window', readFileSync(join(ROOT_DIR, 'lib', 'client.js'), 'utf8'))({ __ModuleLoader__: { load: (payload) => { bundleR2 = payload } } })
+    const bundleExportsR2 = bundleR2.factory((name) => (name === 'react' ? reactStubR2 : null))
+    const tStubR2 = (key) => Object.assign((arg) => `${key}(${arg})`, { toString: () => key })
+    const textsR2 = []
+    const pairsR2 = []
+    const collectR2 = (node) => {
+      if (typeof node === 'string') { textsR2.push(node); return }
+      if (typeof node === 'function') { textsR2.push(String(node)); return }
+      if (typeof node === 'number' || typeof node === 'boolean') { textsR2.push(String(node)); return }
+      if (!node || typeof node !== 'object') return
+      if (typeof node.props?.className === 'string' && /dshrouter-(ok|warn|error)/.test(node.props.className)) {
+        // 类名↔文本绑定收集（防误配对：unknown 展开体 hint 行同持 dshrouter-warn，
+        // 徽章判据必须锚定「徽章文案所在节点」的类名——类名单独收集会被同簇类
+        // 遮蔽（判别红演示实证）。
+        const nodeTexts = []
+        const collectTextOnly = (child) => {
+          if (typeof child === 'string' || typeof child === 'number' || typeof child === 'boolean') nodeTexts.push(String(child))
+          else if (typeof child === 'function') nodeTexts.push(String(child))
+          else if (child && typeof child === 'object' && Array.isArray(child.props?.children)) for (const grandchild of child.props.children) collectTextOnly(grandchild)
+        }
+        if (Array.isArray(node.props.children)) for (const child of node.props.children) collectTextOnly(child)
+        pairsR2.push({ className: node.props.className, text: nodeTexts.join(' ') })
+      }
+      for (const child of Array.isArray(node.props?.children) ? node.props.children : []) collectR2(child)
+    }
+    const renderR2 = (hostHealth, faceHealth) => {
+      textsR2.length = 0
+      pairsR2.length = 0
+      collectR2(bundleExportsR2.HostHealthCard({ hostHealth, faceHealth, t: tStubR2 }))
+      return { texts: textsR2.slice(), pairs: pairsR2.slice() }
+    }
+    // 徽章节点 = 持 dshrouter-{ok,warn,error} 类且文本为徽章文案（ok/unknown 精确、
+    // warn 为 hostHealthWarn(n) 形态——与 hint 行的 hostHealthUnknownHint 区分）。
+    const badgeOfR2 = (render) => render.pairs.find((pair) => /dshrouter-(ok|warn|error)/.test(pair.className)
+      && (pair.text === 'hostHealthOk' || pair.text === 'hostHealthUnknown' || pair.text.startsWith('hostHealthWarn('))) ?? null
+    let probeCallsR2h = 0
+    registerFaceProbes([{ name: 'r2h:count', probe: () => { probeCallsR2h += 1; return { state: 'ok' } } }])
+    runFaceProbes({ get: () => undefined })
+    const renderBaselineR2 = probeCallsR2h
+    const matchedRenderR2 = renderR2({ hostVersions: versionsOfR2('0.2.0-rc.2'), faces: [{ name: 'llm', state: 'ok' }], capabilityProfile: { state: 'matched', baselineId: '0.2.0' } }, null)
+    const unknownRenderR2 = renderR2({ hostVersions: versionsOfR2('0.2.1-alpha.5'), faces: [{ name: 'llm', state: 'ok' }], capabilityProfile: { state: 'compatible-unknown', baselineId: '' } }, null)
+    // incompatible 夹具：非 ok 面在 RPC faces 内（真实 payload 中 capabilityProfile.
+    // state=incompatible 与非 ok 面同帧到达；本地面同名会被 F-6 去重 RPC 权威序在前）。
+    const incompatibleRenderR2 = renderR2({ hostVersions: versionsOfR2('0.2.0-rc.2'), faces: [{ name: 'llm', state: 'ok' }, { name: 'remote.settings', state: 'missing', detail: 'host-face-missing' }], capabilityProfile: { state: 'incompatible', baselineId: '0.2.0' } }, null)
+    check('R2-h: matched → 绿徽章（badge 节点 dshrouter-ok + hostHealthOk）+ 实测基线 id 上屏（hostHealthBaseline——版本行后缀）',
+      badgeOfR2(matchedRenderR2)?.className === 'dshrouter-ok' && matchedRenderR2.texts.includes('hostHealthOk')
+      && matchedRenderR2.texts.some((text) => text.includes('hostHealthBaseline(0.2.0)'))
+      && !matchedRenderR2.pairs.some((pair) => pair.className === 'dshrouter-warn'))
+    check('R2-h: compatible-unknown → 黄徽章 + 显式「未实测宿主版本」提示（badge 节点 dshrouter-warn + badge 文案 + 展开体 hint 行；不误绿不误红）',
+      badgeOfR2(unknownRenderR2)?.className === 'dshrouter-warn' && badgeOfR2(unknownRenderR2)?.text === 'hostHealthUnknown'
+      && unknownRenderR2.texts.some((text) => text.includes('hostHealthUnknownHint'))
+      && !unknownRenderR2.texts.includes('hostHealthOk') && !unknownRenderR2.pairs.some((pair) => pair.className === 'dshrouter-error'))
+    check('R2-h: incompatible → 红徽章 ⚠ 面降级计数（badge 节点 dshrouter-error + hostHealthWarn(n)；非黄非绿）',
+      badgeOfR2(incompatibleRenderR2)?.className === 'dshrouter-error' && badgeOfR2(incompatibleRenderR2)?.text === 'hostHealthWarn(1)'
+      && !incompatibleRenderR2.pairs.some((pair) => pair.className === 'dshrouter-warn') && !incompatibleRenderR2.texts.includes('hostHealthOk'))
+    check('R2-h: 三态渲染期零 probe（探针计数断言——render 只消费快照/RPC 数据）',
+      probeCallsR2h === renderBaselineR2)
+    // 旧服务端容忍：capabilityProfile 缺席（旧服务端响应 / 取数失败恢复期）→ 回落
+    // 既有两态口径（全绿徽章），不误报黄。
+    const legacyRenderR2 = renderR2({ hostVersions: versionsOfR2('0.1.5-rc.2'), faces: [{ name: 'llm', state: 'ok' }] }, null)
+    check('R2-h 兼容: capabilityProfile 缺席（旧服务端）→ 既有口径回落（badge 绿，不误黄）',
+      badgeOfR2(legacyRenderR2)?.className === 'dshrouter-ok' && !legacyRenderR2.pairs.some((pair) => pair.className === 'dshrouter-warn')
+      && legacyRenderR2.texts.includes('hostHealthOk'))
+  }
 }
 
 console.log(failures === 0 ? `\nALL HOST ABI HEALTH TESTS PASSED (${passed} assertions)` : `\n${failures} FAILURE(S) (${passed} passed)`)
