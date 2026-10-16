@@ -118,6 +118,9 @@
         "REVIEW-ARCH-005-R1-DESIGN-REVIEWER": [
           "3647ae45fcd9bad3013635e26cf27628"
         ],
+        "REVIEW-ARCH-005-R10": [
+          "77e9ac38257248d7a50bb8a1970c55dc"
+        ],
         "REVIEW-ARCH-005-R2": [
           "020c29b2f192c411a3ce947763521e6c"
         ],
@@ -135,6 +138,12 @@
         ],
         "REVIEW-ARCH-005-R7": [
           "c23838e86bd9e8e3928c1293909c9321"
+        ],
+        "REVIEW-ARCH-005-R8": [
+          "5af1200e172df8f11787b705c00ed613"
+        ],
+        "REVIEW-ARCH-005-R9": [
+          "910453b5942d0382074b29e00bb936ef"
         ],
         "REVIEW-AUDIT-001-R0": [
           "0ecc43432ad39691a7981c97a3999890"
@@ -499,7 +508,7 @@
           "377e36f54675369e0e5874bc35d8f737"
         ]
       },
-      "sha256": "a957d3548d8e06869e6b45c0e0a228eee430e6592e2c9701aab8c75eab8ee324"
+      "sha256": "3771cbba48bcde4046161a0f71f6fdccd2e5b835ecb14568ecc1b09e0b7bce1f"
     },
     "plan-tracker.md": {
       "rows": {
@@ -784,5 +793,5 @@
   },
   "schema_version": 1,
   "tool": "governance-write-guard/row-family-reconciliation",
-  "updated_at": "2026-10-17T03:30:34"
+  "updated_at": "2026-10-17T04:48:46"
 }

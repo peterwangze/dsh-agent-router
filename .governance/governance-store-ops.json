@@ -71,6 +71,44 @@
         ".governance/arch-005-decoupling-design.md",
         ".governance/arch-005-host-diff-inventory.md"
       ]
+    },
+    "op-7a558cea0b064b20a0a56b82f1f478c9": {
+      "schema_version": 1,
+      "command": "locks-amend",
+      "task_id": "ARCH-005",
+      "input_fingerprint": "1c476b24f8efb913942b1a3d93772a70b16f80e623c8566965b69131a7f73759",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-7a558cea0b064b20a0a56b82f1f478c9",
+        "code": "ok",
+        "new_revision": 7509,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-17T04:49:30",
+      "updated_at": "2026-10-17T04:49:30"
+    },
+    "op-4f2f2a2e55294b37b89fe600ee2be9fb": {
+      "schema_version": 1,
+      "command": "locks-amend",
+      "task_id": "ARCH-005",
+      "input_fingerprint": "995fef3f4bd8627e5309b217603431db568b0d68260880cc34c5b9de1ffe034c",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-4f2f2a2e55294b37b89fe600ee2be9fb",
+        "code": "ok",
+        "new_revision": 7880,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-17T04:49:31",
+      "updated_at": "2026-10-17T04:49:31"
     }
   }
 }
