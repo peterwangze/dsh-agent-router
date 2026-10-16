@@ -13,7 +13,7 @@
 //      镜像（保序去重 + provider 改写 + inputModalities ['text','image'] 账号级
 //      声明）；enabled=false 账号不列入；
 //   ③ 注销联动：无启用账号 / 总开关关闭 → provider 注销（listProviders 不含）；
-//      settings/updated 热同步恢复；
+//      settings/document-updated 热同步恢复；
 //   ④ 请求形状（fetch stub 锁定）：model / store:false / stream:true /
 //      instructions=system / input 完整对话映射（user input_text+input_image、
 //      assistant output_text+function_call 回填、tool-result → function_call_
@@ -188,9 +188,9 @@ console.log('oauth-main-model model catalog (accounts → provider models):')
   const resolved = await h.llm.registration(OAUTH_PROVIDER).adapter.resolveModel(OAUTH_PROVIDER, 'gpt-5.6-sol', undefined)
   check('CAT-4: resolveModel 声明 image（prompt 准入放行带图）', resolved.provider === OAUTH_PROVIDER && Array.isArray(resolved.inputModalities) && resolved.inputModalities.includes('image'))
   check('CAT-5: prepareCall 显式实现并绑定自身（FIX-001 教训）', typeof h.llm.registration(OAUTH_PROVIDER).adapter.prepareCall === 'function')
-  // ③ 注销联动：全部停用 → 注销；恢复 → 重注册（settings/updated 驱动）。
+  // ③ 注销联动：全部停用 → 注销；恢复 → 重注册（settings/document-updated 驱动）。
   h.service.setAccounts({ off: ACCOUNT_OFF })
-  const settingsListener = h.listeners.find((entry) => entry.event === 'settings/updated')
+  const settingsListener = h.listeners.find((entry) => entry.event === 'settings/document-updated')
   settingsListener.fn('router')
   check('CAT-6: 无启用账号 → provider 注销', !h.llm.listProviders().some((entry) => entry.id === OAUTH_PROVIDER))
   h.service.setAccounts({ chatgpt: ACCOUNT_A })
@@ -279,8 +279,8 @@ console.log('fix-015 empty-models observability (P8 warn, deduped):')
   check('F15-1: 启用+已登录+models 空 → provider 不注册', !h.llm.listProviders().some((entry) => entry.id === OAUTH_PROVIDER))
   await new Promise((resolve) => setImmediate(resolve))
   check('F15-2: 同场景发 warn（旧代码无 warn 必败）', h.warns().some((m) => m.includes('chatgpt-oauth provider not registered') && m.includes('empty model lists')))
-  // 去重：再次触发 settings/updated → 仍仅一条 warn。
-  const settingsListener = h.listeners.find((entry) => entry.event === 'settings/updated')
+  // 去重：再次触发 settings/document-updated → 仍仅一条 warn。
+  const settingsListener = h.listeners.find((entry) => entry.event === 'settings/document-updated')
   settingsListener.fn('router')
   await new Promise((resolve) => setImmediate(resolve))
   check('F15-3: warn 去重（状态未变不刷屏）', h.warns().filter((m) => m.includes('empty model lists')).length === 1)
@@ -413,7 +413,7 @@ function seedCredentialFile(dir, overrides = {}) {
 }
 
 /** EVO-010 路由夹具：settings/credentials/llm 三 seam mock + 真 RouterService。
- *  emitEvents=true：settings.mutate 后发射 settings/updated(llm-pi-ai) 事件
+ *  emitEvents=true：settings.mutate 后发射 settings/document-updated(llm-pi-ai) 事件
  *  （模拟宿主 diff-gated commit 事件——F-1 回环判别所需；reviewer 指出的
  *  既有夹具盲区）；settingsMutateFails=true：mutate 抛错（F-7 mutate 拒绝
  *  判别）。 */
@@ -421,8 +421,10 @@ function makeRouteHarness({ accounts, enabled = true, entry, parity = 'ok', toke
   const calls = []
   const warns = []
   const providers = entry === undefined ? {} : { [HOST_ROUTE_PROVIDER]: entry }
+  // A3（HD-002）：settings 面方法换代——get(ns) 消失，读路径 = describe()
+  //   .find(row => row.ns === ns)（host-route readProvidersEntry 新形态镜像）。
   const settings = {
-    get: (ns) => (ns === HOST_ROUTE_NS ? { providers } : undefined),
+    describe: () => [{ ns: HOST_ROUTE_NS, revision: 0, value: { providers } }],
     mutate: async (ns, ops) => {
       calls.push({ kind: 'settings.mutate', ns, ops })
       if (ns !== HOST_ROUTE_NS) throw new Error(`unexpected ns ${ns}`)
@@ -433,7 +435,7 @@ function makeRouteHarness({ accounts, enabled = true, entry, parity = 'ok', toke
           else providers[HOST_ROUTE_PROVIDER] = op.value
         }
       }
-      if (emitEvents) root.emit('settings/updated', HOST_ROUTE_NS)
+      if (emitEvents) root.emit('settings/document-updated', HOST_ROUTE_NS)
       return true
     },
   }
@@ -463,7 +465,7 @@ function makeRouteHarness({ accounts, enabled = true, entry, parity = 'ok', toke
   root.reflect.provide('llm', llm)
   root.logger = { warn: (message) => warns.push(String(message)) }
   const service = new RouterService(root, { enabled, oauthAccounts: accounts })
-  return { service, ctx: root, calls, warns, providers, settings, credentials, emit: (ns) => root.emit('settings/updated', ns) }
+  return { service, ctx: root, calls, warns, providers, settings, credentials, emit: (ns) => root.emit('settings/document-updated', ns) }
 }
 
 /** 带临时凭据文件的启用账号（transport 可覆写）。 */

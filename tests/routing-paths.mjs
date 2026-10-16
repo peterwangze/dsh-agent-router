@@ -720,7 +720,7 @@ console.log('E. takeover 服务端双层语义:')
     listImageVisionAgents: () => config.visionAgents,
     listImageGenerationAgents: () => config.generationAgents,
   }
-  const fireSettingsCommit = (ns = 'router') => { for (const cb of root.events.dispatch('emit', ['settings/updated', ns, null, null, 'update'])) cb(ns, null, null, 'update') }
+  const fireSettingsCommit = (ns = 'router') => { for (const cb of root.events.dispatch('emit', ['settings/document-updated', ns, 1])) cb(ns, 1) }
   const fireAdapters = () => { for (const cb of root.events.dispatch('emit', ['llm/adapters-updated'])) cb() }
   const hasTwin = (provider = 'text-provider') => llm.listProviders().some((entry) => entry.id === `${provider}${WRAP_SUFFIX}`)
 

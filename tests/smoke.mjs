@@ -2245,14 +2245,14 @@ console.log('apply wiring:')
 
   // ── index apply ──
   {
-    let settingsNs = null
+    let settingsRegisterCalls = 0
     let registeredContribution = null
     const root = new Context()
+    // A3（HD-002 声明制）：settings 面无 register——apply 不得触碰运行时注册
+    //（判别：旧代码在 register 缺失时 apply 直调 throw → 本块后续断言全败）。
     await root.plugin({ name: 'stub-settings', apply: (ctx) => ctx.provide('settings', {
-      register: (ns, schema) => {
-        settingsNs = { ns, schema }
-        return { get: () => ({ enabled: true, agents: {} }) }
-      },
+      describe: () => [],
+      register: () => { settingsRegisterCalls += 1 },
     }) })
     await root.plugin({ name: 'stub-typert', apply: (ctx) => ctx.provide('typert', {
       register: (contribution) => { registeredContribution = contribution; return () => {} },
@@ -2268,9 +2268,12 @@ console.log('apply wiring:')
       readImage: async (ref) => ({ ref, data: new Uint8Array(EVO12_PNG_BYTES) }),
     })
     check('index module declares inject', Array.isArray(indexModule.inject) && indexModule.inject.includes('settings') && indexModule.inject.includes('typert') && indexModule.inject.includes('webServer'))
-    const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply })
+    check('index module exports Config (A3 declaration face)', !!indexModule.Config && indexModule.Config.meta?.volatile === true)
+    const app = root.plugin({ name: 'smoke-index', inject: indexModule.inject, apply: indexModule.apply, Config: indexModule.Config })
     await app
-    check('settings ns router registered', settingsNs && settingsNs.ns === 'router')
+    check('settings ns router declared via Config export (no runtime registration — P5)', settingsRegisterCalls === 0 && !!indexModule.Config)
+    const smokeService = root.get('router')
+    check('service scope reads Config live ref defaults (enabled=true through volatile resolution)', smokeService?.isEnabled() === true)
     check('typert contribution registered', registeredContribution && registeredContribution.invocations.length === 19 && registeredContribution.package === 'dsh-agent-router')
     check('router service provided', typeof root.get('router') === 'object' && root.get('router') !== null)
     check('oauth callback route registered', webRoutes.some((route) => route && route.kind === 'exact' && route.path === '/router-oauth/callback' && typeof route.handler === 'function'))
@@ -2574,14 +2577,13 @@ console.log('admission wrapper (L1):')
   check('MODALITY_ENTRIES audio/video placeholders inactive', MODALITY_ENTRIES[1].stateOf(fakeService) === null && MODALITY_ENTRIES[2].stateOf(fakeService) === null)
   // cordis 语义：events.dispatch('emit', …) 返回回调数组、由调用方执行
   //（settings 服务与 LlmRuntime 均如此），测试按同款方式触发。
-  // settings 服务顺序：bumpRevision（发 document-updated，resolved 尚未提交）
-  // → commit（更新 resolved，发 settings/updated）。包装层必须监听后者，
-  // 否则"关闭视觉 agent"读到的还是旧配置、包装组残留（真实 bug 回归）。
-  const fireDocumentUpdate = (ns, revision) => {
+  // ARCH-005 A3（HD-002 事件换代）：0.2.0 唯一 settings 事件 = settings/
+  // document-updated(ns, revision)——宿主 write() 尾部 describe() 变更检测后发，
+  // 发射前 configEditor.edit 已完成（loader volatile-only commit 原地写 live
+  // ref），事件到达时读到的一定是新值（T-5 源级验证；0.1.5 期「bumpRevision
+  // 先于 resolved 提交、须避让该事件」的时序已不存在）。包装层经该事件热同步。
+  const fireSettingsUpdated = (ns, revision = 1) => {
     for (const callback of root.events.dispatch('emit', ['settings/document-updated', ns, revision])) callback(ns, revision)
-  }
-  const fireSettingsCommit = (ns) => {
-    for (const callback of root.events.dispatch('emit', ['settings/updated', ns, null, null, 'update'])) callback(ns, null, null, 'update')
   }
   // 1) 视觉 agent 存在 → 包装注册、声明 image、目录镜像、+多模态 标签。
   const dispose = installAdmissionWrapper(root, fakeService)
@@ -2761,24 +2763,21 @@ console.log('admission wrapper (L1):')
   // 3) 嵌套 tool-result 中的图片块同样被改写（原文本适配器会递归拒绝）。
   const nestedResult = rewriteContentDeep([{ type: 'tool-result', callId: 'c1', content: [{ type: 'image', attachment: { attachmentId: 'sha256:n', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } }, { type: 'text', text: 'x' }] }], [{ modality: 'image', state: { vision: ['vision'], generation: [] }, marker: minimalImageRewrite, rewrite: () => null }])
   check('rewriteContentDeep reaches nested tool-result', nestedResult.changed === true && nestedResult.content[0].content.every((block) => block.type === 'text'))
-  // 4) 门控：关闭视觉 agent → settings/updated 提交后包装卸载、默认模型恢复。
+  // 4) 门控：关闭视觉 agent → settings/document-updated 后包装卸载、默认模型恢复
+  //（A3 换代：事件到达时 live ref 已是新值——T-5 时序，关闭即时生效）。
   config.visionAgents = []
-  // 负向见证：document-updated（resolved 未提交）不得触发卸载——曾因监听
-  // 该事件导致"关闭视觉 agent 后 +多模态 组残留"（真实 bug 回归）。
-  fireDocumentUpdate('router', 2)
-  check('wrapper ignores document-updated (stale resolved)', llm.listProviders().some((entry) => entry.id === `text-provider${WRAP_SUFFIX}`))
-  fireSettingsCommit('router')
+  fireSettingsUpdated('router')
   await tick()
   check('wrapper drops twin when vision agents disabled', !llm.listProviders().some((entry) => entry.id === `text-provider${WRAP_SUFFIX}`))
   check('wrapper restores default model on disable', defaultSelection.provider === 'text-provider')
   // 5) 门控：总开关关闭 → 同样不注册。
   config.enabled = false
   config.visionAgents = [['vision', { name: '视觉', type: 'chat', enabled: true, capabilities: ['image'] }]]
-  fireSettingsCommit('router')
+  fireSettingsUpdated('router')
   check('wrapper respects master switch', !llm.listProviders().some((entry) => entry.id === `text-provider${WRAP_SUFFIX}`))
   // 6) 恢复 + adapters 事件热同步；新 provider 出现即补包装；默认模型再接管。
   config.enabled = true
-  fireSettingsCommit('router')
+  fireSettingsUpdated('router')
   llm.registerAdapter(['another-provider'], { ...textAdapter, providerInfo(provider) { return { id: provider, name: 'Another' } } })
   await tick()
   check('wrapper hot-syncs on adapters event', llm.listProviders().some((entry) => entry.id === `another-provider${WRAP_SUFFIX}`))
@@ -2786,12 +2785,12 @@ console.log('admission wrapper (L1):')
   // 6b) FIX-002 用户主权：一次性接管后用户手动改回原生 → 后续 sync 事件
   //（session 切换/adapters/设置变更）不再强制覆盖回 twin。
   defaultSelection = { provider: 'text-provider', model: 'brain-1' }
-  fireSettingsCommit('router')
+  fireSettingsUpdated('router')
   await tick()
   check('user revert respected after one-shot takeover (FIX-002)', defaultSelection.provider === 'text-provider')
   // 6c) FIX-002 开关关闭：默认模型永不被触碰（flag=false 时 sync 直接跳过接管）。
   config.takeoverDefaultModel = false
-  fireSettingsCommit('router')
+  fireSettingsUpdated('router')
   await tick()
   check('takeover off never touches default model (FIX-002)', defaultSelection.provider === 'text-provider')
   check('wrappableProviders excludes twins', wrappableProviders(llm).every((provider) => !provider.endsWith(WRAP_SUFFIX)) && wrappableProviders(llm).includes('text-provider'))
@@ -2802,12 +2801,12 @@ console.log('admission wrapper (L1):')
   // 恰一次 saveSelection 写 + 写入内容为原生 provider（FIX-002 之前代码无
   // 开关，事件后默认模型仍停在 twin 且零写，必败）。
   config.takeoverDefaultModel = true
-  fireSettingsCommit('router')
+  fireSettingsUpdated('router')
   await tick()
   check('wrapper re-arms takeover after switch back on', defaultSelection.provider === `text-provider${WRAP_SUFFIX}`)
   const switchOffWrites = defaultWrites.length
   config.takeoverDefaultModel = false
-  fireSettingsCommit('router')
+  fireSettingsUpdated('router')
   await tick()
   check('switch-off restores default model while takeover in place (invariant ③)', defaultSelection.provider === 'text-provider' && defaultWrites.length === switchOffWrites + 1 && defaultWrites[switchOffWrites].provider === 'text-provider')
   // 7) 卸载器释放全部注册并恢复默认模型。（FIX-002-R7 F4：6b/6c/6d 之后
@@ -2816,7 +2815,7 @@ console.log('admission wrapper (L1):')
   // 接管，dispose 时默认模型真实停在 twin 上，还原分支才真实执行：补断言
   // 恰一次还原写 + 写入内容为原生 provider——还原写路径被删改即败。）
   config.takeoverDefaultModel = true
-  fireSettingsCommit('router')
+  fireSettingsUpdated('router')
   await tick()
   check('wrapper re-takes over before uninstall (restore branch armed)', defaultSelection.provider === `text-provider${WRAP_SUFFIX}`)
   const disposeWrites = defaultWrites.length
@@ -2852,11 +2851,11 @@ console.log('admission wrapper (L1):')
     // settings 三连）零再剥、零写入。
     defaultSelection = { provider: `text-provider${WRAP_SUFFIX}`, model: 'brain-1' }
     const oneshotWrites = defaultWrites.length
-    fireSettingsCommit('router')
+    fireSettingsUpdated('router')
     await tick()
     for (const callback of root.events.dispatch('emit', ['llm/adapters-updated'])) callback()
     await tick()
-    fireSettingsCommit('router')
+    fireSettingsUpdated('router')
     await tick()
     check('no re-strip after user re-selects twin (legacyStripped one-shot)', defaultSelection.provider === `text-provider${WRAP_SUFFIX}` && defaultWrites.length === oneshotWrites)
     // dispose：标记已消费 → 卸载零写、默认模型不动（pre-F2 代码 dispose 会
@@ -3010,15 +3009,14 @@ console.log('admission wrapper (L1):')
 // 全链路回归 + Node 侧 faces 生产非空（R-5 注册表接线）。
 //
 // 迁移前基线（B5 批前实读 census，面齐备的 index apply——本文件同 harness）：
-// settings/updated 4（index 统计持久化 + service 宿主路由维护 + wrapper 热同步
+// settings 事件 4（index 统计持久化 + service 宿主路由维护 + wrapper 热同步
 // + oauth-llm 状态同步）/ llm/adapters-updated 2（wrapper + oauth-llm）/
 // agent/pre-step 1 / agent/created 1 / agent-preset/selected 1 / agent/request 1
-// = 10。B5 批收敛：index/service 的 settings/updated（同目标共享单 listener，
-// 4→3）+ preset-defaults 的 agent-preset/selected（域管事件）。**EVO-024 B6
-// 归口收口**：wrapper/oauth-llm 剩余四处（settings/updated ×2 +
-// llm/adapters-updated ×2）全部经 events 域——四模块同根 ctx 共享**单**宿主
-// listener，实测 settings/updated 3→1、llm/adapters-updated 2→1、总量 9→6
-// （断言口径 = 收敛后实测精确值；BR-01②「只减不增」方向不回退）。
+// = 10。B5 收敛 4→3；EVO-024 B6 归口收口（四模块同根 ctx 共享**单**宿主
+// listener）实测 settings 事件 3→1、adapters 2→1、总量 9→6。**ARCH-005 A3
+// （HD-002）事件换代**：settings/updated 消失，四订阅点全部迁
+// settings/document-updated（同目标共享单 listener 形态不变）——census 键名
+// 换代、计数不变（断言口径 = 收敛后实测精确值；BR-01②「只减不增」不回退）。
 {
   const b5IndexModule = await import('../lib/index.js')
   const root = new Context()
@@ -3030,7 +3028,9 @@ console.log('admission wrapper (L1):')
     listenersByEvent[event] = [...(listenersByEvent[event] ?? []), handler]
     return origOn(event, handler)
   }
-  await root.plugin({ name: 'b5-settings', apply: (ctx) => ctx.provide('settings', { register: () => ({ get: () => ({ enabled: true, agents: {}, oauthAccounts: {} }) }) }) })
+  // A3 声明制：settings 面无 register（apply 不再做运行时注册；describe/mutate
+  // 为 service.config()/save() 与 host-route 的消费面）。
+  await root.plugin({ name: 'b5-settings', apply: (ctx) => ctx.provide('settings', { describe: () => [], mutate: async () => {} }) })
   await root.plugin({ name: 'b5-typert', apply: (ctx) => ctx.provide('typert', { register: () => () => {} }) })
   await root.plugin({ name: 'b5-webserver', apply: (ctx) => ctx.provide('webServer', { register: () => () => {} }) })
   root.provide('attachments', { saveImage: async () => ({}), readImage: async () => ({}) })
@@ -3046,17 +3046,19 @@ console.log('admission wrapper (L1):')
   root.provide('agentDefaultModel', { currentSelection: () => null, saveSelection: () => {} })
   root.provide('sessionController', { selectModel: async () => ({}) })
   root.logger = { warn: () => {}, info: () => {} }
-  const app = await root.plugin({ name: 'b5-index', inject: b5IndexModule.inject, apply: b5IndexModule.apply })
+  const app = await root.plugin({ name: 'b5-index', inject: b5IndexModule.inject, apply: b5IndexModule.apply, Config: b5IndexModule.Config })
   await new Promise((resolve) => setImmediate(resolve))
-  check('B6 census: settings/updated 收敛 3→1（index 统计持久化 + service 宿主路由维护 + wrapper 热同步 + oauth-llm 状态同步四消费者共享单宿主 listener）', census['settings/updated'] === 1, census)
+  check('A3 census: 旧事件名 settings/updated 零订阅（HD-002 换代后死事件零残留，P5）', census['settings/updated'] === undefined, census)
+  check('B6 census: settings/document-updated 收敛 3→1（index 统计持久化 + service 宿主路由维护 + wrapper 热同步 + oauth-llm 状态同步四消费者共享单宿主 listener）', census['settings/document-updated'] === 1, census)
   check('B6 census: llm/adapters-updated 收敛 2→1（wrapper + oauth-llm 经 events 域共享单 listener——B6 归口收口）', census['llm/adapters-updated'] === 1, census)
   check('B5 census: agent-preset/selected 经 events 域（域管事件 Node 面单 listener）', census['agent-preset/selected'] === 1)
   check('B5 census: scoped 钩子保留直订（agent/pre-step 1 + agent/created 1 + agent/request 1——W-3 口径）', census['agent/pre-step'] === 1 && census['agent/created'] === 1 && census['agent/request'] === 1)
   check('B5 census: 全量订阅注册数 ≤ 迁移前基线 10（BR-01② 订阅总数只减不增）', Object.values(census).reduce((sum, count) => sum + count, 0) <= 10, census)
 
-  // 事件链全链路回归：settings/updated → 域共享 listener → 按名分发给两消费者
-  //（① service.applyStatsSettings 统计持久化重放 ② queueHostRouteSync 宿主路由
-  // pass），ns 过滤语义逐字保持（router/undefined = user；llm-pi-ai = llm）。
+  // 事件链全链路回归：settings/document-updated → 域共享 listener → 按名分发给
+  // 两消费者（① service.applyStatsSettings 统计持久化重放 ② queueHostRouteSync
+  // 宿主路由 pass），ns 过滤语义保持（router = user；llm-pi-ai = llm；A3 后新
+  // 宿主逐 entry 发射、无 undefined 全量广播形态）。
   const serviceB5 = root.get('router')
   let statsApplies = 0
   let routeQueues = 0
@@ -3064,13 +3066,13 @@ console.log('admission wrapper (L1):')
   const rawQueue = serviceB5.queueHostRouteSync.bind(serviceB5)
   serviceB5.applyStatsSettings = (...args) => { statsApplies += 1; return rawApplyStats(...args) }
   serviceB5.queueHostRouteSync = (...args) => { routeQueues += 1; return rawQueue(...args) }
-  const fireSettings = (ns) => { for (const handler of listenersByEvent['settings/updated'] ?? []) handler(ns) }
+  const fireSettings = (ns) => { for (const handler of listenersByEvent['settings/document-updated'] ?? []) handler(ns) }
   fireSettings('router')
-  check('B5 事件链: settings/updated(router) → 共享 listener 按名分发两消费者各一次（迁移后消费者零丢失）', statsApplies === 1 && routeQueues === 1)
+  check('B5 事件链: settings/document-updated(router) → 共享 listener 按名分发两消费者各一次（迁移后消费者零丢失）', statsApplies === 1 && routeQueues === 1)
   fireSettings('llm-pi-ai')
   check('B5 事件链: llm-pi-ai ns 只命中宿主路由消费者（ns 过滤语义不变——统计不误重放）', statsApplies === 1 && routeQueues === 2)
-  fireSettings(undefined)
-  check('B5 事件链: 全量广播（ns undefined）命中两消费者（P8 观测面语义保持）', statsApplies === 2 && routeQueues === 3)
+  fireSettings('unrelated-ns')
+  check('B5 事件链: 无关 ns 两消费者均不命中（A3 后逐 entry ns 过滤——新宿主无全量广播）', statsApplies === 1 && routeQueues === 2)
 
   // R-5：Node 侧注册表接线——RPC faces 生产非空（B1 空注册表落地；启动自检
   // 在 apply 内同步完成，无异步 timer 依赖）。

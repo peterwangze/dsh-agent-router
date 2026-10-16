@@ -224,21 +224,21 @@ console.log('domain skeleton probes (real probing behavior):')
   let aCalls = 0
   let bCalls = 0
   const disposeAll = subscribeEvents(eventCtx, [
-    { event: 'settings/updated', consumer: 'consumer-a', gate: { kind: 'settings-pass', key: 'router' }, handler: () => { aCalls += 1; throw new Error('handler exploded') } },
-    { event: 'settings/updated', consumer: 'consumer-b', handler: () => { bCalls += 1 } },
+    { event: 'settings/document-updated', consumer: 'consumer-a', gate: { kind: 'settings-pass', key: 'router' }, handler: () => { aCalls += 1; throw new Error('handler exploded') } },
+    { event: 'settings/document-updated', consumer: 'consumer-b', handler: () => { bCalls += 1 } },
   ])
-  check('subscribeEvents dedupes to ONE shared ctx.on listener per event name (D1-9)', listeners.get('settings/updated').length === 1)
-  for (const handler of listeners.get('settings/updated')) handler()
+  check('subscribeEvents dedupes to ONE shared ctx.on listener per event name (D1-9)', listeners.get('settings/document-updated').length === 1)
+  for (const handler of listeners.get('settings/document-updated')) handler()
   check('handler throw is contained (fail-safe) and sibling consumers still run', aCalls === 1 && bCalls === 1)
   check('handler failure is ring-observed (P8: event-handler-error)', hostDiagnostics().entries.some((entry) => entry.kind === 'event-handler-error' && entry.consumer === 'consumer-a'))
   armEventGate('settings-pass', 'router', true)
-  for (const handler of listeners.get('settings/updated')) handler()
+  for (const handler of listeners.get('settings/document-updated')) handler()
   check('armed gate suppresses the gated consumer only (F-1 generalized)', aCalls === 1 && bCalls === 2 && hostDiagnostics().entries.some((entry) => entry.kind === 'event-gated'))
   armEventGate('settings-pass', 'router', false)
-  for (const handler of listeners.get('settings/updated')) handler()
+  for (const handler of listeners.get('settings/document-updated')) handler()
   check('disarmed gate resumes dispatch', aCalls === 2 && bCalls === 3)
   disposeAll()
-  check('disposeAll removes the shared listeners', (listeners.get('settings/updated') ?? []).length === 0)
+  check('disposeAll removes the shared listeners', (listeners.get('settings/document-updated') ?? []).length === 0)
   check('FORWARDED_EVENT_ALLOWLIST mirrors host API_REMOTE_FORWARDED_EVENTS (D-2 anchor: reference-updated in, dead name out; ARCH-005 R0: 27 items at 0.2.0-rc.2 primary baseline)', FORWARDED_EVENT_ALLOWLIST.includes('credentials/reference-updated') && !FORWARDED_EVENT_ALLOWLIST.includes('credentials/updated') && FORWARDED_EVENT_ALLOWLIST.length === 27)
   // 6e. inject-manifest：单一事实源 + fiber 面探测（§4.3 域 5）。
   check('FIBER_INJECT is the client.js fiber inject mirror (single source, B2/B6 static comparison)', (() => {
@@ -476,10 +476,11 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   const clientSourceB5 = readLibB5('client.js')
   const eventsSourceB5 = readFileSync(join(ROOT_DIR, 'lib', 'host-abi', 'events.js'), 'utf8')
 
-  // 9a. 域管事件清单（§4.3 域 4 ① / W-3 收窄口径）。
-  const MANAGED_EXPECTED = ['settings/updated', 'llm/adapters-updated', 'settings/document-updated', 'agent-preset/selected', 'credentials/reference-updated']
-  check('B5 9a: MANAGED_EVENTS = §4.3 域 4 五事件清单（多消费者/跨面环境事件单点）',
-    Array.isArray(MANAGED_EVENTS) && JSON.stringify([...MANAGED_EVENTS].sort()) === JSON.stringify([...MANAGED_EXPECTED].sort()), MANAGED_EVENTS)
+  // 9a. 域管事件清单（§4.3 域 4 ① / W-3 收窄口径；ARCH-005 A3 后 settings/updated
+  //     除名——0.2.0 宿主该事件已消失，四订阅点全部换代 settings/document-updated）。
+  const MANAGED_EXPECTED = ['llm/adapters-updated', 'settings/document-updated', 'agent-preset/selected', 'credentials/reference-updated']
+  check('B5 9a: MANAGED_EVENTS = 域管四事件清单（A3 后旧事件名零残留，P5）',
+    Array.isArray(MANAGED_EVENTS) && JSON.stringify([...MANAGED_EVENTS].sort()) === JSON.stringify([...MANAGED_EXPECTED].sort()) && !MANAGED_EVENTS.includes('settings/updated'), MANAGED_EVENTS)
   check('B5 9a: W-3 收窄——scoped 生命周期钩子（agent/pre-step、agent/created、agent/request）不在域管清单（veto 语义/热路径零介入）',
     ['agent/pre-step', 'agent/created', 'agent/request'].every((name) => !MANAGED_EVENTS.includes(name)))
   check('B5 9a: scoped 钩子在消费面保留直订不经域（preset-defaults/prestep 源码面 W-3 口径）',
@@ -498,8 +499,9 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     onSites.length >= 5 && onSites.every((name) => FORWARDED_EVENT_ALLOWLIST.includes(name)), onSites)
   check('B5 9b 静态: D-2 死订阅名 credentials/updated 零残留 + 正名 credentials/reference-updated 在位（白名单锚）',
     !onSites.includes('credentials/updated') && onSites.includes('credentials/reference-updated'))
-  check('B5 9b 迁移: index.js/service.js 的 settings/updated 订阅收敛 events 域（旧裸 ctx.on 零残留，P5）',
+  check('B5 9b 迁移: index.js/service.js 的 settings 事件订阅收敛 events 域（旧裸 ctx.on 零残留，P5；A3 后事件名 = settings/document-updated）',
     /subscribeEvents\(ctx,/.test(readLibB5('index.js')) && /subscribeEvents\(this\.ctx,/.test(readLibB5('service.js'))
+    && /event: 'settings\/document-updated'/.test(readLibB5('index.js')) && /event: 'settings\/document-updated'/.test(readLibB5('service.js'))
     && !/ctx\.on\('settings\/updated'/.test(readLibB5('index.js')) && !/this\.ctx\.on\('settings\/updated'/.test(readLibB5('service.js')))
   check('B5 9b 迁移: preset-defaults 的 agent-preset/selected（域管事件）经域；agent/created 保留直订（W-3）',
     /subscribeEvents\(ctx,/.test(readLibB5('preset-defaults.js'))
@@ -529,11 +531,11 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   check('B5 9c 运行时: isForwardedEvent 判定与白名单镜像一致（含空/非串防御）',
     isForwardedEvent('credentials/reference-updated') === true && isForwardedEvent('credentials/updated') === false
     && isForwardedEvent('') === false && isForwardedEvent(undefined) === false)
-  check('B5 9c 运行时: 宿主面（ctx.on）事件名不受转发白名单约束（settings/updated 非转发事件仍合法）',
+  check('B5 9c 运行时: 宿主面（ctx.on）事件名不受转发白名单约束（app-boot/config-reload 非转发事件仍合法——A3 后宿主面设置事件探针换真非转发名）',
     (() => {
       const seen = []
-      subscribeEvents({ on: (event, handler) => { seen.push(event); return () => {} } }, [{ event: 'settings/updated', consumer: 'stats-persistence', handler: () => {} }])
-      return seen.join('|') === 'settings/updated'
+      subscribeEvents({ on: (event, handler) => { seen.push(event); return () => {} } }, [{ event: 'app-boot/config-reload', consumer: 'config-reload-probe', handler: () => {} }])
+      return seen.join('|') === 'app-boot/config-reload'
     })())
 
   // 9d. 共享 listener 聚合（D1-9：跨模块多次 subscribeEvents 收敛单 ctx.on listener）。
@@ -548,16 +550,16 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   }
   let statsApplies = 0
   let routeSyncs = 0
-  const disposeConsumerA = subscribeEvents(hostTarget, [{ event: 'settings/updated', consumer: 'stats-persistence', handler: (ns) => { if (ns === 'router' || ns === undefined) statsApplies += 1 } }])
-  const disposeConsumerB = subscribeEvents(hostTarget, [{ event: 'settings/updated', consumer: 'host-route-router-ns', handler: (ns) => { if (ns === 'router') routeSyncs += 1 } }])
-  check('B5 9d 聚合: 同目标两次 subscribeEvents 共享单 ctx.on listener（4→3 订阅 census 的机制面）', (hostListeners.get('settings/updated') ?? []).length === 1)
-  for (const handler of hostListeners.get('settings/updated') ?? []) handler('router')
+  const disposeConsumerA = subscribeEvents(hostTarget, [{ event: 'settings/document-updated', consumer: 'stats-persistence', handler: (ns) => { if (ns === 'router') statsApplies += 1 } }])
+  const disposeConsumerB = subscribeEvents(hostTarget, [{ event: 'settings/document-updated', consumer: 'host-route-router-ns', handler: (ns) => { if (ns === 'router') routeSyncs += 1 } }])
+  check('B5 9d 聚合: 同目标两次 subscribeEvents 共享单 ctx.on listener（订阅 census 的机制面）', (hostListeners.get('settings/document-updated') ?? []).length === 1)
+  for (const handler of hostListeners.get('settings/document-updated') ?? []) handler('router')
   check('B5 9d 聚合: 共享 listener 按名分发到全部 consumer（同事件两模块消费者各得其份）', statsApplies === 1 && routeSyncs === 1)
   disposeConsumerA()
-  for (const handler of hostListeners.get('settings/updated') ?? []) handler('router')
+  for (const handler of hostListeners.get('settings/document-updated') ?? []) handler('router')
   check('B5 9d 聚合: 单模块卸载只摘除自身 consumer（其余消费者不受影响——卸载聚合）', statsApplies === 1 && routeSyncs === 2)
   disposeConsumerB()
-  check('B5 9d 聚合: 全量卸载后共享 listener 归零（无残留泄漏）', (hostListeners.get('settings/updated') ?? []).length === 0)
+  check('B5 9d 聚合: 全量卸载后共享 listener 归零（无残留泄漏）', (hostListeners.get('settings/document-updated') ?? []).length === 0)
   // 9d-2. 异步 consumer 的 await 语义（域分发不得降级为 fire-and-forget——
   //   preset-defaults 播种串行队列测试与消费链均依赖 `await handler(...)` 与
   //   直订等价；多 consumer 时合并 Promise.all）。
@@ -1341,6 +1343,14 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     // 可清；fresh 侧 = 两宿主锚串在场（锚失即红——锚定的行为语义另由
     // tests/rpc-shadow-guard.mjs §5/§6 的形态判别 + 真树校验机器判据承载，非本表职责）。
     { file: ['lib', 'rpc.js'], stale: [], fresh: ['dsh-typert-registry/lib/index.js:565', '/lib/client.js:11666-11680'] },
+    // ARCH-005 A3（HD-002）：lib/schemas.js + tests/settings-config-migration.mjs **首次入册**——
+    //   本批 Config 导出声明制迁移在两文件引入宿主树行号式锚（锚对象均于本批实读核验：
+    //   dsh-settings 的 volatile 写入门与 ns schema 来源、pi-ai volatile 先例、config-editor
+    //   edit 净效应、loader _commitVolatile、cosmokit volatile 协议）。stale 空 = 两文件
+    //   首含锚、无旧锚可清；fresh = 代表性宿主锚串在场（锚失即红——锚定语义的行为判别
+    //   由 tests/settings-config-migration.mjs 的真树实跑判据承载，非本表职责）。
+    { file: ['lib', 'schemas.js'], stale: [], fresh: ['dsh-settings :506-508', 'dsh-llm-pi-ai/lib/index.js:1051', '（dsh-settings :538-541）'] },
+    { file: ['tests', 'settings-config-migration.mjs'], stale: [], fresh: ['dsh-config-editor lib/index.js:69-127 的净效应', 'cordis-plugin-loader _commitVolatile（lib/index.js:401-427）', 'lib/types/volatile.js:83', 'Config field "frozen" is not volatile'] },
   ]
   for (const anchorCase of ANCHOR_CASES) {
     const filePath = join(ROOT_DIR, ...anchorCase.file)
@@ -1732,39 +1742,39 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
       },
     }
     let degradedCalls = 0
-    const disposeFailed = subscribeEvents(flakyCtx, [{ event: 'settings/updated', consumer: 'degraded-consumer', handler: () => { degradedCalls += 1 } }])
+    const disposeFailed = subscribeEvents(flakyCtx, [{ event: 'settings/document-updated', consumer: 'degraded-consumer', handler: () => { degradedCalls += 1 } }])
     check('FIX-035 9i: attach 抛错 → 条目不入表（零宿主 listener，无假订阅）',
-      attemptEvents.length === 1 && (flakyListeners.get('settings/updated') ?? []).length === 0)
+      attemptEvents.length === 1 && (flakyListeners.get('settings/document-updated') ?? []).length === 0)
     check('FIX-035 9i: attach 抛错记 event-subscribe-failed（P8：面名 + code=attach-threw + consumer 标签 + 错误摘要截断）',
-      hostDiagnostics().entries.some((entry) => entry.kind === 'event-subscribe-failed' && entry.face === 'settings/updated'
+      hostDiagnostics().entries.some((entry) => entry.kind === 'event-subscribe-failed' && entry.face === 'settings/document-updated'
         && entry.code === 'attach-threw' && entry.consumer === 'degraded-consumer' && String(entry.detail).includes('ctx disposed')))
     check('FIX-035 9i: 失败消费者不得记正向 event-subscribed（观测误导消除——诊断不再是「已订阅」的相反信号）',
-      !hostDiagnostics().entries.some((entry) => entry.kind === 'event-subscribed' && entry.face === 'settings/updated' && entry.consumer === 'degraded-consumer'))
+      !hostDiagnostics().entries.some((entry) => entry.kind === 'event-subscribed' && entry.face === 'settings/document-updated' && entry.consumer === 'degraded-consumer'))
     // ① 失败条目未缓存 → 同目标同事件二次订阅**重新 attach** 并成功（自愈；
     //   静默死订阅消除——P2-1 的核心判别锚，失败消费者仍在订阅态下测）。
     let retryCalls = 0
-    const disposeRetry = subscribeEvents(flakyCtx, [{ event: 'settings/updated', consumer: 'retry-consumer', handler: () => { retryCalls += 1 } }])
+    const disposeRetry = subscribeEvents(flakyCtx, [{ event: 'settings/document-updated', consumer: 'retry-consumer', handler: () => { retryCalls += 1 } }])
     check('FIX-035 9i: 失败条目未缓存 → 二次订阅重试 attach（零复用死条目）',
-      attemptEvents.length === 2 && (flakyListeners.get('settings/updated') ?? []).length === 1,
-      { attempts: attemptEvents, listeners: (flakyListeners.get('settings/updated') ?? []).length })
-    for (const handler of flakyListeners.get('settings/updated') ?? []) handler()
+      attemptEvents.length === 2 && (flakyListeners.get('settings/document-updated') ?? []).length === 1,
+      { attempts: attemptEvents, listeners: (flakyListeners.get('settings/document-updated') ?? []).length })
+    for (const handler of flakyListeners.get('settings/document-updated') ?? []) handler()
     check('FIX-035 9i: 重试成功后消费者真正收到事件（零 host listener 的静默收不到已消除）',
       retryCalls === 1 && degradedCalls === 0)
     // ③ 入表后跨调用聚合语义不破（第三次订阅零 attach；卸载按 consumer 摘除）。
-    const disposeThird = subscribeEvents(flakyCtx, [{ event: 'settings/updated', consumer: 'third-consumer', handler: () => { retryCalls += 1 } }])
+    const disposeThird = subscribeEvents(flakyCtx, [{ event: 'settings/document-updated', consumer: 'third-consumer', handler: () => { retryCalls += 1 } }])
     check('FIX-035 9i 非回归: attach 成功后入表 → 跨调用共享单 listener（零第三次 attach）',
-      attemptEvents.length === 2 && (flakyListeners.get('settings/updated') ?? []).length === 1)
-    for (const handler of flakyListeners.get('settings/updated') ?? []) handler()
+      attemptEvents.length === 2 && (flakyListeners.get('settings/document-updated') ?? []).length === 1)
+    for (const handler of flakyListeners.get('settings/document-updated') ?? []) handler()
     check('FIX-035 9i 非回归: 共享 listener 分发给重试消费者 + 后到消费者（聚合不破）', retryCalls === 3)
     // ② 失败消费者 dispose 为 no-op（幂等、不抛、不悬挂、零跨消费者误摘）。
     check('FIX-035 9i: 失败路径 dispose 降级 no-op（幂等、不抛——活消费者不受影响）', (() => {
       try { disposeFailed(); disposeFailed(); return retryCalls === 3 } catch { return false }
     })())
-    for (const handler of flakyListeners.get('settings/updated') ?? []) handler()
+    for (const handler of flakyListeners.get('settings/document-updated') ?? []) handler()
     check('FIX-035 9i: 失败消费者 dispose 后活消费者照常派发（无悬挂、无误摘）', retryCalls === 5)
     disposeRetry()
     disposeThird()
-    check('FIX-035 9i 非回归: 全量卸载后 listener 归零（无残留泄漏）', (flakyListeners.get('settings/updated') ?? []).length === 0)
+    check('FIX-035 9i 非回归: 全量卸载后 listener 归零（无残留泄漏）', (flakyListeners.get('settings/document-updated') ?? []).length === 0)
 
     // 9i-2. 镜像 parity（lib/client.js subscribeClientEvents 同型分支；§9e 先例）。
     const mirrorAttempts = []

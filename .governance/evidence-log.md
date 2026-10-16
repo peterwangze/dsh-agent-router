@@ -782,3 +782,5 @@
 | REVIEW-ARCH-005-R5 | ARCH-005 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 5） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-ARCH-005-R5-A1BATCH-input.md; review-ARCH-005-R5.md; report_sha256=d33b27e635a0; commit=367b65fe9bf1 | Code Reviewer | 2026-10-17 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
 
 | REVIEW-ARCH-005-R6 | ARCH-005 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 6） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-ARCH-005-R6-A2BATCH-input.md; review-ARCH-005-R6.md; report_sha256=2c001d3d039e; commit=678ff9731443 | Code Reviewer | 2026-10-17 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
+
+| REVIEW-ARCH-005-R7 | ARCH-005 | 治理记录 | review-record CLI 机器写入 review 结论记录（round 7） | 事实依据：review-record 输出摘要（机器写入） | .governance/review-ARCH-005-R7-A3BATCH-input.md; review-ARCH-005-R7.md; report_sha256=062a2d327769; commit=43e82677ca72 | Code Reviewer | 2026-10-17 | G11 | APPROVED_WITH_NOTES | unresolved_blockers=0 |
