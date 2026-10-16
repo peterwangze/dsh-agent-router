@@ -177,7 +177,7 @@ console.log('router/hostFaceDiagnostics RPC contract:')
 {
   const descriptor = ROUTER_DESCRIPTORS.find((item) => item.id === 'dsh-agent-router#router/hostFaceDiagnostics')
   check('descriptor registered (service/namespace router, method hostFaceDiagnostics, direct invocation)', !!descriptor && descriptor.service === 'router' && descriptor.namespace === 'router' && descriptor.method === 'hostFaceDiagnostics' && descriptor.invocation.kind === 'direct')
-  check('result codec is the strict wire schema (wireCodecs.hostFaceDiagnosticsResult)', descriptor?.result?.schema === wireCodecs.hostFaceDiagnosticsResult)
+  check('result codec is the strict wire schema behind create() factory (wireCodecs.hostFaceDiagnosticsResult; ARCH-005 A2 形态——create() 交回同一对象)', descriptor?.result?.create() === wireCodecs.hostFaceDiagnosticsResult)
   // 网关绑定契约（rpc-shadow-guard 同语义：implementation ?? method 反射可调用）。
   const service = new RouterService(new Context())
   service.attach({ get: () => ({ enabled: true, agents: {} }) })
@@ -1335,6 +1335,12 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
         '**在仓对象**条目（非宿主面）：对象 = 本仓 `tests/host-contract.mjs` 的 `stripComments` 实现，可机器核验；本条目只判本仓文本内的锚串形态 + 替代式指代在位。',
       ],
     },
+    // ARCH-005 A2（HD-003）：lib/rpc.js **首次入册**——本批 strictCodec 单点注释携带
+    // 宿主树行号式锚（两锚对象均于本批实读核验：validateCodec 的 create() 强制 throw
+    // 形态 + api-remotes 宿主自证 codec 形态）。stale 侧为空 = 本文件首含锚、无旧锚
+    // 可清；fresh 侧 = 两宿主锚串在场（锚失即红——锚定的行为语义另由
+    // tests/rpc-shadow-guard.mjs §5/§6 的形态判别 + 真树校验机器判据承载，非本表职责）。
+    { file: ['lib', 'rpc.js'], stale: [], fresh: ['dsh-typert-registry/lib/index.js:565', '/lib/client.js:11666-11680'] },
   ]
   for (const anchorCase of ANCHOR_CASES) {
     const filePath = join(ROOT_DIR, ...anchorCase.file)

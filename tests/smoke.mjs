@@ -266,13 +266,13 @@ console.log('rpc contribution:')
   // 本文件行数变动漂移，FIX-040 N3 修正「下一行」字面指代错位）。
   check('19 invocations', contribution.invocations.length === 19)
   check('descriptors share ids', ROUTER_REMOTE.descriptors.length === 19 && ROUTER_REMOTE.descriptors.every((d, i) => d.id === contribution.invocations[i].id))
-  check('strict codecs have parse', contribution.invocations.every((d) => typeof d.result.schema.parse === 'function' && d.parameters.every((p) => typeof p.codec.schema.parse === 'function')))
+  check('strict codecs have parse (create() factories return schemastery objects; ARCH-005 A2)', contribution.invocations.every((d) => typeof d.result.create().parse === 'function' && d.parameters.every((p) => typeof p.codec.create().parse === 'function')))
   check('image RPC descriptors present', contribution.invocations.some((d) => d.method === 'imageData'))
   check('uploadFile RPC descriptor present', contribution.invocations.some((d) => d.method === 'uploadFile' && d.id === 'dsh-agent-router#router/uploadFile'))
   check('readWorkspaceFile RPC descriptor present', contribution.invocations.some((d) => d.method === 'readWorkspaceFile' && d.id === 'dsh-agent-router#router/readWorkspaceFile'))
   // EVO-003 Phase 2（§4.3）：statsExport 描述符——与 stats 相邻注册，
   // strict request/result codec 挂接（CSV 导出 RPC 面）。
-  check('statsExport RPC descriptor present (C-3 CSV export)', contribution.invocations.some((d) => d.method === 'statsExport' && d.id === 'dsh-agent-router#router/statsExport' && d.parameters[0].codec.schema === wireCodecs.statsExportRequest && d.result.schema === wireCodecs.statsExportResult))
+  check('statsExport RPC descriptor present (C-3 CSV export)', contribution.invocations.some((d) => d.method === 'statsExport' && d.id === 'dsh-agent-router#router/statsExport' && d.parameters[0].codec.create() === wireCodecs.statsExportRequest && d.result.create() === wireCodecs.statsExportResult))
   const cliStatusCodec = wireCodecs.cliStatusResult.parse({ ok: true, message: '已登录', loggedIn: true })
   check('cliStatusResult parses', cliStatusCodec.ok === true && cliStatusCodec.loggedIn === true)
   const cliModelsCodec = wireCodecs.cliModelsResult.parse({ ok: true, message: 'm', models: ['a'] })

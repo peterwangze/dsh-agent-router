@@ -19,12 +19,19 @@
  * 修复后全绿。构造走生产路径（new RouterService + attach），stats 默认
  * persist=false 纯内存——不触碰 ~/.dsh 与 $DSH_HOME。
  *
+ * ARCH-005 A2（HD-003）codec 形态判别（§5/§6）：宿主 0.2.0-rc.2 的
+ * strict codec 契约从 `{schema}` 换代为 `{create: () => schema}` 惰性工厂
+ * ——19 条描述子的 codec 产出 MUST 过新树 validateCodec（§5 形态判据 +
+ * §6 真树实跑）。旧 `{schema}` 裸形态判红。
+ *
  * 独立入口：node tests/rpc-shadow-guard.mjs（exit 0/1）。
  */
+import { existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
-import { ROUTER_DESCRIPTORS } from '../lib/rpc.js'
+import { ROUTER_DESCRIPTORS, createHostContribution } from '../lib/rpc.js'
+import { wireCodecs } from '../lib/schemas.js'
 import { RouterService } from '../lib/service.js'
 
 let failures = 0
@@ -184,19 +191,164 @@ console.log('FIX-046: client/server descriptor parity (single source of truth):'
     const clientDescriptor = clientDescriptors.find((descriptor) => descriptor.id === id)
     const serverDescriptor = serverByIdForShape.get(id)
     if (!clientDescriptor || !serverDescriptor) { codecMismatches.push(`${id}: missing`); continue }
-    const same = JSON.stringify(specOf(clientDescriptor.result.schema)) === JSON.stringify(specOf(serverDescriptor.result.schema))
-      && clientDescriptor.result.typeSymbol === serverDescriptor.result.typeSymbol
-      && JSON.stringify(specOf(clientDescriptor.parameters[0].codec.schema)) === JSON.stringify(specOf(serverDescriptor.parameters[0].codec.schema))
-      && clientDescriptor.parameters[0].codec.typeSymbol === serverDescriptor.parameters[0].codec.typeSymbol
+    // ARCH-005 A2：schema 经 create() 惰性取回（形态见 §5）。create 缺失
+    // （旧 {schema} 形态）按判据红处理并给出诊断——不裸调防未捕获 TypeError
+    // 掩盖判别面。
+    const clientResultCodec = clientDescriptor.result
+    const serverResultCodec = serverDescriptor.result
+    const clientParamCodec = clientDescriptor.parameters[0]?.codec
+    const serverParamCodec = serverDescriptor.parameters[0]?.codec
+    const creatable = (codec) => typeof codec?.create === 'function'
+    if (!creatable(clientResultCodec) || !creatable(serverResultCodec) || !creatable(clientParamCodec) || !creatable(serverParamCodec)) {
+      codecMismatches.push(`${id}: codec.create 不是函数（旧 {schema} 形态？client.result=${creatable(clientResultCodec)} server.result=${creatable(serverResultCodec)} client.param=${creatable(clientParamCodec)} server.param=${creatable(serverParamCodec)}`)
+      continue
+    }
+    const same = JSON.stringify(specOf(clientResultCodec.create())) === JSON.stringify(specOf(serverResultCodec.create()))
+      && clientResultCodec.typeSymbol === serverResultCodec.typeSymbol
+      && JSON.stringify(specOf(clientParamCodec.create())) === JSON.stringify(specOf(serverParamCodec.create()))
+      && clientParamCodec.typeSymbol === serverParamCodec.typeSymbol
     if (!same) codecMismatches.push(id)
   }
   check('新增两条（presetDiagnostics/hostFaceDiagnostics）请求+结果 codec 深度等价 lib/schemas.js 权威形状（typeSymbol 含内）',
     codecMismatches.length === 0, { codecMismatches })
   check('全部客户端 descriptor 结果/参数 codec 声明在场（结构性在场判据，防静默丢 codec）',
     clientDescriptors.length > 0 && clientDescriptors.every((descriptor) =>
-      descriptor.result && typeof descriptor.result.mode === 'string' && !!descriptor.result.schema
+      descriptor.result && typeof descriptor.result.mode === 'string' && typeof descriptor.result.create === 'function'
       && (descriptor.parameters ?? []).length > 0
-      && descriptor.parameters.every((entry) => entry.wire === entry.name && !!entry.codec && !!entry.codec.schema)))
+      && descriptor.parameters.every((entry) => entry.wire === entry.name && !!entry.codec && typeof entry.codec.create === 'function')))
+
+  // ── 5. ARCH-005 A2（HD-003）：strict codec 形态判别 `{schema}` → `{create: () => schema}`。
+  //      宿主 0.2.0-rc.2 的 typert-registry 对无 create() 工厂的 strict codec 直接 throw：
+  //      `<new>dsh-typert-registry/lib/index.js:562-566`（validateCodec：
+  //      `if (typeof codec.create !== "function") throw new Error("typert: ${subject}
+  //      strict codec has no create() factory")`）。双通道消费：服务端 register
+  //      （TypertRegistry.register :398 → localStore.validate → validateInvocation
+  //      :522-561 → validateCodec 对 result+每参数强制）与客户端 $mount
+  //      （api-gateway mountContribution :1662 → typert.remotes.register :1664
+  //      → RemoteStore.register :141-160 → descriptors.validate :69-81 → 同一
+  //      validateInvocation）。
+  //      宿主自证形态：`dsh-api-remotes/lib/client.js:11666-11680`（codec:
+  //      {mode:"strict", typeSymbol, create: <惰性 $schema 工厂>}，工厂形
+  //      `() => $value ??= object({...})`——零参调用返回 schema，消费面
+  //      `record.value ??= record.create()`〔typert-registry :510〕）。本段判据：
+  //      ① create 为函数（:565 throw 形态判别面）；② codec 键集恰为
+  //      {create,mode,typeSymbol}——旧 `schema` 键零残留（P5：被取代的旧路径
+  //      MUST 删除，禁止并存）；③ create() 返回值 .parse 可调（schema 对象
+  //      本身不变——仅惰性工厂包装，非重造）。
+  console.log('ARCH-005 A2: strict codec create() factory form (HD-003, both sides):')
+  {
+    const codecSitesOf = (descriptor) => [
+      [descriptor.result, 'result'],
+      ...descriptor.parameters.map((entry) => [entry.codec, `parameter ${entry.name}`]),
+    ]
+    const formAudit = (descriptors) => {
+      const createMissing = []
+      const keySetBad = []
+      const parseBad = []
+      for (const descriptor of descriptors) {
+        for (const [codec, subject] of codecSitesOf(descriptor)) {
+          if (typeof codec?.create !== 'function') { createMissing.push(`${descriptor.id} ${subject}`); continue }
+          const keys = Object.keys(codec).sort().join(',')
+          if (keys !== 'create,mode,typeSymbol') { keySetBad.push(`${descriptor.id} ${subject} keys=[${keys}]`); continue }
+          if (typeof codec.create().parse !== 'function') parseBad.push(`${descriptor.id} ${subject}`)
+        }
+      }
+      return { createMissing, keySetBad, parseBad }
+    }
+    const serverForm = formAudit(ROUTER_DESCRIPTORS)
+    // 诊断优先（§4 惯例同法——check() 不消费第三参，失败清单 MUST 先打）：
+    if (serverForm.createMissing.length > 0) console.error(`  detail  服务端 codec.create 缺失位: ${JSON.stringify(serverForm.createMissing)}`)
+    if (serverForm.keySetBad.length > 0) console.error(`  detail  服务端 codec 键集异常位: ${JSON.stringify(serverForm.keySetBad)}`)
+    if (serverForm.parseBad.length > 0) console.error(`  detail  服务端 create() 返回值无 .parse 位: ${JSON.stringify(serverForm.parseBad)}`)
+    check(`服务端 19 条描述子 result+parameter codec 全部 create 为函数（新树 validateCodec :565 判别面）`,
+      serverForm.createMissing.length === 0, { createMissing: serverForm.createMissing })
+    check('服务端 codec 键集恰为 {create,mode,typeSymbol}（旧 schema 键零残留——P5 禁止新旧并存）',
+      serverForm.keySetBad.length === 0, { keySetBad: serverForm.keySetBad })
+    check('服务端 codec.create() 返回值 .parse 可调（schemastery 对象不变，惰性包装）',
+      serverForm.parseBad.length === 0, { parseBad: serverForm.parseBad })
+    const clientForm = formAudit(clientDescriptors)
+    if (clientForm.createMissing.length > 0) console.error(`  detail  客户端 codec.create 缺失位: ${JSON.stringify(clientForm.createMissing)}`)
+    if (clientForm.keySetBad.length > 0) console.error(`  detail  客户端 codec 键集异常位: ${JSON.stringify(clientForm.keySetBad)}`)
+    if (clientForm.parseBad.length > 0) console.error(`  detail  客户端 create() 返回值无 .parse 位: ${JSON.stringify(clientForm.parseBad)}`)
+    check('客户端（$mount 浏览器包）同三判据全过（镜像同形）',
+      clientForm.createMissing.length === 0 && clientForm.keySetBad.length === 0 && clientForm.parseBad.length === 0,
+      { createMissing: clientForm.createMissing, keySetBad: clientForm.keySetBad, parseBad: clientForm.parseBad })
+    // schema 身份锚（服务侧可核）：create() 必须交回同一模块级 wireCodecs 对象
+    // ——「schema 对象不变」的直接证据（statExport 请求/结果双锚）。
+    const statsExportDescriptor = ROUTER_DESCRIPTORS.find((descriptor) => descriptor.id === 'dsh-agent-router#router/statsExport')
+    const statsExportParamCodec = statsExportDescriptor?.parameters?.[0]?.codec
+    const statsExportResultCodec = statsExportDescriptor?.result
+    check('create() 交回同一 wireCodecs 对象（statsExport 请求/结果身份恒等——schema 不变仅包装）',
+      typeof statsExportParamCodec?.create === 'function' && typeof statsExportResultCodec?.create === 'function'
+      && statsExportParamCodec.create() === wireCodecs.statsExportRequest
+      && statsExportResultCodec.create() === wireCodecs.statsExportResult)
+  }
+
+  // ── 6. ARCH-005 A2 验收①（强形态优先）：真实新树 typert-registry 实跑双通道校验。
+  //      解析本机 0.2.0 宿主全局树（host-contract.mjs 同款候选链首段：DSH_HOST_SOURCE
+  //      → DSH_HOST_PACKAGES → APPDATA npm-global——次序对齐 host-contract :468-469，
+  //      双 env 同设时两守卫解析同一棵树），命中则 import 真实
+  //      TypertRegistry，19 条描述子过服务端 register + 客户端 remotes.register
+  //      （$mount 同一校验链）双通道（validateInvocation→validateCodec 全真码），
+  //      并附旧形态负控：真树对 `{schema}` 裸形态必须 throw :565 原文——
+  //      即 HD-003 根因的机器复演。树缺失则可见 skip（BR-03：门控不硬依赖
+  //      宿主在场——先例 host-contract S3/S7 skip 面；本机 CI 权威树在位）。
+  console.log('ARCH-005 A2: real-tree typert-registry validation (host 0.2.0-rc.2):')
+  {
+    const hostCandidates = []
+    if (process.env.DSH_HOST_SOURCE) hostCandidates.push({ root: process.env.DSH_HOST_SOURCE, origin: 'DSH_HOST_SOURCE' })
+    if (process.env.DSH_HOST_PACKAGES) hostCandidates.push({ root: process.env.DSH_HOST_PACKAGES, origin: 'DSH_HOST_PACKAGES' })
+    if (process.env.APPDATA) hostCandidates.push({ root: join(process.env.APPDATA, 'npm', 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', '@deepseek-ai'), origin: 'APPDATA npm-global' })
+    const hostHit = hostCandidates.find(({ root }) => existsSync(join(root, 'dsh-typert-registry', 'lib', 'index.js')))
+    if (!hostHit) {
+      console.log('  skip  真树校验（@deepseek-ai/dsh-typert-registry 不在本机候选链——§5 形态判据已覆盖；本判据在有宿主树的机器/CI 上生效）')
+    } else {
+      const { TypertRegistry } = await import(pathToFileURL(join(hostHit.root, 'dsh-typert-registry', 'lib', 'index.js')).href)
+      // 最小 ctx 垫片（宿主面锚定实读，P10-④——非按心智模型伪造）：
+      // ① `reflect.provide(name, self, check)`——cordis Service 构造尾调用
+      //   （宿主树 @deepseek-ai/cordis lib/index.js:1782，TypertRegistry
+      //   经 `super(ctx,"typert")` :359-360 触达）；
+      // ② `effect(gen, label)`——register 尾部（dsh-typert-registry
+      //   lib/index.js:398 服务端 / :152 客户端；校验先行，effect 在后——
+      //   本垫片跑首个 next() 提交挂载后返回哑 disposer）；
+      // ③ `logger.warn`——observer 失败回调（:352-357；register 路径不触达）。
+      // 被测宿主面（validatePackage/validateSchemas/validateInvocation/
+      // validateCodec/endpoint+id 去重）**全部真码**。
+      const stubCtx = {
+        reflect: { provide: () => {} },
+        effect: (gen) => { const it = gen(); it.next(); return () => {} },
+        logger: { warn: () => {} },
+      }
+      let serverError = null
+      try { new TypertRegistry(stubCtx).register(createHostContribution()) } catch (error) { serverError = error }
+      if (serverError !== null) console.error(`  detail  真树服务端 register 异常: ${String(serverError)}`)
+      check(`真树服务端 register：19 条描述子全过（validateCodec 实跑，靶子 ${hostHit.origin}）`,
+        serverError === null, { error: serverError ? String(serverError) : null })
+
+      let clientError = null
+      try { new TypertRegistry(stubCtx).remotes.register({ package: 'dsh-agent-router', descriptors: clientDescriptors }) } catch (error) { clientError = error }
+      if (clientError !== null) console.error(`  detail  真树客户端 remotes.register 异常: ${String(clientError)}`)
+      check('真树客户端 remotes.register：浏览器侧求值描述子全过（$mount 同一校验链）',
+        clientError === null, { error: clientError ? String(clientError) : null })
+
+      // 负控（判别性自证）：旧 `{schema}` 裸形态在同一条真校验链上必须被拒
+      // ——throw 文本即 HD-003 根因形态（:562-566，throw 行 :565 逐字锚定）。这同时
+      // 是本套判据的「判红能力」证明：若产品码回退旧形态，上方两条通道断言将红。
+      const source = ROUTER_DESCRIPTORS[0]
+      const oldFormDescriptor = {
+        ...source,
+        parameters: source.parameters.map((entry) => ({ ...entry, codec: { mode: 'strict', typeSymbol: entry.codec.typeSymbol, schema: wireCodecs.emptyRequest } })),
+        result: { mode: 'strict', typeSymbol: source.result.typeSymbol, schema: wireCodecs.catalogResult },
+      }
+      let negativeError = null
+      try { new TypertRegistry(stubCtx).remotes.register({ package: 'dsh-agent-router-old-form-negative-control', descriptors: [oldFormDescriptor] }) } catch (error) { negativeError = error }
+      const negativeRejected = negativeError !== null && String(negativeError).includes('strict codec has no create() factory')
+      if (!negativeRejected) console.error(`  detail  真树负控未按预期拒旧形态（error=${negativeError === null ? 'null——未被拒' : String(negativeError)}）`)
+      check('真树负控：旧 {schema} 裸形态被拒（throw 含 "strict codec has no create() factory"——HD-003 根因机器复演）',
+        negativeRejected,
+        { error: negativeError ? String(negativeError) : null })
+    }
+  }
 }
 
 console.log(failures === 0 ? `\nALL RPC SHADOW GUARD TESTS PASSED (${passed} assertions)` : `\n${failures} FAILURE(S) (${passed} passed)`)
