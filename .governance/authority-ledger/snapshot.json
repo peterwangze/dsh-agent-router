@@ -1,0 +1,34 @@
+{
+  "built_at": "2026-10-16T16:37:16.685801+00:00",
+  "counts": {
+    "gates": {
+      "failed": 0,
+      "other": 0,
+      "passed": 0,
+      "pending": 0,
+      "recorded": 0
+    },
+    "risks": {
+      "closed": 0,
+      "open": 0,
+      "recorded": 0,
+      "unknown": 0
+    },
+    "tasks": {
+      "identity_conflict_ids": [],
+      "identity_conflict_rows": 0,
+      "registered": 0,
+      "superseded": 0
+    }
+  },
+  "event_count": 8,
+  "last_event_hash": "fd9f1694267d7bc657d188e586ca7be196663ba5e472fccb52cb9168d220cbe6",
+  "last_seq": 8,
+  "schema": "authority-ledger/1",
+  "state": {
+    "gates": {},
+    "risks": {},
+    "tasks": {}
+  },
+  "writer": "authority_ledger/1"
+}

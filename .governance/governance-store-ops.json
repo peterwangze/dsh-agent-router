@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "operations": {
+    "op-0bf44443126642d6b59c37f17f2b1ffa": {
+      "schema_version": 1,
+      "command": "locks-release",
+      "task_id": "ARCH-005",
+      "input_fingerprint": "7bb15d47391c9e03ba555bfa52ec82dbd19a3d75f2428c03b0e5163e48cfbae6",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-0bf44443126642d6b59c37f17f2b1ffa",
+        "code": "ok",
+        "new_revision": 49,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-16T23:54:03",
+      "updated_at": "2026-10-16T23:54:03",
+      "released_files": [
+        ".governance/arch-005-decoupling-design.md",
+        ".governance/arch-005-host-diff-inventory.md"
+      ]
+    }
+  }
+}

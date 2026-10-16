@@ -106,6 +106,18 @@
         "REVIEW-ARCH-004-R1": [
           "f9722c78782ad3b3fc4c41be0007266a"
         ],
+        "REVIEW-ARCH-005-R0": [
+          "623dfb48e233e6456bae7456bd9158f0"
+        ],
+        "REVIEW-ARCH-005-R1": [
+          "f09202a30e5ff906ede4472b9f72e4e2"
+        ],
+        "REVIEW-ARCH-005-R1-DESIGN-REVIEWER": [
+          "3647ae45fcd9bad3013635e26cf27628"
+        ],
+        "REVIEW-ARCH-005-R2": [
+          "020c29b2f192c411a3ce947763521e6c"
+        ],
         "REVIEW-AUDIT-001-R0": [
           "0ecc43432ad39691a7981c97a3999890"
         ],
@@ -469,7 +481,7 @@
           "377e36f54675369e0e5874bc35d8f737"
         ]
       },
-      "sha256": "bf4cf08779e130bd9d5cd29427fee6285266cc867accc22e4177d90e8c73a2a8"
+      "sha256": "c3304b6e0f9b8457bac1157ca5aec6b892dbd556ad3e081f46c3598af9e7a387"
     },
     "plan-tracker.md": {
       "rows": {
@@ -481,6 +493,9 @@
         ],
         "ARCH-004": [
           "3ee8f1558fe18b065e86231321ece5a2"
+        ],
+        "ARCH-005": [
+          "b4d89e3b3b49ffefa3e33ac3e8a4cf07"
         ],
         "DEV-001": [
           "82ba5d9ef02d330e076f6bbb1604188c"
@@ -746,10 +761,10 @@
           "58c672f52926fbf91e75a9e983387b10"
         ]
       },
-      "sha256": "f84c7a591578c92a86bde35d49f07b4d9093523f7c357932fde837e043662c82"
+      "sha256": "a4e301607602dc04a88169d907f3d20d1fa07b377d63006b0b75cdc3e113d0a3"
     }
   },
   "schema_version": 1,
   "tool": "governance-write-guard/row-family-reconciliation",
-  "updated_at": "2026-10-16T23:24:59"
+  "updated_at": "2026-10-17T00:37:54"
 }

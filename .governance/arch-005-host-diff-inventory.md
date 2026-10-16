@@ -1,7 +1,7 @@
 # ARCH-005 — DSH 宿主 0.1.5-rc.2 → 0.2.0-rc.2 依赖/契约全量 diff 清单
 
 > - **生成时间**: 2026-10-16，Analyst Agent（ARCH-005）
-> - **被分析变更**: DSH 宿主升级（外部变更）——旧宿主 **dsh-* 全系 0.1.5-rc.2 + cordis 4.0.1 + schemastery 3.18.1** → 新宿主 **@deepseek-ai/dsh 0.2.0-rc.2（全系 dsh-* 统一 0.2.0-rc.2）+ cordis 4.0.5 + schemastery 3.18.4**。本清单为后续适配实施批的事实基线。
+> - **被分析变更**: DSH 宿主升级（外部变更）——旧宿主 **dsh-* 全系 0.1.5-rc.2 + cordis 4.0.1 + schemastery 3.18.1** → 新宿主 **@deepseek-ai/dsh 0.2.0-rc.2（全系 dsh-* 统一 0.2.0-rc.2）+ cordis 4.0.5 + schemastery 3.18.5**（版本读数勘正：首取证记 3.18.4，重读定谳 3.18.5——见修订记录与 §6 T-6）。本清单为后续适配实施批的事实基线。
 > - **基线框架**: `.governance/arch-004-dependency-inventory.md`（A~G 七类 63 条）——本文按其框架逐类复核并更新到当前树（插件 v0.5.0，含 lib/host-abi/ 八域重构后的消费点锚点）。
 >
 > ## 取证树（全部实读，零记忆填空）
@@ -9,12 +9,18 @@
 > | 树 | 路径 | 版本 | 角色 |
 > |----|------|------|------|
 > | **旧树（权威）** | `D:\AI\agent\deepseek\plugins\router\node_modules\@deepseek-ai\` | 13 包：cordis 4.0.1 / schemastery 3.18.1 / dsh-agent·dsh-agent-default-model·dsh-attachment·dsh-credentials·dsh-llm·dsh-session·dsh-settings·dsh-subagent·dsh-system-prompt·dsh-tools·dsh-typert-protocol 全部 0.1.5-rc.2 | 插件自身依赖树 = 旧宿主面（仅插件直接依赖的 13 包） |
-> | **新树（权威）** | `C:\Users\peter\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\` | dsh 0.2.0-rc.2 主包 + 约 220 个 dsh-*/支持包全部 0.2.0-rc.2（抽查 36 包全中）+ cordis 4.0.5 + schemastery 3.18.4 | 新宿主面 |
+> | **新树（权威）** | `C:\Users\peter\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\` | dsh 0.2.0-rc.2 主包 + 约 220 个 dsh-*/支持包全部 0.2.0-rc.2（抽查 36 包全中）+ cordis 4.0.5 + schemastery 3.18.5（2026-10-17 返工重读定谳；首取证读数 3.18.4——树于 2026-10-16 22:50 被整树重写，见 §6 T-6） | 新宿主面 |
 > | **旧侧旁证（辅助，版本差已标注）** | `C:\Users\peter\AppData\Local\npm-cache\_npx\1e7f6d9597241db0\node_modules\@deepseek-ai\` | **0.1.5-rc.3**（ARCH-004 所用 checkout 已漂移 rc.2→rc.3） | 仅用于旧树缺失包（api-remotes/typert-registry/attachment-local/client-ui-* 等）的旧侧形状旁证；凡引用处标注「rc.3 旁证」 |
 >
 > - **旧树覆盖缺口（诚实声明）**: 旧树仅 13 包——插件经宿主运行时间接消费的包（dsh-api-remotes/dsh-api-gateway/dsh-typert-registry/dsh-agent-presets/dsh-agent-loop/dsh-attachment-local/dsh-credentials-local/dsh-fs-local/dsh-api-session-controller/dsh-host-webserver/dsh-client-*/dsh-app-boot/dsh-home-paths 等）不在其中。这些面的旧侧锚点 = ARCH-004 实录（当时 0.1.5-rc.2 实读）+ rc.3 旁证树实读，两者一致性已抽查核对；新侧锚点全部来自新树本次实读。
 > - **分级定义**: **breaking**（插件当前实现会坏） / **additive**（新增能力，可选适配） / **neutral**（无影响或仅维护性漂移）。
-> - **机核证据**: semver 判定与 schemastery volatile 探针均为本机 node 实跑输出（见 HD-001/HD-010）。
+> - **机核证据**: semver 判定与 schemastery volatile 探针均为本机 node 实跑输出（见 HD-001/HD-010；2026-10-17 返工复跑仍全部通过）。
+
+## 修订记录
+
+| 轮次 | 日期 | 来源 | 勘正内容与处置 |
+|------|------|------|----------------|
+| R1 返工 | 2026-10-17 | 双审 NEEDS_CHANGE——R0 Design Reviewer（P1-4/P2-1/P3-2）+ R1 Requirement Reviewer（F-3，与 P1-4 同源）；每处勘正均经本人重读对应源码定谳后写入 | **P1-4 已修复（事实错值）**：新树 schemastery 实测版本 3.18.4 → **3.18.5**（单点重读 `@deepseek-ai/schemastery/package.json:4` 定谳；机核复跑 `satisfies('3.18.5','^3.18.1')` = true、`z.string().volatile()` → meta `{volatile:true}` ✓、旧树 3.18.1 仍 TypeError）。全篇 7 处同步：头部「被分析变更」、取证树表、HD-001 机核证据、HD-010（2 处）、§4.1 E-7/E-8、§7 HOST_BASELINE 建议值。读数漂移根源核查：新树嵌套 287 包 mtime 全体 = 2026-10-16 22:50 整树重写、重写无 npm CLI 日志留痕——按指令登记 §6 T-6（FIX-003「宿主静默更新」族现场新证，含两次读数时点）。**P2-1 已修复（锚点漂移）**：§4.1 A-11 行 `super(ctx, "sessionController", { namespace: "session" })` 锚 `:382` → **`:2847`**（重读 grep 实测唯一命中；`:720` selectModel 复核精确命中）。**P3-2 已修复（表区间）**：HD-005 白名单表区间 `lib/index.js:17-118` → **`:17-126`**（重读实测：`const API_REMOTE_FORWARDED_EVENTS = [` 起于 :17、`];` 止于 :126、表体 27 项逐项数毕——原区间截掉 schedule/changed 与 user-questions/request 末两项）；§4.2 D-2/D-3 行同锚点一并同步（同一事实）。连带一致性：§6 增 T-6 → §7「待验证」计数 5 → 6。R0/R1 中归属 Architect 的 findings 不属本文件，未处理。 |
 
 ---
 
@@ -64,7 +70,7 @@
 |------|------|
 | 双树锚点 | 旧：0.1.5 无此机制（ARCH-004 E-8 实录：peerDeps semver 静默满足 + 宿主 runner 零 enforcement——RISK-003「无预警通道」）→ 新：`<new>dsh-app-boot/lib/index.js:286`（`evaluatePluginCompatibility`——对 manifest 中全部 `@deepseek-ai/dsh`/`dsh-*` peerDeps 逐项 `semver.satisfies(runtimeVersion, range, {includePrerelease:true})`）；`:930-931`（`loadProfileDirectory` 组合点：`issue !== void 0 && !issue.exempted` → throw → catch 进 `skippedBundles`）；豁免通道 = `dsh plugin allow-version` / plugin manager（`:325-430` compatibility.json 体系） |
 | 插件消费点 | package.json:64-73（8 peerDeps 全部 `^0.1.5-rc.2`）；宿主版本守卫 tests/host-version-snapshot.mjs:46-51（HOST_BASELINE 待刷新——见 §7） |
-| 机核证据 | 本机 node + 新树 semver 实跑：`semver.satisfies('0.2.0-rc.2','^0.1.5-rc.2',{includePrerelease:true})` = **false**（8 项 peerDeps 全不过；对照 cordis `4.0.5`/^4.0.1 = true、schemastery `3.18.4`/^3.18.1 = true——dependencies 不在此门控范围，仅 peerDeps） |
+| 机核证据 | 本机 node + 新树 semver 实跑：`semver.satisfies('0.2.0-rc.2','^0.1.5-rc.2',{includePrerelease:true})` = **false**（8 项 peerDeps 全不过；对照 cordis `4.0.5`/^4.0.1 = true、schemastery `3.18.5`/^3.18.1 = true——2026-10-17 返工复跑；dependencies 不在此门控范围，仅 peerDeps） |
 | 用户可见症状 | 插件**完全不加载**：启动 stderr 打印 `skipping profile bundle "dsh-agent-router"` + `pluginCompatibilityWarning`（提示 crash/data-loss 风险 + `dsh plugin allow-version` 豁免法）——§1 全部功能域（设置页/路由/图片接管/统计/预设/OAuth）整体消失 |
 | 域归类 | 安装链（波及全部功能域） |
 | 适配方向 | 插件 peerDeps/dependencies 版本范围升至 `^0.2.0-rc.2` + HOST_BASELINE/README/host-contract 四处同步刷新（host-version-snapshot.mjs 文件头既定流程） |
@@ -112,7 +118,7 @@
 | HD-007 | `credentials/record-updated` 事件（凭据记录级扇出） | 新 `<new>dsh-credentials/lib/index.js:127-132`（`fanOut("credentials/record-updated", key)`）——旧仅 reference-updated（`:113-124` 双树同形存续） | additive；账号池管理可选订阅 |
 | HD-008 | session RPC 命名空间扩容（attachment/cancel/canOpenWorkspacePath/updateQueue/list 等） | 新 `<new>dsh-api-remotes/lib/client.js:11256-11523`（session 命名空间描述子群） | additive；插件消费的 `modelCatalog`/`selectModel` 原样存续（§4） |
 | HD-009 | settings RPC 命名空间新描述子（describe/mutate 之外） | 新 `<new>dsh-api-remotes/lib/client.js:6023`/`:6042`/`:6092` | additive（字段级形状未逐项比对——§6 T-2） |
-| HD-010 | schemastery `.volatile()` meta（3.18.4 新增） | 机核实跑：新 schemastery 3.18.4 `z.string().volatile()` → meta `{volatile:true}` ✓；旧 schemastery 3.18.1 同表达式 **TypeError: volatile is not a function**；rc.3 旁证 pi-ai `volatile` 计数 0 vs 新 :1051 在用 | additive；是 HD-002 适配的依赖面（插件 dependencies 的 ^3.18.1 在旧树不破坏，新树自然可用） |
+| HD-010 | schemastery `.volatile()` meta（新树 3.18.5 实测可用；引入版本未定谳——旧树 3.18.1 无此方法） | 机核实跑（2026-10-17 返工复跑）：新 schemastery 3.18.5 `z.string().volatile()` → meta `{volatile:true}` ✓；旧 schemastery 3.18.1 同表达式 **TypeError: volatile is not a function**；rc.3 旁证 pi-ai `volatile` 计数 0 vs 新 :1051 在用 | additive；是 HD-002 适配的依赖面（插件 dependencies 的 ^3.18.1 在旧树不破坏，新树自然可用） |
 | HD-011 | 插件管理器族 + 版本豁免机制（dsh-plugin-manager / dsh-client-ui-plugin-manager / dsh-host-plugin-inventory / compatibility.json / `dsh plugin allow-version`） | 新 `<new>dsh-app-boot/lib/index.js:325-430` + `<new>dsh-plugin-manager/lib/index.js:226-254` | additive；HD-001 的宿主侧解药面（用户显式豁免可强制装载不兼容插件——适配批不应依赖它，应正升版本） |
 | HD-012 | `dsh-agent-presets`（复数）包拆分为 `dsh-agent-preset` + `dsh-agent-preset-registry` | 新树包清单（无复数包）；服务面完整存续：`<new>dsh-agent-preset-registry/lib/index.js:481`（`super(ctx, "agentPresets")`）、`:723`（`composedPreset(ctx)`）、`:489`（`ctx.emit("agent-preset/selected", session.id, event.data.agentPreset)` 双参形态不变）vs rc.3 旁证 `<aux>dsh-agent-presets/lib/index.js:1327` 同形态 | neutral（对插件零影响——服务名/方法/事件/载荷全同；包内部重组） |
 
@@ -139,7 +145,7 @@
 | A-8 | credentials.resolve/set/unset + reference-updated | ARCH-004 :473/:513/:517/:113-124 | `<new>dsh-credentials-local/lib/index.js:473`/`:513`/`:517`；`<new>dsh-credentials/lib/index.js:124`（`fanOut("credentials/reference-updated", ref)`） | ✅ D-2 修复面（插件已用新名）继续有效 |
 | A-9 | attachments.saveImage/readImage + v1 布局（FIX-003 面） | ARCH-004 :1020/:1024/:284（rc.3 旁证同） | `<new>dsh-attachment/lib/index.js:207`（`super(ctx,"attachments")`）；`<new>dsh-attachment-local/lib/index.js:1031`（`saveImage(input)`）/`:1035`（`readImage(ref, signal)`）/`:292`（root = `DSH_HOME/attachments/v1`） | ✅ 不复发 |
 | A-10 | fs.readBytes(target, signal, maxBytes) | ARCH-004 :794 | `<new>dsh-fs/lib/index.js:60`（`super(ctx,"fs")`）；`<new>dsh-fs-local/lib/index.js:837`（三参签名逐字同） | ✅ |
-| A-11 | sessionController 服务 + selectModel（FIX-030 面） | ARCH-004 :2726/:605 | `<new>dsh-api-session-controller/lib/index.js:382`（`super(ctx,"sessionController",{namespace:"session"})`）+ `:720`（`async selectModel(request)`） | ✅ 不复发；apiProxy 新树全树 grep **0 注册**（回落分支死码状态与 0.1.5 一致） |
+| A-11 | sessionController 服务 + selectModel（FIX-030 面） | ARCH-004 :2726/:605 | `<new>dsh-api-session-controller/lib/index.js:2847`（`super(ctx, "sessionController", { namespace: "session" })`）+ `:720`（`async selectModel(request)`） | ✅ 不复发；apiProxy 新树全树 grep **0 注册**（回落分支死码状态与 0.1.5 一致） |
 | A-12 | sessionProjections.stateOf + {lastUsed, pending}（FIX-029 面） | ARCH-004 :2044-2046/:2075 | `<new>dsh-api-session-controller/lib/index.js:284`（同款消费 `stateOf(agent.session,"modelSelection")`）+ `:2058-2061`（schema：`lastUsed`/`pending` 双字段 nullable） | ✅ |
 | A-13 | agentPresets.composedPreset | ARCH-004 :1550 | `<new>dsh-agent-preset-registry/lib/index.js:723` | ✅（包拆分 HD-012） |
 | A-14 | defineTool / ToolRuntime.register / systemPrompt.section | ARCH-004 :837/:2773/:238 | `<new>dsh-tools/lib/index.js:838`/`:2878`；`<new>dsh-system-prompt/lib/index.js:240`（`section(section)`）+ `:213`（`super(ctx,"systemPrompt")`） | ✅ |
@@ -151,7 +157,7 @@
 | 条 | 事件 | 新树锚点 | 判定 |
 |----|------|---------|------|
 | D-1 | ~~settings/updated~~ | **消失**（HD-002）；替代 `settings/document-updated(ns, revision)`（`<new>dsh-settings/lib/index.js:435/:461`） | 🔴→HD-002 |
-| D-2/D-3 | credentials/reference-updated、settings/document-updated（客户端转发） | `<new>dsh-api-remotes/lib/index.js:17-118` 白名单双双在列（credentials/reference-updated = `{event, mode:"emit"}` 第 12 条；settings/document-updated = 第 25 条） | ✅ |
+| D-2/D-3 | credentials/reference-updated、settings/document-updated（客户端转发） | `<new>dsh-api-remotes/lib/index.js:17-126` 白名单双双在列（credentials/reference-updated = `{event, mode:"emit"}` 第 12 条；settings/document-updated = 第 25 条） | ✅ |
 | D-4 | llm/adapters-updated（客户端 + 服务端） | 白名单在列 + `<new>dsh-llm/lib/index.js:1806` | ✅ |
 | D-5 | agent-preset/selected 双参 (sessionId, agentPreset) | 白名单首项 + `<new>dsh-agent-preset-registry/lib/index.js:489` 双参 emit | ✅ |
 | D-6 | agent/created | `<new>dsh-agent/lib/index.js:579`（`ctx.serial(entry.carrier, "agent/created", {...})`——串行分发；listener 失败包容文档 `:472`） | ✅（emit→serial 内部化，事件名/载荷/容错语义兼容） |
@@ -183,7 +189,7 @@
 | F-1 | DSH_HOME → ~/.dsh 优先序 | `<new>dsh-home-paths/lib/index.js:65-67`（explicit > `$DSH_HOME` > `~/.dsh`） | ✅ |
 | F-3/F-4 | childSessionMeta（origin subagent/delegationDepth/cwd）+ parentAgentOptionsForDelegation（requestHeader 优先） | `<new>dsh-subagent/lib/index.js:470-479` + `:414-415`（`parent.session.requestHeader()?.config` 优先） | ✅ FIX-030-B 同构基线不变 |
 | F-10 | exec.agent（ToolExecutionInput.agent 注入） | `<new>dsh-agent-loop/lib/index.js:497` | ✅ |
-| E-7/E-8 | cordis 4.0.1→4.0.5 / schemastery 3.18.1→3.18.4 | semver 实跑均满足插件 `^4.0.1`/`^3.18.1`；cordis Service/Context 导出面双树同在（node require 实测）；schemastery 默认导出 = function z 双树同 | ✅ |
+| E-7/E-8 | cordis 4.0.1→4.0.5 / schemastery 3.18.1→3.18.5 | semver 实跑均满足插件 `^4.0.1`/`^3.18.1`（2026-10-17 返工复跑）；cordis Service/Context 导出面双树同在（node require 实测）；schemastery 默认导出 = function z 双树同 | ✅ |
 | pi-ai 坑 | 配置段字段名 `input`（vs llm-deepseek 段 `inputModalities`） | 新 `<new>dsh-llm-pi-ai/lib/index.js:1007`（`input: z.array(z.union(MODALITIES))`）vs rc.3 旁证 `:973` 同名；wire 面 `inputModalities` 由宿主内部转换（`:1806`/`:1825`） | ✅ 历史坑未复发（插件 schemas.js 不直接消费此字段——间接经 resolveModelInfo.inputModalities，§4.1 已核） |
 | host-route 常量 | HOST_ROUTE_NS 'llm-pi-ai' / provider 'openai-codex' | `<new>dsh-llm-pi-ai/lib/index.js:2490-2492`（`const name = "llm-pi-ai"` / `const NS`）；openai-codex 在场（`:435` openai-codex-responses 兼容门 + `:851` openai-codex OAuth-only 语义） | ✅ 事实不变；**锚行号漂移**：插件 version.js 注释「dsh-llm-pi-ai:2344」已过期（新 :2490）——维护项 |
 
@@ -191,7 +197,7 @@
 
 | ID | 项 | 说明 |
 |----|----|------|
-| HD-005 | FORWARDED_EVENT_ALLOWLIST 镜像漂移（19 → 27 + 形状 string→{event,mode} + 声明文件迁移） | 插件镜像 `lib/host-abi/events.js:50-70`（19 字符串，注释锚定 `lib/types/remote-events.js`）+ 浏览器镜像 `lib/client.js:5413-5430`。新树真实表 = `<new>dsh-api-remotes/lib/index.js:17-118`（27 项 `{event, mode}` 对象；`lib/types/remote-events.js` 同内容双编译面；转发注册改经 `ctx.typertGateway.registerRemoteEvents`）。**插件订阅的 4 事件全部存活**（agent-preset/selected、credentials/reference-updated、llm/adapters-updated、settings/document-updated——逐项在列）→ 功能不坏；但镜像过期 = ①插件自建防线会对新增 8 事件误拒（deepseek-account/session-expired、deepseek-account/model-sign-in-required、credentials/record-updated、permission-presets/catalog-changed、plugin-manager/changed、plugin-manager/install-log、plugin-manager/install-state、schedule/changed）②B6 静态比对测试的宿主侧锚点失效。**分级 neutral（当前零断裂）**，适配批应同步镜像 + 锚点注释 |
+| HD-005 | FORWARDED_EVENT_ALLOWLIST 镜像漂移（19 → 27 + 形状 string→{event,mode} + 声明文件迁移） | 插件镜像 `lib/host-abi/events.js:50-70`（19 字符串，注释锚定 `lib/types/remote-events.js`）+ 浏览器镜像 `lib/client.js:5413-5430`。新树真实表 = `<new>dsh-api-remotes/lib/index.js:17-126`（27 项 `{event, mode}` 对象；`lib/types/remote-events.js` 同内容双编译面；转发注册改经 `ctx.typertGateway.registerRemoteEvents`）。**插件订阅的 4 事件全部存活**（agent-preset/selected、credentials/reference-updated、llm/adapters-updated、settings/document-updated——逐项在列）→ 功能不坏；但镜像过期 = ①插件自建防线会对新增 8 事件误拒（deepseek-account/session-expired、deepseek-account/model-sign-in-required、credentials/record-updated、permission-presets/catalog-changed、plugin-manager/changed、plugin-manager/install-log、plugin-manager/install-state、schedule/changed）②B6 静态比对测试的宿主侧锚点失效。**分级 neutral（当前零断裂）**，适配批应同步镜像 + 锚点注释 |
 | HD-012 | agent-presets 包拆分 | 见 §3（服务面零变化，包名重组） |
 
 ---
@@ -217,6 +223,7 @@
 | T-3 | llm-pi-ai 条目在 default profile 的 entry id = 'llm-pi-ai'（host-route 写入前提） | 新 settings 写路径按 `configEditor.entries().find(row => row.options.id === ns)` 解析——pi-ai 的 `settingsNs = ctx.fiber.entry?.options.id ?? NS`（新 :2538）暗示 shipped 条目 id 即 ns，但未读 profile 模板实证 | 读 `<new>dsh-base`/profile 模板的 patch 行（或真机 `settings.describe()` 看 ns 列表） | HD-002 适配后 host-route 写 llm-pi-ai ns 可达性 |
 | T-4 | 客户端 remote.* 九 inject 面挂载时序 | 命名空间/描述子/服务面全在（§4.3）；fiber inject 门控时序（waitingFor 行为）未读装配源 | 读 `<new>dsh-web-app`/web-frontend 装配序 + 真机 | 设置页激活时序（低风险——0.1.5 同构机制） |
 | T-5 | settings/document-updated 触发时机语义 | 新事件由 `write()` 尾部 `this.describe()` 变更检测触发（`<new>dsh-settings/lib/index.js:537` + :413-461）——与 0.1.5「resolved 提交后即发」的时序差异（依赖读路径检测）未真机观测 | 真机：settings.mutate 后监听者到达时序探针 | HD-002 适配后 4 个热同步消费者的及时性 |
+| T-6 | 新树 schemastery 读数漂移（3.18.4 → 3.18.5）——FIX-003「宿主静默更新」族现场新证 | **两次读数时点**：首取证 2026-10-16 读得 **3.18.4**（首版入库 commit `fba63ea` = 2026-10-16 23:53:44 +0800；首读精确时刻未留痕）→ 双审查员（R0/R1，2026-10-16）与返工重读（2026-10-17）均为 **3.18.5**。**硬佐证**：新树嵌套 287 包 package.json mtime 全体 = 2026-10-16 22:50:32 +0800（唯 `libreoffice-kit-win32-x64` 22:54）——整树当日被原地重写，且 dsh 主包版本串不变（0.2.0-rc.2）、schemastery 在主包声明 `~3.18.4` 范围内漂移；npm `_logs` 当日首条日志 = 23:52 +0800（`npm view` 只读查询，恰为首版会话的包拆分核验）——**22:50 重写无任何 npm CLI 日志留痕**（静默性实证）。22:50 前树态已被覆盖不可复验，首读值 3.18.4 无法事后证明（读于重写前 = 最可能解释；誊写错误不可完全排除）——按禁止静默采信原则，版本事实以重读定谳 **3.18.5** 为准（本清单全篇已按此勘正） | 可选 `npm view @deepseek-ai/schemastery time` 定 3.18.5 发布时点；适配批以 host-version-snapshot 对实读树断言复验（快照判据天然抓此形态——主包版本不变、嵌套包漂移） | HD-001 版本刷新取值；升级雷达（R4 批）「主包版本不变 ≠ 树不变」的判据设计输入 |
 
 ---
 
@@ -227,7 +234,7 @@
 - **breaking = 4**：HD-001（安装链）/ HD-002（settings 架构）/ HD-003（RPC codec）/ HD-004（图片直传，守卫降级型）
 - **additive = 6**：HD-006 ~ HD-011
 - **neutral = 2 + 存续面 ≈45 项**：HD-005（镜像漂移）/ HD-012（包拆分）；§4 双树实读一致的存续面（A 类 17 行 + D 类 9 行 + 客户端/wire 22 行）
-- **待验证 = 5**（§6 T-1~T-5）；**历史断裂五族**：4 不复发 + 1 半面复发（FIX-048 → HD-004）
+- **待验证 = 6**（§6 T-1~T-6；T-6 为 2026-10-17 返工新增——schemastery 读数漂移/FIX-003 族现场新证）；**历史断裂五族**：4 不复发 + 1 半面复发（FIX-048 → HD-004）
 - **ARCH-004 长尾闭合**：T-4（SessionSelectModelRequest 字段级）——本次实读闭合为兼容（§4.3 B-11 行）
 
 ### breaking 按插件功能域分布
@@ -254,7 +261,7 @@
 
 - `lib/host-abi/events.js:44-48` 注释锚「dsh-api-remotes/lib/types/remote-events.js 实读 19 项」→ 27 项 {event,mode}（HD-005）
 - `lib/host-abi/version.js:19` 注释锚「dsh-llm-pi-ai:2344」→ 新 :2490
-- `tests/host-version-snapshot.mjs:46-51` HOST_BASELINE → `{dsh:'0.2.0-rc.2', dshPackages:'0.2.0-rc.2', cordis:'4.0.5', schemastery:'3.18.4'}`（注意旧基线 dsh 主包 0.1.5-rc.1 与 dsh-* 0.1.5-rc.2 的错位在新树已统一）
+- `tests/host-version-snapshot.mjs:46-51` HOST_BASELINE → `{dsh:'0.2.0-rc.2', dshPackages:'0.2.0-rc.2', cordis:'4.0.5', schemastery:'3.18.5'}`（注意旧基线 dsh 主包 0.1.5-rc.1 与 dsh-* 0.1.5-rc.2 的错位在新树已统一；schemastery 取 2026-10-17 重读定谳值——实施时若快照对实读树断言仍红，按 §6 T-6 流程单点复读树态再定，禁止直接照抄本值）
 - `tests/host-contract.mjs` 的 HOST_VERSION_BASELINE 副本（host-version-snapshot 文件头第 2 步既定流程）
 
 ---
