@@ -986,28 +986,36 @@ export async function runClientRender(check) {
   const tOf = (key) => zh[key] ?? key
   const imageToolReg = registrationOf('conversation.input.right')
   const toolCardReg = registrationOf('tool.call.toolview')
+  // ARCH-005 A4（HD-004）：宿主 0.1.5 起图片直传通道 = conversation.createDrafts
+  // (sessionId, files) → inputActions.addAttachments(ids) → 失败
+  // conversation.releaseDraftAttachments(drafts)（宿主原生先例
+  // dsh-client-ui-conversation composer addFiles 注入；createDraftImages/
+  // addImages 0.1.5-rc.2 npm pack 实测 0 命中——T-1 定性）。夹具锚定该新面
+  // （P10-④：宿主面形态锚定实读，drafts 描述符含 kind/id/previewUrl/file——
+  // browserDraftAttachment 实读同形）。
   const conversationMock = {
-    createDraftImages: (files) => files.map((file, index) => ({ id: `draft-${index}-${file.name}`, previewUrl: 'blob:preview', file })),
+    createDrafts: (sessionId, files) => files.map((file, index) => ({ kind: 'image', id: `draft-${index}-${file.name}`, previewUrl: 'blob:preview', file })),
+    releaseDraftAttachments: () => {},
   }
-  const inputActionsMock = { addImages: () => true }
+  const inputActionsMock = { addAttachments: () => true }
   captured.imageDataCalls = []
 
   // 附件按钮：多模态开启（有视觉 agent）时渲染；仅有生图 agent 时隐藏——与接管同信号。
   {
-    const tree = await renderInto(imageToolReg.render({ t: tOf, router: () => remoteMock, conversation: () => conversationMock, inputActions: inputActionsMock }), 'imagetool')
+    const tree = await renderInto(imageToolReg.render({ t: tOf, router: () => remoteMock, conversation: () => conversationMock, inputActions: inputActionsMock, sessionId: 'session-1' }), 'imagetool')
     const attachButton = findAll(tree, (node) => node && node.type === 'button' && node.props && node.props['aria-label'] === tOf('attach'))
     check('composer attach button renders with vision agent', attachButton.length === 1)
     // 生图 agent（draw，image 类型）也触发按钮显示——图生图需要发图。
     catalogMode = 'drawOnly'
     const listener = captured.listeners.find((entry) => entry.event === 'settings/document-updated')
     if (listener) listener.listener()
-    const genTree = await renderInto(imageToolReg.render({ t: tOf, router: () => remoteMock, conversation: () => conversationMock, inputActions: inputActionsMock }), 'imagetool')
+    const genTree = await renderInto(imageToolReg.render({ t: tOf, router: () => remoteMock, conversation: () => conversationMock, inputActions: inputActionsMock, sessionId: 'session-1' }), 'imagetool')
     const genButton = findAll(genTree, (node) => node && node.type === 'button' && node.props && node.props['aria-label'] === tOf('attach'))
     check('composer attach button renders with generation-only agent', genButton.length === 1)
     // 无任何多模态 agent → 按钮隐藏。
     catalogMode = 'none'
     if (listener) listener.listener()
-    const hidden = await renderInto(imageToolReg.render({ t: tOf, router: () => remoteMock, conversation: () => conversationMock, inputActions: inputActionsMock }), 'imagetool')
+    const hidden = await renderInto(imageToolReg.render({ t: tOf, router: () => remoteMock, conversation: () => conversationMock, inputActions: inputActionsMock, sessionId: 'session-1' }), 'imagetool')
     const attachHidden = findAll(hidden, (node) => node && node.type === 'button' && node.props && node.props['aria-label'] === tOf('attach'))
     check('composer attach button hidden without multimodal agent', attachHidden.length === 0)
     catalogMode = 'withVision'
@@ -1017,18 +1025,19 @@ export async function runClientRender(check) {
   // F11 附件上传（v3 Step 8 / N-6）：attach 输入 accept 扩展非图片类型；非图片
   // 经 remote.uploadFile 上传（字节 base64）→ 成功渲染附件卡片 + 结构化路径文本
   // 经 inputActions.setDraft 追加进 draft；失败显示错误提示；图片文件仍走原生
-  // addImages 原通道（uploadFile 不接管图片——避免双通道）。
+  // addAttachments 通道（ARCH-005 A4/HD-004 迁移：createDrafts 注册 runtime 图片
+  // 草稿——零上传，字节随 prompt 编码；uploadFile 不接管图片——避免双通道）。
   {
     const fileInputOf = (tree) => findAll(tree, (node) => node && node.type === 'input' && node.props && node.props.type === 'file')[0]
     const draftState = { value: '已有草稿文本' }
-    const addImagesCalls = []
+    const addAttachmentsCalls = []
     const setDraftCalls = []
     const conversationUpload = {
-      createDraftImages: (files) => files.map((file, index) => ({ id: `draft-${index}-${file.name}`, previewUrl: 'blob:preview', file })),
-      releaseDraftImages: () => {},
+      createDrafts: (sessionId, files) => files.map((file, index) => ({ kind: 'image', id: `draft-${index}-${file.name}`, previewUrl: 'blob:preview', file })),
+      releaseDraftAttachments: () => {},
     }
     const inputActionsUpload = {
-      addImages: (ids) => { addImagesCalls.push(ids); return true },
+      addAttachments: (ids) => { addAttachmentsCalls.push(ids); return true },
       setDraft: (text) => { setDraftCalls.push(text) },
     }
     const f11Props = () => ({
@@ -1037,6 +1046,7 @@ export async function runClientRender(check) {
       conversation: () => conversationUpload,
       inputActions: inputActionsUpload,
       useInput: (selector) => selector({ draft: draftState.value }),
+      sessionId: 'session-1',
     })
     catalogMode = 'withVision'
     const listener = captured.listeners.find((entry) => entry.event === 'settings/document-updated')
@@ -1067,7 +1077,7 @@ export async function runClientRender(check) {
         check('upload failure shows error without extra card', failCards.length === 1 && textOf(currentTree).includes('FILE_TOO_LARGE'))
       }
       uploadFailMode = false
-      // 图片 + 视频混选：图片仍走原生 addImages（不进 uploadFile），视频走 uploadFile。
+      // 图片 + 视频混选：图片仍走原生 addAttachments（不进 uploadFile），视频走 uploadFile。
       const mixedTree = await renderInto(imageToolReg.render(f11Props()), 'imagetool-f11-mixed')
       const mixedInput = fileInputOf(mixedTree)
       if (mixedInput) {
@@ -1076,7 +1086,126 @@ export async function runClientRender(check) {
           { name: 'clip.mp4', type: 'video/mp4', _base64: 'bXA0' },
         ], value: '' } })
         currentTree = await settle()
-        check('image routes to native addImages, video to uploadFile', addImagesCalls.length === 1 && addImagesCalls[0][0] === 'draft-0-shot.png' && captured.uploadFileCalls.some((call) => call.name === 'clip.mp4') && captured.uploadFileCalls.some((call) => call.name === 'clip.mp4' && call.mediaType === 'video/mp4'))
+        check('image routes to native addAttachments, video to uploadFile', addAttachmentsCalls.length === 1 && addAttachmentsCalls[0][0] === 'draft-0-shot.png' && captured.uploadFileCalls.some((call) => call.name === 'clip.mp4') && captured.uploadFileCalls.some((call) => call.name === 'clip.mp4' && call.mediaType === 'video/mp4'))
+      }
+
+      // ── ARCH-005 A4（HD-004）判别断言群：图片直传 addAttachments 迁移 ──
+      // 验收门 ①：stub 宿主面在场 → 选图 → createDrafts（sessionId+files）→
+      // addAttachments(ids) 全链被调（绿）；stub 缺面 → attachUnavailable 降级
+      // 不崩（守卫负向判别——FIX-048 守卫语义延续）；addAttachments 拒绝（提交
+      // 锁 adjudicating/submitting）→ releaseDraftAttachments 回滚（宿主原生
+      // 先例逐形）；旧面 stub（createDraftImages/addImages 形态）→ 拒识降级
+      // （P5 零并存：旧路径删除后旧面不再被消费）。
+      {
+        // ① 正向链：createDrafts 收到 sessionId 与图片集，addAttachments 收到
+        // 草稿 id 集，成功路径不回滚。
+        const chainCalls = { createDrafts: [], addAttachments: [], release: 0 }
+        const chainConversation = {
+          createDrafts: (sessionId, files) => { chainCalls.createDrafts.push({ sessionId, files }); return files.map((file, index) => ({ kind: 'image', id: `draft-${index}-${file.name}`, previewUrl: 'blob:preview', file })) },
+          releaseDraftAttachments: () => { chainCalls.release += 1 },
+        }
+        const chainInputActions = {
+          addAttachments: (ids) => { chainCalls.addAttachments.push(ids); return true },
+          setDraft: () => {},
+        }
+        const chainTree = await renderInto(imageToolReg.render({
+          t: tOf, router: () => remoteMock, conversation: () => chainConversation,
+          inputActions: chainInputActions, sessionId: 'session-chain',
+        }), 'imagetool-a4-chain')
+        const chainInput = fileInputOf(chainTree)
+        if (chainInput) {
+          chainInput.props.onChange({ target: { files: [
+            { name: 'a.png', type: 'image/png', _base64: 'YQ==' },
+            { name: 'b.webp', type: 'image/webp', _base64: 'Yg==' },
+          ], value: '' } })
+          currentTree = await settle()
+          check('a4 positive: createDrafts called with sessionId and image files',
+            chainCalls.createDrafts.length === 1 && chainCalls.createDrafts[0].sessionId === 'session-chain'
+              && chainCalls.createDrafts[0].files.length === 2 && chainCalls.createDrafts[0].files[0].name === 'a.png')
+          check('a4 positive: addAttachments called with draft ids and no release on success',
+            chainCalls.addAttachments.length === 1 && chainCalls.addAttachments[0].length === 2
+              && chainCalls.addAttachments[0][0] === 'draft-0-a.png' && chainCalls.addAttachments[0][1] === 'draft-1-b.webp'
+              && chainCalls.release === 0)
+        }
+        // ② addAttachments 拒绝（false——宿主提交锁形态）→ releaseDraftAttachments
+        // 回滚（宿主先例：drafts→addAttachments 失败→releaseDraftAttachments）。
+        const rejectCalls = { addAttachments: 0, release: 0 }
+        const rejectConversation = {
+          createDrafts: (sessionId, files) => files.map((file, index) => ({ kind: 'image', id: `draft-${index}-${file.name}`, previewUrl: 'blob:preview', file })),
+          releaseDraftAttachments: () => { rejectCalls.release += 1 },
+        }
+        const rejectTree = await renderInto(imageToolReg.render({
+          t: tOf, router: () => remoteMock, conversation: () => rejectConversation,
+          inputActions: { addAttachments: (ids) => { rejectCalls.addAttachments += 1; return false }, setDraft: () => {} },
+          sessionId: 'session-reject',
+        }), 'imagetool-a4-reject')
+        const rejectInput = fileInputOf(rejectTree)
+        if (rejectInput) {
+          rejectInput.props.onChange({ target: { files: [{ name: 'x.png', type: 'image/png', _base64: 'eA==' }], value: '' } })
+          currentTree = await settle()
+          check('a4 addAttachments rejection rolls back via releaseDraftAttachments',
+            rejectCalls.addAttachments === 1 && rejectCalls.release === 1)
+        }
+        // ③ 负向守卫（attachUnavailable 降级不崩——FIX-048 守卫语义延续）：
+        // 缺 createDrafts 面 / 缺 addAttachments 面 / 缺 sessionId——三种缺面形态。
+        const guardCases = [
+          { label: 'missing createDrafts face', conversation: () => ({ releaseDraftAttachments: () => {} }), inputActions: { addAttachments: () => true }, sessionId: 'session-guard' },
+          { label: 'missing addAttachments face', conversation: () => chainConversation, inputActions: { setDraft: () => {} }, sessionId: 'session-guard' },
+          { label: 'missing sessionId', conversation: () => chainConversation, inputActions: chainInputActions, sessionId: undefined },
+        ]
+        for (const guardCase of guardCases) {
+          const guardTree = await renderInto(imageToolReg.render({
+            t: tOf, router: () => remoteMock, conversation: guardCase.conversation,
+            inputActions: guardCase.inputActions, useInput: (selector) => selector({ draft: '' }),
+            sessionId: guardCase.sessionId,
+          }), `imagetool-a4-guard-${guardCase.label.replace(/[^a-z]+/g, '-')}`)
+          const guardInput = fileInputOf(guardTree)
+          if (guardInput) {
+            guardInput.props.onChange({ target: { files: [{ name: 'g.png', type: 'image/png', _base64: 'Zw==' }], value: '' } })
+            currentTree = await settle()
+            check(`a4 guard (${guardCase.label}): attachUnavailable downgrade, no crash`,
+              textOf(currentTree).includes(zh.attachUnavailable))
+          }
+        }
+        // ④ 旧面 stub 拒识（P5 零并存判别）：宿主 stub 只提供 0.1.2 时代
+        // createDraftImages/addImages 形态 → 新实现不消费 → attachUnavailable。
+        const legacyTree = await renderInto(imageToolReg.render({
+          t: tOf, router: () => remoteMock,
+          conversation: () => ({ createDraftImages: (files) => files.map((file, index) => ({ id: `legacy-${index}`, previewUrl: 'blob:legacy', file })), releaseDraftImages: () => {} }),
+          inputActions: { addImages: () => true, setDraft: () => {} },
+          useInput: (selector) => selector({ draft: '' }),
+          sessionId: 'session-legacy',
+        }), 'imagetool-a4-legacy')
+        const legacyInput = fileInputOf(legacyTree)
+        if (legacyInput) {
+          legacyInput.props.onChange({ target: { files: [{ name: 'old.png', type: 'image/png', _base64: 'b2xk' }], value: '' } })
+          currentTree = await settle()
+          check('a4 legacy face (createDraftImages/addImages) is no longer consumed',
+            textOf(currentTree).includes(zh.attachUnavailable))
+        }
+        // ⑤ 图片分流口径与宿主对齐（isImageMediaType 四 MIME：png/jpeg/webp/gif）：
+        // 非四 MIME 的 image/*（如 image/svg+xml）不入图片直传分支——宿主
+        // createDrafts 只认四 MIME，其余会被宿主当 file draft 触发上传（双通道
+        // 错位），插件侧同口径分流即免疫。
+        const svgCalls = { createDrafts: 0 }
+        const svgConversation = {
+          createDrafts: (sessionId, files) => { svgCalls.createDrafts += 1; return [] },
+          releaseDraftAttachments: () => {},
+        }
+        captured.uploadFileCalls = []
+        const svgTree = await renderInto(imageToolReg.render({
+          t: tOf, router: () => remoteMock, conversation: () => svgConversation,
+          inputActions: { addAttachments: () => true, setDraft: () => {} },
+          useInput: (selector) => selector({ draft: '' }),
+          sessionId: 'session-svg',
+        }), 'imagetool-a4-svg')
+        const svgInput = fileInputOf(svgTree)
+        if (svgInput) {
+          svgInput.props.onChange({ target: { files: [{ name: 'icon.svg', type: 'image/svg+xml', _base64: 'c3Zn' }], value: '' } })
+          currentTree = await settle()
+          check('a4 non-raster image/* routes to uploadFile path, not createDrafts',
+            svgCalls.createDrafts === 0 && captured.uploadFileCalls.some((call) => call.name === 'icon.svg'))
+        }
       }
       // F-01（P1 回归）：多非图片文件一次选选 → 全部路径文本累积后一次 setDraft
       // （旧实现逐文件整体覆盖渲染期快照，除最后一项外全部路径文本丢失）。

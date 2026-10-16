@@ -4769,9 +4769,14 @@ window.__ModuleLoader__.load({
       return null
     }
 
-    /** 文件是否图片（type 前缀判定——与宿主导航栏 image 判定同口径）。 */
+    /** 文件是否图片（ARCH-005 A4/HD-004：与宿主 isImageMediaType 四 MIME 精确
+     *  集合对齐——dsh-client-ui-conversation 的 createDrafts 只认 png/jpeg/
+     *  webp/gif 走 runtime 图片草稿；非四 MIME 的 image/*（如 svg）宿主会当
+     *  file draft 触发上传（双通道错位），插件侧同口径分流即免疫。accept
+     *  属性声明同一集合（下方 input accept），常规操作不可达错位分支）。 */
+    const ATTACH_IMAGE_MEDIA_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
     function isImageFile(file) {
-      return !!file && typeof file.type === 'string' && file.type.startsWith('image/')
+      return !!file && ATTACH_IMAGE_MEDIA_TYPES.has(typeof file.type === 'string' ? file.type : '')
     }
 
     /** 附件类型中文标签（结构化路径文本与卡片共用，§4.4.2 ③：音频/视频/文档）。 */
@@ -4797,7 +4802,7 @@ window.__ModuleLoader__.load({
      *  结论：setDraft 是单一公共 draft 写通道，完全支持路径文本进 draft；
      *  F-01：全部上传落定后累积一次回写，多选不丢路径文本）。 */
     function AttachButton(props) {
-      const { t, router, conversation, inputActions, useInput } = props
+      const { t, router, conversation, inputActions, useInput, sessionId } = props
       const catalog = useRouterCatalog()
       const [error, setError] = useState('')
       const [cards, setCards] = useState([])
@@ -4860,14 +4865,29 @@ window.__ModuleLoader__.load({
         const images = files.filter(isImageFile)
         const others = files.filter((file) => !isImageFile(file))
         if (images.length > 0) {
+          // ARCH-005 A4（HD-004）：图片直传迁移至宿主 0.1.5 起的 addAttachments
+          // 通道——旧 createDraftImages/addImages 面 0.1.5-rc.2 已消失（T-1 定性：
+          // npm pack 0.1.5-rc.2 grep 双 0 命中）。新链 = 宿主原生先例逐形
+          // （dsh-client-ui-conversation composer addFiles 注入——三步链先例
+          // 0.1.5-rc.2 :16776 / 0.2.0 :18389 链形同形；InputActions 面
+          // 0.1.5-rc.2 :12631 / 0.2.0 :13475 定义精确同形）：
+          // conversation.createDrafts(sessionId,
+          // files) 注册 runtime 图片草稿（零上传——object URL 预览，字节随
+          // prompt 编码；上传源只用于非图片 file draft，本路径不涉）→
+          // inputActions.addAttachments(ids)；拒绝（adjudicating/submitting
+          // 提交锁）→ releaseDraftAttachments 回滚。守卫语义延续（FIX-048）：
+          // 任一面/sessionId 缺失 → attachUnavailable 降级不崩。
           const conversationSvc = typeof conversation === 'function' ? conversation() : conversation
-          if (!conversationSvc || typeof conversationSvc.createDraftImages !== 'function' || !inputActions || typeof inputActions.addImages !== 'function') {
+          if (!conversationSvc || typeof conversationSvc.createDrafts !== 'function'
+            || typeof conversationSvc.releaseDraftAttachments !== 'function'
+            || !inputActions || typeof inputActions.addAttachments !== 'function'
+            || typeof sessionId !== 'string' || !sessionId) {
             setError(t('attachUnavailable'))
             return
           }
           try {
-            const created = conversationSvc.createDraftImages(images)
-            if (!inputActions.addImages(created.map((image) => image.id))) conversationSvc.releaseDraftImages(created)
+            const drafts = conversationSvc.createDrafts(sessionId, images)
+            if (!inputActions.addAttachments(drafts.map((draft) => draft.id))) conversationSvc.releaseDraftAttachments(drafts)
           } catch (failure) {
             setError(messageOf(failure))
           }
@@ -5964,6 +5984,10 @@ window.__ModuleLoader__.load({
         conversation: props.conversation,
         inputActions: props.inputActions,
         useInput: props.useInput,
+        // ARCH-005 A4：sessionId 透传（createDrafts(sessionId, files) 必需——
+        // 宿主 conversation.input.right 域按会话传递，sessionId=undefined 时宿主
+        // 不渲染本槽位〔renderSlot 守卫〕，透传值恒非空；守卫仍留缺面降级）。
+        sessionId: props.sessionId,
       })))
       // EVO-012 批二 C：会话产物集合视图入口（输入区「本会话图片」按钮；空态
       // 不渲染）。同样注入 sessionId（宿主 input.right 域按会话传递）。
