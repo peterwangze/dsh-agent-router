@@ -1,0 +1,68 @@
+{
+  "grants": {
+    "grant-0362126c7226553375a29a0ffac924b6": {
+      "consumer": "governance-write-guard/cli",
+      "issued_at": "2026-10-16T23:23:11",
+      "issued_by_run": "run-444b2be0ec72b654458f225a3351c2f2",
+      "status": "active"
+    }
+  },
+  "pending_txn": null,
+  "schema_version": 1,
+  "tool": "governance-write-guard/violation-state-machine",
+  "updated_at": "2026-10-16T23:24:38",
+  "violations": {
+    "WV-08c8e7e487bbd7ee0c260c74f35e0d34": {
+      "after_hash": "6b31f905db16ff17297b07134b06fa72",
+      "before_hash": null,
+      "consumption_event": null,
+      "escalated": false,
+      "escalated_at": null,
+      "family": "plan-tracker.md",
+      "family_kind": "text",
+      "file": ".governance/plan-tracker.md",
+      "first_seen": "2026-10-16T23:24:38",
+      "grant_id": null,
+      "hook_identity": "governance-write-guard/cli",
+      "last_seen": "2026-10-16T23:24:38",
+      "last_session_id": null,
+      "line": 53,
+      "notes": "",
+      "object_id": "GOV-014",
+      "occurrence": 1,
+      "session_id": null,
+      "session_triggers": {},
+      "snapshot": "| P2 | GOV-014 | **治理工作流升级 0.83.0→0.98.0（Scenario C——resolve_entry 检出 active_version=0.98.0；跨度 15+ minor：write-guard 执法硬化/存储架构分离/执行包门禁/closure 生命周期等）**：①深检前置（FE",
+      "status": "open",
+      "type": "unattributed_row_change",
+      "violation_id": "WV-08c8e7e487bbd7ee0c260c74f35e0d34",
+      "workflow_run_id": "run-0b25b46f2e0fbf351134872ff364de10"
+    },
+    "WV-52d8ded0f7887cda4ee5f9ef6295c7bc": {
+      "after_hash": "2af1890f0da5ee104536cbb1aa7c1fa4",
+      "before_hash": "31426ba36340497d47aeca7ac048a8bd",
+      "consumption_event": null,
+      "escalated": false,
+      "escalated_at": null,
+      "family": "plan-tracker.md",
+      "family_kind": "text",
+      "file": ".governance/plan-tracker.md",
+      "first_seen": "2026-10-16T23:23:11",
+      "grant_id": null,
+      "hook_identity": "governance-write-guard/cli",
+      "last_seen": "2026-10-16T23:23:11",
+      "last_session_id": null,
+      "line": 27,
+      "notes": "",
+      "object_id": "FIX-052",
+      "occurrence": 1,
+      "session_id": null,
+      "session_triggers": {},
+      "snapshot": "| P1 | FIX-052 | **预设作用域统计归属错乱（用户报障 2026-09-18：「小说工作流的统计到 governance 了」「最近一直在用治理工作流但实际没有统计到」+ 截图 sha256:5aa18a63… 逐项判读）**。机证根因（Coordinator 多源）：①归属链 = `composedP",
+      "status": "open",
+      "type": "unattributed_row_change",
+      "violation_id": "WV-52d8ded0f7887cda4ee5f9ef6295c7bc",
+      "workflow_run_id": "run-444b2be0ec72b654458f225a3351c2f2"
+    }
+  }
+}
