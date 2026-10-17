@@ -1,79 +1,78 @@
-# 会话快照 — 2026-09-18
+# 会话快照 — 2026-10-17
 
-- **session_id**: 20260918-GOV013-UPGRADE-FIX052
-- **session_date**: 2026-09-18
-- **agent**: zai-coding-cn-router/glm-5.3 @ DeepSeek Harness + software-project-governance **v0.83.0**（本会话自 0.81.0 升级，GOV-013）
-- **工作流版本**: 0.83.0
-- **最新已发布版本**: v0.5.0（2026-09-12，tag `2a119f9`）
+- **session_id**: 20261016-ARCH005-HOST020-V060
+- **session_date**: 2026-10-17（会话起于 10-16，跨 context 续接两次）
+- **agent**: zai-coding-cn-router/glm-5.3 @ ZCode/DSH + software-project-governance **v0.98.0**
+- **工作流版本**: 0.98.0（GOV-014 本链升级 0.83.0→0.98.0）
+- **最新已发布版本**: **v0.6.0（2026-10-17，annotated tag `3cc1501`→`74ad536` + GitHub Release + 资产 `dsh-agent-router-0.6.0.tar.gz` 1,702,929B/sha1 `579cb708…`/公网 curl 200 三重终验全绿——EV-224）**
 - **mode**: always-on × maximum-autonomy（文件策略 = danger-full-access，approval prompts 已禁用）
 
 ## 当前状态
 
-- **current_stage**: 防护网与CI/CD（8/11——G4 通过后进入）
-- **current_gate**: G5（pending——G5~G7 待逐门评估）
+- **current_stage**: 防护网与CI/CD（8/11）——ARCH-005 发布承载完成；G5~G7 待逐门评估
 - **trigger_mode / permission_mode**: always-on / maximum-autonomy
-- **远端**: `origin/main` = `759df3a`（本地 clean；本会话 push 链 `1002777`→`fbd52ef`→`4ac01fa`→`759df3a`，CI 结果未复核——如实标注）
-- **锁**: 双空（FIX-052 已释放）
-- **健康**: 会话首 check-governance 84 issues（项目数据面：Check 18c/18d FIX-049 packet 等——非升级/修复面）；write-guard 每步 PASS
+- **远端**: `origin/main` = `74ad536` + 本收口 commit（本会话 push 链 `d71dee2`→`74ad536`→收口批；CI run 38991525002 于 `74ad536` 三 job 全绿实证；收口批 CI 跑次待复核——治理面提交，预期绿）
+- **锁**: ARCH-005 收口批内释放（单锁串行实施链——tests/host-radar.mjs 已 amend 入锁）
+- **健康**: write-guard 全程 PASS；pre-commit 提示 2 条 stale risk WARN 已由本批 risk-log 刷新处置
 
 ## 本轮已完成
 
-- **GOV-013 治理工作流升级 0.81.0→0.83.0**（Scenario C 双确认链：用户 ask「执行升级」+「执行归档」）：AGENTS.md bootstrap splice（launch.py --bootstrap-project 单源，FEAT-037 thin pointer，项目质量原则段保留）· plan-tracker 工作流版本 0.83.0 · 归档 1 task（integrity PASS，172→170KB）· cleanup 零冗余 · scenario_hint C→F 收口——EV-216；commit `1002777`
-- **FIX-052 预设统计归属错乱（P1 用户报障）全链闭环**：
-  - 受理+RCA（EV-217 机证）：归属链 live 罗盘→header 快照两源均**可变量**（宿主 `standingMountFor` = scope parent 对 `livePresetMounts()` 运行时匹配）；novel-writing 桶历史 0 条（novel 子代理 glm-5.3-flash 09-16/17/18 = 1449/466/1160 全入 governance|subagent）；governance main 09-14 起恒 0（本会话 402 次 main 全记 standard）；时间线与 09-13 15:42 governance 预设重装吻合；settings `agent-presets.default: standard` 幽灵归属
-  - **用户裁决设计原则**：归属键 MUST 绑定工作流身份不变量（会话自身 agent-preset/selected 事件链），禁止 live 挂载/部署默认/全局选择等可变量
-  - Developer TDD 交付 `4ac01fa`（+639/−38）：`sessionPresetIdentity` LRU 1024 单点 + agent/created 播种 + selected 双参更新 + 子代理父身份优先/子头兜底 + 遥测链身份→创建头→罗盘最后兜底+诊断披露 + `liveCompassPresetOf` 罗盘单点（composedPreset 恰 1 处）+ divergence/live-fallback 双诊断（去重 256）；RED 14 红→20/20 绿
-  - R0 Code Reviewer **APPROVED_WITH_NOTES/unresolved_blockers=0** 机录（REVIEW-FIX-052-R0-CODEREVIEWER；宿主锚点 7/7 实读零幻觉；判别力抽查 3/3；P2×5+P3×3 台账）
-  - Coordinator 独立复跑 run-all **ALL 21 SUITES + 4 RUNNER MODULES exit 0**（25.7s）
-  - 收口 EV-219；commit `759df3a`（含 review 三件 + tracker 终态 + RECO 机录）
-- **机证（复验前置）**：宿主插件加载路径 = `profiles/web/node_modules/dsh-agent-router` **Junction → 本工作树**——修复代码已在加载路径，**重启 DSH 生效**
+- **ARCH-005 宿主 0.1.5-rc.2→0.2.0-rc.2 适配 + 版本依赖解耦全链闭环并发布 v0.6.0**：
+  - 十实施批全落地：R0 靶子修复+基线登记 `bd17cac` / R1 声明面基线跳跃 `367b65f` / A1 装载门取证程序 `678ff97` / A2 codec create() 工厂 `43e8267` / A3 settings Config 声明制 `b6aeac4` / A4 图片直传恢复（T-1 定性=恢复非回归）`66878ea` / R2 协商三态 `6d9fead` / R3 看护矩阵化 `dffb553` / R4 升级雷达 `e01213e` / R5 宿主升级 SOP `5b08fea`；**四断点（装载门/RPC codec/settings 声明/图片直传）全解除**——「插件在 0.2.0 宿主完整加载」判据成立
+  - R4F CI 矩阵 env 泄漏修复 `d71dee2`（tests/host-radar.mjs 套件封闭化——PROBE_ENV_KEYS 单点净化；矩阵 job 13 条红转绿；REVIEW-ARCH-005-R13 AWN/0）
+  - 发布链：E-1~E-3 三件套 `74ad536`（bump 0.6.0 + CHANGELOG 七段 + README 版本面；会话中断丢 agent 报告经产物审计+复验恢复）→ CI 三 job 全绿（38991525002）→ E-4 Release Review **APPROVED_WITH_NOTES/0**（REVIEW-ARCH-005-R14；11/11 PASS + 版本位独立建议维持 MINOR）→ E-5 ask 未响应按用户预授权推进（DEC-34 如实标注）→ E-6 tag+Release+资产三重终验（gh API+下载 sha 双证+Coordinator curl 200/1702929B）
+  - 审查链 REVIEW-ARCH-005-R3~R14 全 APPROVED_WITH_NOTES/unresolved_blockers=0
+  - 治理：DEC-33（DEC-1~7 默认采纳）→ DEC-34（发布终态三裁决）；EV-224 发布机证；tracker/risk-log（RISK-001/003 刷新）终态
+- **v0.5.0 后真机修复四件随版交付**：FIX-046 面板取数 / FIX-048 条件化接管 / FIX-049 贴图误切（+配置字段名勘正代改）/ FIX-052 统计归属（均此前会话完成，本版首随发布面交付）
 
 ## 遗留任务
 
 | 任务 ID | 描述 | 完成百分比 | 阻塞原因 | 优先级 |
 |---------|------|-----------|----------|--------|
-| FIX-052 | 预设统计归属——待真机复验（重启 DSH 后正常使用各工作流，统计面板各桶归属应正确累积；历史错行不回改） | 95%（代码+审查终态） | 用户 GUI 复验动作 | P1 |
-| FIX-049 | 原生多模态贴图直传——待真机复验（切多模态模型→立即贴图→应直传不跳 twin） | 95%（同上） | 用户 GUI 复验动作 | P1 |
-| FIX-052 台账微批 | F-1 继承缺失诊断 + F-2 淘汰盲区诊断 + F-4 父缺失分支判别用例（Reviewer 建议合并一次触碰） | 未派发 | — | P2 |
-| 卫生批候选 | fix-031 H7 标签语义 + ctx-services L36 注释 + 每日用量表列宽折行（展示面） | 未立项 | — | P3 |
-| GOV-009 | 宿主仓钩子产品代码判定边界（TPA unblocked #1；两例真机实证） | 已立项待派发 | 跨仓 | P2 |
-| GOV-011 | 治理工具解析侧缺陷批 7 项（TPA unblocked #2） | 已立项待派发 | 跨仓 | P2 |
-| G5~G7 Gate 评估 | 阶段推进（项目实际已发布 v0.5.0，阶段标签落后） | 未启动 | — | P2 |
-| Check 36 R2 处置裁决 | RISK-003（高）缓解引用 ARCH-004/FIX-038 未完成 | 待用户裁决 | — | P1 |
+| ARCH-005 真机复验 | 用户重装 v0.6.0 后按 docs/host-upgrade-sop.md §7 清单 12 条复验（装载门/五场景含 N-1 默认值/三态徽章双层/图片直传/FIX-052·049 顺延项——每条 P10-③ 证据形态） | 95%（机器面全闭环） | 用户 GUI 复验动作（重装 = `dsh plugin --profile web add file:./` 或 Release tarball） | P0 |
+| 雷达首跑复核 | host-radar.yml schedule 首窗（周一 03:30 UTC）后复核 Actions 日志与 issue 载体行为（R4 登记义务；gh/GITHUB_TOKEN 真机行为以首跑为准） | 未启动 | schedule 时窗未到 | P1 |
+| E-4 备注 N 系列 | N1 基线档案 job API 字段异象观察 / N5 CI 平台警告（Node 20 deprecation、ubuntu-latest 2026-10-19 迁移）维护卫生 | 未立项 | — | P3 |
+| R4F 备注 F-1/F-3 | host-radar 套件污染负控 canary（判别环境无关化）/ PROBE_ENV_KEYS 与 probe 键集机器互锁 | 未立项 | — | P3 |
+| FIX-052 台账微批 | F-1 继承缺失诊断 + F-2 淘汰盲区诊断 + F-4 父缺失分支判别用例 | 未派发 | — | P2 |
+| 卫生批候选 | fix-031 H7 标签语义 + ctx-services L36 注释 + 每日用量表列宽折行 | 未立项 | — | P3 |
+| GOV-009 / GOV-011 | 跨仓（宿主仓钩子边界 / 治理工具解析侧缺陷 7 项） | 已立项待派发 | 跨仓授权 | P2 |
+| G5~G7 Gate 评估 / Check 36 R2 裁决 | 阶段推进（项目已发布 v0.6.0，阶段标签落后）；RISK-003 缓解引用 ARCH-005 已完成——Check 36 R2 处置可重评 | 未启动 | — | P2 |
 
 ## 待确认决策
 
 | 决策 ID | 标题 | 上下文 | 截止日期 |
 |---------|------|--------|----------|
-| — | — | 无未决决策（本会话用户裁决：①执行 0.83.0 升级+归档 ②立即派发 FIX-052 ③真机复验 FIX-052；另有历史裁决「不允许修改当前仓之外的其它仓代码」仍有效） | — |
+| — | — | 无未决（DEC-1~7 经 DEC-34 默认确认终态——**非用户显式确认**，E-5 ask 未响应按预授权推进；若用户对 DEC-1 支持面单范围口径有异议可重开，已落地批 revert 粒度在案） | — |
 
 ## 活跃风险
 
 | 风险 ID | 描述 | 升级截止日期 | 负责人 |
 |---------|------|-------------|--------|
-| RISK-003 | 宿主接口演进（缓解结构化落地；保持活跃——FIX-052 又增同族证据：childSessionMeta live 罗盘现写子头） | 宿主 node_modules 变更后首次接管路由调用 | Coordinator |
-| RISK-001 | CI 回归保护（主轨道闭合；残余 = CI 未覆盖面清单 + 锚守卫卫生） | — | Coordinator |
+| RISK-003 | 宿主接口演进（ARCH-005 后防护四层常设化：基线档案单源/三态徽章/CI 矩阵+周频雷达/SOP；保持活跃——宿主持续演进；雷达首跑待实证） | 宿主 node_modules 变更后首次接管路由调用 / 雷达首窗复核 | Coordinator |
+| RISK-001 | CI 回归保护（主轨道+矩阵闭合；残余 = 真机 GUI/OAuth/宿主装配时序等未覆盖面清单——README 边界清单在案） | — | Coordinator |
 
 ## 未完成 / 已延期
 
-- FIX-052 / FIX-049 真机复验（用户已选择进行中——重启 DSH 后观察）
-- FIX-052 P2 台账微批（F-1/F-2/F-4）+ 卫生批候选
-- 跨仓 GOV-009/GOV-011（需插件仓会话授权）
-- 本会话 push 的 CI 跑次未复核（`1002777`/`fbd52ef`/`4ac01fa`/`759df3a`——历史基线 `#SKIP 6`）
+- ARCH-005 真机复验 12 条（用户重装后承载）
+- host-radar schedule 首跑复核（周一 03:30 UTC 窗口后）
+- 收口批 push 的 CI 跑次复核（治理面提交）
+- FIX-052 F-1/F-2/F-4 P2 微批 + 卫生批候选 + E-4/R4F P3 备注
+- 跨仓 GOV-009/GOV-011（需授权）
 
 ## 下次会话优先级
 
-1. **真机复验结算**：FIX-052（统计归属）+ FIX-049（贴图直传）——补终验证据行；CI 跑次复核
-2. **FIX-052 F-1/F-2/F-4 P2 微批**（Reviewer 建议合并一次触碰）
-3. **GOV-009 / GOV-011（跨仓）**（TPA unblocked，需授权）
-4. G5~G7 Gate 评估 / Check 36 R2 裁决
+1. **重装 + 真机复验结算**：用户 `dsh plugin --profile web add`（或 Release tarball 离线装）→ 重启 DSH → SOP §7 清单 12 条逐条复验补终验证据行（含 FIX-052/FIX-049 顺延项）
+2. **雷达首跑复核**（schedule 首窗后 Actions 日志 + issue 载体 + 心跳形态）
+3. FIX-052 F-1/F-2/F-4 P2 微批 + E-4/R4F P3 备注（可合并一次触碰评估）
+4. GOV-009 / GOV-011（跨仓，需授权）
+5. G5~G7 Gate 评估 / Check 36 R2 处置重评（RISK-003 缓解已落地）
 
 > FIX-262/REQ-108：本节派生自完成必推荐快照。
-> - **推荐快照引用**: **RECO-FIX-052**（`task-priority-analysis --evidence-task FIX-052` 机器写入 evidence-log）
+> - **推荐快照引用**: **RECO-ARCH-005-RELEASE**（完成必推荐 ask 于收口批呈现——首选项 = 重装+真机复验清单 12 条）
 
 ## 用户偏好设置
 
-- 交互节奏：报障即受理（P10-①/②——RCA/取证全部机器完成，不转嫁用户）；关键决策 ask 确认，其余自动推进
-- 设计裁决记录在案：统计归属键 MUST 绑定工作流身份不变量（FIX-052 方向红线，用户 2026-09-18 裁决）
-- 文件策略：danger-full-access + approval prompts 禁用；git commit+push 自动
-- 角色分工：用户执行真机动作（重启/点击/观察）；Coordinator 只做机器可完成的复现与取证（P10-②）
+- 交互节奏：ask 未响应时按预授权+审查终态推进并如实标注（DEC-33/34 先例）；关键决策 ask 必达
+- 文件策略：danger-full-access + approval prompts 禁用；git commit+push 自动（push 走 SSH over 443 瞬态 URL——OAuth token 缺 workflow scope，不改用户配置）
+- 角色分工：用户执行真机动作（重装/重启/点击/观察）；Coordinator 只做机器可完成的复现与取证（P10-②）
+- 安全红线延续：「不允许修改当前仓之外的其它仓代码」仍有效；真实环境三选一 + R4 逐条上报全程遵守（$TEMP 沙箱内验证零 HOME 写入）

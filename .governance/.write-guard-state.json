@@ -97,12 +97,18 @@
         ],
         "DEC-33": [
           "9d8b654adf050107b2108b29943d69f8"
+        ],
+        "DEC-34": [
+          "433fd544b43efdfb3fee5bdda7224e33"
         ]
       },
-      "sha256": "3639051f39bc764c2377b7253a72eda156a412a277ddf9e4accfeeab554d33ca"
+      "sha256": "d8d284ce1428bf16fde7203968372455fe71dd77d3c82351a1783e4ce0a4bc1d"
     },
     "evidence-log.md": {
       "rows": {
+        "EVD-1": [
+          "2dc406f18f367316dbdccebc4403535c"
+        ],
         "REVIEW-ARCH-004-R0": [
           "c533f22b138e2d0f923eaaaeee8d573d"
         ],
@@ -123,6 +129,15 @@
         ],
         "REVIEW-ARCH-005-R11": [
           "ab3fd4848c4ad0267316e65c9ab61280"
+        ],
+        "REVIEW-ARCH-005-R12": [
+          "09d5149c86f9e9061b549bab8deee4cc"
+        ],
+        "REVIEW-ARCH-005-R13": [
+          "2b8a2fc609623e8ad9aadb140c4a9173"
+        ],
+        "REVIEW-ARCH-005-R14": [
+          "f5669d7f3b1a20d5abeebee2d276b102"
         ],
         "REVIEW-ARCH-005-R2": [
           "020c29b2f192c411a3ce947763521e6c"
@@ -511,7 +526,7 @@
           "377e36f54675369e0e5874bc35d8f737"
         ]
       },
-      "sha256": "89ee94dd9bb34e69cbb8468a0a2d6ba049db08a3e3e6ad02971456fb1cd2fdfa"
+      "sha256": "5c834f964d6185f329c4a9e32cab2d0aefc8307c111269cf6aa1ce958c77bd47"
     },
     "plan-tracker.md": {
       "rows": {
@@ -525,7 +540,7 @@
           "3ee8f1558fe18b065e86231321ece5a2"
         ],
         "ARCH-005": [
-          "b4d89e3b3b49ffefa3e33ac3e8a4cf07"
+          "1be586b62a4cf10597bfb1d088226af2"
         ],
         "DEV-001": [
           "82ba5d9ef02d330e076f6bbb1604188c"
@@ -791,10 +806,10 @@
           "58c672f52926fbf91e75a9e983387b10"
         ]
       },
-      "sha256": "a4e301607602dc04a88169d907f3d20d1fa07b377d63006b0b75cdc3e113d0a3"
+      "sha256": "2e56b3ba38df71785fad4f200811c4c57585504d7952ff332bed435fdf744c12"
     }
   },
   "schema_version": 1,
   "tool": "governance-write-guard/row-family-reconciliation",
-  "updated_at": "2026-10-17T08:23:42"
+  "updated_at": "2026-10-17T10:01:37"
 }

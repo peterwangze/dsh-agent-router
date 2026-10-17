@@ -109,6 +109,112 @@
       "baseline_effects": null,
       "recorded_at": "2026-10-17T04:49:31",
       "updated_at": "2026-10-17T04:49:31"
+    },
+    "op-289864a20225493ea94e26feebc62b70": {
+      "schema_version": 1,
+      "command": "locks-amend",
+      "task_id": "ARCH-005",
+      "input_fingerprint": "d4e0f0cefcddbeafefd45e5f03bf94dbf7f69765144ee2886589dbcc8c344b07",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-289864a20225493ea94e26feebc62b70",
+        "code": "ok",
+        "new_revision": 8296,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-17T09:15:38",
+      "updated_at": "2026-10-17T09:15:38"
+    },
+    "op-be0d4c396f6d40f8a7fc9d8aee57531c": {
+      "schema_version": 1,
+      "command": "evidence-append",
+      "task_id": "ARCH-005",
+      "input_fingerprint": "171034b584211c26de8f6b14ae150583e4b05783e8fe98f409aa099fc231115a",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-be0d4c396f6d40f8a7fc9d8aee57531c",
+        "code": "ok",
+        "new_revision": 502886,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-17T09:57:56",
+      "updated_at": "2026-10-17T09:57:56"
+    },
+    "op-45052a09cdb04a119df3e21c23a6730c": {
+      "schema_version": 1,
+      "command": "decision-append",
+      "task_id": "",
+      "input_fingerprint": "3d84af5b246740ff1237411956774db5b476e6579312593e69c38253316c01dd",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-45052a09cdb04a119df3e21c23a6730c",
+        "code": "ok",
+        "new_revision": 42889,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-17T09:58:08",
+      "updated_at": "2026-10-17T09:58:08",
+      "authority": {
+        "state": "MD_ACTIVE",
+        "epoch": 0,
+        "generation": 0,
+        "backend": "md"
+      }
+    },
+    "op-cc504fad69b7489baf2552aa1cc838b7": {
+      "schema_version": 1,
+      "command": "locks-release",
+      "task_id": "ARCH-005",
+      "input_fingerprint": "7bb15d47391c9e03ba555bfa52ec82dbd19a3d75f2428c03b0e5163e48cfbae6",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-cc504fad69b7489baf2552aa1cc838b7",
+        "code": "ok",
+        "new_revision": 49,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-17T10:01:37",
+      "updated_at": "2026-10-17T10:01:37",
+      "released_files": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/host-radar.yml",
+        "CHANGELOG.md",
+        "README.md",
+        "lib/client.js",
+        "lib/host-abi/events.js",
+        "lib/host-abi/version.js",
+        "lib/host-route.js",
+        "lib/index.js",
+        "lib/oauth-llm.js",
+        "lib/rpc.js",
+        "lib/schemas.js",
+        "lib/service.js",
+        "lib/wrapper.js",
+        "package.json",
+        "scripts/host-radar-probe.mjs",
+        "tests/host-abi-health.mjs",
+        "tests/host-contract.mjs",
+        "tests/host-radar.mjs",
+        "tests/host-version-snapshot.mjs",
+        "tests/rpc-shadow-guard.mjs",
+        "tests/served-client.js"
+      ]
     }
   }
 }
