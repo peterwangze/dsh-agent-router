@@ -68,9 +68,21 @@ const check = (label, condition, detail) => {
   }
 }
 
+// 套件封闭性（ARCH-005-R4F）：probe 全部 env 消费面 = DSH_HOST_SOURCE/DSH_BASELINE
+// 恰两个（scripts/host-radar-probe.mjs 全文 grep process.env 实证：DSH_HOST_SOURCE
+// 两处——模式判定与靶子回落；DSH_BASELINE 一处——基线选择；无第三个）。spawn env
+// 先剥离这两个宿主继承项再合并用例显式传入：套件用例假设「零 DSH_* 继承、靶子/基线
+// 全由用例显式指定」，CI 基线矩阵 job 的 job 级 DSH_HOST_SOURCE/DSH_BASELINE 注入
+// （R3 门控参数化——env 渗入无关用例曾致 0.1.5 job 11 红 / 0.2.0 job 2 红）由此被
+// 挡在套件外；env 同效用例的显式传入在净化之后合并——机制判别不削弱。净化单点在
+// 此，不逐用例散落。
+const PROBE_ENV_KEYS = ['DSH_HOST_SOURCE', 'DSH_BASELINE']
+
 /** 跑雷达脚本（子进程——CLI 是 workflow 的唯一消费面，测试同一形态）。 */
 const runRadar = (args, env = {}) => {
-  const result = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', timeout: 120_000, env: { ...process.env, ...env } })
+  const sanitized = { ...process.env }
+  for (const key of PROBE_ENV_KEYS) delete sanitized[key]
+  const result = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', timeout: 120_000, env: { ...sanitized, ...env } })
   let json = null
   try { json = JSON.parse(result.stdout) } catch { /* 非 JSON 输出由各判据自行断言 */ }
   return { status: result.status, stdout: result.stdout, stderr: result.stderr, json }
