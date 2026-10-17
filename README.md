@@ -222,6 +222,8 @@ cd package
 
 ## 维护与开发
 
+宿主升级 SOP（五步——检测 / diff 定性 / 影响分级 / 适配批 / 发布与复验，含基线登记 checklist 与重装后真机复验清单）：见 `docs/host-upgrade-sop.md`（ARCH-005 R5 固化，每步含机器入口与失败可观测面）。
+
 ### 门控命令（单入口，本地与 CI 同一命令）
 
 ```bash
