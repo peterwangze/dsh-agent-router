@@ -1,0 +1,270 @@
+# ARCH-005 R4（设计 §6 R4 行 / §2-B 四维-c / DEC-3 / NEW-1 T-6 吸收）：升级检测雷达。
+#
+# 职责：宿主 @deepseek-ai/dsh 新版本 / 树漂移的**插件外检测通道**（FIX-003 静默更新族
+# 的结构性对策——gate-block regime 下插件侧一切可观测机制不可达，雷达是第一发现人）。
+# **探测不门控**：本 workflow 与门控 CI（ci.yml）完全分离——push/PR 不触发，probe 发现
+# 差异只产报告工件 + 开 issue，永不让门控变红；雷达自身故障（npm 不可达 / marker 缺失 /
+# probe 失败）才红（P8 可观测）。
+#
+# 三个决策/吸收点的落地形态：
+# - **DEC-3**：cron 周频（每周一 03:30 UTC）+ `npm view @deepseek-ai/dsh dist-tags --json`
+#   **全枚举**比对（latest + next/alpha 等预发布 tag 并集——F-5：宿主 rc/alpha 快速迭代是
+#   既定部署通道，latest-only 对 0.2.1-alpha.x 流动失明）；
+# - **NEW-1 / T-6 吸收（选型 (a)）**：probe job **每周期无条件运行**（对主基线版本新装一棵
+#   fresh 树跑四类 diff 报告）——T-6 现场证 = 主包版本不变但嵌套树整树静默重写
+#   （schemastery 3.18.4→3.18.5），纯 dist-tags 比对对该形态永不触发；registry 端
+#   `npm view <pkg>@<ver> dependencies` 只给**声明 range**（同一已发布版本不可变）⇒ 备选
+#   (b)「registry 侧包表 diff」对 range 内解析漂移恒零 diff，不可选。fresh 树的**包表版本**
+#   diff（对基线档案记录值）即 T-6 检测面（判别实证见 tests/host-radar.mjs T-6 双树）。
+# - **心跳可观测**：连续 N 次未跑自警。last-seen 载体 = **workflow 自身运行历史**
+#   （gh run list 取最近一次 success 的 updatedAt——GitHub 平台即戳记者：运行记录不可变、
+#   不逐出、失败运行天然不刷新〔conclusion=failure 被过滤，失败周次自动计入 gap〕，零写入
+#   零额外凭据）。载体选型依据（实读 Actions 能力后排除另三形，2026-10-17 复核）：
+#   ① repo variable——**GITHUB_TOKEN 被 GitHub 显式阻断访问 Actions Variables API**
+#   （读写均 403 "Resource not accessible by integration"；`actions: write` 不覆盖该 API
+#   ——Variables 读写是 GitHub App / fine-grained PAT 专属权限，见 GitHub community
+#   discussion #146874 与 Stack Overflow 77882485 实证）：写入侧每跑必红、读取侧被
+#   403 误当「从未跑过」→ 状态静默重置 + 每周重复 issue——不可执行；
+#   ② actions/cache：7 天未用逐出 + 容量逐出（静默丢态，周频访问恰在边界）；
+#   ③ issue 保活戳记：心跳状态混入告警流（信号/噪声混载）。
+#   已告警版本（防周频重复 issue）的状态半边同取**雷达 issue 列表本身**（标题
+#   `host-radar: <version> — …`（任意 open/closed）= 已告警；开 issue 就是推进 seen
+#   ——无第二份状态写入，P5 同一动作单路径）。
+#   已知边界（如实登记）：「未跑」的检测只能发生在**下一次成功运行时**（雷达死亡时无
+#   进程可自警）；run 级 conclusion 口径 = radar/probe 任一 job 红即整跑不戳记（probe
+#   红自有红跑通知，心跳 gap 同时累积——双信号非丢失）；cron 被仓库 60 天不活跃自动
+#   停用的形态由 GitHub 自身向仓库 admin 发通知——非本 workflow 可达面。
+#
+# 判定逻辑单点（P5）：全部判定经 `scripts/host-radar-probe.mjs`（probe / dist-tags /
+# heartbeat 三模式 CLI——判别测试 tests/host-radar.mjs）；本 yaml 只编排，不复制判定；
+# 基线数据零 yaml 字面量（probe 目标版本由脚本输出 verdict.json 派生——R3 resolve-baselines
+# 单源纪律同形）。9h-5 注意：本文件属锚扫描面——禁行号式锚（`文件:NNN` / `L###` / 裸
+# `:NN`）形态，锚一律符号名/常量名式。
+#
+# 手动触发（workflow_dispatch——测试与应急）：
+# - dist_tags_stub：dist-tags JSON 覆盖（演示/复演预发布 tag 场景；留空 = 实跑 npm view）；
+# - host_versions：probe 目标版本逗号表（留空 = 雷达自判：主基线版本 + 新发现版本并集）；
+# - force_issue：零 diff 也开 issue（报告通道演练）。
+
+name: host-radar
+
+on:
+  schedule:
+    - cron: '30 3 * * 1' # 周频（DEC-3；schedule 仅默认分支生效——GitHub Actions 平台语义）
+  workflow_dispatch:
+    inputs:
+      dist_tags_stub:
+        description: 'dist-tags JSON stub（测试/演示；留空 = 实跑 npm view）'
+        required: false
+        default: ''
+      host_versions:
+        description: 'probe 目标版本逗号表（留空 = 主基线 + 新版本并集——T-6 吸收：主基线无条件 probe）'
+        required: false
+        default: ''
+      force_issue:
+        description: '零 diff 也开 issue（报告通道演练）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read # 心跳 last-seen 载体 = 本 workflow 运行历史（只读；GITHUB_TOKEN 不可写 Actions Variables——见文件头选型注记）
+  issues: write # probe 报告 issue + 心跳自警 issue + 已告警版本状态面（issue 列表读取同源）
+
+jobs:
+  # ── 雷达：dist-tags 全枚举比对 + 心跳自警 + probe 目标合成 ─────────────────────
+  radar:
+    name: 雷达（dist-tags 全枚举 + 心跳）
+    runs-on: ubuntu-latest
+    outputs:
+      probe_targets: ${{ steps.targets.outputs.probe_targets }}
+      new_versions: ${{ steps.verdict.outputs.new_versions }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DIST_TAGS_STUB: ${{ inputs.dist_tags_stub }}
+      HOST_VERSIONS: ${{ inputs.host_versions }}
+      EVENT_NAME: ${{ github.event_name }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup node (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      # 注：雷达脚本零 npm 依赖（只读仓库文本 + 动态 import lib/host-abi/events.js——
+      # 该域模块链无外部依赖），无需 pnpm install。
+
+      # dist-tags 捕获（P8：npm 不可达 = 雷达自身故障 → 本步非零退出红——不静默）
+      - name: dist-tags capture (npm view --json, or stub for drills)
+        run: |
+          if [ -n "$DIST_TAGS_STUB" ]; then
+            printf '%s' "$DIST_TAGS_STUB" > dist-tags.json
+            echo "dist-tags: STUB mode (workflow_dispatch drill)"
+          else
+            npm view @deepseek-ai/dsh dist-tags --json > dist-tags.json
+          fi
+          cat dist-tags.json
+
+      # 已告警版本（防周频重复 issue 的状态半边）：雷达 issue 标题本身即状态——
+      # `host-radar: <version> — …`（任意 open/closed）= 已告警；开 issue 就是推进，
+      # 无第二份状态写入（P5）。gh issue list 失败 = 本步红（P8：状态读取失败可观测，
+      # 不静默当空集——空集会触发重复告警）。
+      - name: read announced versions (radar issue list)
+        run: |
+          gh issue list --state all --json title --limit 300 > issue-titles.json
+          node -e '
+            const titles = JSON.parse(require("node:fs").readFileSync("issue-titles.json", "utf8")).map((row) => row.title)
+            const seen = [...new Set(titles.flatMap((title) => /^host-radar: (\S+) — /.exec(title)?.[1] ?? []))]
+            require("node:fs").writeFileSync("seen.json", JSON.stringify(seen))
+            console.log("announced versions (from radar issue titles):", JSON.stringify(seen))
+          '
+
+      # 判定（单实现路径）：全枚举 → 新版本 = tag 指向版本 ∉（档案在册 dsh 值 ∪ seen）
+      - name: verdict (scripts/host-radar-probe.mjs --dist-tags-file)
+        id: verdict
+        run: |
+          node scripts/host-radar-probe.mjs --dist-tags-file dist-tags.json --seen "$(cat seen.json)" > verdict.json
+          NEW_VERSIONS=$(node -e 'const v = JSON.parse(require("node:fs").readFileSync("verdict.json", "utf8")); process.stdout.write(JSON.stringify(v.newVersions))')
+          echo "new_versions=$NEW_VERSIONS" >> "$GITHUB_OUTPUT"
+          echo "verdict: new versions = $NEW_VERSIONS"
+
+      # 心跳：last-seen = 本 workflow 最近一次 success 运行的 updatedAt（平台侧戳记——
+      # 失败运行 conclusion=failure 被过滤，天然「失败周次计入 gap」；无需也不存在
+      # 独立戳记步）。stale 判定（连续 ≥2 周期未成功）→ 自警 issue——与 probe 报告
+      # issue 同型幂等门（open 的 `host-radar heartbeat stale:` 前缀存在即跳过：
+      # probe job 持续红 ≥2 周期而 radar job 每周成功的形态下 stale 每周重判，
+      # 无门则每周重复告警；人工关闭后 stale 仍在 → 下周重新告警——重新武装语义）。
+      # gh run list 失败 = 本步红（P8：运行历史读取失败可观测，不静默当 never——
+      # 当 never 会把真实 gap 抹掉漏告警）。
+      - name: heartbeat check + self-alert (radar silence detector)
+        run: |
+          gh run list --workflow host-radar.yml --json conclusion,updatedAt --limit 30 > radar-runs.json
+          LAST_SEEN=$(node -e '
+            const runs = JSON.parse(require("node:fs").readFileSync("radar-runs.json", "utf8"))
+            const lastSuccess = runs.find((run) => run.conclusion === "success")
+            process.stdout.write(lastSuccess ? lastSuccess.updatedAt : "never")
+          ')
+          echo "heartbeat: last successful host-radar run = $LAST_SEEN (workflow run history — platform-stamped)"
+          node scripts/host-radar-probe.mjs --heartbeat --last-seen "$LAST_SEEN" --interval-days 7 --misses 2 > heartbeat.json
+          cat heartbeat.json
+          if grep -q '"stale": true' heartbeat.json; then
+            GAP=$(node -e 'const h = JSON.parse(require("node:fs").readFileSync("heartbeat.json", "utf8")); process.stdout.write(String(h.gapDays))')
+            HEARTBEAT_EXISTING=$(gh issue list --state open --json title --limit 300 --jq '.[].title | select(startswith("host-radar heartbeat stale:"))' | head -1)
+            if [ -n "$HEARTBEAT_EXISTING" ]; then
+              echo "heartbeat: STALE — open self-alert issue already exists (「$HEARTBEAT_EXISTING」) — skip duplicate (gap $GAP 天仍未解除)"
+            else
+              gh issue create \
+                --title "host-radar heartbeat stale: 雷达连续 ≥2 周期未成功运行" \
+                --body "雷达心跳自警（ARCH-005 R4）：距上次成功运行 **$GAP 天**（阈值 = 7 天 × 2 次）。可能原因：schedule 被停用 / 雷达 job 持续失败 / GitHub 60 天不活跃自动停用。请检查 Actions 的 host-radar 运行历史后处置。" \
+                --label "host-radar" || gh issue create --title "host-radar heartbeat stale: 雷达连续 ≥2 周期未成功运行" --body "雷达心跳自警（ARCH-005 R4）：距上次成功运行 $GAP 天（阈值 14 天）。"
+              echo "heartbeat: STALE — self-alert issue opened"
+            fi
+          fi
+
+      # probe 目标合成（P5：版本零 yaml 字面量——全部自 verdict.json / 输入派生）。
+      # schedule / 默认 dispatch：主基线版本（T-6 吸收——无条件 probe）∪ 新版本去重；
+      # 显式 host_versions 输入：完全覆盖（应急演练指定版本）。
+      - name: compose probe targets (primary unconditional — T-6 absorption + new versions)
+        id: targets
+        run: |
+          TARGETS=$(node -e '
+            const fs = require("node:fs")
+            const verdict = JSON.parse(fs.readFileSync("verdict.json", "utf8"))
+            const overrides = String(process.env.HOST_VERSIONS ?? "").trim()
+            const targets = overrides !== ""
+              ? overrides.split(",").map((v) => v.trim()).filter(Boolean)
+              : [...new Set([verdict.primary.dsh, ...verdict.newVersions])]
+            process.stdout.write(JSON.stringify(targets))
+          ')
+          echo "probe_targets=$TARGETS" >> "$GITHUB_OUTPUT"
+          echo "probe targets: $TARGETS (event=$EVENT_NAME)"
+
+  # ── probe：装 fresh 宿主树 → 四类 diff 报告工件 → issue（探测不门控）──────────
+  probe:
+    name: probe ${{ matrix.target }}
+    needs: radar
+    if: needs.radar.outputs.probe_targets != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.radar.outputs.probe_targets) }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET: ${{ matrix.target }}
+      NEW_VERSIONS: ${{ needs.radar.outputs.new_versions }}
+      FORCE_ISSUE: ${{ inputs.force_issue }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup node (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # fresh 宿主树（T-6 吸收选型 (a) 的关键形态）：npm 安装**时点解析**——主包钉精确
+      # 版本，其 range 依赖（cordis ~4.0.4 / schemastery ~3.18.4 等）解析为当下最新满足
+      # 版本 ⇒ 「主包版本不变但树漂移」在此树上是**可观测的**（registry 元数据恒 range
+      # 不可变，(b) 案不可达此面）。
+      - name: fresh host tree (npm install --prefix, resolved at install time)
+        run: |
+          npm install --prefix "$RUNNER_TEMP/host-tree" "@deepseek-ai/dsh@$TARGET"
+          echo "installed @deepseek-ai/dsh@$TARGET — scope dir sample:"
+          ls "$RUNNER_TEMP/host-tree/node_modules/@deepseek-ai" | head -20
+
+      # 四类 diff 报告（锚 miss / 白名单增删 / schema 字段 / 包表版本）——探测不门控：
+      # 差异多少都 exit 0（报告 = 决策输入，不是门控判据）。
+      - name: probe (four-category diff report — never gates)
+        run: |
+          node scripts/host-radar-probe.mjs \
+            --host-source "$RUNNER_TEMP/host-tree/node_modules/@deepseek-ai" \
+            --out "host-radar-report.json"
+
+      - name: upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-radar-report-${{ matrix.target }}
+          path: host-radar-report.json
+          if-no-files-found: error
+
+      # issue 开立判据：目标 ∈ 新版本（announce）或 totalDiffs > 0（漂移——含 T-6 形态）
+      # 或 force_issue（演练）。幂等门 = 该 target 已有 **open** 雷达 issue（标题前缀
+      # `host-radar: <target> —`）则跳过——持续漂移不刷屏；人工关闭后漂移仍在 → 下周
+      # 重新告警（告警通道重新武装）。**开 issue 即「已告警」状态推进**（radar job 的
+      # seen 读取面 = issue 列表——零第二份状态写入，P5；亦消除多 target matrix 并行
+      # 下的读-改-写竞争）。
+      - name: open issue on new version / drift (idempotent — report + artifact pointer)
+        run: |
+          IS_NEW=$(node -e 'process.stdout.write(JSON.parse(process.env.NEW_VERSIONS || "[]").includes(process.env.TARGET) ? "true" : "false")')
+          TOTAL=$(node -e 'process.stdout.write(String(JSON.parse(require("node:fs").readFileSync("host-radar-report.json", "utf8")).summary.totalDiffs))')
+          echo "target=$TARGET is_new=$IS_NEW totalDiffs=$TOTAL force=$FORCE_ISSUE"
+          if [ "$IS_NEW" != "true" ] && [ "$TOTAL" = "0" ] && [ "$FORCE_ISSUE" != "true" ]; then
+            echo "quiet run: no new version, zero diffs — no issue"
+            exit 0
+          fi
+          EXISTING=$(gh issue list --state open --json title --limit 300 --jq '.[].title | select(startswith("host-radar: '"$TARGET"' —"))' | head -1)
+          if [ -n "$EXISTING" ]; then
+            echo "open radar issue already exists for $TARGET (「$EXISTING」) — skip duplicate announcement"
+            exit 0
+          fi
+          node -e '
+            const fs = require("node:fs")
+            const report = JSON.parse(fs.readFileSync("host-radar-report.json", "utf8"))
+            const lines = [
+              `host-radar probe report（ARCH-005 R4）— target: ${process.env.TARGET}`,
+              "",
+              `baseline: ${report.baseline.id}(${report.baseline.status}) dsh=${report.baseline.dsh} dsh-*=${report.baseline.dshPackages} cordis=${report.baseline.cordis} schemastery=${report.baseline.schemastery}`,
+              `summary: totalDiffs=${report.summary.totalDiffs} (anchors=${report.summary.anchorMisses} events=+${report.summary.eventHostOnly}/-${report.summary.eventMirrorOnly} schemas=${report.summary.schemaFacesWithDiff} packages=${report.summary.packageMismatches} mismatch + ${report.summary.packageAbsent} absent)`,
+              "",
+              "完整四类 diff 报告见本 run 的 artifact（host-radar-report-" + process.env.TARGET + "）。",
+              "处置入口：升级 SOP 第 2 步（分级）——超集增量 → 刷新基线档案；语义变更 → 适配批（见 .governance/arch-005-decoupling-design.md §2-B 四维-d）。",
+            ]
+            fs.writeFileSync("issue-body.md", lines.join("\n") + "\n")
+          '
+          gh issue create \
+            --title "host-radar: ${TARGET} — totalDiffs ${TOTAL}" \
+            --body-file issue-body.md --label "host-radar" \
+            || gh issue create --title "host-radar: ${TARGET} — totalDiffs ${TOTAL}" --body-file issue-body.md
+          echo "issue opened"

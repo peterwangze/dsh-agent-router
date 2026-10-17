@@ -1,5 +1,5 @@
 {
-  "built_at": "2026-10-16T20:43:34.388390+00:00",
+  "built_at": "2026-10-17T00:18:13.797903+00:00",
   "counts": {
     "gates": {
       "failed": 0,
@@ -21,9 +21,9 @@
       "superseded": 0
     }
   },
-  "event_count": 16,
-  "last_event_hash": "6ec5971d2422a43d9055e255c145750350ceade52b5022c3b2c39a65bc1cfa5e",
-  "last_seq": 16,
+  "event_count": 17,
+  "last_event_hash": "47598998afb67db916ebaa6b2355e06a71a60d2e8d84e29f638a023bb8c27fa1",
+  "last_seq": 17,
   "schema": "authority-ledger/1",
   "state": {
     "gates": {},
