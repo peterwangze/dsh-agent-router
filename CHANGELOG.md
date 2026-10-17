@@ -3,6 +3,62 @@
 > dsh-agent-router 的版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 > 内部注解（提交号 / EV 编号）供追溯，用户可忽略。
 
+## v0.6.0 — 2026-10-17
+
+### 摘要
+
+**宿主 0.2.0-rc.2 适配 + 版本依赖解耦架构版**。核心变化一句话：**宿主 0.1.5-rc.2 → 0.2.0-rc.2 升级对本插件的四个断裂点（装载门 / RPC codec / settings 声明 / 图片直传）全部解除——插件在 0.2.0 宿主上完整加载（装载门放行 + apply 全程无 throw），图片直传自 0.1.5 起的降级随之恢复；同时把「宿主升级」从单次抢救重构为常设架构：基线档案（单一事实源）/ 协商三态徽章 / 看护矩阵（双基线 CI）/ 漂移雷达（周频 cron）/ 宿主升级 SOP（五步可重放）；支持面基线同步跳跃至宿主 0.2.0-rc.2 及以上（DEC-1 单范围基线跳跃——低于基线不再支持，宿主装载门将整层拒载）**。同版内修复 v0.5.0 发布后真机验收与用户报障四件（健康面板取数失败 / 图片条件化接管失效 / 原生多模态贴图误切 / 预设统计归属错乱）。
+
+### 新增
+
+- **🛰 版本协商三态徽章（R2）**：设置页健康面板的宿主版本徽章从单态扩展为三态——**matched**（绿：实测基线组合）/ **compatible-unknown**（黄「未实测宿主版本」：落在声明范围内但未经实测的宿主版本（patch/rc 内跳位）照常装载运行，黄态 + 一次性 `host-version-unknown` 诊断事件如实告知）/ **incompatible**（面级判定先于版本判定的不兼容）。判定单点 `hostCapabilityProfile`（判定序：面先于版本）+ RPC `capabilityProfile` 字段（codec 必填，旧服务端网关直通容忍）+ 徽章渲染期零探针；基线值单源锁定（快照权威 ↔ lib 投影值级相等，机器断言看护——单侧漂移即红）（内部注解：`6d9fead`；REVIEW-ARCH-005-R9）。
+- **📡 宿主升级雷达（R4）**：`.github/workflows/host-radar.yml` cron 周频（每周一 03:30 UTC）+ `workflow_dispatch` 应急——dist-tags **全枚举**（latest + next/alpha 等预发布 tag 并集比对，0.2.1-alpha.5 采集实证）+ **树静默重写形态吸收**（T-6：主包版本不变但嵌套树被整树重写——probe 每周期无条件对主基线新装 fresh 树跑四类 diff 报告：锚 / 白名单 / schema / 包表）+ 心跳自警（连续 ≥2 周期未成功运行即开自警 issue）；**探测不门控**（发现差异恒 exit 0——报告 = 决策输入，永不把门控 CI 打红）+ 46 断言判别套件；新版本 / 漂移 → issue（处置入口指回 SOP 第②步）（内部注解：`e01213e`；REVIEW-ARCH-005-R11）。
+- **🧮 看护矩阵化（R0 + R3）**：`HOST_BASELINE_REGISTRY` 双基线注册表（frozen 0.1.5 历史 / primary 0.2.0 当前——「恰一 primary」恒等断言）成为单一事实源，四处消费面（snapshot / host-contract / ci.yml / probe）按 marker 文本权威提取（版本副本删除，提取失败即红——fail-closed）；`DSH_BASELINE` 参数化 + 锚 / schema `since` 分代（低代宿主记可见 skip 不误红）；CI 新增 `guard-matrix` matrix job（resolve-baselines → 每条基线 pack 8 包装树 + `DSH_HOST_SOURCE` + 同门控命令——yaml 零版本字面量）；非法 `DSH_BASELINE` 从旧静默 exit 0 改判红收口（P8）（内部注解：R0 `bd17cac` / R3 `dffb553`；REVIEW-ARCH-005-R3 / R10）。
+- **🚪 冷装装载门取证程序（A1）**：`scripts/cold-install-gate.mjs`——$TEMP 沙箱（DSH_HOME 重定向）冷装 + headless `--dump-config` 启动，按宿主 dsh-app-boot 实读判据断言装载门放行（stderr 无 skip 警告 + 组合树含本插件段）；`--expect-skip` 判别红演示（临时回退单项声明 → 宿主 stderr 逐字警告 → 恢复 → 复跑绿——装载门判据非恒绿自证）+ 六类失败出口全部非零退出（P8）；判据文档 `docs/cold-install-gate.md`（内部注解：`678ff97`；REVIEW-ARCH-005-R5）。
+- **📘 宿主升级 SOP（R5）**：`docs/host-upgrade-sop.md` 五步——① 检测（雷达 / 靶子告警 / 用户线索三通道）② diff 定性（四类机器报告 + 人工比对）③ 影响分级（breaking / additive / neutral 可判定谓词）④ 适配批（四类断点的先例批索引直接复用，不重发明）⑤ 发布 + 复验（CHANGELOG 义务行 / 门控 / 冷装 / 真机复验清单）+ 基线登记 checklist 11 条 + 重装后真机复验清单 12 条（回归面只增不减）；以本链十批做 retrospective walk-through 验证（按步骤重放可得出与本链一致的动作序列）（内部注解：`5b08fea`；REVIEW-ARCH-005-R12）。
+
+### 修复
+
+- **HD-002：settings Config 声明制迁移（apply 期断点解除——A3）**：宿主 0.2.0 起 settings 面改声明制——旧的订阅式读取在 apply 期抛 `settings.register is not a function`（插件整层加载失败）。修复：`routerConfig.volatile()` + `Config` 导出（**schemastery `^3.18.1` → `^3.18.5` 硬前提**——`.volatile()` 为新版能力）+ 四订阅点 `settings/updated` → `settings/document-updated`（宿主双参形态逐字对齐）+ host-route describe 读 + 事件驱动缓存（磁盘读热路径消除）；46 断言判别套件 + 五场景全绿（老配置可读可写 / stats 跨重启 / 热同步 / 快速连续操作 / **目标值 = 默认值**）+ `scripts/a3-apply-gate.mjs`（真 boot「服务端 apply 全程无 throw」+ 正向 TCP 探针）（内部注解：`b6aeac4`；REVIEW-ARCH-005-R7）。
+- **HD-003：RPC codec `create()` 工厂迁移（apply 期断点解除——A2）**：宿主 0.2.0 的 TypertRegistry 走 `create()` 工厂契约——旧 `.schema` 静态形态抛 `strict codec has no create() factory`。修复：`strictCodec` 单点包装（38 个 codec 位全部收敛经 parameter/result 两个 helper——同一动作单路径）+ 客户端镜像字节恒等 + shadow-guard 扩展（真树实跑：0.2.0 双通道 19/19 + 旧形态负控 throw 逐字复演）（内部注解：`43e8267`；REVIEW-ARCH-005-R6）。
+- **HD-004：图片直传恢复（A4——「恢复」而非 0.2.0 回归修复）**：对话输入框「添加图片」→ 附件随消息原生直传的链路**自宿主 0.1.5 起已降级**（T-1 定性：`npm pack` 实证宿主 `createDraftImages` 在 0.1.5-rc.2 零命中——v0.5.0 时代即已缺失该面，0.2.0 适配时定性为**恢复**而非 0.2.0 回归修复）。修复：对齐宿主原生三步链 `createDrafts` → `addAttachments` → 拒绝 release（走上传得 file receipt 且 serialize 未注册 id 直接 throw——选型经审查独立证实）+ 四项缺面守卫（缺面降级不崩，FIX-048 降级语义延续）+ `isImageFile` 四类 MIME 对齐宿主；判别群 9/9 + 红演示 6 红（内部注解：`66878ea`；REVIEW-ARCH-005-R8）。
+- **FIX-046：设置页宿主面健康面板 / 预设生效诊断面板取数失败（v0.5.0 真机验收发现——面板版本恒 `?`、诊断恒空）**：根因 = RPC descriptor 两份事实源（服务端 19 / 客户端 17，差集恰为 `presetDiagnostics` + `hostFaceDiagnostics`）→ 客户端 remote 缺方法。修复：可观测化先行（客户端四态分类诊断 + 上屏）+ Rework 补齐客户端观测面两条 descriptor（单点化）+ 双侧 parity 机器守卫（修复前必红实证）；V-9 真机复验 4/4 通过（版本三值真实 / 失败行消失 / 面探针 5→18 / 诊断事件复活）（内部注解：`a75f85d` + `3869e79`）。
+- **FIX-048：图片条件化自动接管失效（用户报障）**：宿主 InputState 的 `attachmentIds` 形态演进后，v0.3.3 起的「贴图即自动切多模态包装路由」武装判定失效——贴图不再自动切换。修复：宿主 InputState `attachmentIds` 双形态跟随（内部注解：`bff7a7f`）。
+- **FIX-049：原生多模态模型会话贴图误切 twin（用户报障）**：宿主原生多模态模型会话中贴图被误切到插件包装路由 / 订阅模型——接管门控存在漂移窗口。修复：贴图时点按需能力刷新（接管门控漂移窗口消除）（内部注解：`c6028fd`）。
+- **FIX-052：预设作用域统计归属错乱（用户报障）**：多预设使用下统计归属可能错乱（切换预设 / 快速连续建会话等扰动）。修复：归属键重构为会话预设身份不变量——三扰动零漂移（内部注解：`4ac01fa`）。
+
+### 变更
+
+- **靶子候选链修复 + 事件白名单镜像对齐（R0）**：`tests/host-contract.mjs` 宿主靶子候选链增加 npm 全局树（此前对 0.2.0 全局树失明、跑在过期 `_npx` 副本上——本次升级的第一发现人是用户报障；靶子修复把「升级已发生」的本地发现能力补齐）；probe 类工具必须显式瞄准（`--host-source`），不自动发现；`lib/host-abi/events.js` 白名单镜像 19→27 项 + `since` 分代（三镜像字节恒等断言）+ pi-ai 锚（内部注解：`bd17cac`）。
+- **锚守卫体系与测试基础设施批（零用户行为面——9 任务 50 提交）**：FIX-038 CI 首跑失败修复（非适用平台断言改可见 skip + LRU 夹具 POSIX 路径语义 + `lstat` 裸抛消除）/ FIX-039 v0.5.0 发布审查台账批（注释锚）/ FIX-040（skip 可见性口径修正 + `.cmd` shim 断言平台中立化 + 锚符号名化等 14 笔）/ FIX-041~FIX-045（在仓行号锚全量改符号名 / 代码串式 + `ANCHOR_CASES` 全量接线 19 文件级条目 + 守卫自指与入表完备性机器判据）/ FIX-047（FIX-046 遗留 P3 卫生微批）——全部为注释 / 测试 / CI 面，产品行为零改动（内部注解：见「版本说明·发布范围」SHA 底账）。
+- **治理工作流升级（零用户可见变更）**：GOV-012 / GOV-013 / GOV-014 三次治理工作流升级（0.80.0→0.98.0；AGENTS.md bootstrap splice + 治理记录——按改动面机器分类计入产品/发布面，语义为治理，如实披露）（内部注解：`6ff1b07` / `1002777` / `2d63a97`）。
+
+### 破坏性变更
+
+**结论：对基线（宿主 0.2.0-rc.2）及以上 = 用户面零破坏性变更；对低于基线的旧宿主 = 支持面终止（DEC-1 单范围基线跳跃，如实披露）。**分项依据：
+
+1. **支持面 = 宿主 0.2.0-rc.2 及以上（本版唯一收窄面，DEC-1 基线跳跃）**：宿主 0.2.0 起装载门（dsh-app-boot）对插件 manifest 中全部 `@deepseek-ai/dsh*` peerDeps 逐项 `semver.satisfies(runtimeVersion, range, { includePrerelease: true })` 门控——**低于基线的旧宿主不在本版支持面**，宿主装载门将整层拒载并打印 skip 警告（`dsh: skipping profile bundle "dsh-agent-router"` + `is incompatible with dsh` / crash/data-loss 风险提示）；不承诺回退——请先把宿主升到 0.2.0-rc.2 及以上再升级本插件（README「宿主兼容性（实测基线）」支持基线集表：0.2.0 primary / 0.1.5 frozen）。
+2. **依赖声明面跳跃（记录性 + 装载门门控钥匙双语义）**：11 项 dsh 声明（peerDependencies 8 项 + dsh 包 dependencies 3 项）`^0.1.5-rc.2` → `^0.2.0-rc.2`（R1 `367b65f`，pnpm-lock 同步刷新——CI frozen-lockfile 口径）；8 项 peerDeps 另带 `peerDependenciesMeta` `optional: true`——**该标记仅影响安装器行为（pnpm 装入 profile 时不对缺失 peer 告警），不解除宿主装载门**（R1 验收：optional 不解除门控的行为级实证）。
+3. **schemastery `^3.18.1` → `^3.18.5`**（A3 `b6aeac4`）：`.volatile()` 声明制迁移的硬前提——无此能力则 settings Config 声明不可表达。
+4. **用户配置 / 存储格式零变更**：不新增、不删除、不改名任何用户配置项；统计 JSONL、凭据文件、`oauthAccounts` 结构不动（v2 统计行的降级读取边界沿用 v0.4.5 已披露口径，见下）。
+5. **行为面**：HD-002 / HD-003 为宿主契约对齐（旧宿主面在 0.2.0 已不存在）；HD-004 为能力恢复（0.1.5 起降级的链路恢复）；FIX-046 / FIX-048 / FIX-049 / FIX-052 均为缺陷修正方向。
+
+**是否算 breaking（明确结论与依据）**：第 1 项按 semver 严格口径属支持面收窄（对「运行在低于 0.2.0-rc.2 宿主上」的场景构成 breaking）；本仓 0.x 阶段口径 = **声明基线即支持面**（先例 v0.4.4「宿主面跟随披露」/ v0.5.0），基线数值随实测上移时如实披露而非承诺旧宿主兼容。故本版入账口径 = **「基线及以上用户面零破坏 + 支持面收窄已披露」**；**版本位 = MINOR（v0.6.0，2026-10-17 定版）**，见「版本说明」。
+
+### 已知行为 / 口径披露
+
+- **gate-block regime（单范围基线跳跃的已知代价）**：宿主未来 minor 跳位（如 0.3.0）不在 `^0.2.0-rc.2` 范围内 → 插件整层拒载、**插件侧三态徽章 / 诊断事件不可达**（gate-block 下插件零运行机会）——宿主启动 stderr 的 skip 警告是唯一用户侧线索，升级雷达为机器观测面（处置 = 升级插件，或宿主侧 `dsh plugin allow-version` 豁免）。patch/rc 内跳位则照常装载运行（黄态「未实测宿主版本」+ 面级降级不整页崩溃）。
+- **本地全量门控基线（Windows）**：`cmd /c "chcp 65001 >nul && node tests/run-all.mjs"` 真实基线口径下，**smoke.mjs 恰 2 条 sh 臂为本地环境性失败（Git Bash 编码/兼容——立案批实证，CI 为权威）**；本地基线形态 = 23 独立套件 22 PASS + smoke 恰 2 条 sh 臂 + `#SKIP 0`（本版实测见「版本说明·验证基线」）。
+- **升级雷达 Actions 首跑复核义务在册（R4 登记）**：`host-radar.yml` 已随本版入库，但 schedule 触发与 gh / GITHUB_TOKEN 真机行为以 Actions 首跑日志为准（首跑属 push 后动作——本节不声称雷达已在线生效）。
+- **降级兼容（延续披露）**：v0.4.5 起产生的 v2 统计行（含预设作用域 scope 行）无法被 v0.4.4 及更早版本读取，最坏情形下降级后首次统计加载会触发旧版坏行修复机制、不可逆清除这些 v2 行——如需降级请先备份统计目录（`DSH_HOME/dsh-agent-router/stats/`）；本版不改变该边界。
+- **宿主域延续披露（三条不变）**：某形态会话 GUI 预设下拉不发切换请求（DEFERRED-001）/ 带切换历史的空白会话重启后状态可能非最后预设配置 / 会话内切换模型会同步改写全局默认——详见 v0.4.5 节「已知行为 / 口径披露」。
+
+### 版本说明
+
+- **版本号**：0.5.0 → **v0.6.0**（**中位抬升 = MINOR 位**）。依据：本版含**新增能力面**——版本协商三态徽章 + 升级雷达（cron workflow）+ CI 看护矩阵 + 冷装装载门程序 + 宿主升级 SOP 文档——叠加**已披露的支持面收窄**（DEC-1 基线跳跃）；仓内成文先例「新能力面 → 中位抬升」（v0.4.2 / v0.5.0）；**发布链任务定版 MINOR 候选 0.6.0（2026-10-17），E-4 Release Reviewer 保留独立升降位建议权**。**日期口径**：本节日期 2026-10-17 = 发布候选定版与发布三件套（E-1）时点。破坏性判定见「破坏性变更」结论行。
+- **发布范围**：v0.5.0（tag `336665c`，2026-09-12）以来 main 全部提交——E-1 时点（本三件套 staged、提交落地前）实采 **117 个**（复核命令与产出：`git rev-list --count v0.5.0..HEAD`；本 E-1 提交落地后 = 118）。三分账（按提交实际改动面机器分类——仅 `.governance/` 改动的提交计治理，其余计产品/发布面）：**产品/发布面提交 69 个**——① ARCH-005 链十批 10 个（R0 `bd17cac` 靶子修复 + 基线登记 / R1 `367b65f` 声明面基线跳跃 / A1 `678ff97` 装载门取证程序 / A2 `43e8267` codec create() 工厂迁移 / A3 `b6aeac4` settings 声明制迁移 / A4 `66878ea` 图片直传恢复 / R2 `6d9fead` 协商三态 / R3 `dffb553` 看护矩阵化 / R4 `e01213e` 升级雷达 / R5 `5b08fea` 宿主升级 SOP）；①补 ARCH-005-R4F 修复批 1 个（CI 基线矩阵 job env 泄漏修复——tests/host-radar.mjs 判别套件封闭化：spawn env 剥离 DSH_HOST_SOURCE/DSH_BASELINE 宿主继承后再合并用例显式传入，套件结果与宿主 env 恒一致；先于 E 批提交落地故计入 E-1 时点实采，`d71dee2`）；② 用户可见修复 4 任务 5 个（FIX-046 `a75f85d` + `3869e79` / FIX-048 `bff7a7f` / FIX-049 `c6028fd` / FIX-052 `4ac01fa`）；③ 锚守卫/测试基础设施/注释卫生批 9 任务 50 个（FIX-038 ×4：`cc89119` / `96aca2c` / `7fd8cb5` / `e1fe160`；FIX-039 ×2：`3f3e59b` / `5d8af6e`；FIX-040 ×14：`8c99c0f` / `ec86c28` / `6bb961c` / `09c7cc7` / `207141a` / `04edcf9` / `1b5cead` / `4e5c848` / `b87df16` / `08d562a` / `ebda9d1` / `e13ca17` / `8eef8f1` / `d301859`；FIX-041 ×10：`6d77ad5` / `8f187f6` / `f2a4d37` / `bd649a3` / `7c5e510` / `524a30d` / `6c9553b` / `de9d551` / `704a331` / `0af6927`；FIX-042 ×9：`fa99686` / `0a176b5` / `61af16a` / `d58c5ca` / `246c8bb` / `14156b8` / `866f688` / `8aed89c` / `9b262ef`；FIX-043 ×6：`813c4a9` / `2d65f6e` / `cfe7756` / `2ea0bc9` / `ce8d908` / `355687a`；FIX-044 ×1：`6680d29`；FIX-045 ×2：`3e9e8a5` / `cd1441a`；FIX-047 ×2：`d1c9d95` / `06b4c85`）；④ 治理工作流升级 3 个（GOV-012 `6ff1b07` / GOV-013 `1002777` / GOV-014 `2d63a97`——AGENTS.md bootstrap splice，零用户可见变更）；**治理提交 48 个**（仅 `.governance/` 改动——ARCH-005 立案/分析/双审工件/各批审查机录与终态、FIX-046~FIX-052 任务治理入账、真机验收留证、REL-012 尾账等，不承载用户可见变更）。**结论行：69 + 48 = 117 = E-1 时点实采；本 E-1 提交自身计入本版发布面（落地后 118，改动面为文档与版本声明，不承载产品行为）；产品提交在本节语义全覆盖（ARCH-005 链按批归并到「新增 / 修复 / 变更 / 破坏性变更」各节；锚守卫批与治理升级零用户行为面、按「变更」节两行归并），治理提交不入用户面。**
+- **验证基线**：E-2 门控全量复跑实测（本版 bump 后，Windows 真实基线口径 `cmd /c "chcp 65001 >nul && node tests/run-all.mjs"`）= **23 独立套件 + 4 runner 模块：22 PASS + smoke.mjs 恰 2 条 sh 臂环境性 FAIL**（`bare-source install (sh --local) idempotent on sh` / `git clone failure reports clear error on sh`——Git Bash 编码/兼容，CI 为权威）**+ `#SKIP 0`（零 skip 回显），39.3s——与链上基线（R4/R5 批）一致零回退**；E-3 tarball 隔离冷装实测（发布验收用 packed 产物而非 link 形态）= `npm pack` 产物 **1,702,929 字节**（`dsh-agent-router-0.6.0.tgz`，33 files，shasum `579cb708`，Release 资产终验记录值）→ $TEMP 沙箱（`DSH_HOME` 重定向——唯一 env 覆写，零 HOME/USERPROFILE 赋值）以 **tarball 形态**安装（`dsh plugin --profile sandbox add <tarball>` exit 0，install-log `+ dsh-agent-router file:…dsh-agent-router-0.6.0.tgz`，全 log 零 `link:` 形态）→ `--dump-config` 启动 **exit 0 + stderr 0 字节（无任何 skip 警告标记）+ 组合树含 `# == dsh-agent-router` 段 + 沙箱内安装版本 0.6.0**——装载门放行判据全绿（A1 程序判据同形）。链上各批验收凭据随批入账（rpc-shadow-guard 真树双通道 19/19 / settings-config-migration 46 断言五场景 / a3-apply-gate 真 boot stderr 0B + TCP 探针 / host-radar 46 断言 + dry-run 双树吻合）；十批审查记录均为 APPROVED_WITH_NOTES / unresolved_blockers=0（REVIEW-ARCH-005-R3~R12）。**E-4 发布审查结论由发布链各自入账，本节不预填**；用户真机复验（SOP §7 清单 12 条——装载门 / 五场景 / 三态徽章 / 图片直传 / FIX-052·049 顺延项）由发布后真机臂承载，本节不预填。
+
 ## v0.5.0 — 2026-09-12
 
 ### 摘要
