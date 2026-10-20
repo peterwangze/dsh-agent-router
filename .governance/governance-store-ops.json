@@ -348,6 +348,25 @@
         "generation": 0,
         "backend": "md"
       }
+    },
+    "op-d724e9ec6dc3495a8d708b8a1b22592f": {
+      "schema_version": 1,
+      "command": "evidence-append",
+      "task_id": "REL-013",
+      "input_fingerprint": "03c7abbcd5bb5f8d9adfe4ccc5ebbe324c49282290103ab107691c034045a587",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-d724e9ec6dc3495a8d708b8a1b22592f",
+        "code": "ok",
+        "new_revision": 512890,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-20T20:22:41",
+      "updated_at": "2026-10-20T20:22:41"
     }
   }
 }

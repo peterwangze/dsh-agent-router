@@ -1,74 +1,72 @@
-# 会话快照 — 2026-10-20
+# 会话快照 — 2026-10-20（REL-013 v0.6.1 发布会话）
 
-- **session_id**: 20261016-ARCH005-HOST020-V060（续会话；10-20 段 = ARCH-006 基线刷新）
-- **session_date**: 2026-10-20（主链 10-16~17 完成 ARCH-005+v0.6.0 发布；10-20 宿主再升级触发 ARCH-006）
-- **agent**: zai-coding-cn-router/glm-5.3 @ ZCode/DSH + software-project-governance **v0.98.0**
+- **session_id**: 20261020-REL013-V0601
+- **session_date**: 2026-10-20（会话恢复 Scenario D → 0.6.1 发版全链 E-1~E-6）
+- **agent**: DSH Coordinator（deepseek-flash）@ DeepSeek Harness + software-project-governance **v0.98.0**
 - **工作流版本**: 0.98.0
-- **最新已发布版本**: **v0.6.0（2026-10-17，tag `3cc1501`→`74ad536` + Release 资产三重终验）**；**main 领先发布版**：`6bbf78b`（ARCH-006 基线刷新——未发版，0.6.1 patch 候选待用户决策）
+- **最新已发布版本**: **v0.6.1（2026-10-20，tag `a86883b` + GitHub Release `dsh-agent-router-0.6.1.tar.gz` 1,703,118B 三重终验全绿）**；main = `c259751`（治理收尾提交），CI run **39421679928 success**
 - **mode**: always-on × maximum-autonomy
 
 ## 当前状态
 
 - **current_stage**: 防护网与CI/CD（8/11）；G5~G7 待逐门评估
 - **trigger_mode / permission_mode**: always-on / maximum-autonomy
-- **远端**: `origin/main` = `6bbf78b`（本会话 push 链 `d71dee2`→`74ad536`→`4d7f331`→`6bbf78b`+收口批；CI 39392930138 于 `6bbf78b` 五 job 全绿）
-- **锁**: ARCH-006 收口批内释放
-- **宿主形态**: 本机已装 **0.2.1-rc.2**（ARCH-006 已吸收为已测基线 primary；装载门/apply/契约/探针全绿）
+- **锁**: REL-013 锁已释放（M7.6a；后续无在途派发）
 
 ## 本轮已完成
 
-- **ARCH-005 宿主 0.2.0 适配 + 解耦全链 + v0.6.0 发布**（10-16~17，详见 git log 与 EV-224；十批 + R4F + 发布链 E-1~E-6 + 审查链 R3~R14 全 AWN/0）
-- **ARCH-006 宿主 0.2.1-rc.2 基线档案刷新（10-20）——解耦策略首次实战验证通过**：
-  - 雷达首窗（run 39228057201，schedule 10-19 09:10 UTC）自动预警 0.2.1-rc.2 + 0.2.1-alpha.5 开 issue #1/#2——零人工介入
-  - Coordinator 检测定性：四类 diff 全 additive（锚 0 漂移 / events +1 / schemas +3 字段 / 包表 8 版本号差）；运行面双门 GREEN；全量门控唯一红 = host-contract S7 schema 超集精确检测；三态黄态桩机证
-  - Developer 刷新批 `6bbf78b`（注册表 0.2.1 primary/0.2.0 frozen + 事件白名单 28 + schema 白名单 9 字段 + 两判据语义演进）；审查 R0 AWN/0；CI 五 job 全绿（0.2.1 矩阵 job 单源派生自动新增）
-  - EV-225；雷达 issue #2 关闭（#1 alpha 保持打开）
-- **雷达首跑复核义务闭合**（R4 登记 → 本会话实证 schedule 触发 + issue 载体 + dist-tags 全枚举含预发布通道）
+- **会话恢复（Scenario D）**：D2 交叉验证 4/4 一致；full 健康摘要 90 issues（历史数据债，GOV-014 先例口径）；用户选择「执行 0.6.1 发版 + 重装真机复验结算」
+- **REL-013 v0.6.1 发布全链（E-1~E-6）**：
+  - E-1 发布三件套 `a86883b`（bump 0.6.1 / CHANGELOG v0.6.1 / README 版本面 + 基线矩阵三行）
+  - E-2 终树门控 `ALL 23 SUITES + 4 RUNNER MODULES PASSED (35.0s)`、`#SKIP 2`、exit 0（Coordinator 独立复跑）
+  - E-3 隔离冷装双形态：cold-install-gate GREEN（$TEMP 沙箱 DSH_HOME 重定向、stderr 0B）+ tarball 1,703,118B/33 files/沙箱安装 exit 0/version 0.6.1
+  - E-4 发布审查：REVIEW-REL-013-R0 **NEEDS_CHANGE（2×P1：tarball 追溯性 + README 主基线口径）** → 返工 → R1 **APPROVED_WITH_NOTES / unresolved_blockers=0**（版本位独立裁决维持 PATCH）
+  - E-5 tag `v0.6.1`（→`a86883b`）+ push main `c259751` + GitHub Release（非 draft）→ **三重终验全绿**（gh API state=uploaded/size=1703118 + 重下载 sha1/sha256 双恒等 + 公网 curl 200/逐字节）；
+  - E-6 归档触发检测 `--auto --dry-run`：0 task 满足条件 → 按规程跳过（未修改文件）；evidence 侧 45 行 would_archive 为候选面（无触发条件）
+- **治理入账**：EVD-3（E-1~E-3）/ EVD-4（返工勘正 + 终树 E-2/E-3）/ EVD-5（E-5 三重终验）/ TRIAGE-REL-013 / TRIAGE-FIX-053 / REVIEW-R0/R1 机录 / DEC-35（发布 go + PATCH + 回滚通道）/ tracker 终态 + 版本路线图 0.6.1 + 总览更新 / `docs/cold-install-gate.md` §5 ARCH-006 口径勘正
+- **发布审查发现即闭环**：P2-1（README primary 行无机器断言）→ 独立 triage **FIX-053**（P2 / machine-signal，待派发）；P3×4 全部修复或勘正
 
 ## 遗留任务
 
 | 任务 ID | 描述 | 完成百分比 | 阻塞原因 | 优先级 |
 |---------|------|-----------|----------|--------|
-| 真机复验 | 用户重装后按 SOP §7 清单 12 条复验（0.2.1-rc.2 上；FIX-052/049 顺延项在内）——装 v0.6.0 即可用（黄态），装 main/0.6.1 则绿态 | 95% | 用户 GUI 复验动作 | P0 |
-| 0.6.1 发版决策 | 基线刷新承载发版（bump+CHANGELOG+tag/Release）——用户决策 | 未启动 | 待决策 | P1 |
-| ARCH-006 P3 台账 | caretRangeContains rc 错位方向分歧 / versionTripleOf 畸形输入 fail-closed 对齐 / smoke sh 臂环境性（登记） | 未立项 | — | P3 |
+| E-7 真机复验 | 用户重装 **v0.6.1** 后按 `docs/host-upgrade-sop.md` §7 清单 12 条复验（A1-A2 / B1-B5 / C1-C2 / D1 / E1 / F1）——发布版=绿态（0.2.1-rc.2 matched） | 未启动 | 用户 GUI 动作（真机证据：截图/录屏/日志） | P0 |
+| FIX-053 | README §5 基线断言扩展：覆盖 primary（0.2.1）四值 + 恰一 primary 行在场 + 负控 | 已 triage 待派发 | — （machine-signal 排程） | P2 |
 | FIX-052 台账微批 | F-1/F-2/F-4（Reviewer 建议） | 未派发 | — | P2 |
-| 卫生批候选 | fix-031 H7 + ctx-services 注释 + 用量表列宽 + E-4 N 系列（N1/N5）+ R4F F-1 canary/F-3 键集互锁 | 未立项 | — | P3 |
-| GOV-009 / GOV-011 | 跨仓（需授权） | 已立项待派发 | 跨仓授权 | P2 |
-| G5~G7 Gate / Check 36 R2 | 阶段推进（已发 v0.6.0；RISK-003 缓解已落地可重评） | 未启动 | — | P2 |
+| ARCH-006 P3 台账 | caretRangeContains rc 错位 / versionTripleOf 畸形输入 fail-closed / smoke sh 臂环境性 | 未立项 | — | P3 |
+| 卫生批候选 | fix-031 H7 + ctx-services 注释 + 用量表列宽 + E-4 N 系列 + R4F F-1/F-3 | 未立项 | — | P3 |
+| GOV-009 / GOV-011 | 跨仓（插件仓钩子产品代码判定 / 治理工具解析侧缺陷） | 已立项待派发 | 跨仓授权（用户红线：不改当前仓之外其它仓） | P2 |
+| 治理数据债 | check-governance full 90 issues（18d/18f/18i/30/32/36/42 等，0.9x 新检查对旧格式历史行） | — | 需专用护理批决策 | P2 |
+| G5~G7 Gate / Check 36 R2 | 阶段推进（v0.6.1 已发布；RISK-003 缓解已落地可重评） | 未启动 | — | P2 |
 
 ## 待确认决策
 
 | 决策 ID | 标题 | 上下文 | 截止日期 |
 |---------|------|--------|----------|
-| — | 0.6.1 发版（候选） | 基线刷新批 `6bbf78b` 已在 main 未发版；发 0.6.1 patch（bump+CHANGELOG+tag/Release）可让重装版本=发布版+绿态徽章 | 用户决策 |
+| — | E-7 真机复验时点 | 用户重装 v0.6.1 并按 SOP §7 12 条复验（真机证据）；发布链 E-7 待该动作结算 | 用户动作 |
+| — | FIX-053 / P2·P3 微批排程 | machine-signal 候选；是否下一批优先 | 用户/下会话 |
 
 ## 活跃风险
 
 | 风险 ID | 描述 | 升级截止日期 | 负责人 |
 |---------|------|-------------|--------|
-| RISK-003 | 宿主接口演进（四层防护常设化且经 0.2.1-rc.2 实战验证；保持活跃；issue #1 alpha 通道待吸收） | 宿主 minor 跳位（0.3.x）时 gate-block regime | Coordinator |
-| RISK-001 | CI 回归保护（矩阵三基线全绿；残余真机面清单不变） | — | Coordinator |
-
-## 未完成 / 已延期
-
-- 真机复验 12 条（用户重装承载）；0.6.1 发版决策
-- ARCH-006/FIX-052/E-4/R4F 的 P2/P3 台账微批
-- 跨仓 GOV-009/011（需授权）
+| RISK-003 | 宿主接口演进（四层防护常设化；0.2.1-rc.2 已吸收为 primary；雷达 issue #1 alpha 通道保持打开） | 宿主 minor 跳位（0.3.x）时 gate-block regime | Coordinator |
+| RISK-001 | CI 回归保护（run 39421679928 success；残余 = CI 未覆盖面清单 + 锚守卫卫生） | — | Coordinator |
 
 ## 下次会话优先级
 
-1. **0.6.1 发版决策 + 重装真机复验结算**（发版则走发布链 E 缩编：bump/CHANGELOG/门控/冷装→审查→发布；随后 SOP §7 清单 12 条）
-2. ARCH-006 P3 + FIX-052 F-1/F-2/F-4 + 卫生批（可合并触碰评估）
-3. GOV-009 / GOV-011（跨仓，需授权）
-4. G5~G7 Gate 评估 / Check 36 R2 重评
+1. **E-7 用户重装 v0.6.1 + SOP §7 清单 12 条复验结算**（真机证据；发布链 E-7 收口条件）
+2. **FIX-053**（README primary 行断言；machine-signal 排程）+ P2 台账微批（FIX-052 F-1/F-2/F-4）
+3. 治理数据债护理批（18d/18f/18i/30/32/36/42；`.governance` 数据面为主）或 G5~G7 Gate 评估
+4. GOV-009 / GOV-011（跨仓，需授权）
 
 > FIX-262/REQ-108：本节派生自完成必推荐快照。
-> - **推荐快照引用**: **RECO-ARCH-006-REFRESH**（完成必推荐 ask 于收口批呈现——首选项 = 0.6.1 发版决策+重装复验）
+> - **推荐快照引用**: **RECO-REL-013**（完成必推荐 ask 于 2026-10-20 发布收口呈现——首选项 = E-7 用户重装复验 + FIX-053）
 
 ## 用户偏好设置
 
-- 交互节奏：ask 未响应时按预授权+审查终态推进并如实标注；关键决策 ask 必达；本段新增指令「刷新然后提交推送」已执行（范围克制：无发版——发版为独立决策）
-- 文件策略：danger-full-access；commit+push 自动（SSH over 443 瞬态 URL）
+- 交互节奏：关键决策 ask 必达；发版已获用户预授权（2026-10-20 会话选择）
+- 文件策略：danger-full-access；commit+push 自动（`gh auth git-credential` 单命令 helper，无持久化配置变更）
 - 角色分工：用户执行真机动作；Coordinator 机器取证
 - 安全红线延续：「不允许修改当前仓之外的其它仓代码」；真实环境三选一 + R4 逐条上报
+- 发布事实：v0.6.1 Release notes 含回滚通道（重装 v0.6.0，零数据迁移）与已知口径（雷达 issue #1 alpha 打开）
