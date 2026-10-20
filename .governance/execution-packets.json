@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "generated_at": "2026-10-16T23:26:49",
+  "generated_at": "2026-10-20T19:56:34",
   "packets": {
     "ARCH-005": {
       "task_id": "ARCH-005",
       "priority": "P0",
-      "status": "**已立案（2026-10-16）**——快速通道（纯分析零产品代码修改）；锁检查双空实证；GOV-014 升级收口后开工；本行承载分析→设计→实施→发布全链状态",
+      "status": "**已立案（2026-10-16）**——快速通道（纯分析零产品代码修改）；锁检查双空实证；GOV-014 升级收口后开工 ｜ **分析+双审+修订终态（2026-10-17）**——双产出（Analyst 契约 diff 清单 273 行 + Architect 解耦设计 346 行，方案 B 基线档案+协商三态+漂移雷达，3 案×蓝军 9 格）；审查链 **Design R0 NEEDS_CHANGE（4 P1）→ 返工 → R1 APPROVED_WITH_NOTES/0**（REVIEW-ARCH-005-R0/R1；P3-3 争议仲裁返工方胜；NEW-1：R4 雷达须吸收 T-6「树静默重写」形态——R4 批实施前一段话级修改）+ **Requirement R1 NEEDS_CHANGE（F-1 阻塞）→ 返工 → R2 APPROVED_WITH_NOTES/0**（REVIEW-ARCH-005-R1/R2；三分量覆盖矩阵全绿；N-1：「目标值=默认值」场景随 A3 批吸收、N-2 已勘正本行）；批次依赖序定版 = **R0→R1→A1→A2→A3→A4→（R2∥R3）→R4→R5**（A1 装载门收口/A2 HD-003 codec/A3 HD-002 settings/A4 HD-004 图片直传；breaking 4 全显式承载）；**待用户裁决 DEC-1~DEC-7 后实施链启动**（推荐：DEC-1 B 基线跳跃/DEC-2 加 optional meta/DEC-3 Actions cron 周频+dist-tags 枚举/DEC-4 暂缓/DEC-5 单链分批/DEC-6 保守档/DEC-7 tests 常量起步） ｜ **实施链+发布全闭环（2026-10-17）**——十批全落地（R0 `bd17cac`/R1 `367b65f`/A1 `678ff97`/A2 `43e8267`/A3 `b6aeac4`/A4 `66878ea`/R2 `6d9fead`/R3 `dffb553`/R4 `e01213e`/R5 `5b08fea` + R4F CI 矩阵 env 泄漏修复 `d71dee2`）；审查链 REVIEW-ARCH-005-R3~R14 全 APPROVED_WITH_NOTES/unresolved_blockers=0；DEC-1~7 经 DEC-33 默认采纳 → DEC-34 终态（E-5 ask 未响应——按用户预授权与 E-4 审查终态推进，如实标注非用户显式确认）；E-1~E-3 发布三件套 `74ad536`（bump 0.6.0 + CHANGELOG + README）；CI run 38991525002 三 job 全绿（基线矩阵由红转绿实证）；E-6 发布落地（Release URL/资产 `dsh-agent-router-0.6.0.tar.gz` 1,702,929B、sha1 `579cb708…`、公网 curl 200 逐字节吻合——EV-224）；**真机复验 12 条（docs/host-upgrade-sop.md §7）随用户重装承载**（FIX-052/FIX-049 复验顺延项在内）；雷达首跑复核义务（R4 登记）为发布后首个 schedule 窗口动作",
       "goal": "ARCH-005 **DSH 宿主 0.1.5-rc.2→0.2.0-rc.2 适配 + 版本依赖解耦（用户指令 2026-10-16：先完成新版本适配，进一步完成版本依赖解耦避免每次升级插件失效；插件已卸载止损，适配发布后重装）**。事实基线：①全局 npm 已装 @deepseek-ai/dsh 0.2.0-rc.2，**dsh 全系包统一版本锁定 0.2.0-rc.2**（dsh-llm/dsh-agent/dsh-session… 全家桶）；②插件声明面 `^0.1.5-rc.2` ×11（deps 3 + peers 8）——semver 0.x minor 跳位即失配，**依赖声明面整体断裂**；③cordis 4.0.1→4.0.5（宿主嵌套）、schemastery 3.18.1→3.18.4；④历史断裂族（FIX-003 宿主静默更新/FIX-028 connection.api 移除/FIX-030 apiProxy 服务移除/FIX-033 LlmAdapter 契约漂移/FIX-048 attachmentIds→imageIds）证明宿主升级=契约漂移高发面。执行 = Analyst 依赖/契约全量 diff（0.1.5-rc.2 仓内树 vs 0.2.0-rc.2 全局树，逐域逐锚）∥ Architect 解耦设计（ARCH-004 D1-D4 框架基础上版本依赖解耦：声明面策略/能力探测/契约容错/双宿主测试矩阵）→ 双审 → 实施链 → 发布承载",
       "product_success_contract": {
         "user": "TO_BE_DEFINED: impacted persona for ARCH-005 **DSH 宿主 0.1.5-rc.2→0.2.0-rc.2 适配 + 版本依赖解耦（用户指令 2026-10-16：先完成新版本适配，进一步完成版本依赖解耦避免每次升级插件失效；插件已卸载止损，适配发布后重装）**。事实基线：①全局 npm 已装 @deepseek-ai/dsh 0.2.0-rc.2，**dsh 全系包统一版本锁定 0.2.0-rc.2**（dsh-llm/dsh-agent/dsh-session… 全家桶）；②插件声明面 `^0.1.5-rc.2` ×11（deps 3 + peers 8）——semver 0.x minor 跳位即失配，**依赖声明面整体断裂**；③cordis 4.0.1→4.0.5（宿主嵌套）、schemastery 3.18.1→3.18.4；④历史断裂族（FIX-003 宿主静默更新/FIX-028 connection.api 移除/FIX-030 apiProxy 服务移除/FIX-033 LlmAdapter 契约漂移/FIX-048 attachmentIds→imageIds）证明宿主升级=契约漂移高发面。执行 = Analyst 依赖/契约全量 diff（0.1.5-rc.2 仓内树 vs 0.2.0-rc.2 全局树，逐域逐锚）∥ Architect 解耦设计（ARCH-004 D1-D4 框架基础上版本依赖解耦：声明面策略/能力探测/契约容错/双宿主测试矩阵）→ 双审 → 实施链 → 发布承载",
@@ -124,6 +124,133 @@
       ],
       "done_definition": [
         "产品代码（Developer→Code Reviewer；分析段 Analyst+Architect→双 Reviewer）",
+        "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
+        "Commit and push are completed for this single task."
+      ],
+      "source": "plan-tracker.md##当前活跃事项"
+    },
+    "REL-013": {
+      "task_id": "REL-013",
+      "priority": "P1",
+      "status": "**已立项（2026-10-20）**——TRIAGE-REL-013 机器入账（user-named；side_effect 网络发布已声明、touches_real_env=false）；待派发",
+      "goal": "REL-013 **v0.6.1 发版承载 ARCH-006 基线刷新（用户点名 2026-10-20 本会话「执行 0.6.1 发版 + 重装真机复验结算」）**。范围 = tag v0.6.0（74ad536）→ main（265acc1）3 提交（产品 1：6bbf78b 基线刷新；治理 2）；版本位 PATCH（0.6.0→0.6.1，全 additive 无破坏性 schema 变更）；发布链 E 缩编 = E-1 bump/CHANGELOG/README → E-2 门控全量 → E-3 隔离冷装 → E-4 Release Reviewer 独立审查 → E-5 tag/Release 三重终验 → E-6 归档触发检测；E-7 用户重装 + SOP §7 清单 12 条复验结算",
+      "product_success_contract": {
+        "user": "TO_BE_DEFINED: impacted persona for REL-013 **v0.6.1 发版承载 ARCH-006 基线刷新（用户点名 2026-10-20 本会话「执行 0.6.1 发版 + 重装真机复验结算」）**。范围 = tag v0.6.0（74ad536）→ main（265acc1）3 提交（产品 1：6bbf78b 基线刷新；治理 2）；版本位 PATCH（0.6.0→0.6.1，全 additive 无破坏性 schema 变更）；发布链 E 缩编 = E-1 bump/CHANGELOG/README → E-2 门控全量 → E-3 隔离冷装 → E-4 Release Reviewer 独立审查 → E-5 tag/Release 三重终验 → E-6 归档触发检测；E-7 用户重装 + SOP §7 清单 12 条复验结算",
+        "job_to_be_done": "TO_BE_DEFINED: user job and desired outcome for REL-013 **v0.6.1 发版承载 ARCH-006 基线刷新（用户点名 2026-10-20 本会话「执行 0.6.1 发版 + 重装真机复验结算」）**。范围 = tag v0.6.0（74ad536）→ main（265acc1）3 提交（产品 1：6bbf78b 基线刷新；治理 2）；版本位 PATCH（0.6.0→0.6.1，全 additive 无破坏性 schema 变更）；发布链 E 缩编 = E-1 bump/CHANGELOG/README → E-2 门控全量 → E-3 隔离冷装 → E-4 Release Reviewer 独立审查 → E-5 tag/Release 三重终验 → E-6 归档触发检测；E-7 用户重装 + SOP §7 清单 12 条复验结算",
+        "non_goals": [
+          "TO_BE_DEFINED: explicit non-goal that protects the task from scope drift.",
+          "TO_BE_DEFINED: explicit non-goal that prevents process evidence from replacing product value."
+        ],
+        "success_metrics": [
+          "TO_BE_DEFINED: user-visible outcome or acceptance scenario for this task.",
+          "TO_BE_DEFINED: runnable E2E, test, or command that proves the outcome."
+        ],
+        "competitive_baseline": "TO_BE_DEFINED: mature-team or competing-product baseline this task must match.",
+        "done_definition": [
+          "TO_BE_DEFINED: product success evidence is recorded with concrete facts.",
+          "TO_BE_DEFINED: independent review confirms the user outcome is not replaced by process completion."
+        ]
+      },
+      "acceptance_contract": {
+        "scenario": "TO_BE_DEFINED: user-visible acceptance scenario for REL-013 **v0.6.1 发版承载 ARCH-006 基线刷新（用户点名 2026-10-20 本会话「执行 0.6.1 发版 + 重装真机复验结算」）**。范围 = tag v0.6.0（74ad536）→ main（265acc1）3 提交（产品 1：6bbf78b 基线刷新；治理 2）；版本位 PATCH（0.6.0→0.6.1，全 additive 无破坏性 schema 变更）；发布链 E 缩编 = E-1 bump/CHANGELOG/README → E-2 门控全量 → E-3 隔离冷装 → E-4 Release Reviewer 独立审查 → E-5 tag/Release 三重终验 → E-6 归档触发检测；E-7 用户重装 + SOP §7 清单 12 条复验结算",
+        "command": "TO_BE_DEFINED: runnable E2E, smoke, unit, or validation command",
+        "expected_output": "TO_BE_DEFINED: concrete pass output, assertion, or observable demo result",
+        "last_run": {
+          "status": "TO_BE_DEFINED",
+          "exit_code": null,
+          "summary": "TO_BE_DEFINED: last run output summary with evidence location"
+        },
+        "demo_evidence": "TO_BE_DEFINED: demo, CLI output, or artifact proving the scenario"
+      },
+      "quality_budget": {
+        "dimensions": {
+          "performance": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable performance threshold for REL-013 **v0.6.1 发版承载 ARCH-006 基线刷新（用户点名 2026-10-20 本会话「执行 0.6.1 发版 + 重装真机复验结算」）**。范围 = tag v0.6.0（74ad536）→ main（265acc1）3 提交（产品 1：6bbf78b 基线刷新；治理 2）；版本位 PATCH（0.6.0→0.6.1，全 additive 无破坏性 schema 变更）；发布链 E 缩编 = E-1 bump/CHANGELOG/README → E-2 门控全量 → E-3 隔离冷装 → E-4 Release Reviewer 独立审查 → E-5 tag/Release 三重终验 → E-6 归档触发检测；E-7 用户重装 + SOP §7 清单 12 条复验结算",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for performance",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest performance result or planned evidence location",
+            "exception": ""
+          },
+          "reliability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable reliability threshold for REL-013 **v0.6.1 发版承载 ARCH-006 基线刷新（用户点名 2026-10-20 本会话「执行 0.6.1 发版 + 重装真机复验结算」）**。范围 = tag v0.6.0（74ad536）→ main（265acc1）3 提交（产品 1：6bbf78b 基线刷新；治理 2）；版本位 PATCH（0.6.0→0.6.1，全 additive 无破坏性 schema 变更）；发布链 E 缩编 = E-1 bump/CHANGELOG/README → E-2 门控全量 → E-3 隔离冷装 → E-4 Release Reviewer 独立审查 → E-5 tag/Release 三重终验 → E-6 归档触发检测；E-7 用户重装 + SOP §7 清单 12 条复验结算",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for reliability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest reliability result or planned evidence location",
+            "exception": ""
+          },
+          "security": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable security threshold for REL-013 **v0.6.1 发版承载 ARCH-006 基线刷新（用户点名 2026-10-20 本会话「执行 0.6.1 发版 + 重装真机复验结算」）**。范围 = tag v0.6.0（74ad536）→ main（265acc1）3 提交（产品 1：6bbf78b 基线刷新；治理 2）；版本位 PATCH（0.6.0→0.6.1，全 additive 无破坏性 schema 变更）；发布链 E 缩编 = E-1 bump/CHANGELOG/README → E-2 门控全量 → E-3 隔离冷装 → E-4 Release Reviewer 独立审查 → E-5 tag/Release 三重终验 → E-6 归档触发检测；E-7 用户重装 + SOP §7 清单 12 条复验结算",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for security",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest security result or planned evidence location",
+            "exception": ""
+          },
+          "accessibility": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable accessibility threshold for REL-013 **v0.6.1 发版承载 ARCH-006 基线刷新（用户点名 2026-10-20 本会话「执行 0.6.1 发版 + 重装真机复验结算」）**。范围 = tag v0.6.0（74ad536）→ main（265acc1）3 提交（产品 1：6bbf78b 基线刷新；治理 2）；版本位 PATCH（0.6.0→0.6.1，全 additive 无破坏性 schema 变更）；发布链 E 缩编 = E-1 bump/CHANGELOG/README → E-2 门控全量 → E-3 隔离冷装 → E-4 Release Reviewer 独立审查 → E-5 tag/Release 三重终验 → E-6 归档触发检测；E-7 用户重装 + SOP §7 清单 12 条复验结算",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for accessibility",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest accessibility result or planned evidence location",
+            "exception": ""
+          },
+          "ux": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable ux threshold for REL-013 **v0.6.1 发版承载 ARCH-006 基线刷新（用户点名 2026-10-20 本会话「执行 0.6.1 发版 + 重装真机复验结算」）**。范围 = tag v0.6.0（74ad536）→ main（265acc1）3 提交（产品 1：6bbf78b 基线刷新；治理 2）；版本位 PATCH（0.6.0→0.6.1，全 additive 无破坏性 schema 变更）；发布链 E 缩编 = E-1 bump/CHANGELOG/README → E-2 门控全量 → E-3 隔离冷装 → E-4 Release Reviewer 独立审查 → E-5 tag/Release 三重终验 → E-6 归档触发检测；E-7 用户重装 + SOP §7 清单 12 条复验结算",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for ux",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest ux result or planned evidence location",
+            "exception": ""
+          },
+          "maintainability": {
+            "threshold": "TO_BE_DEFINED: minimum acceptable maintainability threshold for REL-013 **v0.6.1 发版承载 ARCH-006 基线刷新（用户点名 2026-10-20 本会话「执行 0.6.1 发版 + 重装真机复验结算」）**。范围 = tag v0.6.0（74ad536）→ main（265acc1）3 提交（产品 1：6bbf78b 基线刷新；治理 2）；版本位 PATCH（0.6.0→0.6.1，全 additive 无破坏性 schema 变更）；发布链 E 缩编 = E-1 bump/CHANGELOG/README → E-2 门控全量 → E-3 隔离冷装 → E-4 Release Reviewer 独立审查 → E-5 tag/Release 三重终验 → E-6 归档触发检测；E-7 用户重装 + SOP §7 清单 12 条复验结算",
+            "validation": "TO_BE_DEFINED: command, check, metric source, or quality signal for maintainability",
+            "status": "TO_BE_DEFINED",
+            "evidence": "TO_BE_DEFINED: latest maintainability result or planned evidence location",
+            "exception": ""
+          }
+        }
+      },
+      "vertical_slice": {
+        "user_visible_slice": "TO_BE_DEFINED: smallest user-visible slice for REL-013 **v0.6.1 发版承载 ARCH-006 基线刷新（用户点名 2026-10-20 本会话「执行 0.6.1 发版 + 重装真机复验结算」）**。范围 = tag v0.6.0（74ad536）→ main（265acc1）3 提交（产品 1：6bbf78b 基线刷新；治理 2）；版本位 PATCH（0.6.0→0.6.1，全 additive 无破坏性 schema 变更）；发布链 E 缩编 = E-1 bump/CHANGELOG/README → E-2 门控全量 → E-3 隔离冷装 → E-4 Release Reviewer 独立审查 → E-5 tag/Release 三重终验 → E-6 归档触发检测；E-7 用户重装 + SOP §7 清单 12 条复验结算",
+        "demo_path": "TO_BE_DEFINED: runnable demo, smoke test, URL, screenshot, or command proving the slice",
+        "scope_guard": "TO_BE_DEFINED: files and behavior in scope for this slice only (产品代码（Developer→Release Reviewer）)",
+        "rollback_plan": "TO_BE_DEFINED: how to revert or disable the slice if validation fails",
+        "status": "TO_BE_DEFINED",
+        "evidence": "TO_BE_DEFINED: latest demo proof or planned evidence location"
+      },
+      "interruption_policy": {
+        "mode": "critical-only: default execute routine reversible work and record assumptions when needed",
+        "critical_triggers": [
+          "Ask the user when product intent is unclear.",
+          "Ask the user when acceptance standard or done criteria are unclear.",
+          "Ask the user before irreversible, release, risk acceptance, external dependency, or mode change decisions."
+        ],
+        "auto_execute": [
+          "Run routine execution, local validation, focused code edits, and governance record updates when scope is known and reversible.",
+          "Commit and push normal single-task changes when validation, evidence, and review gates are satisfied."
+        ],
+        "assumption_record": {
+          "assumption": "TO_BE_DEFINED: default choice used for a reversible non-critical ambiguity",
+          "basis": "TO_BE_DEFINED: fact source or repository pattern supporting the default",
+          "reversibility": "TO_BE_DEFINED: why the choice can be changed without product damage",
+          "validation": "TO_BE_DEFINED: command or demo that will verify the assumption",
+          "rollback": "TO_BE_DEFINED: how to revert if the assumption is wrong"
+        },
+        "interruption_budget": "At most one user interruption per work unit unless a new critical trigger appears."
+      },
+      "allowed_change_scope": [
+        "Only change files required by this task row: 产品代码（Developer→Release Reviewer）",
+        "Keep unrelated refactors, release version bumps, and fixture sync out of this task unless listed in the task scope."
+      ],
+      "required_evidence": [
+        "evidence-log entry with 事实依据, 目标对齐, 用户影响, and 结构化事实 JSON",
+        "validation commands with exit_code and concise output summary",
+        "independent review evidence or explicit degraded review evidence that does not claim full separation"
+      ],
+      "next_commands": [
+        "python -m unittest skills/software-project-governance/infra/tests/test_verify_workflow.py -v",
+        "python skills/software-project-governance/infra/verify_workflow.py check-governance --fail-on-issues"
+      ],
+      "done_definition": [
+        "产品代码（Developer→Release Reviewer）",
         "Code Reviewer or matching Reviewer has APPROVED the product-code change.",
         "Commit and push are completed for this single task."
       ],

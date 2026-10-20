@@ -261,6 +261,93 @@
         "tests/host-radar.mjs",
         "tests/host-version-snapshot.mjs"
       ]
+    },
+    "op-81f3ec9650684df39c6873a08564d7ed": {
+      "schema_version": 1,
+      "command": "evidence-append",
+      "task_id": "REL-013",
+      "input_fingerprint": "afc7c188f16d3f0e9fa78bae6045e71ff52191133d1cedc11eb52ddf3e8690ab",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-81f3ec9650684df39c6873a08564d7ed",
+        "code": "ok",
+        "new_revision": 507832,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-20T20:10:51",
+      "updated_at": "2026-10-20T20:10:51"
+    },
+    "op-2feeda4edde74f9d9c246031516fb6c8": {
+      "schema_version": 1,
+      "command": "locks-release",
+      "task_id": "REL-013",
+      "input_fingerprint": "1a3bc41d8fed50a92b16dd19cf17f81fb0ea979f6c64a6560ac03c1528182fe7",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-2feeda4edde74f9d9c246031516fb6c8",
+        "code": "ok",
+        "new_revision": 49,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-20T20:11:34",
+      "updated_at": "2026-10-20T20:11:34",
+      "released_files": [
+        "CHANGELOG.md",
+        "README.md",
+        "package.json"
+      ]
+    },
+    "op-a184905d9a134bf1a94a5f4f9ef6392e": {
+      "schema_version": 1,
+      "command": "evidence-append",
+      "task_id": "REL-013",
+      "input_fingerprint": "eff9d7da6a6aac1db9d6996d5b0e79a2ea76fd74f2342da3e8fea430c7624338",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-a184905d9a134bf1a94a5f4f9ef6392e",
+        "code": "ok",
+        "new_revision": 510892,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-20T20:17:37",
+      "updated_at": "2026-10-20T20:17:37"
+    },
+    "op-8231b6acd9c64dbd8829a38d44a27337": {
+      "schema_version": 1,
+      "command": "decision-append",
+      "task_id": "",
+      "input_fingerprint": "c15bc79e8e4d70f8ce0f057c50d72f0f4c5ee36962e97a05e988386c464f7993",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-8231b6acd9c64dbd8829a38d44a27337",
+        "code": "ok",
+        "new_revision": 43761,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-20T20:19:52",
+      "updated_at": "2026-10-20T20:19:52",
+      "authority": {
+        "state": "MD_ACTIVE",
+        "epoch": 0,
+        "generation": 0,
+        "backend": "md"
+      }
     }
   }
 }

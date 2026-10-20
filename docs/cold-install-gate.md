@@ -71,26 +71,30 @@ node scripts/cold-install-gate.mjs --expect-skip  # 红演示（判别力自证�
 
 ## 5. HD-001 声明面收口：三方一致核对凭据（既有断言引用）
 
-HD-001 收口要求 package.json（11 项声明）× `HOST_BASELINE` 注册表 primary 项 ×
-README 基线集表**三方版本逐项一致**。经评估，该口径**已由
-`tests/host-version-snapshot.mjs` 既有断言机器覆盖**（不重复造轮子）；核对凭据 =
-以下断言名（跑 `node tests/host-version-snapshot.mjs`，绿 = 一致）：
+HD-001 收口要求 package.json（11 项声明）× `HOST_BASELINE_REGISTRY` × README 基线集表
+**逐项一致**。**ARCH-006 语义演进**：声明面范围以**覆盖判据**容纳主基线
+（`declaredRangeCovers`，镜像宿主装载门 `semver.satisfies(..., {includePrerelease:true})`）；
+声明面逐字锚定项（`declaredEntry`，当前 0.2.0 frozen）与主基线（primary 0.2.1）分离登记。
+该口径**已由 `tests/host-version-snapshot.mjs` 既有断言机器覆盖**（不重复造轮子）；
+核对凭据 = 以下断言名（跑 `node tests/host-version-snapshot.mjs`，绿 = 一致）：
 
-| 三方边 | 断言（`ok` 行文本） | 数量 |
+| 三方边 | 断言（`ok` 行文本，ARCH-006 后口径） | 数量 |
 |---|---|---|
-| package.json → 注册表 primary | `declared dsh range ^0.2.0-rc.2 maps to the PRIMARY registry entry (frozen/absent no longer accepted — F-1 tightening)`（11 项声明收敛到同一范围且恰为主基线口径） | 1 |
-| package.json → 注册表 primary（逐项） | `peerDep @deepseek-ai/<pkg> records the PRIMARY baseline range (^0.2.0-rc.2)` | 8 |
-| package.json → 注册表 primary（逐项） | `dep @deepseek-ai/<pkg> records the PRIMARY baseline range (^0.2.0-rc.2)` | 3 |
-| 注册表 primary → README | `README records host CLI baseline dsh 0.2.0-rc.2` / `README records dsh-* baseline 0.2.0-rc.2` / `README records cordis baseline 4.0.5` / `README records schemastery baseline 3.18.5` | 4 |
+| package.json → 注册表 primary（覆盖判据） | `declared dsh range ^0.2.0-rc.2 covers the PRIMARY registry baseline 0.2.1-rc.2 (ARCH-006: range-style declaration must contain the primary baseline …)` | 1 |
+| package.json → 注册表（逐项） | `peerDep @deepseek-ai/<pkg> records the common declared range (^0.2.0-rc.2) covering PRIMARY 0.2.1-rc.2 (ARCH-006 coverage semantics — split/absent red)` | 8 |
+| package.json → 注册表（逐项） | `dep @deepseek-ai/<pkg> records the common declared range (^0.2.0-rc.2) covering PRIMARY 0.2.1-rc.2 (ARCH-006 coverage semantics — split/absent red)` | 3 |
+| 注册表 declaredEntry → README | `README records host CLI baseline dsh 0.2.0-rc.2` / `README records dsh-* baseline 0.2.0-rc.2` / `README records cordis baseline 4.0.5` / `README records schemastery baseline 3.18.5`（= declaredEntry 四值在场；v0.6.1 起 README 基线集表同步列 0.2.1 primary / 0.2.0 frozen / 0.1.5 frozen 三行） | 4 |
 
-三方由传递性闭合（pkg ↔ 注册表逐项相等；注册表 ↔ README 四值在场）。A1 批核对
-证据：2026-10-17 跑 `node tests/host-version-snapshot.mjs` = **29/29 绿，exit 0**。
+三方由传递性闭合（pkg ↔ 声明面锚定项逐项相等；锚定项 ↔ README 四值在场；覆盖判据保证
+primary 在声明范围内）。A1 批核对证据：2026-10-17 跑 `node tests/host-version-snapshot.mjs`
+= **29/29 绿，exit 0**（ARCH-006 后断言数更增，以当次运行输出为准）。
 
-**覆盖面如实声明（边界）**：README 侧断言为**文件级包含判定**（主基线四值在
-README 全文在场），未解析基线集表行结构——即「值写错位置但别处出现」不会被该
-断言抓出。11 项声明侧为**逐项严格相等**（分裂 / 回退 frozen / 假版本即红，R1 批
-F-1 收紧）。若后续需要表行级锁定，属 R3（看护矩阵批）判据增强面，不在本批造
-第二套核对。
+**覆盖面如实声明（边界）**：README 侧断言为**文件级包含判定**（`declaredEntry` 四值在
+README 全文在场），未解析基线集表行结构——即「值写错位置但别处出现」不会被该断言抓出；
+**primary 行（0.2.1）在 README 的在场性当前无机器断言**（REL-013 E-4 P2-1，独立任务
+跟进扩断言）。11 项声明侧为**覆盖判据 + 逐项收敛**（ARCH-006：范围不覆盖 primary /
+分裂 / 假版本即红——F-1 收紧意图保持）。若后续需要表行级锁定，属看护矩阵判据增强面，
+不在本批造第二套核对。
 
 ## 6. 判别红演示（判据非恒绿的自证）
 
