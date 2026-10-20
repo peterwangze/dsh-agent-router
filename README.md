@@ -4,7 +4,7 @@
 >
 > DeepSeek Harness（DSH）多模型路由插件：为任意 DSH 主 agent 挂载专业 agent 目录——**Agent 预设与 subagent 默认模型**、**专业 Agent 配置与自动路由**、**ChatGPT 订阅登录 + 主模型调用**三大主要功能，按任务自动路由到带独立模型的视觉、图片生成、翻译、语音、子代理等专业 agent，扩展主 agent 的能力边界。
 
-[![version](https://img.shields.io/badge/version-v0.6.0-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
+[![version](https://img.shields.io/badge/version-v0.6.1-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## 项目目标
@@ -27,7 +27,7 @@
 
 ### 方式一（推荐）：dsh plugin 标准管理
 
-前置要求：DSH ≥ **0.2.0-rc.2**（当前受支持与实测主基线；历史 0.1.5 系为冻结基线，见下「宿主兼容性」支持基线集表；`dsh plugin` 命令自 0.1.1-rc.2 起提供）+ [pnpm](https://pnpm.io/)（宿主插件管理以 pnpm 拉起安装）。
+前置要求：DSH ≥ **0.2.0-rc.2**（声明面支持范围下限；实测主基线 `0.2.1-rc.2`，见下「宿主兼容性」支持基线集表；`dsh plugin` 命令自 0.1.1-rc.2 起提供）+ [pnpm](https://pnpm.io/)（宿主插件管理以 pnpm 拉起安装）。
 
 **在线安装**（插件未发布 npm registry，走 GitHub git 源）：
 
@@ -38,19 +38,19 @@
 
 **离线安装**（发行包为 npm pack 形态——解压出 `package/` 目录）：
 
-1. 下载发行包：[dsh-agent-router-0.6.0.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.6.0/dsh-agent-router-0.6.0.tar.gz)
+1. 下载发行包：[dsh-agent-router-0.6.1.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.6.1/dsh-agent-router-0.6.1.tar.gz)
 2. 解压并进入包目录：
 
 ```powershell
 # Windows（PowerShell）
-tar -xzf dsh-agent-router-0.6.0.tar.gz
+tar -xzf dsh-agent-router-0.6.1.tar.gz
 cd package
 dsh plugin --profile web add file:./
 ```
 
 ```sh
 # macOS / Linux
-tar -xzf dsh-agent-router-0.6.0.tar.gz
+tar -xzf dsh-agent-router-0.6.1.tar.gz
 cd package
 npx @deepseek-ai/dsh plugin --profile web add file:./
 ```
@@ -79,23 +79,23 @@ npx @deepseek-ai/dsh plugin --profile web add file:./
 
 安装脚本自动完成：克隆源码 → 链接到 `~/.dsh/profiles/node_modules/` → 在 `profiles/web/cordis.patch.yml` 写入宿主行（幂等，可重复执行）。完成后**重启 DSH** 即可。
 
-固定版本：把命令中的 `main` 换成版本号，如 `v0.6.0`。
+固定版本：把命令中的 `main` 换成版本号，如 `v0.6.1`。
 
 #### 离线安装
 
-1. 下载发行包：[dsh-agent-router-0.6.0.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.6.0/dsh-agent-router-0.6.0.tar.gz)
+1. 下载发行包：[dsh-agent-router-0.6.1.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.6.1/dsh-agent-router-0.6.1.tar.gz)
 2. 解压并进入包目录（npm pack 形态，目录名为 `package`）：
 
 ```powershell
 # Windows
-tar -xzf dsh-agent-router-0.6.0.tar.gz
+tar -xzf dsh-agent-router-0.6.1.tar.gz
 cd package
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -LocalPath .
 ```
 
 ```sh
 # macOS / Linux
-tar -xzf dsh-agent-router-0.6.0.tar.gz
+tar -xzf dsh-agent-router-0.6.1.tar.gz
 cd package
 ./install.sh --local .
 ```
@@ -127,7 +127,7 @@ cd package
 ```text
 请帮我在 DeepSeek Harness 上安装「dsh-agent-router」多模型路由插件：
 
-1. 确认前置条件：DeepSeek Harness ≥ 0.2.0-rc.2（当前受支持与实测主基线）、本机已安装 pnpm。
+1. 确认前置条件：DeepSeek Harness ≥ 0.2.0-rc.2（声明面支持范围下限；实测主基线 `0.2.1-rc.2`）、本机已安装 pnpm。
 2. 在终端执行标准管理命令（npx 形态最通用，Windows / macOS / Linux 一致）：
    npx @deepseek-ai/dsh plugin --profile web add github:peterwangze/dsh-agent-router
 3. 等待命令执行完成，确认输出无报错（pnpm 会自动安装插件依赖）。
@@ -141,12 +141,13 @@ cd package
 
 | 基线 | 状态 | dsh CLI | 全系 `dsh-*` | cordis | schemastery | 实测时点 |
 |------|------|---------|--------------|--------|-------------|----------|
-| 0.2.0 | **primary（当前）** | `0.2.0-rc.2` | `0.2.0-rc.2` | `4.0.5` | `3.18.5` | 2026-10-17，npm 全局树实读 |
+| 0.2.1 | **primary（当前）** | `0.2.1-rc.2` | `0.2.1-rc.2` | `4.0.5` | `3.18.5` | 2026-10-20，npm 全局树实读 |
+| 0.2.0 | frozen（历史） | `0.2.0-rc.2` | `0.2.0-rc.2` | `4.0.5` | `3.18.5` | 2026-10-17，npm 全局树实读 |
 | 0.1.5 | frozen（历史） | `0.1.5-rc.1` | `0.1.5-rc.2` | `4.0.2` | `3.18.2` | 2026-09-12 实读 |
 
-- `package.json` 的 `peerDependencies`（8 项）与 dsh 包 `dependencies` 版本范围（`^0.2.0-rc.2`，主基线口径）为**记录性声明**——插件自身运行不依赖 semver enforcement 判定宿主；但自宿主 0.2.0 起，**声明范围同时是宿主装载门的门控钥匙**：`dsh-app-boot` 对插件 manifest 中全部 `@deepseek-ai/dsh*` peerDeps 逐项 `semver.satisfies(runtimeVersion, range, {includePrerelease:true})`，不满足且无豁免（`dsh plugin allow-version`）即**整层拒载**——宿主启动 stderr 打印 `skipping profile bundle "dsh-agent-router"` 与兼容性警告（crash/data-loss 风险提示）。8 项 peerDeps 另带 `peerDependenciesMeta` `optional: true`：该标记**仅影响安装器行为**（pnpm 装入 profile 时不对缺失 peer 告警），**不解除宿主装载门**。
+- `package.json` 的 `peerDependencies`（8 项）与 dsh 包 `dependencies` 版本范围（`^0.2.0-rc.2`，**声明面锚定口径**——锚定 0.2.0 frozen 档案项、以覆盖判据容纳主基线 `0.2.1-rc.2`）为**记录性声明**——插件自身运行不依赖 semver enforcement 判定宿主；但自宿主 0.2.0 起，**声明范围同时是宿主装载门的门控钥匙**：`dsh-app-boot` 对插件 manifest 中全部 `@deepseek-ai/dsh*` peerDeps 逐项 `semver.satisfies(runtimeVersion, range, {includePrerelease:true})`，不满足且无豁免（`dsh plugin allow-version`）即**整层拒载**——宿主启动 stderr 打印 `skipping profile bundle "dsh-agent-router"` 与兼容性警告（crash/data-loss 风险提示）。8 项 peerDeps 另带 `peerDependenciesMeta` `optional: true`：该标记**仅影响安装器行为**（pnpm 装入 profile 时不对缺失 peer 告警），**不解除宿主装载门**。
 - **两种版本漂移形态**（用户可观察的行为差异）：① **minor 跳位拒载**——宿主 minor 升级（如 0.3.0）不在 `^0.2.0-rc.2` 范围内 → 插件整层不加载，宿主启动 stderr 的 skip 警告是唯一用户侧线索（单范围基线跳跃策略的已知代价，处置 = 升级插件）；② **patch/rc 内跳位可运行**——落在声明范围内但未经实测的宿主版本（如 `0.2.0` final、`0.2.1-alpha.x`）照常装载运行，属「未实测宿主版本」：若个别宿主面不兼容，面级降级不整页崩溃，健康面板可见各宿主面实时状态。
-- 兼容性判定的权威防护 = `tests/host-version-snapshot.mjs` 版本快照测试 + `tests/host-contract.mjs` 宿主面契约静态看护（声明面 / 契约形状 / 消费点，见「维护与开发」）+ 本矩阵：声明面与主基线不一致（版本范围漂移 / 回退历史基线 / 注入清单引用已消亡包）时全量测试网即红。
+- 兼容性判定的权威防护 = `tests/host-version-snapshot.mjs` 版本快照测试 + `tests/host-contract.mjs` 宿主面契约静态看护（声明面 / 契约形状 / 消费点，见「维护与开发」）+ 本矩阵：声明面**不再覆盖主基线**（版本范围漂移 / 回退历史基线 / 注入清单引用已消亡包）时全量测试网即红。
 - 宿主升级后请同步刷新基线：更新 package.json 版本范围、本矩阵数值与快照测试中的基线常量（测试文件头注释含刷新步骤）。
 
 ## 使用指南
@@ -258,7 +259,7 @@ node tests/host-contract.mjs    # 只跑宿主面契约静态看护（npm run te
 - **能覆盖**：全部可在 Node 内静态/桩驱动执行的套件（契约快照、声明面比对、消费点守卫、事件白名单、域行为判别）——与本地同一条门控命令（启动行区分独立套件与 runner 模块）。
 - **在 ubuntu-latest 上会 skip 的断言**（打印可见 skip、不失败）：① `host-contract.mjs` 的 S3 宿主侧包表半边与 S7 增强靶子组（CI 无宿主 checkout）——其余 **71 条**静态断言照跑（宿主不可达侧；宿主可达侧 **82 条**——FIX-037 R1 计数更新），宿主靶子不可达记 `--  skipped`（靶子可达时另打印关键包版本一致性判据，≠ `HOST_BASELINE` → 告警 + skip）；② `smoke.mjs` 的 install.ps1 解析（探测 `powershell`/`pwsh`，两者皆无则打印 skip 原因；Ubuntu 运行器预期自带 PowerShell 7，该平台事实以 CI 首跑日志确认）；③ `install-entry.mjs` 的在线/离线命令臂按可用宿主择一（ubuntu 走 `sh`+`curl` 与 `pwsh` 臂）。**FIX-038 平台适用性判据（非适用平台记可见 skip，禁静默通过）**：`install-entry.mjs` 的 3 条 `-File` 离线臂（`offline install (-File) succeeds/idempotent`、`bare-source install (-File) …`、`real node_modules dir left untouched (-File)`——`install.ps1` 自述 Windows 专属入口，离线臂依赖 junction / robocopy / 反斜杠子路径）**仅在 win32 执行**（**FIX-040 P2-2 起 `smoke.mjs` 的 `cli invocation cmd shim` 已平台中立化**：`resolveCliInvocation` 增可选平台判据注入参（默认实机、行为零变化），断言显式传 `'win32'` 驱动 ⇒ 全平台恒跑，并新增注入 `'linux'` 的反向旁路臂）；POSIX 对偶覆盖按臂分列（仅陈述实际成立范围）——§6（`-File` 离线安装）与 §6c（裸源码依赖链接）在 `sh` 可用时由 `install.sh` 臂承担（断言未删除），**§6d（自带真实 `node_modules` 不得改动）无 POSIX 对照臂**（`install.sh` 的「源码自带依赖目录：…（跳过依赖链接）」分支与 `LINKED=0` 拷贝回退护栏同载该数据保护语义却零判别测试 = 已知覆盖缺口，台账候选；**锚形 = 符号名 / 代码串 + 文件**——FIX-040 起不再写死行号）。**这些 skip 行不再只在套件内可见**：`run-all` 汇总回显 `#SKIP | <原行>` 与 `#SKIP n (套件×条数)`（FIX-037 ①）——CI 日志可直接判定被跳过的断言；单宿主探针失败同样打印 `skip … (probe failed: …)`，该臂不静默消失。**预期内的 skip（非缺陷，FIX-037 P2-3/R1 口径 + FIX-038 扩表 + FIX-040 收口，按环境分列）**：**ubuntu 正常态 = `#SKIP 6 (host-contract.mjs×2, smoke.mjs×4)`（预期值——修复后首跑前尚未实测，以首跑日志逐行复核）**——host-contract 在 CI 必然无宿主（无 `DSH_HOST_SOURCE`/`DSH_HOST_PACKAGES`，Linux 无 `LOCALAPPDATA`）⇒ S3 半边 + S7 组 2 条，smoke 4 条 = `install.ps1 parses (powershell)` 探针臂 1 条（5.1 仅 Windows 存在，**同一断言由 pwsh 臂完整执行**，≠ 断言被跳过）+ FIX-038 遗留 `-File` 离线臂 3 条；**属 Windows 侧、不计入 ubuntu 的 skip 来源**：`POSIX online checks`（触发条件 = `sh`/`curl` 均不可探；ubuntu 运行器自带 sh+curl ⇒ 该臂照跑不跳）、win32 侧 `0o600` 可见 skip（ubuntu 照常执行）、`.cmd` shim（FIX-040 P2-2 起全平台恒跑）；**Windows 本地正常态 = `#SKIP 2 (smoke.mjs×2)`（本地实测；FIX-040 起由 `#SKIP 1` 升为 2 = install-entry 的 `POSIX online checks` 1 条 + smoke 的 `0o600` 可见 skip 1 条，后者此前为 `if (!win32)` 静默消失，属 FIX-037 ① 同族收口）**。判据取**相对基线增量**：出现新增 skip 来源或断言数下降才需研判（绝对值随平台组合变化，不作为告警依据）。
 - **必须 Windows 本地跑（CI 不覆盖）**：Windows PowerShell 5.1 解析/执行臂（`install.ps1` + `install-entry` 的 5.1 online/offline 命令）、**目录 link 语义的 win32 半边**（win32 junction——`install.ps1` 的 `-File` 离线安装臂按此判据平台门控：非 win32 记可见 skip，不再以失败/崩溃形态出现；**按臂分列，FIX-040 如实化**：其 POSIX 半边（symlink）实为 CI 已覆盖——`sh` 可用时 `install-entry` 的 `sh --local` 臂在 ubuntu 首跑日志中已执行，run 34696694673 的失败点在其后 §6c 的 `lstatSync` 裸抛；CI 真正不覆盖的是 win32 junction 半边与 §6d 对偶臂）、宿主运行时装配与 fiber inject 面就绪时序、GUI 渲染与设置页交互、OAuth 真实端点登录流、CLI 子代理真机执行。这些仍由真机手工验收 + 设置页诊断面板（`router/hostFaceDiagnostics`：宿主版本 + 面健康 + 诊断环形）兜底。对称面：smoke 的 POSIX 文件权限断言（0o600）仅在非 win32 平台执行（**FIX-040 起 win32 侧为可见 skip，非静默消失**）。
-- 宿主依赖在 CI 的解析：`lib/` 不直接 import 任何 `peerDependencies` 包（宿主面经 cordis 服务注入），直接依赖的 dsh 包与 cordis / schemastery 均在公开 registry 可解析（主基线 `0.2.0-rc.2`）——**「公开 registry 可解析」属远端事实，待 CI 首跑确认**（本地等价命令已实证），故冻结锁文件安装即可跑通全量网。首跑属 push 后动作。
+- 宿主依赖在 CI 的解析：`lib/` 不直接 import 任何 `peerDependencies` 包（宿主面经 cordis 服务注入），直接依赖的 dsh 包与 cordis / schemastery 均在公开 registry 可解析（主基线 `0.2.1-rc.2`）——**「公开 registry 可解析」属远端事实，待 CI 首跑确认**（本地等价命令已实证），故冻结锁文件安装即可跑通全量网。首跑属 push 后动作。
 
 ### 隔离 worktree 验证规矩（EV-178 事故教训）
 

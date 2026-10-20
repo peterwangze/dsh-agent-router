@@ -3,6 +3,37 @@
 > dsh-agent-router 的版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 > 内部注解（提交号 / EV 编号）供追溯，用户可忽略。
 
+## v0.6.1 — 2026-10-20
+
+### 摘要
+
+**宿主 0.2.1-rc.2 基线档案刷新版（PATCH）**。核心变化一句话：**把宿主 0.2.1-rc.2 从「未实测宿主版本」吸收为已测主基线——基线档案追加 0.2.1 primary（原 0.2.0 降档 frozen，恰一 primary 断言保持），转发事件白名单 27→28、`llm.listConfigurableProviders` schema 白名单 6→9 字段随宿主超集增量对齐；同步演进声明面覆盖判据与 patch 感知分代谓词，使声明面与基线代际继续被机器看护。插件声明面 `^0.2.0-rc.2` 与插件消费面均零改动——本版全 additive，无破坏性变更、无新增功能**。
+
+### 变更
+
+- **🛰 宿主基线档案刷新（ARCH-006）**：`HOST_BASELINE_REGISTRY` 追加 `0.2.1`（status=primary），`0.2.0` 由 primary 降档 frozen（状态词表仅 frozen / primary，不臆造新状态）；「恰一 primary」不变式断言保持。五个消费面单源跟随：`tests/host-contract.mjs` 的 marker 提取断言 / `.github/workflows/ci.yml` 的 `resolve-baselines` 派生三基线矩阵（yaml 零版本字面量，自动新增 0.2.1 矩阵 job）/ `tests/host-radar.mjs` probe 的 `totalDiffs=0`（包表 10/10 match）/ `lib/host-abi/version.js` 投影与快照权威的值级锁定（`tests/host-abi-health.mjs` R2-a 解析快照权威 ↔ import 投影逐项 canonical 比较，覆盖整个数组含新条目）/ `tests/host-version-snapshot.mjs` 三基线档案（内部注解：`6bbf78b`；CI run `39392930138` 五 job 全绿；REVIEW-ARCH-006-R0）。
+- **📡 转发事件白名单 27 → 28**：追加 `plugin-market/changed`（`since` 分代 = 0.2.1）；`lib/host-abi/events.js` / `lib/client.js` / `tests/served-client.js` 三镜像逐字节恒等同步；0.2.0 / 0.1.5 代基线下该事件记可见 skip、不误红（分代复跑：`DSH_BASELINE=0.2.0` → 126 断言 + 4 可见 skip 零红 / `0.1.5` → 123 断言 + 6 可见 skip 零红）（内部注解：`6bbf78b`；REVIEW-ARCH-006-R0）。
+- **🧾 `llm.listConfigurableProviders` schema 白名单 6 → 9 字段**：宿主 0.2.1 结果的超集增量 `defaultBaseURL` / `baseURLEnv` / `nativeAuth` 入白名单（字段序与宿主 `dsh-api-remotes` 源码声明逐序恒等）；插件消费面仍只用旧 6 字段子集（`lib/` 对新三字段零消费）——消费代码零改动（内部注解：`6bbf78b`；REVIEW-ARCH-006-R0）。
+- **🧭 两项判据语义演进（看护强度不降）**：① 声明面判据由「逐字相等」演进为**覆盖判据 `declaredRangeCovers`**——镜像宿主装载门 `semver.satisfies(runtimeVersion, range, { includePrerelease: true })` 一手锚（宿主 `dsh-app-boot` 源码），使 `^0.2.0-rc.2` 声明面覆盖新主基线 `0.2.1-rc.2`；防回退负控全红实证（回退 `^0.1.5-rc.2` / `^0.1.0-rc.1` / 假 `^9.9.9` / 越顶 `^0.3.0-rc.1` 判红；分裂 / 缺失范围判红；未注册锚定值 README 判据组红；审查员独立求值 6 例符合预期），声明面零改动（`^0.2.0-rc.2` ×11）。② 分代谓词由 `minorOf` 演进为 **`versionTripleOf`（patch 感知）**——`since=0.2.1` 对 `target=0.2.0` 的错向判定修正（旧谓词把 0.2.0 树假红）；既有全部 8 个（since × target）组合新旧谓词零分歧穷举核验，0.2.0 / 0.1.5 分代复跑零红（内部注解：`6bbf78b`；REVIEW-ARCH-006-R0）。
+- **📘 README 版本面与宿主兼容性矩阵同步**：README 版本面（badge / 离线发行包 URL 与 tar 名 / 固定版本示例）0.6.0 → 0.6.1；「宿主兼容性（实测基线）」支持基线集表刷新为 **0.2.1 primary（当前，2026-10-20 npm 全局树实读）/ 0.2.0 frozen（2026-10-17 实读）/ 0.1.5 frozen（历史，2026-09-12 实读）**——三行逐条对应机器档案注册表；安装前置提示同步改为「DSH ≥ 0.2.0-rc.2（声明面支持范围下限；实测主基线 `0.2.1-rc.2`）」。§5 README 判据组要求的声明面锚定项（0.2.0 frozen 四值）仍在位（内部注解：本 E-1 提交）。
+- **🛡 定性与处置路径（雷达自动化）**：宿主 0.2.1-rc.2 由升级雷达首窗（run `39228057201`）自动预警（issue #1 alpha 通道 / issue #2 新版本）发现；四类 diff（锚 / 白名单 / schema / 包表）全部 additive、锚 0 漂移 → 按宿主升级 SOP ③「additive 路径」处置（非抢救）；吸收后 issue #2 已关闭，issue #1（alpha 通道）保持打开。ARCH-006 批验收 = `tests/host-contract.mjs` 129 断言绿（原 S7 红转绿）+ probe `totalDiffs=0` + cold-install-gate / a3-apply-gate 双门 GREEN + 三态桩 `matched/0.2.1` 机证（含 `0.2.1-alpha.5` → compatible-unknown / degraded → incompatible 旁路）（内部注解：`6bbf78b` / `265acc1`；REVIEW-ARCH-006-R0 为 APPROVED_WITH_NOTES / unresolved_blockers=0，P3×3 入台账非阻塞）。
+
+### 破坏性变更
+
+**结论：无破坏性变更（全 additive）。** 分项依据：① 基线档案为**数据面追加 + 状态降档**（0.2.1 入册 primary / 0.2.0 转 frozen），不改变插件运行行为；支持面仍由声明面 `^0.2.0-rc.2` 覆盖（0.2.1-rc.2 与 0.2.0-rc.2 均在该范围内，装载门双 GREEN 实证），未收窄。② 事件白名单 27→28、schema 白名单 6→9 均为**宿主超集对齐**；新增事件 / 字段对旧代宿主按分代记可见 skip，插件消费面零改动。③ 两项判据变化仅在看护 / 测试语义层（覆盖判据更贴合宿主装载门；分代谓词修正 patch 位误判），不改变插件对用户暴露的接口与行为。④ **用户配置 / 存储格式零变更**：不新增、不删除、不改名任何用户配置项；统计 JSONL、凭据文件、`oauthAccounts` 结构不动。⑤ 无新增能力面——本版不含新功能与用户可见行为变更。
+
+### 已知行为 / 口径披露
+
+- **升级雷达 issue #1（alpha 通道）保持打开**：宿主 0.2.1 的 alpha / next 预发布通道（如 `0.2.1-alpha.5`）仍由周频雷达持续观测——落在声明范围内但未实测的宿主版本继续以 `compatible-unknown` 黄态 + 一次性 `host-version-unknown` 诊断事件如实告知；本版**不吸收 alpha 通道**，待后续版本按宿主升级 SOP ③ 定性后处置。
+- **本版不含新功能**：v0.6.1 为 ARCH-006 基线刷新的发布承载，仅含基线档案 / 白名单 / 看护判据变更与版本声明；用户可见功能面与 v0.6.0 一致。
+- **审查台账 P3×3（非阻塞，随 ARCH-006 入册）**：① `caretRangeContains` 双侧剥离 rc 后缀——同三元组 rc 错位时与真实 `satisfies` 存在方向分歧（当前数据不可达）；② `versionTripleOf` 对畸形输入回落 `[0,0,0]`（恒适用、非 fail-closed；被守卫路径不可达，建议后续卫生批对齐 F-3 风格）；③ 本机 smoke 2 条 sh 臂历史性失败为环境性（批前已存在，归因实验证实；CI 为权威）。
+
+### 版本说明
+
+- **版本号**：0.6.0 → **v0.6.1**（**PATCH 位**）。依据：本版为 ARCH-006 基线档案刷新的发布承载——全部为 additive 数据 / 白名单 / 看护判据变更与版本声明，无新增能力面、无破坏性变更（见「破坏性变更」结论）；按语义化版本取 PATCH 位。**发布链任务定版 PATCH 候选 0.6.1（2026-10-20），E-4 Release Reviewer 保留独立升降位建议权**。**日期口径**：本节日期 2026-10-20 = 发布候选定版与发布三件套（E-1）时点。
+- **发布范围**：v0.6.0（tag `74ad536`，2026-10-17）以来 main 全部提交——E-1 时点实采 **3 个**（复核命令与产出：`git rev-list --count v0.6.0..HEAD`）：**产品 / 发布面提交 1 个** = ARCH-006 基线刷新 `6bbf78b`（`lib/**` 3 文件 + `tests/**` 5 文件，全 additive）；**治理提交 2 个** = `4d7f331`（ARCH-005 收口：v0.6.0 发布终态 / EV-224 / REVIEW-ARCH-005-R14 机录等）/ `265acc1`（ARCH-006 收口：EV-225 / REVIEW-ARCH-006-R0 机录 / 雷达 issue #2 关闭等）——两者仅 `.governance/**` 改动，不承载用户可见变更，不入用户面。**结论行：产品 1 + 治理 2 = 3 = E-1 时点实采；本 E-1 提交落地后 = 4（E-1 提交自身计入本版发布面，改动面为版本声明与文档，不承载产品行为）；产品提交在「变更」节语义全覆盖。**
+- **验证基线**：E-1 时点本地全量门控复跑实测（Windows 真实基线口径 `cmd /c "chcp 65001>nul && node tests/run-all.mjs"`）= **ALL 23 SUITES + 4 RUNNER MODULES (via smoke.mjs) PASSED，`#SKIP 2 (smoke.mjs×2)`，exit 0**；skip 明细 = win32 `0o600` 权限位不可判定 1 条 + 无 sh / curl 时 POSIX 在线臂 1 条（**历史上 smoke 恰 2 条 sh 臂环境性失败本时点未复现，如实记录**）。ARCH-006 批自身验收凭据（`tests/host-contract.mjs` 129 断言绿 / probe `totalDiffs=0` / 双门 GREEN / 三态 `matched/0.2.1` 桩机证 / CI run `39392930138` 五 job 全绿）随批入账；E-2 发布门控复跑（Coordinator 独立复跑，**发布候选树（本提交定稿前，文档面定稿不改动被测代码/配置）**，同一命令）= **ALL 23 SUITES + 4 RUNNER MODULES (via smoke.mjs) PASSED，`#SKIP 2 (smoke.mjs×2)`，exit 0**（耗时随环境浮动，逐次实测记录见治理证据）（与 E-1 一致）；E-3 隔离环境安装冒烟（环境变量重定向至临时目录）双形态通过：① `scripts/cold-install-gate.mjs` GREEN（link 形态冷装 + headless `--dump-config`，宿主 stderr 0 字节、组合树含 `# == dsh-agent-router`）；② `npm pack` tarball 形态（33 files）在 $TEMP 沙箱（`DSH_HOME` 重定向）安装 exit 0（安装版本 0.6.1、零 `link:` 形态）→ `dsh --profile sandbox --dump-config` exit 0 + stderr 0 字节 + 组合树含插件段；**发布资产终验（尺寸 / sha256 / 公网下载）以 E-5 机录为准**。**E-4 发布审查结论不在本节预填**（由 `review-record` 机录承载）。
+
 ## v0.6.0 — 2026-10-17
 
 ### 摘要
