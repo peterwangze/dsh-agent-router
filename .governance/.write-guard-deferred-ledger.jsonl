@@ -23,3 +23,11 @@
 {"schema_version": 1, "kind": "observation_face", "date": "2026-10-17", "skip_kind": "vacuum", "reason": "检测编排运行、零命中（rows_judged=1）——真空面：无观测义务", "rows_judged": 1, "hits": 0, "fired": 0, "detector_errors": 0}
 {"schema_version": 1, "kind": "observation_face", "date": "2026-10-17", "skip_kind": "vacuum", "reason": "检测编排运行、零命中（rows_judged=3）——真空面：无观测义务", "rows_judged": 3, "hits": 0, "fired": 0, "detector_errors": 0}
 {"schema_version": 1, "kind": "observation_face", "date": "2026-10-17", "skip_kind": "vacuum", "reason": "检测编排运行、零命中（rows_judged=0）——真空面：无观测义务", "rows_judged": 0, "hits": 0, "fired": 0, "detector_errors": 0}
+{"schema_version": 1, "kind": "observation_face", "date": "2026-10-17", "skip_kind": "vacuum", "reason": "检测编排运行、零命中（rows_judged=0）——真空面：无观测义务", "rows_judged": 0, "hits": 0, "fired": 0, "detector_errors": 0}
+{"schema_version": 1, "kind": "observation_face", "date": "2026-10-20", "skip_kind": "vacuum", "reason": "检测编排运行、零命中（rows_judged=2）——真空面：无观测义务", "rows_judged": 2, "hits": 0, "fired": 0, "detector_errors": 0}
+{"schema_version": 1, "kind": "observation_face", "date": "2026-10-20", "skip_kind": "vacuum", "reason": "检测编排运行、零命中（rows_judged=0）——真空面：无观测义务", "rows_judged": 0, "hits": 0, "fired": 0, "detector_errors": 0}
+{"schema_version": 1, "kind": "observation_face", "date": "2026-10-20", "skip_kind": "vacuum", "reason": "检测编排运行、零命中（rows_judged=0）——真空面：无观测义务", "rows_judged": 0, "hits": 0, "fired": 0, "detector_errors": 0}
+{"schema_version": 1, "kind": "deferred_hit", "date": "2026-10-20", "surface": "evidence-log.md", "family": "evidence", "row_key": "EVD-2", "line": 806, "hit_word": "待后续", "negative_context_hit": false, "fired": true}
+{"schema_version": 1, "kind": "deferred_hit", "date": "2026-10-20", "surface": "plan-tracker.md", "family": "task_status", "row_key": "ARCH-006", "line": 27, "hit_word": "待后续", "negative_context_hit": false, "fired": true}
+{"schema_version": 1, "kind": "observation_face", "date": "2026-10-20", "skip_kind": null, "reason": "2 fired deferred hit(s)", "rows_judged": 2, "hits": 2, "fired": 2, "detector_errors": 0}
+{"schema_version": 1, "kind": "observation_face", "date": "2026-10-20", "skip_kind": "vacuum", "reason": "检测编排运行、零命中（rows_judged=0）——真空面：无观测义务", "rows_judged": 0, "hits": 0, "fired": 0, "detector_errors": 0}

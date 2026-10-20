@@ -109,6 +109,9 @@
         "EVD-1": [
           "2dc406f18f367316dbdccebc4403535c"
         ],
+        "EVD-2": [
+          "9819143d4a024d49cdf394bac68d46d0"
+        ],
         "REVIEW-ARCH-004-R0": [
           "c533f22b138e2d0f923eaaaeee8d573d"
         ],
@@ -162,6 +165,9 @@
         ],
         "REVIEW-ARCH-005-R9": [
           "910453b5942d0382074b29e00bb936ef"
+        ],
+        "REVIEW-ARCH-006-R0-CODE-REVIEWER": [
+          "47090fc7f53b9404d65a58821839824f"
         ],
         "REVIEW-AUDIT-001-R0": [
           "0ecc43432ad39691a7981c97a3999890"
@@ -526,7 +532,7 @@
           "377e36f54675369e0e5874bc35d8f737"
         ]
       },
-      "sha256": "5c834f964d6185f329c4a9e32cab2d0aefc8307c111269cf6aa1ce958c77bd47"
+      "sha256": "3a4e61a96d496153ccd429b5593397f09b9a2c99b5709b267a6f42c7f597ee5d"
     },
     "plan-tracker.md": {
       "rows": {
@@ -541,6 +547,9 @@
         ],
         "ARCH-005": [
           "1be586b62a4cf10597bfb1d088226af2"
+        ],
+        "ARCH-006": [
+          "e1d66cc45eb8f06ad2edad6265fc1b96"
         ],
         "DEV-001": [
           "82ba5d9ef02d330e076f6bbb1604188c"
@@ -806,10 +815,10 @@
           "58c672f52926fbf91e75a9e983387b10"
         ]
       },
-      "sha256": "2e56b3ba38df71785fad4f200811c4c57585504d7952ff332bed435fdf744c12"
+      "sha256": "1746a08ef90be1803ab6a2a3ef0da748ce7c559caa199192f5fecc08680773f8"
     }
   },
   "schema_version": 1,
   "tool": "governance-write-guard/row-family-reconciliation",
-  "updated_at": "2026-10-17T10:01:37"
+  "updated_at": "2026-10-20T16:26:21"
 }

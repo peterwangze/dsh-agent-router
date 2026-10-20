@@ -215,6 +215,52 @@
         "tests/rpc-shadow-guard.mjs",
         "tests/served-client.js"
       ]
+    },
+    "op-576f18281dfd49f39f369634a50a0630": {
+      "schema_version": 1,
+      "command": "evidence-append",
+      "task_id": "ARCH-006",
+      "input_fingerprint": "ea051237aebdde9d53ece949dc3ccd9ac3b68d74a531e00ce761b5d1bf6dd1b1",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-576f18281dfd49f39f369634a50a0630",
+        "code": "ok",
+        "new_revision": 505618,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-20T16:25:26",
+      "updated_at": "2026-10-20T16:25:26"
+    },
+    "op-6cd48484d1c24ab991608af210ab75b4": {
+      "schema_version": 1,
+      "command": "locks-release",
+      "task_id": "ARCH-006",
+      "input_fingerprint": "acffdb30b69c7947e9e11c9016ea36bec675d28483438add1fc6b1eb64b133e7",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-6cd48484d1c24ab991608af210ab75b4",
+        "code": "ok",
+        "new_revision": 49,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-20T16:26:11",
+      "updated_at": "2026-10-20T16:26:11",
+      "released_files": [
+        "lib/host-abi/events.js",
+        "lib/host-abi/version.js",
+        "tests/host-abi-health.mjs",
+        "tests/host-contract.mjs",
+        "tests/host-radar.mjs",
+        "tests/host-version-snapshot.mjs"
+      ]
     }
   }
 }
