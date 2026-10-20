@@ -22,7 +22,7 @@
  * 五守卫（设计 §5.1 第 1-5 条）：
  *  S1 契约快照四类面：llm 适配器契约（含 twin + oauth-llm 枚举，复用
  *     adapter-parity F2 动态枚举模式）/ 宿主协议对象导出面 / remote 面方法形状
- *     （CLIENT_REMOTE_FACES）/ ctx 服务面（CTX_SERVICES）/ 转发事件白名单（27 项）
+ *     （CLIENT_REMOTE_FACES）/ ctx 服务面（CTX_SERVICES）/ 转发事件白名单（28 项）
  *  S2 宿主源码形状锚点（P10-④：桩形态锚定宿主源码；高风险非导出面以形状
  *     签名断言，宿主漂移即红）
  *  S3 声明面比对：package.json `dsh.client.inject` + peerDeps 8 项 vs
@@ -66,7 +66,7 @@
  *  - `DSH_BASELINE` 环境变量选择**目标基线**（值 = 档案 id（'0.1.5'/'0.2.0'）或 status
  *    关键词（'frozen'/'primary'）；未设/空白 = 默认 primary——本地默认行为不变）。
  *    选择只作用于**靶子面**：版本一致性判据（FIX-037 ③）与 S7/S5/S2 的**宿主侧**判据
- *    按所选基线档案项判定；**声明面**判据（S3 的 HOST_DECLARED_RANGE 等）恒取 primary
+ *    按所选基线档案项判定；**声明面**判据（S3 的覆盖判据 declaredRangeCovers 等）恒取 primary
  *    项——frozen 选择不放松声明面（与 host-version-snapshot F-1 收紧同族纪律）；
  *  - 锚/S5 条目 `since` 字段成文分代（R3 交付②，与 R0 白名单逐项 since 注记同族）：
  *    条目当前形态定型于哪代基线；所选基线**低于**条目 since 时该条目的宿主侧判据记
@@ -74,7 +74,7 @@
  *    形态〔0.2.0 收缩定型〕对 0.1.5 树合法不同），静态/插件面判据不受影响恒跑；
  *  - S7 7a 的期望集按**逐事件 since**（lib/host-abi/events.js 镜像数组行内注记——R0
  *    登记形态）分代过滤：所选基线低于事件 since 时该事件不入期望集（0.1.5 表 19 项 ⊂
- *    镜像 27 项在 frozen 基线下判 19 ⊆ 19）；宿主侧超集照旧绿 + 打印增量，消费项除名即红。
+ *    镜像 28 项在 frozen 基线下判 19 ⊆ 19）；宿主侧超集照旧绿 + 打印增量，消费项除名即红。
  *
  * 独立入口：node tests/host-contract.mjs（exit 0/1）。
  */
@@ -211,7 +211,7 @@ const BLOCK_ASSEMBLER_PROTO_BASELINE = ['push', 'ensure', 'assemble', 'mustGet',
  * 「主基线项相等」机器锁定；R3 起随基线参数化删除副本：下方提取/选择失败即**判红收口退出**
  * 〔fail-closed，先例 host-version-snapshot 的 F-3 前置优雅判红〕，「刷新漏改副本」的漂移面
  * 从机制上消失）。宿主升级后按该文件头注释刷新（R3 起刷新点不含本文件版本常量——已无副本）。
- * 用途：①primaryBaseline = 主基线项（声明面口径 HOST_DECLARED_RANGE / S3 派生）；②
+ * 用途：①primaryBaseline = 主基线项（声明面覆盖判据 declaredRangeCovers 的判据值 / S3 派生）；②
  * targetBaseline = DSH_BASELINE 所选**目标基线**（靶子面判据：版本一致性〔FIX-037 ③〕
  * + S7/S5/S2 宿主侧判据按档案项与条目 since 分代）——选择规则与 host-version-snapshot §0b
  * 一致：值 = 档案 id 或 status 关键词，未设/空白 = 默认 primary（本地默认行为不变），
@@ -231,7 +231,7 @@ const targetBaseline = DSH_BASELINE_RAW === ''
   ? primaryBaseline
   : HOST_BASELINE_REGISTRY?.find((entry) => entry?.id === DSH_BASELINE_RAW || entry?.status === DSH_BASELINE_RAW) ?? null
 // 提取与选择的 fail-closed 判据（先例 host-version-snapshot F-3——提取失败时版本一致性
-// 判据与 HOST_DECLARED_RANGE 均失去数据源，继续跑只会产出失真结论，故显式判红后收口
+// 判据与声明面覆盖判据均失去数据源，继续跑只会产出失真结论，故显式判红后收口
 // 退出，不静默降级——P8）。
 {
   const registryShapeOk = Array.isArray(HOST_BASELINE_REGISTRY)
@@ -249,14 +249,21 @@ const targetBaseline = DSH_BASELINE_RAW === ''
   }
 }
 /**
- * 基线代际比较（since 分代判定的谓词）：`since` 取档案 id 形态（'0.1.5'/'0.2.0'）或
- * 逐事件注记的完整版本（'0.1.5-rc.2'）——按 major.minor 数值序比较（prerelease 后缀
- * 不参与分代：0.1.5 与 0.1.5-rc.2 同代，与 R0 白名单注记口径一致）。
+ * 基线代际比较（since 分代判定的谓词）：`since` 取档案 id 形态（'0.1.5'/'0.2.0'/
+ * '0.2.1'）或逐事件注记的完整版本（'0.1.5-rc.2'/'0.2.1-rc.2'）——按 major.minor.**patch**
+ * 数值序比较，预发布后缀不参与（0.1.5 与 0.1.5-rc.2 同代，与 R0 白名单注记口径一致）。
+ * ARCH-006 精化：注册表出现同 minor 的相邻档案项（0.2.0/0.2.1）后，仅比 major.minor
+ * 会把「定型于 0.2.1 的条目」误判为「0.2.0 也适用」⇒ 比较升级为三元组（既有全部
+ * since/档案项组合的判定结果不变——此前不存在仅 patch 不同的组合；0.2.1-rc.2 定型
+ * 条目对 0.2.0/0.1.5 基线记可见 skip 不误红）。
  */
-const minorOf = (version) => String(version).split('.').slice(0, 2).map(Number)
+const versionTripleOf = (version) => {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version))
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : [0, 0, 0]
+}
 const baselineIncludes = (since) => {
-  const [a, b] = [minorOf(since), minorOf(targetBaseline.id)]
-  return a[0] < b[0] || (a[0] === b[0] && a[1] <= b[1])
+  const [a, b] = [versionTripleOf(since), versionTripleOf(targetBaseline.id)]
+  return a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] <= b[2])))
 }
 /**
  * 版本一致性判据的关键包 = `dsh` CLI + **S7 直读包**（`dsh-api-remotes` /
@@ -291,8 +298,9 @@ const CTX_SERVICES_BASELINE = {
   agentPresets: ['composedPreset'],
 }
 /**
- * 宿主转发事件白名单（宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表 27 项，逐字逐序；
- * ARCH-005 R0 随 0.2.0-rc.2 主基线登记刷新——19→27 纯增量，新增 8 项与 lib/host-abi/events.js
+ * 宿主转发事件白名单（宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表 28 项，逐字逐序；
+ * ARCH-005 R0 随 0.2.0-rc.2 主基线登记刷新——19→27 纯增量；ARCH-006 随 0.2.1-rc.2 主基线
+ * 登记刷新——27→28 纯增量（新增 plugin-market/changed），新增项与 lib/host-abi/events.js
  * 镜像同步（每项 since 注记在镜像侧）；S7 增强组经 API_REMOTE_FORWARDED_EVENTS 单向消费断言核验：
  * 镜像 ⊆ 宿主实读表，宿主侧超集绿 + 打印增量清单，宿主侧除名消费项即红）。
  */
@@ -321,6 +329,7 @@ const FORWARDED_EVENT_BASELINE = [
   'plugin-manager/changed',
   'plugin-manager/install-log',
   'plugin-manager/install-state',
+  'plugin-market/changed',
   'settings/document-updated',
   'schedule/changed',
   'user-questions/request',
@@ -329,7 +338,7 @@ const FORWARDED_EVENT_BASELINE = [
 const CLIENT_PACKAGE_INJECT_BASELINE = ['@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-api-remotes']
 /** 客户端 fiber inject 九面基线（inject-manifest 域 FIBER_INJECT 镜像源 = lib/client.js inject 数组）。 */
 const FIBER_INJECT_BASELINE = ['slots', 'locale', 'remote', 'remote.llm', 'remote.settings', 'remote.credentials', 'remote.agentPresets', 'remote.session', 'modelDirectories']
-/** peerDeps 8 项宿主供给包（记录性声明口径见下方 HOST_DECLARED_RANGE——注册表派生）。 */
+/** peerDeps 8 项宿主供给包（记录性声明口径 = 覆盖主基线的共同 ^ 范围——见上方 declaredRangeCovers，权威判据在 host-version-snapshot）。 */
 const PEER_DEP_BASELINE = [
   '@deepseek-ai/dsh-attachment',
   '@deepseek-ai/dsh-agent',
@@ -341,12 +350,20 @@ const PEER_DEP_BASELINE = [
   '@deepseek-ai/dsh-credentials',
 ]
 /**
- * 声明面记录性口径（F-2 / R0 审查承接）：**注册表派生**——`^` + 主基线项（primaryBaseline，
- * ARCH-005 R3 起经文本提取自 HOST_BASELINE_REGISTRY——无第五份硬拷贝）的 dshPackages。
- * **恒取 primary 项**（不随 DSH_BASELINE 所选目标基线变——frozen 选择不放松声明面，
- * 与 host-version-snapshot F-1 收紧同族纪律）；主基线刷新时本口径随动。
+ * 声明面覆盖谓词（ARCH-006——F-2 / R0 承接的语义演进）：**文本提取**消费权威套件
+ * host-version-snapshot.mjs 的 caretRangeContains（该文件为独立入口不可 import——与
+ * 上方 HOST_BASELINE_REGISTRY 提取同纪律，P5 单源零第二份谓词拷贝）。声明面口径从
+ * 「逐字 === ^primary.dshPackages」演进为「收敛同一 ^ 范围且**覆盖主基线** dshPackages」
+ * （装载门 satisfies(includePrerelease) 镜像——^0.2.0-rc.2 ⊇ 0.2.1-rc.2，声明面零改动
+ * 收编）；**恒取 primary 项**（不随 DSH_BASELINE 所选目标基线变——frozen 选择不放松
+ * 声明面，与 host-version-snapshot F-1 同族纪律）。提取失败 → null → 下方 S3 判据红
+ * （fail-closed，先例 HOST_BASELINE_REGISTRY 提取判据组）。
  */
-const HOST_DECLARED_RANGE = `^${primaryBaseline.dshPackages}`
+const declaredRangeCovers = (() => {
+  const block = blockOf(stripComments(readTest('host-version-snapshot.mjs')), 'function caretRangeContains(')
+  if (!block) return null
+  try { return new Function(`return ${block}`)() } catch { return null /* 提取失败 → S3 判据红（fail-closed） */ }
+})()
 /** cordis.patch.yml 两宿主行（宿主对不存在条目仅 stderr 警告——静默面守卫）。 */
 const PATCH_ROWS_BASELINE = [
   { id: 'router', name: 'dsh-agent-router' },
@@ -465,21 +482,28 @@ const HOST_SHAPE_ANCHORS = [
  * 出现（S5 的符号本就是宿主源码里的 `<面键>_result$schema` 声明，可逐字定位）。
  *
  * ARCH-005 R3（交付②——since 分代成文）：每条声明其 schema 白名单**当前形态**定型于
- * 哪代基线。五面 0.1.5-rc.2 定型、0.2.0 复核逐字段相同（本批复读 frozen 树实证）；
+ * 哪代基线。四面 0.1.5-rc.2 定型、0.2.0 复核逐字段相同（本批复读 frozen 树实证）；
  * `agentPresets.list` 的 {presets} 收缩形态**定型于 0.2.0**（0.1.5 树实读顶层字段为
- * {presets,authorable}——authorable 移除且插件从未消费，R0 登记）⇒ 所选基线低于 since
- * 时：本表白名单形态对更老宿主合法不同——**宿主侧**判据（包×文件/符号存在性）与 S7 7b
+ * {presets,authorable}——authorable 移除且插件从未消费，R0 登记）；`llm.
+ * listConfigurableProviders` 的 9 字段形态**定型于 0.2.1**（ARCH-006：6→9 纯超集
+ * ——defaultBaseURL/baseURLEnv/nativeAuth 新增，消费面仍为旧 6 字段子集）⇒ 所选基线低于
+ * since 时：本表白名单形态对更老宿主合法不同——**宿主侧**判据（包×文件/符号存在性）与 S7 7b
  * 顶层字段判等均记可见 skip（分代判定）；静态判据（锚形态/声明完备性/消费 ⊆ 白名单）
  * 与所选基线无关恒跑。since 缺失或 ∉ 档案 id 集 → 下方「锚分代」判据红（fail-closed）。
  */
 const WIRE_SCHEMA_WHITELIST = {
   'llm.listConfigurableProviders': {
-    since: '0.1.5',
+    since: '0.2.1',
     anchor: 'dsh-api-remotes 的 lib/client.js 的 llm_listConfigurableProviders_result schema（S7 增强组按符号逐字核验）',
     expectPackage: 'dsh-api-remotes',
     expectFile: ['lib/client.js'],
     expectSymbol: ['llm_listConfigurableProviders'],
-    schema: ['provider', 'displayName', 'settingsNs', 'settingsPath', 'declared', 'error'],
+    // ARCH-006（0.2.1-rc.2 主基线登记）：顶层字段 6→9 纯超集——新增 defaultBaseURL /
+    // baseURLEnv / nativeAuth（宿主 0.2.1 实读 client.js 的 llm_listConfigurableProviders_
+    // result 逐字段序）；插件消费面（joinProviderDirectoryHost）仍只读旧 6 字段子集
+    // ⇒ 消费代码零改动，仅守卫白名单扩张。低代基线（0.2.0/0.1.5）按 since 分代对
+    // 宿主侧顶层字段判等记可见 skip（该两代实读为 6 字段形态）。
+    schema: ['provider', 'displayName', 'settingsNs', 'settingsPath', 'declared', 'defaultBaseURL', 'baseURLEnv', 'nativeAuth', 'error'],
     dynamic: { file: 'lib/host-abi/client-remotes.js', marker: 'function joinProviderDirectoryHost(', pattern: /entry\.([A-Za-z_]\w*)/g },
   },
   'llm.listProviders': {
@@ -550,7 +574,7 @@ const WIRE_SCHEMA_WHITELIST = {
  * 转发事件逐项 since 注记（ARCH-005 R3——S7 7a 分代判定的输入）：注记面 =
  * `lib/host-abi/events.js` 镜像数组的**行内注释**（R0 登记形态：`'事件名', // since <版本>`）。
  * 镜像**值面**由 S1e 值级 parity 锁定；本处补「注记面」判据——镜像逐项有注记 + 注记不指向
- * 镜像外事件（陈旧注记即红）。分代比较按 major.minor（minorOf——'0.1.5-rc.2' 与 '0.1.5'
+ * 镜像外事件（陈旧注记即红）。分代比较按 major.minor.patch（versionTripleOf——'0.1.5-rc.2' 与 '0.1.5'
  * 同代），与锚/S5 的 since = 档案 id 口径互通。
  */
 const FORWARDED_EVENT_SINCE = new Map()
@@ -753,10 +777,11 @@ console.log('S1 契约快照四类面（宿主面形状漂移即红；宿主新�
     && probes.map((item) => item.name.slice(4)).sort().join(',') === Object.keys(CTX_SERVICES).sort().join(','))
 }
 
-// S1e 转发事件白名单（27 项 + 镜像 parity + 判定函数；ARCH-005 R0 随 0.2.0-rc.2 基线登记刷新）
+// S1e 转发事件白名单（28 项 + 镜像 parity + 判定函数；ARCH-005 R0 随 0.2.0-rc.2 基线登记刷新，
+//     ARCH-006 随 0.2.1-rc.2 基线登记刷新——27→28 吸收 plugin-market/changed）
 {
-  check('S1e 契约快照: FORWARDED_EVENT_ALLOWLIST === 宿主 27 项基线（逐字逐序——锚宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表，0.2.0-rc.2 主基线）',
-    FORWARDED_EVENT_ALLOWLIST.length === 27 && deepEqual(FORWARDED_EVENT_ALLOWLIST, FORWARDED_EVENT_BASELINE), FORWARDED_EVENT_ALLOWLIST)
+  check('S1e 契约快照: FORWARDED_EVENT_ALLOWLIST === 宿主 28 项基线（逐字逐序——锚宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表，0.2.1-rc.2 主基线）',
+    FORWARDED_EVENT_ALLOWLIST.length === 28 && deepEqual(FORWARDED_EVENT_ALLOWLIST, FORWARDED_EVENT_BASELINE), FORWARDED_EVENT_ALLOWLIST)
   const mirrorLiteral = arrayOf(clientStripped, 'FORWARDED_EVENT_ALLOWLIST = [')
   let mirror = null
   if (mirrorLiteral) {
@@ -848,8 +873,12 @@ console.log('S3 声明面比对（inject / peerDeps / fiber 面 / patch 条目�
 
   const peerNames = Object.keys(pkg.peerDependencies ?? {}).sort()
   check('S3 声明面: peerDependencies = 基线 8 项宿主供给包（集合相等）', deepEqual(peerNames, [...PEER_DEP_BASELINE].sort()), peerNames)
-  const wrongRange = PEER_DEP_BASELINE.filter((name) => pkg.peerDependencies?.[name] !== HOST_DECLARED_RANGE)
-  check(`S3 声明面: peerDeps 8 项版本范围 === 记录性口径 ${HOST_DECLARED_RANGE}（实测基线）`, wrongRange.length === 0, wrongRange)
+  check('S3 声明面: caretRangeContains 覆盖谓词自 host-version-snapshot.mjs 文本提取成功（ARCH-006 单源消费——提取失败即红，先例 HOST_BASELINE_REGISTRY 提取判据组）',
+    typeof declaredRangeCovers === 'function')
+  const peerRangesS3 = PEER_DEP_BASELINE.map((name) => pkg.peerDependencies?.[name])
+  const commonPeerRangeS3 = peerRangesS3[0] && peerRangesS3.every((range) => range === peerRangesS3[0]) ? peerRangesS3[0] : null
+  check(`S3 声明面: peerDeps 8 项版本范围收敛同一记录性口径 ${commonPeerRangeS3 ?? '<split/absent>'} 且覆盖主基线 ${primaryBaseline.dshPackages}（ARCH-006 覆盖语义——范围不再覆盖 primary（frozen 回退/假版本）即红，权威判据 = host-version-snapshot 声明面组）`,
+    typeof declaredRangeCovers === 'function' && commonPeerRangeS3 !== null && declaredRangeCovers(commonPeerRangeS3, primaryBaseline.dshPackages), peerRangesS3)
 
   check('S3 声明面: FIBER_INJECT === 基线九面（inject-manifest 单源）', deepEqual(FIBER_INJECT, FIBER_INJECT_BASELINE), FIBER_INJECT)
   const fiberRemoteFaces = FIBER_INJECT.filter((name) => name.startsWith('remote.')).map((name) => name.slice('remote.'.length))

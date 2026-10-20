@@ -6,14 +6,19 @@
  * 必须与实测基线一致；任一侧漂移（宿主升级后忘改声明、手滑改回旧范围、
  * 复活已消亡包的注入死行）→ 本测试必红。
  *
- * 实测基线（ARCH-005 R0 起为**双基线档案**，见下方 HOST_BASELINE_REGISTRY）：
+ * 实测基线（ARCH-005 R0 起为**多基线档案**，见下方 HOST_BASELINE_REGISTRY；ARCH-006
+ * 刷新至三档案）：
  * - 0.1.5（frozen）：dsh 0.1.5-rc.1 / dsh-* 0.1.5-rc.2 / cordis 4.0.2 / schemastery 3.18.2
  *   （2026-09-12 机核；R1 安装同步后本仓树已不再保持该组合，见 0.2.0 行）
- * - 0.2.0（primary）：dsh 与全部 dsh-* 0.2.0-rc.2 / cordis 4.0.5 / schemastery 3.18.5
- *   （npm 全局树实读 2026-10-17，实施时单点复读定谳——禁止照抄文档值；R1 安装同步后
- *   本仓 node_modules/@deepseek-ai/ 树 = 主基线 0.2.0-rc.2，cordis/schemastery 按插件
- *   自持范围解析 4.0.1/3.18.1——仍在 ^4.0.1/^3.18.1 内，对主基线 4.0.5/3.18.5 的
- *   覆盖由 section 4「范围覆盖」判据看护）
+ * - 0.2.0（frozen）：dsh 与全部 dsh-* 0.2.0-rc.2 / cordis 4.0.5 / schemastery 3.18.5
+ *   （npm 全局树实读 2026-10-17；ARCH-006 起降档 frozen——本仓 node_modules 树与
+ *   package.json 声明面仍锚定该档案项〔^0.2.0-rc.2 ×11〕，见下方声明面覆盖判据）
+ * - 0.2.1（primary）：dsh 与全部 dsh-* 0.2.1-rc.2 / cordis 4.0.5 / schemastery 3.18.5
+ *   （npm 全局树实读 2026-10-20 实施时单点复读定谳——禁止照抄文档值；四类 diff 全
+ *   additive：锚 0 漂移 / events +1 plugin-market/changed / llm.listConfigurableProviders
+ *   schema 6→9 纯超集 / 包表 8 项 dsh 系版本号差，cordis 与 schemastery 未变。装载门
+ *   cold-install-gate + apply 门 a3-apply-gate 双 GREEN 实证 ^0.2.0-rc.2 声明容纳
+ *   0.2.1-rc.2）
  *
  * 依据（ARCH-004 §3 D1-5 / ADR-A；ARCH-005 R1 修订口径——旧「宿主 runner/cordis
  * 零 enforcement、安装器零告警」叙事被 0.2.0 装载门终结，见设计 §3-9 / HD-001）：
@@ -35,8 +40,9 @@
  *    version 字段（dsh CLI 包与 cordis / schemastery 单独核对——**禁止照抄文档
  *    值，实施时单点复读树态定谳**，ARCH-005 T-6 纪律）；
  * 2. 同步更新多处：本文件 HOST_BASELINE_REGISTRY（新增档案项：旧主基线降级
- *    frozen、新项 status primary）、package.json 对应版本范围与 inject 清单
- *    （若有包消亡/新增）、README「宿主兼容性（实测基线）」小节、
+ *    frozen、新项 status primary）、package.json 对应版本范围（ARCH-006 起仅当现范围
+ *    **不再覆盖**新 primary 时才需改——覆盖判据见 section 0）与 inject 清单
+ *    （若有包消亡/新增）、README「宿主兼容性（实测基线）」小节（声明面锚定项随动）、
  *    tests/host-contract.mjs（ARCH-005 R3 起经**文本提取**消费本注册表——无第二份
  *    版本常量可漏改，提取/选择失败即红；其靶子面判据按 DSH_BASELINE 所选档案项
  *    判定，声明面判据恒取 primary 项）；
@@ -62,31 +68,25 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-// ── 实测宿主基线档案（ARCH-005 R0：单表 → 双基线；唯一事实源 = 宿主树实读；刷新步骤见文件头注释）──
+// ── 实测宿主基线档案（ARCH-005 R0：单表 → 多基线；唯一事实源 = 宿主树实读；刷新步骤见文件头注释）──
 // 0.1.5（frozen）：历史实测基线，仅以档案常量承载（R1 安装同步前本仓树曾为该组合；
 //   R1 起 frozen 项不再被声明面接受——section 0 的 F-1 收紧，回退即红）。
-// 0.2.0（primary）：当前主基线——npm 全局树实读（%APPDATA%\npm\node_modules\@deepseek-ai\dsh
-//   嵌套 scope，2026-10-17 实施时单点复读：dsh 主包与全部 dsh-* 包 0.2.0-rc.2；cordis/schemastery
-//   随树非 0.2.0-rc.2——4.0.5 / 3.18.5〔设计 F-B / 复审 R1 F-3 三方仲裁 3.18.5，本批复读复核〕）。
-//   R1 安装同步后本仓树 = 主基线 0.2.0-rc.2；cordis/schemastery 按插件自持范围解析 4.0.1/3.18.1。
+// 0.2.0（frozen）：ARCH-006 前的主基线——npm 全局树实读（%APPDATA%\npm\node_modules\
+//   @deepseek-ai\dsh 嵌套 scope，2026-10-17）；ARCH-006 起随 0.2.1 升格降档 frozen
+//   （本仓 node_modules 树与 package.json 声明面 ^0.2.0-rc.2 ×11 仍锚定本档案项——
+//   声明面零改动收编，见 section 0 覆盖判据；该范围覆盖新 primary 0.2.1-rc.2）。
+// 0.2.1（primary）：当前主基线——npm 全局树实读（同上路径，2026-10-20 实施时单点
+//   复读：dsh 主包与全部 dsh-* 包 0.2.1-rc.2；cordis/schemastery 未变——4.0.5 / 3.18.5）。
 // 本档案 = 唯一事实源（ARCH-005 R3 起 tests/host-contract.mjs 亦经文本提取消费本注册表
 // ——无第二份版本常量，提取/选择失败即红；「双份常量机器锁定」纪律（F-J）随之退役为
 // 「单份常量 + 提取判据」）。
 const HOST_BASELINE_REGISTRY = Object.freeze([
   { id: '0.1.5', status: 'frozen', dsh: '0.1.5-rc.1', dshPackages: '0.1.5-rc.2', cordis: '4.0.2', schemastery: '3.18.2' },
-  { id: '0.2.0', status: 'primary', dsh: '0.2.0-rc.2', dshPackages: '0.2.0-rc.2', cordis: '4.0.5', schemastery: '3.18.5' },
+  { id: '0.2.0', status: 'frozen', dsh: '0.2.0-rc.2', dshPackages: '0.2.0-rc.2', cordis: '4.0.5', schemastery: '3.18.5' },
+  { id: '0.2.1', status: 'primary', dsh: '0.2.1-rc.2', dshPackages: '0.2.1-rc.2', cordis: '4.0.5', schemastery: '3.18.5' },
 ])
 /** 主基线项（唯一 primary；档案完整性断言在下方 section 0 锁定）。 */
 const HOST_BASELINE = Object.freeze(HOST_BASELINE_REGISTRY.find((entry) => entry.status === 'primary'))
-/**
- * 主基线记录性声明口径（^ + 主基线 dshPackages 实测值）。
- * ARCH-005 R1（F-1 收紧——R0 审查承接）：声明面 11 项（8 peers + 3 dsh deps）MUST
- * 等于**主基线**口径——frozen 历史项不再被接受（R0 过渡窗「任一在册项皆可」的放宽
- * 随 R1 声明面基线跳跃关闭），package.json 整体回退 frozen 范围即红（防基线跳跃被
- * 无声回退）。注册表零 primary 项时该值为 '^undefined'（不可命中）且下方 F-3 守卫
- * 前置优雅判红，不会崩栈。
- */
-const primaryDeclaredRange = `^${HOST_BASELINE?.dshPackages ?? ''}`
 
 /**
  * 目标基线选择（ARCH-005 R3——看护矩阵化）：`DSH_BASELINE` 环境变量（值 = 档案 id
@@ -131,14 +131,14 @@ const INJECT_BASELINE = [
 ]
 
 /**
- * caret 范围（^M.m.p 形态——本仓库声明面实际使用的唯一范围形态）是否包含
- * 实测基线版本（M.m.p 数值序）。预发布后缀场景本断言不涉及（cordis /
- * schemastery 基线均为正式版）；范围改用其它形态 → 解析失败 → 红，
- * 强制走基线刷新流程而非静默放过。
+ * caret 范围（^M.m.p 形态，可选 -rc.N 预发布后缀——本仓库声明面实际使用的唯一范围
+ * 形态）是否包含实测基线版本（M.m.p 数值序，预发布后缀不参与——宿主装载门
+ * satisfies(includePrerelease) 的镜像判据；ARCH-006 起兼承 dsh 系 rc 版本的覆盖判定）。
+ * 范围改用其它形态 → 解析失败 → 红，强制走基线刷新流程而非静默放过。
  */
 function caretRangeContains(range, version) {
-  const base = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(String(range))
-  const ver = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(version))
+  const base = /^\^(\d+)\.(\d+)\.(\d+)(?:-rc\.\d+)?$/.exec(String(range))
+  const ver = /^(\d+)\.(\d+)\.(\d+)(?:-rc\.\d+)?$/.exec(String(version))
   if (!base || !ver) return false
   const [baseMajor, baseMinor, basePatch] = [Number(base[1]), Number(base[2]), Number(base[3])]
   const [verMajor, verMinor, verPatch] = [Number(ver[1]), Number(ver[2]), Number(ver[3])]
@@ -166,10 +166,13 @@ check('registry entry fields complete (dsh/dshPackages/cordis/schemastery)', HOS
 /**
  * package.json 声明面对应的档案项：
  * - 8 peerDeps + 3 dsh deps 的声明范围 MUST 收敛到**同一个** ^ 范围（分裂即红）；
- * - 该范围 MUST 恰为**主基线项**（primary）的记录性口径（ARCH-005 R1 F-1 收紧：
- *   声明面基线已随 R1 跳跃至 primary——frozen 项（^0.1.5-rc.2）或任何其它范围
- *   （假版本/漏登记基线）→ 判红；回退 frozen 即「基线跳跃被无声回退」的守卫点）；
- * - 范围不属于任何档案项 → null → 下方逐项断言红。
+ * - 该范围 MUST **覆盖主基线项**（primary）的 dshPackages（ARCH-006 语义演进：范围型
+ *   声明容纳主基线——装载门 satisfies(includePrerelease) 判据的镜像；^0.2.0-rc.2 ⊇
+ *   0.2.1-rc.2 合法。R1 F-1 的守卫意图不降：回退到不覆盖主基线的范围——frozen 历史
+ *   口径（^0.1.5-rc.2）或任何其它范围（假版本/漏登记基线）→ 判红，「基线跳跃被
+ *   无声回退」守卫点延续）；
+ * - declaredEntry（声明面逐字锚定的档案项——section 5 README 判据用）仅作记录面，
+ *   ARCH-006 起允许为 in-registry 非 primary 项（本仓声明面锚 0.2.0 frozen 项）。
  */
 const declaredRangeValues = [
   ...PEER_DEP_NAMES.map((name) => pkg.peerDependencies?.[name]),
@@ -177,7 +180,11 @@ const declaredRangeValues = [
 ]
 const commonDeclaredRange = declaredRangeValues[0] && declaredRangeValues.every((range) => range === declaredRangeValues[0]) ? declaredRangeValues[0] : null
 const declaredEntry = commonDeclaredRange ? HOST_BASELINE_REGISTRY.find((entry) => declaredRange(entry.dshPackages) === commonDeclaredRange) ?? null : null
-check(`declared dsh range ${commonDeclaredRange ?? '<split/absent>'} maps to the PRIMARY registry entry (frozen/absent no longer accepted — F-1 tightening)`, declaredEntry !== null && declaredEntry.status === 'primary')
+check(`declared dsh range ${commonDeclaredRange ?? '<split/absent>'} covers the PRIMARY registry baseline ${HOST_BASELINE !== undefined ? HOST_BASELINE.dshPackages : '<no primary>'} (ARCH-006: range-style declaration must contain the primary baseline — mirror of the host gate's satisfies(includePrerelease); a range that no longer covers primary, e.g. the frozen ${HOST_BASELINE_REGISTRY.find((entry) => entry.status !== 'primary')?.dshPackages ?? 'legacy'} form, stays red — F-1 tightening intent preserved)`,
+  HOST_BASELINE !== undefined && commonDeclaredRange !== null && caretRangeContains(commonDeclaredRange, HOST_BASELINE.dshPackages))
+if (declaredEntry === null && commonDeclaredRange !== null) {
+  console.log(`  --  declared range ${commonDeclaredRange} anchors no registry entry (fake/unregistered version — README 判据组将红；ARCH-006：声明面锚定项与主基线覆盖关系分离登记)`)
+}
 
 // F-3（R0 审查承接）：注册表零 primary 项时 HOST_BASELINE 为 undefined——其后
 // section 4 的 HOST_BASELINE.cordis 等派生读数会 TypeError 崩栈、截断全部后续断言
@@ -210,18 +217,18 @@ check('inject declares exactly the 3 baseline-surviving packages in order', JSON
 check('inject no longer lists dead @deepseek-ai/dsh-client-runtime (gone since host 0.1.5)', !pkg.dsh?.client?.inject?.includes('@deepseek-ai/dsh-client-runtime'))
 check('dsh.client.platform stays web', pkg.dsh?.client?.platform === 'web')
 
-// ── 2. peerDeps 记录口径：恰为在册 8 项，每项 === 主基线口径（F-1 收紧）────────
+// ── 2. peerDeps 记录口径：恰为在册 8 项，每项 === 共同声明范围（覆盖主基线——F-1 语义演进）──
 console.log('peerDependencies measured-baseline record:')
 const peerNames = Object.keys(pkg.peerDependencies ?? {})
 check('peerDependencies covers exactly the 8 baseline host packages', JSON.stringify([...peerNames].sort()) === JSON.stringify([...PEER_DEP_NAMES].sort()))
 for (const name of PEER_DEP_NAMES) {
-  check(`peerDep ${name} records the PRIMARY baseline range (${primaryDeclaredRange})`, pkg.peerDependencies?.[name] === primaryDeclaredRange)
+  check(`peerDep ${name} records the common declared range (${commonDeclaredRange ?? '<split/absent>'}) covering PRIMARY ${HOST_BASELINE.dshPackages} (ARCH-006 coverage semantics — split/absent red)`, pkg.peerDependencies?.[name] === commonDeclaredRange)
 }
 
-// ── 3. deps dsh 包记录口径：3 项 === 主基线口径（F-1 收紧）────────────────────
+// ── 3. deps dsh 包记录口径：3 项 === 共同声明范围（覆盖主基线）──────────────────
 console.log('dsh runtime deps measured-baseline record:')
 for (const name of DSH_RUNTIME_DEPS) {
-  check(`dep ${name} records the PRIMARY baseline range (${primaryDeclaredRange})`, pkg.dependencies?.[name] === primaryDeclaredRange)
+  check(`dep ${name} records the common declared range (${commonDeclaredRange ?? '<split/absent>'}) covering PRIMARY ${HOST_BASELINE.dshPackages} (ARCH-006 coverage semantics — split/absent red)`, pkg.dependencies?.[name] === commonDeclaredRange)
 }
 
 // ── 4. 非 dsh 范围包含基线（cordis / schemastery：历史范围未证伪，从简保持；
@@ -230,9 +237,10 @@ console.log('non-dsh ranges cover baseline:')
 check(`dep @deepseek-ai/cordis range covers primary baseline ${HOST_BASELINE.cordis}`, caretRangeContains(pkg.dependencies?.['@deepseek-ai/cordis'], HOST_BASELINE.cordis))
 check(`dep @deepseek-ai/schemastery range covers primary baseline ${HOST_BASELINE.schemastery}`, caretRangeContains(pkg.dependencies?.['@deepseek-ai/schemastery'], HOST_BASELINE.schemastery))
 
-// ── 5. README 兼容矩阵同步（声明面所在档案项 = 主基线的实测基线 + 记录性语义 + 权威防护指针）──
-//      R1 起声明面恒为主基线（section 0 的 F-1 收紧保证 declaredEntry = primary 或已红），
-//      README 必须载有主基线四值（支持基线集表的 primary 行）。
+// ── 5. README 兼容矩阵同步（声明面锚定档案项 = declaredEntry 的实测基线 + 记录性语义 + 权威防护指针）──
+//      ARCH-006 起 declaredEntry = 声明范围逐字锚定的在册项（当前 0.2.0 frozen——本仓
+//      声明面 ^0.2.0-rc.2 ×11 未随 0.2.1 主基线升格改动，覆盖关系由 section 0 判据看护），
+//      README 必须载有该档案项四值（支持基线集表的对应行）。
 console.log('README compatibility matrix:')
 check('README has 宿主兼容性（实测基线） section', readme.includes('### 宿主兼容性（实测基线）'))
 check(`README records host CLI baseline dsh ${declaredEntry?.dsh}`, readme.includes(declaredEntry?.dsh ?? '<no declared entry>'))

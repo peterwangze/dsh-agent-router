@@ -88,16 +88,18 @@ const runRadar = (args, env = {}) => {
   return { status: result.status, stdout: result.stdout, stderr: result.stderr, json }
 }
 
-// ── 合成宿主树（绿树 = 0.2.0-rc.2 主基线形态；mutate 单点突变）────────────────
+// ── 合成宿主树（绿树 = 0.2.1-rc.2 主基线形态；mutate 单点突变）────────────────
 // schema 顶层字段 / LlmAdapter 方法 / 锚符号 / 7d 针：按主基线常量手写——绿树
-// 零 diff 断言 = 夹具与权威常量的机器锁（见文件头「判别夹具」段）。
+// 零 diff 断言 = 夹具与权威常量的机器锁（见文件头「判别夹具」段；ARCH-006 随
+// 0.2.1-rc.2 主基线刷新：包表版本 0.2.0-rc.2→0.2.1-rc.2 + llm_listConfigurable
+// Providers schema 6→9 字段 + 事件表随镜像 import 自动 +1）。
 const KEY_DSH_PACKAGES = [
   'dsh', 'dsh-api-remotes', 'dsh-api-session-controller', 'dsh-client-ui-model-selection',
   'dsh-client-ui-conversation', 'dsh-llm', 'dsh-client-ui-settings', 'dsh-client-locale',
 ]
 const LLM_ADAPTER_METHODS = ['providerInfo', 'providerRetryPolicy', 'imageRequestPricing', 'listModels', 'resolveModel', 'prepareCall']
 const SCHEMA_FIELDS = {
-  llm_listConfigurableProviders_result: ['provider', 'displayName', 'settingsNs', 'settingsPath', 'declared', 'error'],
+  llm_listConfigurableProviders_result: ['provider', 'displayName', 'settingsNs', 'settingsPath', 'declared', 'defaultBaseURL', 'baseURLEnv', 'nativeAuth', 'error'],
   llm_listProviders_result: ['id', 'name'],
   session_modelCatalog_result: ['default', 'routableProviders', 'groups', 'failures'],
   settings_describe_result: ['writable', 'hasDocument', 'namespaces'],
@@ -130,8 +132,8 @@ function buildTree(dir, mutate = {}) {
     writeFileSync(path, content)
   }
   const pkgJson = (name, version) => JSON.stringify({ name: `@deepseek-ai/${name}`, version }, null, 2)
-  const mainVersion = mutate.dshVersion ?? '0.2.0-rc.2'
-  const packagesVersion = mutate.dshPackagesVersion ?? '0.2.0-rc.2'
+  const mainVersion = mutate.dshVersion ?? '0.2.1-rc.2'
+  const packagesVersion = mutate.dshPackagesVersion ?? '0.2.1-rc.2'
   const dropPackages = new Set(mutate.dropPackages ?? [])
   for (const name of KEY_DSH_PACKAGES) {
     if (dropPackages.has(name)) continue
@@ -182,15 +184,15 @@ console.log('R4 雷达 probe 模式（四类 diff 报告 + 探测不门控 + 判
   // 该断言同时是「夹具 × 权威常量」机器锁：注册表/白名单/schema/锚任一漂移 ⇒ 红。
   const green = buildTree(mkdtemp('green'))
   const greenRun = runRadar(['--host-source', green])
-  check('probe: 绿树（0.2.0-rc.2 形态）四类零 diff + exit 0（负控 + 夹具机器锁）',
+  check('probe: 绿树（0.2.1-rc.2 形态）四类零 diff + exit 0（负控 + 夹具机器锁）',
     greenRun.status === 0 && greenRun.json?.summary?.totalDiffs === 0, { status: greenRun.status, summary: greenRun.json?.summary, stderr: greenRun.stderr })
   check('probe: 绿树包表 10 项全部 match（8 关键包 + cordis + schemastery）',
     greenRun.json?.packageTable && Object.values(greenRun.json.packageTable).length === 10
       && Object.values(greenRun.json.packageTable).every((entry) => entry?.status === 'match'),
     greenRun.json?.packageTable)
-  check('probe: 报告载基线档案项（primary 0.2.0 单源提取——无版本常量副本）',
-    greenRun.json?.baseline?.id === '0.2.0' && greenRun.json?.baseline?.status === 'primary'
-      && greenRun.json?.baseline?.dsh === '0.2.0-rc.2' && greenRun.json?.baseline?.schemastery === '3.18.5',
+  check('probe: 报告载基线档案项（primary 0.2.1 单源提取——无版本常量副本）',
+    greenRun.json?.baseline?.id === '0.2.1' && greenRun.json?.baseline?.status === 'primary'
+      && greenRun.json?.baseline?.dsh === '0.2.1-rc.2' && greenRun.json?.baseline?.schemastery === '3.18.5',
     greenRun.json?.baseline)
 
   // T-6 形态判别（NEW-1 MUST）：dsh 主版本不变、schemastery 范围内漂移 → 恰 1 包表 mismatch。
@@ -269,7 +271,7 @@ console.log('R4 雷达 probe 模式（四类 diff 报告 + 探测不门控 + 判
   const outRun = runRadar(['--host-source', green, '--out', outFile])
   const written = existsSync(outFile) ? JSON.parse(readFileSync(outFile, 'utf8')) : null
   check('probe: --out 报告工件落盘且与 stdout JSON 同构（workflow artifact 形态）',
-    outRun.status === 0 && written !== null && written.summary?.totalDiffs === 0 && written.baseline?.id === '0.2.0',
+    outRun.status === 0 && written !== null && written.summary?.totalDiffs === 0 && written.baseline?.id === '0.2.1',
     { exists: existsSync(outFile) })
 
   // DSH_HOST_SOURCE / DSH_BASELINE 环境变量机制（R3 同语义复用）
@@ -290,12 +292,13 @@ console.log('R4 雷达 probe 模式（四类 diff 报告 + 探测不门控 + 判
 
 console.log('R4 雷达 dist-tags 模式（全枚举——F-5：预发布通道不失明）:')
 {
-  // 实测形态 stub（2026-10-17 registry 实跑捕获：next/latest=0.2.0-rc.2 + alpha=0.2.1-alpha.5）
+  // 实测形态 stub（2026-10-17 registry 实跑捕获：next/latest=0.2.0-rc.2 + alpha=0.2.1-alpha.5；
+  // ARCH-006 后 primary 已 0.2.1-rc.2 在册——alpha 通道 0.2.1-alpha.5 仍 ∉ 档案 dsh 值集）
   const liveForm = '{"next":"0.2.0-rc.2","latest":"0.2.0-rc.2","alpha":"0.2.1-alpha.5"}'
   const live = runRadar(['--dist-tags', liveForm])
   check('dist-tags: 实测形态全枚举（next/latest/alpha 三 tag 并集）→ alpha 通道 0.2.1-alpha.5 判为新版本（latest-only 查询将失明——F-5 判别）',
     live.status === 0 && live.json?.newVersions?.length === 1 && live.json.newVersions[0] === '0.2.1-alpha.5'
-      && live.json?.tags?.alpha === '0.2.1-alpha.5' && live.json?.primary?.dsh === '0.2.0-rc.2',
+      && live.json?.tags?.alpha === '0.2.1-alpha.5' && live.json?.primary?.dsh === '0.2.1-rc.2',
     { status: live.status, json: live.json })
   check('dist-tags: 已告警版本经 --seen 抑制（防周频重复 issue）',
     (() => { const r = runRadar(['--dist-tags', liveForm, '--seen', '["0.2.1-alpha.5"]']); return r.status === 0 && r.json?.newVersions?.length === 0 })(),
