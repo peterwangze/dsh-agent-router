@@ -39,6 +39,39 @@
  *  S6 转发事件白名单静态比对（W-4）：客户端转发面订阅事件名 ⊆ 白名单 +
  *     镜像值级 parity + Node 面 ctx.on 事件名 ⊆ {域管事件, scoped 钩子}
  *
+ * FIX-055 增补组（REVIEW-FIX-054-R0 P2-1/P3-1/P3-2 + FIX-055-R0 P2-1/P2-2/P3-1/P3-2/P3-3 收口）：
+ *  S8 宿主 v4 **row admission（写入面守卫）**：直连宿主模块
+ *     `assertV4RowAdmission`（一手入口）——`buildReminderMessage` 产出的 user/message
+ *     行必须被接受；`source.kind='plugin'` 必须被拒且错误含 `producer-owned source
+ *     kind`。**边界**：该入口仅在 `kind==='plugin'` 时调 `source()`（宿主 :142-152），
+ *     正向 `plugin:dsh-agent-router` 不触发逐消息准入 ⇒ S8 仅证明该行在入口/恢复
+ *     判据上不被拒，**不单独构成 source() 受理证据**（由 S8b 承担）。
+ *  S8b 宿主 v4 **logical admission（逐消息 source() 准入）**：直连宿主已导出的
+ *     `assertReleasedV4Relationships(artifact, knownEventTypes)`（0.2.1-rc.2 定义
+ *     :1027-1042、导出 :1552）——经 `assertV4MessageSources`（:132-137）对每条已知
+ *     事件消息执行 `source()`：最小 v4 artifact（events=[reminder user/message 行 +
+ *     surfaceOp:'append']）正向必须通过；kind 缺失 / kind 空串 / kind='plugin'（带
+ *     旧完整形状 `{kind,plugin}`）三负向控制必须各自被拒。
+ *     基线感知（S8/S8b 共用单点解析）：since=0.2.1（v4 会话格式定型代际）——0.2.0/
+ *     0.1.5 记可见 skip。**缺包语义（FIX-055-R0 P2-2）**：完整宿主树（本机 npm 全局
+ *     树，origin='npm-global(...)'）缺 v4 包 = **红**（完整安装不应缺）；显式/部分树
+ *     （DSH_HOST_SOURCE / DSH_HOST_PACKAGES / _npx）缺包 = 可见 skip 带原因。
+ *  S9 插件名单源守卫（P3-2 + FIX-055-R0 P3-2/P3-3）+ 宿主锚守卫（P3-1）：
+ *     package.json name === lib/index.js 注册名 === cordis.patch.yml 两宿主行插件名
+ *     === install.ps1 `$script:PluginName` === install.sh `PLUGIN` === lib/prestep.js
+ *     PLUGIN_NAME（import 实模块，不复制字面量；YAML 解析支持形态见 9a 注释）。
+ *     lib/prestep.js 注释引用的每个宿主锚按「行号窗口 + 内容模式」在实装宿主文件内
+ *     看护（锚行号 = 0.2.1-rc.2 实读、随下方 1b 步骤维护；窗口吸收补丁级挪行；模式
+ *     移出窗口即红 → 人工复核注释/基线后刷新）。
+ *
+ * **CI 覆盖口径（FIX-055-R0 P2-2）**：guard-matrix pinned 宿主树 = 恰好
+ * HOST_KEY_PACKAGES 8 包，不 pin v4/persistence——`dsh-session-format-v3-to-v4` 在
+ * registry 无 0.1.5-rc.2 发行版（最早 0.1.7-alpha.1），纯增量 pin 会在 0.1.5 矩阵 job
+ * 的 `npm pack` 失败；条件 pin 需 yaml 矩阵分支或注册表新字段（超出本批授权面）。
+ * 故真实 v4 admission 的 CI 覆盖 = 仅在包在场的树（本机完整树）执行；CI pinned 树
+ * 以可见 skip 回显、不红——如需 CI 覆盖，先按基线扩展 pin 机制（注册表驱动、无
+ * 版本字面量）再收紧本文件 skip 判据。
+ *
  * 判别性（红/绿演示——EVO-024 验收各附红→绿实证；演示用临时改动已全部复原，不入提交）：
  *  1. 黑名单：往消费者加一行裸 `ctx.get('sessionController')` → S4 红（分级放行
  *     越界：sessionController 白名单计数 0）；
@@ -53,9 +86,13 @@
  *
  * 如何刷新本套件（宿主升级后，与 host-version-snapshot 刷新步骤同步执行）：
  *  1. 以宿主 checkout 实读核验本文件各 *_BASELINE / WIRE_SCHEMA / ANCHOR 常量
- *     （锚点按宿主实读核验的包名/文件/符号更新——FIX-043 批 A 已去行号）；消费字段漂移则同步更新
+ *     （S2/S5/S7 锚点按宿主实读核验的包名/文件/符号更新——FIX-043 批 A 已去行号；
+ *     FIX-055 新增的宿主行号锚（S9b）为 0.2.1-rc.2 实读行、随 1b 步骤维护）；消费字段漂移则同步更新
  *     对应域模块（lib/host-abi/*.js）与浏览器镜像（lib/client.js）——镜像
  *     parity 由 S1c/S5 双向锁定；
+ *  1b. FIX-055 面同步刷新：S8 的基线代际判据（since=0.2.1）随 v4 会话格式代际更新；
+ *     S9b 的锚行号/内容模式按 lib/prestep.js 注释引用行实读核验（行号漂移由窗口吸收，
+ *     模式移出窗口即红）；宿主导入面变更时同步 prestep.js 注释锚。
  *  2. 跑 `node tests/host-contract.mjs` 确认绿，再跑全量门控 `node tests/run-all.mjs`。
  *
  * 基线参数化（ARCH-005 R3——看护矩阵化，设计 §2-B 四维-c / §6 R3 行）：
@@ -80,7 +117,7 @@
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { LlmAdapter, BlockAssembler } from '@deepseek-ai/dsh-llm'
 import * as dshMessage from '@deepseek-ai/dsh-llm/message'
@@ -93,6 +130,7 @@ import { CLIENT_REMOTE_FACES, createClientRemotes } from '../lib/host-abi/client
 import { CTX_SERVICES, ctxServiceFaceProbes } from '../lib/host-abi/ctx-services.js'
 import { FORWARDED_EVENT_ALLOWLIST, isForwardedEvent, MANAGED_EVENTS } from '../lib/host-abi/events.js'
 import { CLIENT_PACKAGE_INJECT, FIBER_INJECT } from '../lib/host-abi/inject-manifest.js'
+import { buildReminderMessage, PLUGIN_NAME } from '../lib/prestep.js'
 
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -688,6 +726,16 @@ if (hostTarget.root) {
 }
 
 /**
+ * FIX-055-R0 P2-2：宿主树完整度判定（S8/S8b/S9b 共用单点）。
+ * 完整安装 = 本机 npm 全局树（origin='npm-global(...)'；v4/persistence 随宿主发行）
+ * ⇒ 缺包判红（完整安装不应缺）；DSH_HOST_SOURCE / DSH_HOST_PACKAGES / _npx 为
+ * 显式或部分树（CI guard-matrix pinned 树 = 恰好 HOST_KEY_PACKAGES 8 包，刻意不
+ * pin v4/persistence——v4 包无 0.1.5-rc.2 发行版，纯增量 pin 会打断 0.1.5 矩阵 job）
+ * ⇒ 缺包记可见 skip 带原因（包缺失 ≠ 契约漂移）。
+ */
+const hostTreeIsComplete = hostTarget.origin !== null && hostTarget.origin.startsWith('npm-global')
+
+/**
  * 宿主源码按需读取（**单一实现路径**：S2/S5 的「声明面 → 靶子」核验共用；只读、零写入、按路径缓存）。
  * 返回 `null` = 宿主靶子不可达或该包×文件不存在 ⇒ 调用方按其语义降级（note / 跳过），BR-03 不变。
  * 与 S7 增强靶子组自带 `hostRead` 的边界：S7 是**整套**读取（缺失即响亮失败），本函数只承担
@@ -1161,6 +1209,181 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
     const composerSlots = hostRead('dsh-client-ui-conversation', 'lib', 'types', 'client', 'contract', 'slots.d.ts')
     check("S7 增强: 宿主 ComposerAttachment kind 判别字段在位（FIX-048 kind 语义锚——kind: 'image' | kind: 'file'）",
       composerSlots.includes("kind: 'image'") && composerSlots.includes("kind: 'file'"))
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIX-055（REVIEW-FIX-054-R0 P2-1 / FIX-055-R0 P2-1 delta）：宿主 v4 合约**双组**。
+// S8（row）与 S8b（logical）共用同一宿主模块解析（基线/可达性/缺包/入口/import
+// 单点判定、skip 原因只打印一次）——避免两条解析路径与重复 skip 噪声（P5）。
+const hostV4Contract = await (async () => {
+  const V4_SINCE = '0.2.1'
+  const V4_PACKAGE = 'dsh-session-format-v3-to-v4'
+  if (!baselineIncludes(V4_SINCE)) {
+    note(`S8/S8b 宿主 v4 合约: 所选基线 ${targetBaseline.id} < ${V4_SINCE}（v4 会话格式定型于 ${V4_SINCE}）→ 两组记 skip（基线分代；CI 三基线矩阵旧树不误红）`)
+    return { status: 'skip' }
+  }
+  if (!hostTarget.root) {
+    note('S8/S8b 宿主 v4 合约: 宿主靶子不可达（见上方「宿主靶子解析」行）→ 两组记 skip（BR-03：静态守卫不依赖宿主）')
+    return { status: 'skip' }
+  }
+  const packageDir = join(hostTarget.root, V4_PACKAGE)
+  if (!existsSync(packageDir)) {
+    if (hostTreeIsComplete) {
+      check(`S8/S8b 宿主 v4 合约: 完整宿主树（${hostTarget.origin}）缺 ${V4_PACKAGE} → 红（FIX-055-R0 P2-2：本机完整 npm 全局树应含该包）`, false, { root: hostTarget.root, origin: hostTarget.origin })
+    } else {
+      note(`S8/S8b 宿主 v4 合约: 靶子树不含 ${V4_PACKAGE}（${hostTarget.origin} = 显式/部分树；CI pinned 树 = 恰好 HOST_KEY_PACKAGES 8 包，刻意不含该包）→ 两组记 skip（包缺失 ≠ 契约漂移；本机完整树实跑）`)
+    }
+    return { status: 'skip' }
+  }
+  const entry = join(packageDir, 'lib', 'index.js')
+  if (!existsSync(entry)) {
+    check(`S8/S8b 宿主 v4 合约: 宿主包 ${V4_PACKAGE} 的 lib/index.js 在位（靶子 ${hostTarget.root}——包存在而入口消失 = 契约漂移）`, false, { expected: entry })
+    return { status: 'fail' }
+  }
+  let module = null
+  let importError = null
+  try { module = await import(pathToFileURL(entry).href) } catch (error) { importError = error }
+  check(`S8/S8b 宿主 v4 合约: 宿主模块 ${V4_PACKAGE} 可 import（真实入口 ${entry}）`, module !== null, { importError: importError === null ? null : String(importError?.message ?? importError) })
+  return module === null ? { status: 'fail' } : { status: 'ok', module, entry }
+})()
+
+console.log('S8 宿主 v4 row admission（写入面守卫；FIX-055 P2-1——仅证明该行在入口/恢复判据上不被拒，逐消息 source() 受理证据由 S8b 承载）:')
+if (hostV4Contract.status === 'ok') {
+  const admission = hostV4Contract.module.assertV4RowAdmission
+  check('S8 row admission: 宿主导出 assertV4RowAdmission（宿主 lib/index.js:1107 定义 / :1552 导出，0.2.1-rc.2 实读）', typeof admission === 'function', { exportedType: typeof admission })
+  if (typeof admission === 'function') {
+    const reminder = buildReminderMessage('FIX-055 row admission 探针')
+    const row = { type: 'user/message', seq: 1, data: reminder }
+    let accepted = true
+    let acceptError = null
+    try { admission(row) } catch (error) { accepted = false; acceptError = error }
+    check('S8 正向: buildReminderMessage 产出的 user/message 行被真实 v4 row admission 接受，且 source 无 plugin 字段（row 入口对正向 kind 不触发 source()——受理证据见 S8b）', accepted && reminder?.source?.kind === `plugin:${PLUGIN_NAME}` && !Object.hasOwn(reminder?.source ?? {}, 'plugin'), { accepted, source: reminder?.source ?? null, acceptError: acceptError === null ? null : `${acceptError?.name}: ${acceptError?.message}` })
+    let rejected = false
+    let rejectName = null
+    let rejectMessage = ''
+    try { admission({ ...row, data: { ...reminder, source: { kind: 'plugin' } } }) } catch (error) { rejected = true; rejectName = error?.name ?? null; rejectMessage = String(error?.message ?? '') }
+    check("S8 负向: source.kind='plugin' 被真实 v4 row admission 拒收（SessionFormatError 且错误含 'producer-owned source kind'——宿主 lib/index.js:126 一手判据）", rejected && rejectName === 'SessionFormatError' && rejectMessage.includes('producer-owned source kind'), { rejected, rejectName, rejectMessage })
+  }
+}
+
+console.log('S8b 宿主 v4 logical admission（逐消息 source() 准入；FIX-055-R0 P2-1——assertReleasedV4Relationships → assertV4MessageSources → source()）:')
+if (hostV4Contract.status === 'ok') {
+  const relationships = hostV4Contract.module.assertReleasedV4Relationships
+  check('S8b logical admission: 宿主导出 assertReleasedV4Relationships（宿主 lib/index.js:1027-1042 定义 / :1552 导出，0.2.1-rc.2 实读）', typeof relationships === 'function', { exportedType: typeof relationships })
+  if (typeof relationships === 'function') {
+    const reminder = buildReminderMessage('FIX-055 logical admission 探针')
+    const artifactOf = (message) => ({
+      header: { id: 'fix-055-logical-admission' },
+      inheritedEventCount: 0,
+      events: [{ seq: 0, type: 'user/message', surfaceOp: 'append', data: message }],
+    })
+    const knownEventTypes = new Set(['user/message'])
+    let accepted = true
+    let acceptError = null
+    try { relationships(artifactOf(reminder), knownEventTypes) } catch (error) { accepted = false; acceptError = error }
+    check(`S8b 正向: reminder user/message 行通过真实 logical admission（source() 真正接受 plugin:${PLUGIN_NAME}；source 无 plugin 字段）`, accepted && reminder?.source?.kind === `plugin:${PLUGIN_NAME}` && !Object.hasOwn(reminder?.source ?? {}, 'plugin'), { accepted, source: reminder?.source ?? null, acceptError: acceptError === null ? null : `${acceptError?.name}: ${acceptError?.message}` })
+    const withoutSource = { ...reminder }
+    delete withoutSource.source
+    const negativeCases = [
+      ['kind 缺失', withoutSource],
+      ['kind 空串', { ...reminder, source: { kind: '' } }],
+      ["kind='plugin'（旧完整形状 {kind,plugin}）", { ...reminder, source: { kind: 'plugin', plugin: PLUGIN_NAME } }],
+    ]
+    const outcomes = negativeCases.map(([label, message]) => {
+      try { relationships(artifactOf(message), knownEventTypes); return { label, rejected: false, name: null, message: '' } }
+      catch (error) { return { label, rejected: true, name: error?.name ?? null, message: String(error?.message ?? '') } }
+    })
+    const allRejected = outcomes.every((outcome) => outcome.rejected && outcome.name === 'SessionFormatError' && outcome.message.includes('producer-owned source kind'))
+    check(`S8b 负向控制: ${outcomes.length} 种非法 source（kind 缺失 / kind 空串 / kind='plugin' 带旧 plugin 字段）全部被真实 logical admission 拒收（SessionFormatError + producer-owned source kind）`, allRejected, outcomes)
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIX-055：插件名单源守卫（REVIEW-FIX-054-R0 P3-2 收口）+ 宿主锚守卫（P3-1 收口）。
+console.log('S9 插件名单源守卫（FIX-055 P3-2）+ 宿主锚守卫（FIX-055 P3-1）:')
+{
+  // 9a 插件名单源（静态，恒跑；PLUGIN_NAME 经 import 实模块取值，不复制字面量）。
+  //    cordis.patch.yml 支持的布局（FIX-055-R0 P3-3）：块序列 `- id: <id>` 后紧跟
+  //    `name: <name>`（当前非引号布局；值允许单/双引号标量，注释先剥离）。
+  //    flow style / 嵌套 mapping 等其它形态不在支持面：解析失配 → 判红，需人工
+  //    同步本解析器（fail-closed，不静默通过）。
+  /** YAML 行注释剥离（`#` 至行尾；名字不含 `#`，故不做引号内例外）。 */
+  const stripYamlComments = (source) => source.replace(/(^|\s)#[^\n]*/g, '$1')
+  /** YAML 标量去引号（单/双引号包裹时取内层；非引号原样）。 */
+  const yamlScalar = (raw) => {
+    const value = raw.trim()
+    if (value.length >= 2 && ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"')))) return value.slice(1, -1)
+    return value
+  }
+  const indexSource = readLib('index.js')
+  const indexName = /export const name = ['"]([^'"]+)['"]/.exec(indexSource)?.[1] ?? null
+  const patchPluginNames = (() => {
+    const names = new Map()
+    let currentId = null
+    for (const line of stripYamlComments(patch).split(/\r?\n/)) {
+      const idMatch = /^\s*-\s*id:\s*(.+?)\s*$/.exec(line)
+      if (idMatch !== null) { currentId = yamlScalar(idMatch[1]); continue }
+      const nameMatch = /^\s*name:\s*(.+?)\s*$/.exec(line)
+      if (nameMatch !== null && currentId !== null) names.set(currentId, yamlScalar(nameMatch[1]))
+    }
+    return names
+  })()
+  const reminder = buildReminderMessage('FIX-055 插件名单源守卫探针')
+  check(`S9a 插件名单源: package.json name === PLUGIN_NAME（lib/prestep.js 实模块 import；${JSON.stringify(pkg.name)} vs ${JSON.stringify(PLUGIN_NAME)}）`, pkg.name === PLUGIN_NAME, { packageName: pkg.name, pluginName: PLUGIN_NAME })
+  check(`S9a 插件名单源: lib/index.js 注册名 === PLUGIN_NAME（${JSON.stringify(indexName)} vs ${JSON.stringify(PLUGIN_NAME)}）`, indexName === PLUGIN_NAME, { indexName, pluginName: PLUGIN_NAME })
+  check(`S9a 插件名单源: cordis.patch.yml 宿主行 router 插件名 === PLUGIN_NAME（${JSON.stringify(patchPluginNames.get('router') ?? null)}）`, patchPluginNames.get('router') === PLUGIN_NAME, { patchNames: Object.fromEntries(patchPluginNames), pluginName: PLUGIN_NAME })
+  check("S9a 插件名单源: cordis.patch.yml 宿主行 tool-router 插件名 === '<PLUGIN_NAME>/tool'（子面名自同一单源派生）", patchPluginNames.get('tool-router') === `${PLUGIN_NAME}/tool`, { toolRouterName: patchPluginNames.get('tool-router') ?? null, expected: `${PLUGIN_NAME}/tool` })
+  // 安装器第四/五源（FIX-055-R0 P3-2：只读 install.ps1 / install.sh，仅断言不改文件）
+  const installPs1Source = readFileSync(join(ROOT_DIR, 'install.ps1'), 'utf8')
+  const installShSource = readFileSync(join(ROOT_DIR, 'install.sh'), 'utf8')
+  const installPs1Name = /^\$script:PluginName\s*=\s*['"]([^'"]+)['"]/m.exec(installPs1Source)?.[1] ?? null
+  const installShMatch = /^PLUGIN\s*=\s*(?:"([^"]+)"|'([^']+)')/m.exec(installShSource)
+  const installShName = installShMatch === null ? null : (installShMatch[1] ?? installShMatch[2])
+  check(`S9a 插件名单源: install.ps1 $script:PluginName === PLUGIN_NAME（install.ps1 实读；${JSON.stringify(installPs1Name)} vs ${JSON.stringify(PLUGIN_NAME)}）`, installPs1Name === PLUGIN_NAME, { installPs1Name, pluginName: PLUGIN_NAME })
+  check(`S9a 插件名单源: install.sh PLUGIN === PLUGIN_NAME（install.sh 实读；${JSON.stringify(installShName)} vs ${JSON.stringify(PLUGIN_NAME)}）`, installShName === PLUGIN_NAME, { installShName, pluginName: PLUGIN_NAME })
+  check(`S9a reminder 源形态: buildReminderMessage 产物 source.kind === 'plugin:${PLUGIN_NAME}' 且无 plugin 字段（kind 单点派生 + 迁移同形）`, reminder?.source?.kind === `plugin:${PLUGIN_NAME}` && !Object.hasOwn(reminder?.source ?? {}, 'plugin'), { source: reminder?.source ?? null, expectedKind: `plugin:${PLUGIN_NAME}` })
+
+  // 9b 宿主锚守卫：逐条对应 lib/prestep.js 注释引用的宿主锚；行号 = 0.2.1-rc.2 实读、
+  //    与注释同源；窗口吸收宿主补丁级挪行；内容模式移出窗口 = 锚漂移 → 红
+  //    （人工复核注释与基线后刷新，不机械改码）。
+  const HOST_V4_ANCHORS = [
+    { id: 'admission-source', package: 'dsh-session-format-v3-to-v4', file: 'lib/index.js', line: 126, window: 6, face: 'v4 source 准入拒收串（source()）', patterns: [/producer-owned source kind/, /value\["kind"\] === "plugin"/] },
+    { id: 'producer-kind-fallback', package: 'dsh-session-format-v3-to-v4', file: 'lib/index.js', line: 92, window: 6, face: 'producerKind 未登记插件回落口径', patterns: [/function producerKind\(plugin, role\)/, /plugin:\$\{plugin\}/] },
+    { id: 'rewrite-plugin-source', package: 'dsh-session-format-v3-to-v4', file: 'lib/index.js', line: 101, window: 8, face: '迁移丢弃 plugin 字段（rewritePluginSource）', patterns: [/function rewritePluginSource/, /key !== "plugin"/] },
+    { id: 'persistence-inline-admission', package: 'dsh-session-persistence-jsonl', file: 'lib/worker.cjs', line: 11641, window: 6, face: '持久化内联同一 admission 判据', patterns: [/producer-owned source kind/, /value\["kind"\] === "plugin"/] },
+    { id: 'message-source-no-catch-all', package: 'dsh-llm', file: 'lib/types/message.d.ts', line: 97, window: 5, face: 'MessageSourceMap 无 catch-all plugin kind 声明', patterns: [/no shared catch-all/, /`plugin` kind/] },
+  ]
+  const ANCHOR_SINCE = '0.2.1'
+  if (!baselineIncludes(ANCHOR_SINCE)) {
+    note(`S9b 宿主锚: 所选基线 ${targetBaseline.id} < ${ANCHOR_SINCE}（锚定型于 v4 会话格式代际）→ ${HOST_V4_ANCHORS.length} 条锚记 skip（基线分代；CI 三基线矩阵旧树不误红）`)
+  } else if (!hostTarget.root) {
+    note(`S9b 宿主锚: 宿主靶子不可达 → ${HOST_V4_ANCHORS.length} 条锚记 skip（BR-03：静态守卫不依赖宿主）`)
+  } else {
+    const anchorPackages = [...new Set(HOST_V4_ANCHORS.map((anchor) => anchor.package))]
+    for (const packageName of anchorPackages.filter((name) => !existsSync(join(hostTarget.root, name)))) {
+      const affected = HOST_V4_ANCHORS.filter((anchor) => anchor.package === packageName).map((anchor) => anchor.id)
+      if (hostTreeIsComplete) {
+        check(`S9b 宿主锚: 完整宿主树（${hostTarget.origin}）缺 ${packageName} → 红（FIX-055-R0 P2-2：本机完整 npm 全局树应含该包；${affected.join(' / ')}）`, false, { packageName, root: hostTarget.root, affected })
+      } else {
+        note(`S9b 宿主锚: 靶子树不含 ${packageName}（${hostTarget.origin} = 显式/部分树；CI pinned 树 = 恰好 HOST_KEY_PACKAGES 8 包，刻意不含该包）→ ${affected.join(' / ')} 记 skip（本机完整 npm 全局树实跑；包缺失 ≠ 锚漂移）`)
+      }
+    }
+    for (const anchor of HOST_V4_ANCHORS) {
+      const packageDir = join(hostTarget.root, anchor.package)
+      if (!existsSync(packageDir)) continue // 已按包记 skip（CI pinned 树形态）
+      const anchorFile = join(packageDir, anchor.file)
+      if (!existsSync(anchorFile)) {
+        check(`S9b 宿主锚: ${anchor.id} 宿主文件在位（${anchor.package}/${anchor.file}——包存在而文件消失 = 契约漂移）`, false, { expected: anchorFile })
+        continue
+      }
+      const lines = readFileSync(anchorFile, 'utf8').split(/\r?\n/)
+      const start = Math.max(1, anchor.line - anchor.window)
+      const end = Math.min(lines.length, anchor.line + anchor.window)
+      const windowLines = lines.slice(start - 1, end)
+      const missing = anchor.patterns.filter((pattern) => !windowLines.some((line) => pattern.test(line)))
+      check(`S9b 宿主锚: ${anchor.id}（${anchor.face}）命中 ${anchor.package}/${anchor.file} 行 ${start}-${end} 窗口（期望行 ${anchor.line}；${anchor.patterns.length} 项内容模式全部在场——窗口外即锚漂移）`, missing.length === 0, { expectedLine: anchor.line, window: [start, end], fileLines: lines.length, missingPatterns: missing.map((pattern) => String(pattern)), actualWindow: windowLines.map((line, index) => `${start + index}: ${line.trim().slice(0, 160)}`) })
+    }
   }
 }
 
