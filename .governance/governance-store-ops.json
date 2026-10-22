@@ -538,6 +538,25 @@
       "baseline_effects": null,
       "recorded_at": "2026-10-22T15:25:15",
       "updated_at": "2026-10-22T15:25:15"
+    },
+    "op-5478ae546ae54c08867f7a91e42f976c": {
+      "schema_version": 1,
+      "command": "evidence-append",
+      "task_id": "REL-014",
+      "input_fingerprint": "9cfdfa933fae5abd1b361916b432f63c5c8563d6e57326a2efa50d0fa295d415",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-5478ae546ae54c08867f7a91e42f976c",
+        "code": "ok",
+        "new_revision": 524780,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-22T15:38:32",
+      "updated_at": "2026-10-22T15:38:32"
     }
   }
 }
