@@ -117,6 +117,8 @@ Analyst 依赖 / 契约全量 diff——**模板先例 = `.governance/arch-005-h
 机器报告四类是「点名的差异」；人工比对补「语义变化定性」（改名 vs 新增、时序变化、
 先例族对照——历史断裂五族 FIX-003/028/030/033/048）。
 
+**行为面/协议准入类（FIX-054 教训，2026-10-22）**：四类机器 diff 只覆盖「结构面」（锚 / 事件白名单 / wire schema / 包表），**不覆盖运行期准入判据**。宿主升级后 MUST 追加检索会话与消息协议包（`dsh-session-format-*` / `dsh-session-persistence-*` / `dsh-llm` 的 message 类型）的 admission / 校验改动：重点是消息 `source.kind` 词表与「producer-owned」要求（v4 会话格式拒收 catch-all `plugin`，第三方插件应写 `plugin:<插件名>`）、事件 surfaceOp 约束与 codec 形状。判据 = 插件写入的每条消息/事件在新宿主 admission 下可通过；发现方式 = 读宿主新包源码中的 `SessionFormatError` / 准入谓词，而非只看 schema 白名单（本次断裂即 ARCH-006 四类 diff 全 additive 但运行期拒收）。
+
 **待验证项挂接**（本链 T-1~T-6 先例）：定性存疑项逐条挂到适配批前置——如 T-1 用
 `npm pack <pkg>@<ver>` + grep 定性「新断 vs 已然」（A4 先例：createDraftImages 在
 0.1.5-rc.2 零命中 → HD-004 定性为「恢复」而非「回归」）；T-3/T-5 源级实证锚定可达性

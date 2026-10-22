@@ -311,7 +311,7 @@ type RewriteDecision = {
 }
 decideRewrite(messages, ctx: { provider; model; turn }): Promise<RewriteDecision>  // 能力查询带缓存
 rewriteMessages(messages, decision): Message[]   // 只改模型输入，不动日志（F3）
-collectReminder(attachmentIds: string[], visionAgents: string[]): { id; text }     // 通道①
+collectReminder(attachmentIds: string[], visionAgents: string[]): string   // 通道①：返回 reminder 文本（外层由 buildReminderMessage 包装为带 id 的 user 消息，source.kind = plugin:dsh-agent-router——FIX-054）
 ```
 
 #### 4.3.4 route_agent 工具参数（扩展）
@@ -357,7 +357,8 @@ wire codec 追加到 `lib/schemas.js` wireCodecs + `lib/rpc.js` ROUTER_DESCRIPTO
 ③ agent-loop step()：
    a. agent/pre-step（M3/M4 注册，N-3）：
       - 检测当前轮含 image 块 → 注入带 id 的 reminder user 消息（通道①，
-        source: {kind:'plugin'}——行为指令，不含图片内容）
+        source: {kind:'plugin:dsh-agent-router'}——行为指令，不含图片内容；
+        宿主 v4 会话格式要求 producer-owned kind（无 catch-all `plugin`），FIX-054 修正）
       - 会话路由非包装路由（逃生组）→ 按 M4 分级改写 outgoing messages
         （能力查询失败/纯文本 → marker 文本，保证 C-3）
    b. agent/request：插件不再注册（X-1）→ 瀑布返回原 config

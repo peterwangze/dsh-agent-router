@@ -103,9 +103,12 @@
         ],
         "DEC-35": [
           "ce95ee342e4616628e6b8588d1565acc"
+        ],
+        "DEC-36": [
+          "0f516c64d287dab9f7c8e670ec915dfe"
         ]
       },
-      "sha256": "c74cf06db13ead86dfd8fe0158e27e4aa3f307c98266ec66af95a43dc3d197c0"
+      "sha256": "6cbb1a31dcd074c6ca106cf07891f9f4616079b6be9e2c442f60f1145919c6ba"
     },
     "evidence-log.md": {
       "rows": {
@@ -123,6 +126,15 @@
         ],
         "EVD-5": [
           "1977dfde70c4a6e1df8f3e2e68745654"
+        ],
+        "EVD-6": [
+          "ec8daa5ef6d9f7e1fdbd412c824b54cc"
+        ],
+        "EVD-7": [
+          "d2693c1eedaba78e1371164948becd31"
+        ],
+        "EVD-8": [
+          "3f4bc518feca0726756cacfa9d0bf63f"
         ],
         "REVIEW-ARCH-004-R0": [
           "c533f22b138e2d0f923eaaaeee8d573d"
@@ -484,6 +496,9 @@
         "REVIEW-FIX-052-R0-CODEREVIEWER": [
           "2e36ccba3bf8cf7a0e379261fbb47acd"
         ],
+        "REVIEW-FIX-054-R0-CODE-REVIEWER": [
+          "ea50524e8e603e14f4b9ece14818840b"
+        ],
         "REVIEW-REL-002-R0": [
           "97922ffea4e199eea747e7c0d91cd1ee",
           "9b51527fbb5eccc3be9c294080f75749"
@@ -548,9 +563,15 @@
         ],
         "REVIEW-REL-013-R1-RELEASE-REVIEWER": [
           "04e13dca9c85e4cd2b81ada5e892a81c"
+        ],
+        "REVIEW-REL-014-R0-RELEASE-REVIEWER": [
+          "4d0463d90a4fb3d88c481e1375565502"
+        ],
+        "REVIEW-REL-014-R1-RELEASE-REVIEWER": [
+          "5d3528f22e85ff475f708dcc5e89da50"
         ]
       },
-      "sha256": "02c729449bc4cc20fbfb62acdcd7241fc0959dd46102e1bf322c632f6b0d218d"
+      "sha256": "4bfb5e23a50749705d7261507666d673c8b224e43458328882ab244778e63c7f"
     },
     "plan-tracker.md": {
       "rows": {
@@ -747,6 +768,13 @@
         "FIX-053": [
           "893f81bff0b1c0db8fa1497d1cadc8ad"
         ],
+        "FIX-054": [
+          "1add9618420919488d8f07c5ad65f021",
+          "a5f6c7de53518f348b62a079b93861b7"
+        ],
+        "FIX-055": [
+          "df6d1bd21cb45b2a02dbb45e78f06078"
+        ],
         "GOV-001": [
           "53be57896bb73b3ab53b12c7f1ec8edc"
         ],
@@ -819,7 +847,11 @@
         ],
         "REL-013": [
           "3d1a576759b2be7b0755684edc10b50e",
-          "f49d31857dfbd06c69d483814d9c7657"
+          "6e4a5b0d59c4caac0d95dbe73da5acc0"
+        ],
+        "REL-014": [
+          "86af1bd1bd596da77a704464a53b476c",
+          "e89fd3c93d974035cdb6a57812abfc80"
         ],
         "REQ-001": [
           "9aaf5daac017b93737b0ea6937c2a508"
@@ -840,10 +872,10 @@
           "58c672f52926fbf91e75a9e983387b10"
         ]
       },
-      "sha256": "45af8cb08837cc42e1d8d0da0295729add6f5c7746c1b9a04b188f457e9f6ca7"
+      "sha256": "046462794fbfffc437b05f1abcb0e13b707dac8c8668ec102cb7a1e888ea415a"
     }
   },
   "schema_version": 1,
   "tool": "governance-write-guard/row-family-reconciliation",
-  "updated_at": "2026-10-20T20:23:34"
+  "updated_at": "2026-10-22T13:55:47"
 }

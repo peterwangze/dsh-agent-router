@@ -367,6 +367,139 @@
       "baseline_effects": null,
       "recorded_at": "2026-10-20T20:22:41",
       "updated_at": "2026-10-20T20:22:41"
+    },
+    "op-d21509aaf74f4026bc5169b8e259019a": {
+      "schema_version": 1,
+      "command": "locks-release",
+      "task_id": "FIX-054",
+      "input_fingerprint": "2dff320fdabdeeed3454ca0bfac0e2c42ad2b652baa3aad2888c1f3c939e31e2",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-d21509aaf74f4026bc5169b8e259019a",
+        "code": "ok",
+        "new_revision": 49,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-22T12:41:07",
+      "updated_at": "2026-10-22T12:41:07",
+      "released_files": [
+        "lib/prestep.js",
+        "tests/fix-010-gui-fidelity.mjs",
+        "tests/fix-029-host-contract.mjs",
+        "tests/metrics.mjs",
+        "tests/routing-paths.mjs",
+        "tests/smoke.mjs"
+      ]
+    },
+    "op-f5b74a11660a4232ba7f8c73be4378d1": {
+      "schema_version": 1,
+      "command": "evidence-append",
+      "task_id": "FIX-054",
+      "input_fingerprint": "dc870f3b1e89e90b2bf6299256c9e9ed75903d3d4c0bf2d510aaee193489c5e8",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-f5b74a11660a4232ba7f8c73be4378d1",
+        "code": "ok",
+        "new_revision": 516081,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-22T12:52:25",
+      "updated_at": "2026-10-22T12:52:25"
+    },
+    "op-923a6ee7beb04277bde34f91866aec94": {
+      "schema_version": 1,
+      "command": "evidence-append",
+      "task_id": "REL-014",
+      "input_fingerprint": "23b5c1da9b37741f23547ca7f41659a0e5957a893a59e328c8444c12e79b9864",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-923a6ee7beb04277bde34f91866aec94",
+        "code": "ok",
+        "new_revision": 517927,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-22T13:47:00",
+      "updated_at": "2026-10-22T13:47:00"
+    },
+    "op-047a088527074d1ba6ca9da862a3695f": {
+      "schema_version": 1,
+      "command": "locks-release",
+      "task_id": "REL-014",
+      "input_fingerprint": "289f8e020c48c12345ee503d2e1744a5b265fa66e531a848a34d6ec4c1ef9dd7",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-047a088527074d1ba6ca9da862a3695f",
+        "code": "ok",
+        "new_revision": 49,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-22T13:47:00",
+      "updated_at": "2026-10-22T13:47:00",
+      "released_files": [
+        "CHANGELOG.md",
+        "README.md",
+        "package.json"
+      ]
+    },
+    "op-cd56fa8be58a42ed81edf1ca6f5bccdb": {
+      "schema_version": 1,
+      "command": "evidence-append",
+      "task_id": "REL-014",
+      "input_fingerprint": "868d9599ee8a455416e4d32ba9f1a6ddea0b1958c50c27270eddac9ceeac977e",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-cd56fa8be58a42ed81edf1ca6f5bccdb",
+        "code": "ok",
+        "new_revision": 519765,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-22T13:53:53",
+      "updated_at": "2026-10-22T13:53:53"
+    },
+    "op-f80a930b77a440838f5d8be5649e78fd": {
+      "schema_version": 1,
+      "command": "decision-append",
+      "task_id": "",
+      "input_fingerprint": "6267841a08c81b191af839d75855dc30dda2956e38c02f1adc0faf41b517167a",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-f80a930b77a440838f5d8be5649e78fd",
+        "code": "ok",
+        "new_revision": 44768,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-22T13:55:34",
+      "updated_at": "2026-10-22T13:55:34",
+      "authority": {
+        "state": "MD_ACTIVE",
+        "epoch": 0,
+        "generation": 0,
+        "backend": "md"
+      }
     }
   }
 }
