@@ -121,6 +121,15 @@
         "EVD-11": [
           "af28864fbcdd3aa3f8aa090ecad77213"
         ],
+        "EVD-12": [
+          "ce6a2524e758e96b7535d1d23105c77f"
+        ],
+        "EVD-13": [
+          "e8f4a1f60dad083e9808f98643884206"
+        ],
+        "EVD-14": [
+          "da418a3765e16f4fd8f4e4422f8cf475"
+        ],
         "EVD-2": [
           "9819143d4a024d49cdf394bac68d46d0"
         ],
@@ -508,6 +517,12 @@
         "REVIEW-FIX-054-R0-CODE-REVIEWER": [
           "ea50524e8e603e14f4b9ece14818840b"
         ],
+        "REVIEW-FIX-055-R0-CODE-REVIEWER": [
+          "3b5e1a1041f5eb24f9643c423424aeca"
+        ],
+        "REVIEW-FIX-055-R1-CODE-REVIEWER": [
+          "d5b31f5689b640b75c37eeacbd6b5127"
+        ],
         "REVIEW-REL-002-R0": [
           "97922ffea4e199eea747e7c0d91cd1ee",
           "9b51527fbb5eccc3be9c294080f75749"
@@ -580,7 +595,7 @@
           "5d3528f22e85ff475f708dcc5e89da50"
         ]
       },
-      "sha256": "4038af4ebc449ac08399992dfa60d29222437c39e8871c31490c0a559128fb52"
+      "sha256": "3ee03eeb0f0b6a914e520d85854e71582980331690c84b14c616ec0ee7d6ce09"
     },
     "plan-tracker.md": {
       "rows": {
@@ -778,11 +793,12 @@
           "893f81bff0b1c0db8fa1497d1cadc8ad"
         ],
         "FIX-054": [
-          "a6d05d427867d4fd34942f149fb21f53",
+          "4dbd553d3393e3acad2b8feebd7d22e2",
           "ff3dc57ab5032d95d8cd7a20744e2f77"
         ],
         "FIX-055": [
-          "df6d1bd21cb45b2a02dbb45e78f06078"
+          "733b585a87df473a3c4e8b749f1e0e92",
+          "b298a959ac55e2d91bf4c28927b78135"
         ],
         "GOV-001": [
           "53be57896bb73b3ab53b12c7f1ec8edc"
@@ -881,10 +897,10 @@
           "58c672f52926fbf91e75a9e983387b10"
         ]
       },
-      "sha256": "dcca9091044119e992c73fd857d7d836429f16bd6506461712237602c98bcea9"
+      "sha256": "3f1b80117b55879ca74dd8a73fd8e4bd40456ec5bbdba351180d2dc195a424d8"
     }
   },
   "schema_version": 1,
   "tool": "governance-write-guard/row-family-reconciliation",
-  "updated_at": "2026-10-22T15:39:51"
+  "updated_at": "2026-10-22T16:28:04"
 }
