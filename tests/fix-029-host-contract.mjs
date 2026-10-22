@@ -109,6 +109,20 @@ const imgPlusText = () => [
 const hasImageBlock = (msgs) => msgs.some((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'image'))
 const hasMarkerText = (msgs) => msgs.some((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'text' && typeof b.text === 'string' && b.text.includes('请直接调用 route_agent 工具')))
 const hasReminder = (msgs) => msgs.some((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'text' && typeof b.text === 'string' && b.text.includes('本轮消息包含图片')))
+// FIX-054（P0）：reminder source MUST 是宿主 v4 准入的 producer-owned kind——
+// 宿主 dsh-session-format-v3-to-v4 的 source() 对 kind 缺失/空串/'plugin' 抛
+// SessionFormatError；第三方插件经 v3→v4 迁移的 kind 口径 = `plugin:${plugin}`
+// （同文件 producerKind()；0.2.1-rc.2 实读），且迁移产物丢弃 plugin 字段。
+// 断言用字面量（独立于 lib 实现），旧实现 kind:'plugin' 必红。
+const REMINDER_SOURCE_KIND = 'plugin:dsh-agent-router'
+const isProducerOwnedSource = (message) => {
+  const source = message && message.source
+  return !!source && typeof source.kind === 'string' && source.kind.length > 0 && source.kind !== 'plugin'
+}
+const hasProducerOwnedReminder = (msgs) => {
+  const reminder = msgs.find((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'text' && typeof b.text === 'string' && b.text.includes('本轮消息包含图片')))
+  return !!reminder && isProducerOwnedSource(reminder) && reminder.source.kind === REMINDER_SOURCE_KIND && !Object.hasOwn(reminder.source, 'plugin')
+}
 
 console.log('fix-029 A: prestep durable pending selection (RED on current code — stale header wins):')
 {
@@ -125,7 +139,7 @@ console.log('fix-029 A: prestep durable pending selection (RED on current code �
   })
   const outA1 = await runPending(staleHeaderAgent, imgPlusText())
   check('A1: stale header + pending twin → 保留原始 image 块（旧实现必败：逃生组改写）', hasImageBlock(outA1))
-  check('A2: 同场景标记文本不进会话历史 + reminder 注入保持（accepts 链不回退）', !hasMarkerText(outA1) && hasReminder(outA1))
+  check('A2: 同场景标记文本不进会话历史 + reminder 注入保持（accepts 链不回退）', !hasMarkerText(outA1) && hasReminder(outA1) && hasProducerOwnedReminder(outA1))
 
   // A3：pending 指向非 wrapper（用户切回原生发图）→ 逃生组改写保持（C-3）。
   const runNative = installPrestepHarness(fakeService, {

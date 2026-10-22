@@ -1093,6 +1093,21 @@ console.log('F. takeover 客户端会话级:')
   const imgMessages = () => [{ role: 'user', content: [{ type: 'image', attachment: { attachmentId: IMG_C, name: 't.png', mediaType: 'image/png', bytes: 4, width: 2, height: 2 } }] }]
   const hasReminder = (msgs) => msgs.some((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'text' && typeof b.text === 'string' && b.text.includes(REMINDER_SUBSTR)))
   const hasImageBlock = (msgs) => msgs.some((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'image'))
+  // FIX-054（P0）：reminder source MUST 是宿主 v4 准入的 producer-owned kind——
+  // 宿主 dsh-session-format-v3-to-v4 的 source() 对 kind 缺失/空串/'plugin' 抛
+  // SessionFormatError("format v4 message requires a producer-owned source
+  // kind")；第三方插件经 v3→v4 迁移的 kind 口径 = `plugin:${plugin}`（同文件
+  // producerKind()；0.2.1-rc.2 实读），且迁移产物丢弃 plugin 字段。断言用字面量
+  // （独立于 lib 实现），旧实现 kind:'plugin' 必红。
+  const REMINDER_SOURCE_KIND = 'plugin:dsh-agent-router'
+  const isProducerOwnedSource = (message) => {
+    const source = message && message.source
+    return !!source && typeof source.kind === 'string' && source.kind.length > 0 && source.kind !== 'plugin'
+  }
+  const hasProducerOwnedReminder = (msgs) => {
+    const reminder = msgs.find((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'text' && typeof b.text === 'string' && b.text.includes(REMINDER_SUBSTR)))
+    return !!reminder && isProducerOwnedSource(reminder) && reminder.source.kind === REMINDER_SOURCE_KIND && !Object.hasOwn(reminder.source, 'plugin')
+  }
 
   // G1 原生多模态（非 wrapper）：accepts=true → 不注入 reminder + 图片块保留（未改写）——
   // 旧代码：无条件注入 → hasReminder 必败。
@@ -1104,7 +1119,7 @@ console.log('F. takeover 客户端会话级:')
   // 现状行为保持判别（误删保护：C-3 纯文本主模型不见裸图块）。
   {
     const out = await runPreStep({ llm: mkStubLlm(), provider: 'text-only-prov', model: 't1', messages: imgMessages() })
-    check('[G2] 纯文本主模型：reminder 注入保持 + 改写无裸图块', hasReminder(out) && !hasImageBlock(out))
+    check('[G2] 纯文本主模型：reminder 注入保持 + 改写无裸图块', hasReminder(out) && hasProducerOwnedReminder(out) && !hasImageBlock(out))
   }
   // G3 wrapper 分支原生多模态：provider 剥 -router 探测原能力 → 不注入——
   // 旧代码 wrapper 分支不探测（onWrapperRoute 跳过）→ 无条件注入 → 必败。
@@ -1115,7 +1130,7 @@ console.log('F. takeover 客户端会话级:')
   // G4 wrapper 分支纯文本：注入保持（不改写——wrapper stream 在模型输入层改写，防双改写）。
   {
     const out = await runPreStep({ llm: mkStubLlm(), provider: 'text-only-prov-router', model: 't1', messages: imgMessages() })
-    check('[G4] wrapper 分支纯文本：reminder 保持注入', hasReminder(out))
+    check('[G4] wrapper 分支纯文本：reminder 保持注入', hasReminder(out) && hasProducerOwnedReminder(out))
   }
   // G7（FIX-018 缺陷 2 证明）：chatgpt-oauth twin 会话——prestep 能力判定经
   // registration(<剥 -router>).adapter.resolveModel 直调（EVO-009 适配器形状

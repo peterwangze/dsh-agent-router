@@ -104,6 +104,20 @@ const imgPlusText = () => [
 const hasImageBlock = (msgs) => msgs.some((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'image'))
 const hasMarkerText = (msgs) => msgs.some((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'text' && typeof b.text === 'string' && b.text.includes('请直接调用 route_agent 工具')))
 const hasReminder = (msgs) => msgs.some((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'text' && typeof b.text === 'string' && b.text.includes('本轮消息包含图片')))
+// FIX-054（P0）：reminder source MUST 是宿主 v4 准入的 producer-owned kind——
+// 宿主 dsh-session-format-v3-to-v4 的 source() 对 kind 缺失/空串/'plugin' 抛
+// SessionFormatError；第三方插件经 v3→v4 迁移的 kind 口径 = `plugin:${plugin}`
+// （同文件 producerKind()；0.2.1-rc.2 实读），且迁移产物丢弃 plugin 字段。
+// 断言用字面量（独立于 lib 实现），旧实现 kind:'plugin' 必红。
+const REMINDER_SOURCE_KIND = 'plugin:dsh-agent-router'
+const isProducerOwnedSource = (message) => {
+  const source = message && message.source
+  return !!source && typeof source.kind === 'string' && source.kind.length > 0 && source.kind !== 'plugin'
+}
+const hasProducerOwnedReminder = (msgs) => {
+  const reminder = msgs.find((m) => Array.isArray(m?.content) && m.content.some((b) => b?.type === 'text' && typeof b.text === 'string' && b.text.includes('本轮消息包含图片')))
+  return !!reminder && isProducerOwnedSource(reminder) && reminder.source.kind === REMINDER_SOURCE_KIND && !Object.hasOwn(reminder.source, 'plugin')
+}
 
 console.log('fix-010 GUI fidelity (RED on current code):')
 {
@@ -123,7 +137,7 @@ console.log('fix-010 GUI fidelity (RED on current code):')
   )
   check('A1: wrapper 路由会话（options 非 wrapper）保留原始 image 块（RED: escape rewrite 替换）', hasImageBlock(outA))
   check('A2: 同场景标记文本不进入会话历史（无 minimalImageRewrite 污染）', !hasMarkerText(outA))
-  check('A3: 纯文本判定链不回退——reminder 注入保持（accepts=false）', hasReminder(outA))
+  check('A3: 纯文本判定链不回退——reminder 注入保持（accepts=false）', hasReminder(outA) && hasProducerOwnedReminder(outA))
 
   // B. 控制组：无 requestHeader（新会话首轮）→ 回落 agent.options → 非 wrapper
   //    纯文本 → 逃生组改写保持（C-3：纯文本主模型不见裸图块）。
@@ -132,7 +146,7 @@ console.log('fix-010 GUI fidelity (RED on current code):')
     imgPlusText(),
   )
   check('B1: 新会话回落 options：非 wrapper 纯文本 → 逃生组改写保持（无裸图块）', !hasImageBlock(outB) && hasMarkerText(outB))
-  check('B2: 新会话回落 options：reminder 注入保持', hasReminder(outB))
+  check('B2: 新会话回落 options：reminder 注入保持', hasReminder(outB) && hasProducerOwnedReminder(outB))
 
   // C. 控制组：wrapper 分支纯文本（G4 同型）→ 不改写（防双改写）+ reminder 注入。
   const outC = await run(
@@ -143,7 +157,7 @@ console.log('fix-010 GUI fidelity (RED on current code):')
     imgPlusText(),
   )
   check('C1: wrapper 分支纯文本：image 块保留（无消息层改写）', hasImageBlock(outC))
-  check('C2: wrapper 分支纯文本：reminder 注入保持', hasReminder(outC))
+  check('C2: wrapper 分支纯文本：reminder 注入保持', hasReminder(outC) && hasProducerOwnedReminder(outC))
 }
 
 // E. REL-005 P1-1（review-FIX-010-R0 F-1）漂移窗口判别：新会话无 header +
@@ -167,7 +181,7 @@ console.log('fix-010 drift-window live default (REL-005 P1-1):')
     imgPlusText(),
   )
   check('E1: 无 header + options 过时但 live default 指向 wrapper → 保留原始 image 块（旧实现必败：读 options 逃生组改写）', hasImageBlock(outE) && !hasMarkerText(outE))
-  check('E2: 同场景 reminder 注入保持（wrapper 分支纯文本判定链不回退）', hasReminder(outE))
+  check('E2: 同场景 reminder 注入保持（wrapper 分支纯文本判定链不回退）', hasReminder(outE) && hasProducerOwnedReminder(outE))
   // E3：反向控制——live default 服务缺失 → options 终回退 → 逃生组改写保持
   // （B1 语义不回退；旧实现同路径，非判别，控制组）。
   const runNoDefault = installPrestepHarness(fakeService)

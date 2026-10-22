@@ -287,7 +287,23 @@ async function observeTriggerRate() {
     preRoot.events.waterfall('agent/pre-step', { agent, messages, turn: 1, step: 1, signal: undefined },
       () => Promise.resolve({ kind: 'enter', messages: [...messages] }))
   const decision = await dispatch(escapeAgent, [imageMessage])
-  checks.push(['三通道①：图片轮注入 reminder（带 id + route_agent 行为指令）', decision.kind === 'enter' && decision.messages.length === 2 && decision.messages[1].role === 'user' && decision.messages[1].source.kind === 'plugin' && decision.messages[1].content.some((b) => b.type === 'text' && b.text.includes('route_agent') && b.text.includes('includeImages') && b.text.includes(contentId))])
+  // FIX-054（P0）：reminder source MUST 是宿主 v4 准入的 producer-owned kind——
+  // 宿主 dsh-session-format-v3-to-v4 的 source() 对 kind 缺失/空串/`'plugin'`
+  // 抛 SessionFormatError("format v4 message requires a producer-owned source
+  // kind")；第三方插件经 v3→v4 迁移的 kind 口径 = `plugin:${plugin}`（同文件
+  // producerKind()；0.2.1-rc.2 实读），且迁移产物丢弃 plugin 字段。断言用
+  // 字面量（独立于 lib 实现），旧实现 kind:'plugin' 必红。
+  const REMINDER_SOURCE_KIND = 'plugin:dsh-agent-router'
+  const isProducerOwnedSource = (message) => {
+    const source = message && message.source
+    return !!source && typeof source.kind === 'string' && source.kind.length > 0 && source.kind !== 'plugin'
+  }
+  const reminderSourceOk = (messages) => {
+    const reminder = Array.isArray(messages) ? messages[1] : undefined
+    return isProducerOwnedSource(reminder) && reminder.source.kind === REMINDER_SOURCE_KIND && !Object.hasOwn(reminder.source, 'plugin')
+  }
+  checks.push(['三通道①：图片轮注入 reminder（带 id + route_agent 行为指令）', decision.kind === 'enter' && decision.messages.length === 2 && decision.messages[1].role === 'user' && decision.messages[1].source.kind === REMINDER_SOURCE_KIND && decision.messages[1].content.some((b) => b.type === 'text' && b.text.includes('route_agent') && b.text.includes('includeImages') && b.text.includes(contentId))])
+  checks.push(['三通道①：reminder source 为 producer-owned kind（宿主 v4 准入；FIX-054）', reminderSourceOk(decision.messages)])
   const reminderText = collectReminder([contentId], ['vision'])
   checks.push(['三通道①：collectReminder 含附件 id + 视觉 agent 指引', reminderText.includes(contentId) && reminderText.includes('"vision"') && reminderText.includes('route_agent') && reminderText.includes('attachmentIds')])
   dispose()

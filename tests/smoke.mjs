@@ -2933,10 +2933,29 @@ console.log('admission wrapper (L1):')
   const contentId = `sha256:${'a'.repeat(64)}`
   const imageMessage = createUserMessage({ content: [{ type: 'text', text: '看图' }, { type: 'image', attachment: { attachmentId: contentId, mediaType: 'image/png', bytes: 4, width: 2, height: 2, name: 'shot.png' } }], source: { kind: 'user' } })
 
+  // FIX-054（P0）：reminder 必须是宿主 v4 准入的 **producer-owned source kind**。
+  // 宿主判据（0.2.1-rc.2 实读）：`dsh-session-format-v3-to-v4` 的 source()
+  // （lib/index.js:126；`dsh-session-persistence-jsonl/lib/worker.cjs:11641`
+  // 内联同一判据）对 kind 缺失/空串/`'plugin'` 抛 SessionFormatError
+  // "format v4 message requires a producer-owned source kind"；`dsh-llm` 的
+  // lib/types/message.d.ts:94-99 逐字写明「每个 producer 自声明 kind；不存在
+  // catch-all 的 `plugin` kind」。第三方插件经 v3→v4 迁移的 kind 口径 =
+  // `plugin:${plugin}`（同迁移文件 producerKind()，lib/index.js:92），且迁移
+  // 产物丢弃 `plugin` 字段。断言用字面量（独立于 lib 实现），旧实现必红。
+  const REMINDER_SOURCE_KIND = 'plugin:dsh-agent-router'
+  const isProducerOwnedSource = (message) => {
+    const source = message && message.source
+    return !!source && typeof source.kind === 'string' && source.kind.length > 0 && source.kind !== 'plugin'
+  }
+
   // ① 图片轮（包装路由）：注入带 id 的 reminder（通道①），不改写（wrapper stream 主改写面）。
   const twinAgent = { options: { provider: `escape-provider${WRAP_SUFFIX}`, model: 'brain-1' } }
   const twinDecision = await dispatch(twinAgent, [imageMessage])
-  check('image turn on wrapper route injects plugin reminder', twinDecision.kind === 'enter' && twinDecision.messages.length === 2 && twinDecision.messages[1].role === 'user' && twinDecision.messages[1].source.kind === 'plugin')
+  check('image turn on wrapper route injects plugin reminder', twinDecision.kind === 'enter' && twinDecision.messages.length === 2 && twinDecision.messages[1].role === 'user' && twinDecision.messages[1].source.kind === REMINDER_SOURCE_KIND)
+  // FIX-054 判别断言（镜像宿主 v4 admission 语义）：source.kind 必须非空且
+  // !== 'plugin'（producer-owned）+ 与迁移映射 `plugin:${plugin}` 精确一致；
+  // 旧实现 kind:'plugin'（且带 plugin 字段）在此必红。
+  check('reminder source is producer-owned (host v4 admission, FIX-054)', isProducerOwnedSource(twinDecision.messages[1]) && twinDecision.messages[1].source.kind === REMINDER_SOURCE_KIND && !Object.hasOwn(twinDecision.messages[1].source, 'plugin'))
   check('reminder carries a message id (session validation)', typeof twinDecision.messages[1].id === 'string' && twinDecision.messages[1].id.length > 0)
   check('reminder carries attachment id + route_agent instruction', twinDecision.messages[1].content.some((b) => b.type === 'text' && b.text.includes(contentId) && b.text.includes('route_agent') && b.text.includes('includeImages') && b.text.includes('attachmentIds') && b.text.includes('"vision"')))
   check('wrapper route keeps raw image block (no pre-step rewrite)', twinDecision.messages[0].content.some((b) => b.type === 'image'))
@@ -2946,7 +2965,7 @@ console.log('admission wrapper (L1):')
   const escapeDecision = await dispatch(escapeAgent, [imageMessage])
   check('escape-group image turn has no raw image block', escapeDecision.messages[0].content.every((b) => b.type !== 'image'))
   check('escape rewrite embeds marker text with id', escapeDecision.messages[0].content.some((b) => b.type === 'text' && b.text.includes('route_agent') && b.text.includes('includeImages') && b.text.includes(contentId)))
-  check('escape-group turn also injects reminder', escapeDecision.messages.length === 2 && escapeDecision.messages[1].source.kind === 'plugin')
+  check('escape-group turn also injects reminder', escapeDecision.messages.length === 2 && escapeDecision.messages[1].source.kind === REMINDER_SOURCE_KIND)
 
   // ③ 逃生组 + 原生多模态主模型：能力判定保真直传（preserveImageInput 语义）。
   // FIX-005（2026-08-23）：原生多模态（accepts=true）不注入 reminder——主模型已
@@ -2954,7 +2973,7 @@ console.log('admission wrapper (L1):')
   const mmAgent = { options: { provider: 'mm-escape-provider', model: 'brain-1' } }
   const mmDecision = await dispatch(mmAgent, [imageMessage])
   check('native multimodal escape keeps raw image (passthrough)', mmDecision.messages[0].content.some((b) => b.type === 'image') && mmDecision.messages.length === 1)
-  check('native multimodal escape injects no reminder (FIX-005)', mmDecision.messages.every((m) => !(m.source && m.source.kind === 'plugin')))
+  check('native multimodal escape injects no reminder (FIX-005)', mmDecision.messages.every((m) => !(m.source && m.source.kind === REMINDER_SOURCE_KIND)))
 
   // ④ 纯文本轮负向：零注入、零改写（同一对象引用返回）。
   const textMessage = createUserMessage({ content: [{ type: 'text', text: '纯文本轮' }], source: { kind: 'user' } })
@@ -2988,7 +3007,7 @@ console.log('admission wrapper (L1):')
     root.events.waterfall('agent/pre-step', { agent, messages, turn: 1, step: 1, signal: undefined },
       () => Promise.resolve({ kind: 'enter', messages: [...messages, contextMessage] }))
   const contextDecision = await contextDispatch(escapeAgent, [imageMessage])
-  check('context-appended decision maps rewrite + passthrough (index=-1)', contextDecision.kind === 'enter' && contextDecision.messages.length === 3 && contextDecision.messages[0].content.every((b) => b.type !== 'image') && contextDecision.messages[1] === contextMessage && contextDecision.messages[2].source.kind === 'plugin')
+  check('context-appended decision maps rewrite + passthrough (index=-1)', contextDecision.kind === 'enter' && contextDecision.messages.length === 3 && contextDecision.messages[0].content.every((b) => b.type !== 'image') && contextDecision.messages[1] === contextMessage && contextDecision.messages[2].source.kind === REMINDER_SOURCE_KIND)
   const rejectDecision = await root.events.waterfall('agent/pre-step', { agent: escapeAgent, messages: [imageMessage], turn: 1, step: 1, signal: undefined },
     () => Promise.resolve({ kind: 'reject', reason: 'blocked' }))
   check('reject decision passes through untouched', rejectDecision.kind === 'reject' && rejectDecision.reason === 'blocked' && rejectDecision.messages === undefined)
