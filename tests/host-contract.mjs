@@ -64,13 +64,17 @@
  *     看护（锚行号 = 0.2.1-rc.2 实读、随下方 1b 步骤维护；窗口吸收补丁级挪行；模式
  *     移出窗口即红 → 人工复核注释/基线后刷新）。
  *
- * **CI 覆盖口径（FIX-055-R0 P2-2）**：guard-matrix pinned 宿主树 = 恰好
- * HOST_KEY_PACKAGES 8 包，不 pin v4/persistence——`dsh-session-format-v3-to-v4` 在
- * registry 无 0.1.5-rc.2 发行版（最早 0.1.7-alpha.1），纯增量 pin 会在 0.1.5 矩阵 job
- * 的 `npm pack` 失败；条件 pin 需 yaml 矩阵分支或注册表新字段（超出本批授权面）。
- * 故真实 v4 admission 的 CI 覆盖 = 仅在包在场的树（本机完整树）执行；CI pinned 树
- * 以可见 skip 回显、不红——如需 CI 覆盖，先按基线扩展 pin 机制（注册表驱动、无
- * 版本字面量）再收紧本文件 skip 判据。
+ * **CI 覆盖口径（FIX-055-R0 P2-2；FIX-056-4 复核确认）**：guard-matrix pinned 宿主树
+ * = 恰好 HOST_KEY_PACKAGES 8 包，**不 pin v4/persistence**。registry 证据补录
+ * （FIX-056-3，`npm view @deepseek-ai/dsh-session-format-v3-to-v4 versions --json`
+ * 只读查询 2026-10-22）：`0.1.7-alpha.1 / 0.1.7-alpha.2 / 0.1.7-rc.1 / 0.1.7-rc.2 /
+ * 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-alpha.1 … 0.2.1-rc.2`——**无 0.1.5-rc.2**（而
+ * 0.1.5 基线 dshPackages = 0.1.5-rc.2）⇒ 无条件纯增量 pin 会在 0.1.5 矩阵 job 的
+ * `npm pack` 失败（set -e）；条件 pin 需 yaml 矩阵分支（版本字面量，破坏「yaml 零
+ * 版本字面量」不变量）或注册表新字段（超出本批授权面）⇒ **不改 ci.yml，结论维持**。
+ * **接受口径**：CI pinned 树不 pin v4/persistence；真实 admission 覆盖 = 本机完整树
+ * 实跑（S8 row 写入面 + S8b 逻辑面逐消息 source() 准入——S8b 在本机实跑，CI pinned
+ * 树以可见 skip 回显、不红）。扩展路径（注册表驱动 pin）仅登记不实现。
  *
  * 判别性（红/绿演示——EVO-024 验收各附红→绿实证；演示用临时改动已全部复原，不入提交）：
  *  1. 黑名单：往消费者加一行裸 `ctx.get('sessionController')` → S4 红（分级放行
@@ -1286,7 +1290,8 @@ if (hostV4Contract.status === 'ok') {
     const withoutSource = { ...reminder }
     delete withoutSource.source
     const negativeCases = [
-      ['kind 缺失', withoutSource],
+      ['source 缺失（整体无 source 字段）', withoutSource],
+      ['kind 缺失（source 在、无 kind）', { ...reminder, source: {} }],
       ['kind 空串', { ...reminder, source: { kind: '' } }],
       ["kind='plugin'（旧完整形状 {kind,plugin}）", { ...reminder, source: { kind: 'plugin', plugin: PLUGIN_NAME } }],
     ]
@@ -1295,7 +1300,7 @@ if (hostV4Contract.status === 'ok') {
       catch (error) { return { label, rejected: true, name: error?.name ?? null, message: String(error?.message ?? '') } }
     })
     const allRejected = outcomes.every((outcome) => outcome.rejected && outcome.name === 'SessionFormatError' && outcome.message.includes('producer-owned source kind'))
-    check(`S8b 负向控制: ${outcomes.length} 种非法 source（kind 缺失 / kind 空串 / kind='plugin' 带旧 plugin 字段）全部被真实 logical admission 拒收（SessionFormatError + producer-owned source kind）`, allRejected, outcomes)
+    check(`S8b 负向控制: ${outcomes.length} 种非法 source（source 缺失 / kind 缺失 / kind 空串 / kind='plugin' 带旧 plugin 字段）全部被真实 logical admission 拒收（SessionFormatError + producer-owned source kind）`, allRejected, outcomes)
   }
 }
 
@@ -1344,15 +1349,33 @@ console.log('S9 插件名单源守卫（FIX-055 P3-2）+ 宿主锚守卫（FIX-0
   check(`S9a 插件名单源: install.sh PLUGIN === PLUGIN_NAME（install.sh 实读；${JSON.stringify(installShName)} vs ${JSON.stringify(PLUGIN_NAME)}）`, installShName === PLUGIN_NAME, { installShName, pluginName: PLUGIN_NAME })
   check(`S9a reminder 源形态: buildReminderMessage 产物 source.kind === 'plugin:${PLUGIN_NAME}' 且无 plugin 字段（kind 单点派生 + 迁移同形）`, reminder?.source?.kind === `plugin:${PLUGIN_NAME}` && !Object.hasOwn(reminder?.source ?? {}, 'plugin'), { source: reminder?.source ?? null, expectedKind: `plugin:${PLUGIN_NAME}` })
 
-  // 9b 宿主锚守卫：逐条对应 lib/prestep.js 注释引用的宿主锚；行号 = 0.2.1-rc.2 实读、
-  //    与注释同源；窗口吸收宿主补丁级挪行；内容模式移出窗口 = 锚漂移 → 红
-  //    （人工复核注释与基线后刷新，不机械改码）。
+  // 9b 宿主锚守卫：逐条对应 lib/prestep.js 注释引用的宿主锚。
+  //    **锚行号单源派生（FIX-056-1）**：期望行号从 lib/prestep.js 注释的锚标记解析
+  //    （`lib/index.js:126` / `:92` / `worker.cjs:11641` / `message.d.ts:94-99`）——
+  //    本套件不再手抄第二份行号（单源 = prestep 注释，宿主升级按头部 1b 刷新）；
+  //    解析失败 = 红（注释锚契约破坏，fail-closed，提示同步 prestep 注释）。
+  //    rewritePluginSource 在注释中无行号 → **符号级锚**：在宿主文件内定位函数行，
+  //    不复制行号。窗口吸收宿主补丁级挪行；内容模式移出窗口 = 锚漂移 → 红（人工
+  //    复核 prestep 注释与基线后刷新，不机械改码）。
+  const prestepSource = readLib('prestep.js')
+  const prestepAnchorLine = (pattern, label) => {
+    const match = pattern.exec(prestepSource)
+    check(`S9b 锚单源: lib/prestep.js 注释含 ${label} 锚标记（解析期望行号）`, match !== null)
+    return match === null ? null : Number(match[1])
+  }
+  const prestepAnchorLines = {
+    admissionSource: prestepAnchorLine(/source\(\)`（`lib\/index\.js:(\d+)`/, 'source() lib/index.js:NN'),
+    producerKind: prestepAnchorLine(/producerKind\(\)`，`lib\/index\.js:(\d+)`/, 'producerKind lib/index.js:NN'),
+    persistenceInline: prestepAnchorLine(/`dsh-session-persistence-jsonl\/lib\/worker\.cjs:(\d+)`/, 'worker.cjs:NN'),
+    messageSource: prestepAnchorLine(/`lib\/types\/message\.d\.ts:(\d+)-\d+`/, 'message.d.ts:NN-MM'),
+  }
+  console.log(`      · 锚行号单源（lib/prestep.js 注释）: admission=${prestepAnchorLines.admissionSource ?? '<parse-fail>'} producer=${prestepAnchorLines.producerKind ?? '<parse-fail>'} persistence=${prestepAnchorLines.persistenceInline ?? '<parse-fail>'} message=${prestepAnchorLines.messageSource ?? '<parse-fail>'}；rewrite=符号级`)
   const HOST_V4_ANCHORS = [
-    { id: 'admission-source', package: 'dsh-session-format-v3-to-v4', file: 'lib/index.js', line: 126, window: 6, face: 'v4 source 准入拒收串（source()）', patterns: [/producer-owned source kind/, /value\["kind"\] === "plugin"/] },
-    { id: 'producer-kind-fallback', package: 'dsh-session-format-v3-to-v4', file: 'lib/index.js', line: 92, window: 6, face: 'producerKind 未登记插件回落口径', patterns: [/function producerKind\(plugin, role\)/, /plugin:\$\{plugin\}/] },
-    { id: 'rewrite-plugin-source', package: 'dsh-session-format-v3-to-v4', file: 'lib/index.js', line: 101, window: 8, face: '迁移丢弃 plugin 字段（rewritePluginSource）', patterns: [/function rewritePluginSource/, /key !== "plugin"/] },
-    { id: 'persistence-inline-admission', package: 'dsh-session-persistence-jsonl', file: 'lib/worker.cjs', line: 11641, window: 6, face: '持久化内联同一 admission 判据', patterns: [/producer-owned source kind/, /value\["kind"\] === "plugin"/] },
-    { id: 'message-source-no-catch-all', package: 'dsh-llm', file: 'lib/types/message.d.ts', line: 97, window: 5, face: 'MessageSourceMap 无 catch-all plugin kind 声明', patterns: [/no shared catch-all/, /`plugin` kind/] },
+    { id: 'admission-source', package: 'dsh-session-format-v3-to-v4', file: 'lib/index.js', line: prestepAnchorLines.admissionSource, window: 6, face: 'v4 source 准入拒收串（source()）', patterns: [/producer-owned source kind/, /value\["kind"\] === "plugin"/] },
+    { id: 'producer-kind-fallback', package: 'dsh-session-format-v3-to-v4', file: 'lib/index.js', line: prestepAnchorLines.producerKind, window: 6, face: 'producerKind 未登记插件回落口径', patterns: [/function producerKind\(plugin, role\)/, /plugin:\$\{plugin\}/] },
+    { id: 'rewrite-plugin-source', package: 'dsh-session-format-v3-to-v4', file: 'lib/index.js', line: null, symbol: /function rewritePluginSource/, window: 8, face: '迁移丢弃 plugin 字段（rewritePluginSource，符号级锚）', patterns: [/function rewritePluginSource/, /key !== "plugin"/] },
+    { id: 'persistence-inline-admission', package: 'dsh-session-persistence-jsonl', file: 'lib/worker.cjs', line: prestepAnchorLines.persistenceInline, window: 6, face: '持久化内联同一 admission 判据', patterns: [/producer-owned source kind/, /value\["kind"\] === "plugin"/] },
+    { id: 'message-source-no-catch-all', package: 'dsh-llm', file: 'lib/types/message.d.ts', line: prestepAnchorLines.messageSource, window: 6, face: 'MessageSourceMap 无 catch-all plugin kind 声明', patterns: [/no shared catch-all/, /`plugin` kind/] },
   ]
   const ANCHOR_SINCE = '0.2.1'
   if (!baselineIncludes(ANCHOR_SINCE)) {
@@ -1378,11 +1401,22 @@ console.log('S9 插件名单源守卫（FIX-055 P3-2）+ 宿主锚守卫（FIX-0
         continue
       }
       const lines = readFileSync(anchorFile, 'utf8').split(/\r?\n/)
-      const start = Math.max(1, anchor.line - anchor.window)
-      const end = Math.min(lines.length, anchor.line + anchor.window)
+      let expectedLine = anchor.line
+      if (anchor.symbol !== undefined) {
+        const symbolIndex = lines.findIndex((line) => anchor.symbol.test(line))
+        if (symbolIndex < 0) {
+          check(`S9b 宿主锚: ${anchor.id} 符号级锚在位（${anchor.package}/${anchor.file} 未命中 ${String(anchor.symbol)}）`, false, { symbol: String(anchor.symbol) })
+          continue
+        }
+        expectedLine = symbolIndex + 1
+      } else if (expectedLine === null) {
+        continue // 单源解析失败已在上方判红（避免二次噪声）
+      }
+      const start = Math.max(1, expectedLine - anchor.window)
+      const end = Math.min(lines.length, expectedLine + anchor.window)
       const windowLines = lines.slice(start - 1, end)
       const missing = anchor.patterns.filter((pattern) => !windowLines.some((line) => pattern.test(line)))
-      check(`S9b 宿主锚: ${anchor.id}（${anchor.face}）命中 ${anchor.package}/${anchor.file} 行 ${start}-${end} 窗口（期望行 ${anchor.line}；${anchor.patterns.length} 项内容模式全部在场——窗口外即锚漂移）`, missing.length === 0, { expectedLine: anchor.line, window: [start, end], fileLines: lines.length, missingPatterns: missing.map((pattern) => String(pattern)), actualWindow: windowLines.map((line, index) => `${start + index}: ${line.trim().slice(0, 160)}`) })
+      check(`S9b 宿主锚: ${anchor.id}（${anchor.face}）命中 ${anchor.package}/${anchor.file} 行 ${start}-${end} 窗口（期望行 ${expectedLine}${anchor.symbol === undefined ? '（prestep 注释单源）' : '（符号级派生）'}；${anchor.patterns.length} 项内容模式全部在场——窗口外即锚漂移）`, missing.length === 0, { expectedLine, lineSource: anchor.symbol === undefined ? 'prestep-comment' : 'symbol', window: [start, end], fileLines: lines.length, missingPatterns: missing.map((pattern) => String(pattern)), actualWindow: windowLines.map((line, index) => `${start + index}: ${line.trim().slice(0, 160)}`) })
     }
   }
 }
