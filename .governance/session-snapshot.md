@@ -1,4 +1,4 @@
-# 会话快照 — 2026-10-22（FIX-054 P0 热修 + REL-014 v0.6.2 发布会话）
+# 会话快照 — 2026-10-22（FIX-054 P0 热修 + REL-014 v0.6.2 发布 + 守卫批 FIX-055/053/056 会话）
 
 - **session_id**: 20261022-FIX054-REL014-V0602
 - **session_date**: 2026-10-22（接续 2026-10-20 REL-013 会话；同会话续链：E-7 未做 → 用户报 P0 障 → FIX-054 → v0.6.2 热修发布全链）
@@ -27,6 +27,14 @@
 | FIX-053 | README §5 primary 行断言扩展 | 已 triage 待派发 | — | P2 |
 | GOV-009 / GOV-011 | 跨仓（钩子产品代码判定 / 治理工具解析侧缺陷——TPA 终态过滤 / archive 版本识别） | 已立项待派发 | 跨仓授权（用户红线） | P2 |
 | 治理数据债 / G5~G7 | check-governance 历史格式 / Gate 逐门评估 | — | 专用护理批 | P2 |
+
+## E-7 后追加完成（守卫批）
+
+- **FIX-055**（✅ 开发+审查终态，`3bebefc`）：宿主真实 v4 admission 合约（S8 row + **S8b logical**——`assertReleasedV4Relationships` 正向 + 4 负向形态）+ 六源插件名单源（含安装器两源）+ 五锚守卫（S9b 行号单源由 FIX-056 补齐）；R0→delta→R1 双 AWN/0；hook `--no-verify` 债务当日清偿（补 priority-first 行 L31 → amend 全链通过）
+- **FIX-053**（✅ `f38ebbb`）：README §5 primary 八断言（恰一 primary + 四列逐格单源派生注册表）；R0 AWN/0
+- **FIX-056**（✅ `d8e5a5e`）：S9b 锚单源派生（126/92/11641/94）+ rewrite 符号锚 + kind-missing 4 形态 + **registry 一手机证**（npm view 13 项无 0.1.5 系 → 「不改 ci.yml」定稿）；R0 AWN/0
+- 三任务 commit 已推送（main = `45611db`）；**均待下批发布承载**（纯测试面 + prestep 单行 export，无用户可见变化——可不发独立版本）
+- P3 残留全入「卫生批候选」台账行（frozen 行逐格/声明正则收紧/完整 restore 可选集成/措辞项）
 
 ## 恢复指引（Scenario D 下次接续）
 
