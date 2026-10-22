@@ -28,6 +28,10 @@
  * 即整层拒载，宿主 stderr 有可观测 skip 警告）；peerDependenciesMeta optional 仅
  * 影响安装器行为、不解除装载门。本快照测试 + README 兼容矩阵仍为声明面漂移的
  * 权威防护（防宿主升级后忘改声明 / 基线跳跃被无声回退 / 复活死行）。
+ * 声明面 README 判据（§5）分两层：① declaredEntry（声明面逐字锚定的 frozen 项）
+ * 全文记录判据；② **primary 行结构判据**（FIX-053，REVIEW-REL-013-R0 P2-1）——
+ * 「支持基线集」表恰一 primary 行、行内 dsh CLI / 全系 dsh-* / cordis / schemastery
+ * 四列逐格 === HOST_BASELINE_REGISTRY 的 primary 项（缺行 / 重复 / 漏改即红）。
  *
  * 判别性（红/绿演示）：把任一基线常量临时改成假版本号 → peerDeps/deps/README
  * 断言必红；package.json 范围改回 ^0.1.0-rc.* 或 inject 复活死行
@@ -249,6 +253,35 @@ check(`README records cordis baseline ${declaredEntry?.cordis}`, readme.includes
 check(`README records schemastery baseline ${declaredEntry?.schemastery}`, readme.includes(declaredEntry?.schemastery ?? '<no declared entry>'))
 check('README declares peerDeps as 记录性 (record-only, no enforcement reliance)', readme.includes('记录性'))
 check('README points authoritative guard to tests/host-version-snapshot.mjs', readme.includes('tests/host-version-snapshot.mjs'))
+
+// ── 5b. README 支持基线集表 primary 行（FIX-053，REVIEW-REL-013-R0 P2-1 收口）──
+//      背景：上方 §5 用 readme.includes() 对 declaredEntry（0.2.0 frozen）四值做
+//      全文宽松命中——primary（0.2.1）行若漏改 / 缺行 / 重复均不红（v0.6.1 基线
+//      刷新窗口）。本组按 README 表格**行结构**解析「宿主兼容性（实测基线）」小节，
+//      期望值单源取 HOST_BASELINE_REGISTRY 的 primary 项（无第二份版本字面量），
+//      并加「恰一 primary 行」计数。解析失配（小节缺失 / 无版本行）= 红（fail-closed：
+//      提示同步 README 或本解析器）。表格列为：
+//      | 基线 | 状态 | dsh CLI | 全系 dsh-* | cordis | schemastery | 实测时点 |
+console.log('README primary baseline row (FIX-053):')
+const compatSection = (readme.match(/### 宿主兼容性（实测基线）([\s\S]*?)(?=\n## )/) ?? [null, ''])[1]
+const compatRows = compatSection.split(/\r?\n/)
+  .filter((line) => /^\|\s*\d+\.\d+\.\d+\s*\|/.test(line))
+  .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim()))
+check(`README §5 table parses (section found=${compatSection !== ''}, baseline rows=${compatRows.length}, registry entries=${HOST_BASELINE_REGISTRY.length})`, compatSection !== '' && compatRows.length >= HOST_BASELINE_REGISTRY.length)
+const readmePrimaryRows = compatRows.filter((cells) => (cells[1] ?? '').includes('primary'))
+check(`README §5: exactly one primary baseline row (got ${readmePrimaryRows.length}; 0 = missing row, >1 = duplicate — FIX-053)`, readmePrimaryRows.length === 1)
+const readmePrimaryRow = readmePrimaryRows.length === 1 ? readmePrimaryRows[0] : null
+check(`README §5: primary row baseline id === registry primary ${HOST_BASELINE.id} (got ${readmePrimaryRow?.[0] ?? '<none>'})`, readmePrimaryRow !== null && readmePrimaryRow[0] === HOST_BASELINE.id)
+check(`README §5: primary row status cell declares primary（当前） (got ${JSON.stringify(readmePrimaryRow?.[1] ?? null)})`, readmePrimaryRow !== null && (readmePrimaryRow[1] ?? '').includes('primary') && (readmePrimaryRow[1] ?? '').includes('（当前）'))
+const README_PRIMARY_COLUMNS = [
+  ['dsh CLI', HOST_BASELINE.dsh, 2],
+  ['全系 dsh-*', HOST_BASELINE.dshPackages, 3],
+  ['cordis', HOST_BASELINE.cordis, 4],
+  ['schemastery', HOST_BASELINE.schemastery, 5],
+]
+for (const [label, value, column] of README_PRIMARY_COLUMNS) {
+  check(`README §5: primary row column ${column} (${label}) === \`${value}\` from registry primary (got ${JSON.stringify(readmePrimaryRow?.[column] ?? null)})`, readmePrimaryRow !== null && readmePrimaryRow[column] === '`' + value + '`')
+}
 
 console.log(`baseline registry: ${HOST_BASELINE_REGISTRY.map((entry) => `${entry.id}(${entry.status}: dsh=${entry.dsh} dsh-*=${entry.dshPackages} cordis=${entry.cordis} schemastery=${entry.schemastery})`).join(' | ')} | declared=${commonDeclaredRange ?? '<split/absent>'} -> ${declaredEntry?.id ?? '<none>'} | selected(DSH_BASELINE)=${DSH_BASELINE_RAW || '<unset>'} -> ${SELECTED_BASELINE.id}(${SELECTED_BASELINE.status})`)
 console.log(failures === 0 ? `\nALL HOST VERSION SNAPSHOT TESTS PASSED (${passed} assertions)` : `\n${failures} FAILURE(S) (${passed} passed)`)
