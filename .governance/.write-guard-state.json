@@ -130,6 +130,12 @@
         "EVD-14": [
           "da418a3765e16f4fd8f4e4422f8cf475"
         ],
+        "EVD-15": [
+          "0b70874f355bcb66a99504930a4fcff5"
+        ],
+        "EVD-16": [
+          "6856b285d69f287b98be8e5e16ce3215"
+        ],
         "EVD-2": [
           "9819143d4a024d49cdf394bac68d46d0"
         ],
@@ -514,6 +520,9 @@
         "REVIEW-FIX-052-R0-CODEREVIEWER": [
           "2e36ccba3bf8cf7a0e379261fbb47acd"
         ],
+        "REVIEW-FIX-053-R0-CODE-REVIEWER": [
+          "62d1852c0f21f8cb5ce6d1306ef4da8a"
+        ],
         "REVIEW-FIX-054-R0-CODE-REVIEWER": [
           "ea50524e8e603e14f4b9ece14818840b"
         ],
@@ -522,6 +531,9 @@
         ],
         "REVIEW-FIX-055-R1-CODE-REVIEWER": [
           "d5b31f5689b640b75c37eeacbd6b5127"
+        ],
+        "REVIEW-FIX-056-R0-CODE-REVIEWER": [
+          "12e7bd21700ce06d90e5d956060c9bc2"
         ],
         "REVIEW-REL-002-R0": [
           "97922ffea4e199eea747e7c0d91cd1ee",
@@ -595,7 +607,7 @@
           "5d3528f22e85ff475f708dcc5e89da50"
         ]
       },
-      "sha256": "3ee03eeb0f0b6a914e520d85854e71582980331690c84b14c616ec0ee7d6ce09"
+      "sha256": "4559d8469da692a88ca475c77f4a897ffe5afd6a9f5659b49d5813d489d947ba"
     },
     "plan-tracker.md": {
       "rows": {
@@ -790,7 +802,8 @@
           "2af1890f0da5ee104536cbb1aa7c1fa4"
         ],
         "FIX-053": [
-          "893f81bff0b1c0db8fa1497d1cadc8ad"
+          "893f81bff0b1c0db8fa1497d1cadc8ad",
+          "cdcfe09eb645fbe0802faede70c1b7d2"
         ],
         "FIX-054": [
           "4dbd553d3393e3acad2b8feebd7d22e2",
@@ -799,6 +812,9 @@
         "FIX-055": [
           "733b585a87df473a3c4e8b749f1e0e92",
           "b298a959ac55e2d91bf4c28927b78135"
+        ],
+        "FIX-056": [
+          "a08f09c00dce724a162fd22b33a826a1"
         ],
         "GOV-001": [
           "53be57896bb73b3ab53b12c7f1ec8edc"
@@ -897,10 +913,10 @@
           "58c672f52926fbf91e75a9e983387b10"
         ]
       },
-      "sha256": "3f1b80117b55879ca74dd8a73fd8e4bd40456ec5bbdba351180d2dc195a424d8"
+      "sha256": "cd299d23e8f33933e85266f7fbc7a88a2aba49383d10aa5a9a5e276a6462f054"
     }
   },
   "schema_version": 1,
   "tool": "governance-write-guard/row-family-reconciliation",
-  "updated_at": "2026-10-22T16:28:04"
+  "updated_at": "2026-10-22T18:46:28"
 }

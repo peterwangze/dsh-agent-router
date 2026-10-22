@@ -685,6 +685,88 @@
       "baseline_effects": null,
       "recorded_at": "2026-10-22T16:26:31",
       "updated_at": "2026-10-22T16:26:31"
+    },
+    "op-82a5533382e340089cdcf5038dcac2be": {
+      "schema_version": 1,
+      "command": "locks-release",
+      "task_id": "FIX-053",
+      "input_fingerprint": "a369bb3ae96693c3dd54ad3b236a850fd81a94fc3b278e5b6cc28efbcdc0113b",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-82a5533382e340089cdcf5038dcac2be",
+        "code": "ok",
+        "new_revision": 710,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-22T17:39:18",
+      "updated_at": "2026-10-22T17:39:18",
+      "released_files": [
+        "tests/host-version-snapshot.mjs"
+      ]
+    },
+    "op-0d45dbd70f9843d196feca9c18ce73b4": {
+      "schema_version": 1,
+      "command": "locks-release",
+      "task_id": "FIX-056",
+      "input_fingerprint": "efb584e8ba654e26ec007b717582d47b05bdab882b98bb9bb5f124f345cef8fb",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-0d45dbd70f9843d196feca9c18ce73b4",
+        "code": "ok",
+        "new_revision": 49,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-22T17:39:18",
+      "updated_at": "2026-10-22T17:39:18",
+      "released_files": [
+        "tests/host-contract.mjs"
+      ]
+    },
+    "op-8c7ed6e8f1184b0aa371d704c37afb54": {
+      "schema_version": 1,
+      "command": "evidence-append",
+      "task_id": "FIX-053",
+      "input_fingerprint": "b3f886aa0d6f30d11bee820dfa91cd7804783fbea6afbc8126cbe763451887f5",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-8c7ed6e8f1184b0aa371d704c37afb54",
+        "code": "ok",
+        "new_revision": 532896,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-22T18:45:53",
+      "updated_at": "2026-10-22T18:45:53"
+    },
+    "op-a5544d1b8fd0401a8e295a8a84e3341e": {
+      "schema_version": 1,
+      "command": "evidence-append",
+      "task_id": "FIX-056",
+      "input_fingerprint": "39ce8e21e1fe694edb0500c05a5769b8038af88c9992f8295bfbad8dda14c377",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-a5544d1b8fd0401a8e295a8a84e3341e",
+        "code": "ok",
+        "new_revision": 534953,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-22T18:45:53",
+      "updated_at": "2026-10-22T18:45:53"
     }
   }
 }
