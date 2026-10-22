@@ -3,6 +3,37 @@
 > dsh-agent-router 的版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 > 内部注解（提交号 / EV 编号）供追溯，用户可忽略。
 
+## v0.6.2 — 2026-10-22
+
+### 摘要
+
+**图片轮 reminder 来源标记与宿主 v4 会话格式对齐（P0 热修，PATCH）**。核心变化一句话：**v0.6.1 在宿主 0.2.1-rc.2 下「文字模型发图 → 接管 `+多模态` → 发送」会整轮失败（宿主报 `format v4 message requires a producer-owned source kind`）——本版把插件 pre-step reminder 的来源标记从宿主 v4 已不接受的 `plugin` 改为 producer-owned 的 `plugin:dsh-agent-router`，图片轮恢复可发送**。纯缺陷修复：无新增能力面、无破坏性变更、声明面（11 项 dsh 依赖声明）零改动。
+
+### 修复
+
+- **FIX-054：图片轮 pre-step reminder 被宿主 v4 会话格式拒收导致整轮失败（P0，用户场景）**：
+  - **症状**：用文字模型（非原生多模态主模型）的会话中发送图片 → 插件按既有条件接管、切换为 `+多模态` 包装路由 → 消息发送后**本轮运行失败**，宿主侧报 `format v4 message requires a producer-owned source kind`；用户视角为「加了图就发不出去」。
+  - **根因**：本机实测宿主 0.2.1-rc.2（v4 会话格式）对 v4 会话行执行 producer-owned source kind admission（运行时验证覆盖 = 0.2.1-rc.2 主基线；0.2.0 / 0.1.5 由 CI 三基线矩阵后置覆盖，本版未作运行验证）——只接受 producer 自有的 direct kind，**不再接受 catch-all `plugin`**；而插件唯一写入 reminder 的点 `lib/prestep.js` 的 `buildReminderMessage` 仍写 `source.kind='plugin'`。宿主 v3→v4 会话迁移对本插件（未登记第三方插件名、非改名）的映射口径是 `plugin:<插件名>`，即 `plugin:dsh-agent-router`。
+  - **修复**：`lib/prestep.js` 新增单点常量 `REMINDER_SOURCE_KIND = plugin:${PLUGIN_NAME}`（求值 = `plugin:dsh-agent-router`，与 `PLUGIN_NAME` / `lib/index.js` / `cordis.patch.yml` 现有名称同源），`buildReminderMessage` 的 source 引用该常量；判别测试与 5 个测试套件（`tests/smoke.mjs` / `tests/metrics.mjs` / `tests/routing-paths.mjs` / `tests/fix-010-gui-fidelity.mjs` / `tests/fix-029-host-contract.mjs`）断言同步收紧为「精确新 kind + 非空 + source 无 `plugin` 字段」，旧实现下各套件至少一条必红。
+  - **影响面**：仅 reminder 消息的 source 元数据（单写入点、单调用点）；除 reminder source 元数据写入点外，客户端与服务端其它逻辑零改动，无数据迁移（旧 v3 会话由宿主迁移为同形 kind，`client.js` 不消费 `source.kind`）。（内部注解：`4bed2d3`；REVIEW-FIX-054-R0 为 APPROVED_WITH_NOTES / unresolved_blockers=0，P2×2 + P3×4 入台账非阻塞。）
+
+### 破坏性变更
+
+**结论：无破坏性变更。** 分项依据：① 纯缺陷修复——不含新功能、接口变更或用户可见行为变更（图片轮从「整轮失败」恢复为可发送，属修复方向）；② **用户配置 / 存储格式零变更**：不新增、不删除、不改名任何配置项，统计 JSONL、凭据文件、`oauthAccounts` 结构不动；③ **声明面零改动**：11 项 dsh 依赖声明（8 peer + 3 dependencies）与 `peerDependenciesMeta` 不变，装载门支持面不变；④ 改动仅 reminder 消息 source 元数据一处，客户端镜像与 RPC 面零改动；⑤ 旧会话无需迁移——宿主 v3→v4 迁移产出同形 `plugin:` kind。
+
+### 已知行为 / 口径披露
+
+- **宿主 v4 会话格式要求 producer-owned kind（无 catch-all `plugin`）**：本版起插件 reminder 写 `plugin:dsh-agent-router`；该格式由宿主 v3→v4 迁移映射表定义（「其他任何插件名 → `plugin:` 后接完整原始名称」），本插件新写入即用该形态——保证新旧会话 kind 单一形态、不引入裸名与 `plugin:` 并存的第二形态。
+- **升级雷达 issue #1（alpha 通道）保持打开**：宿主 alpha / next 预发布通道仍由周频雷达持续观测；本版不吸收 alpha 通道，待后续版本按宿主升级 SOP 定性后处置。
+- **另：用户报告「原生多模态模型贴图仍被切 +多模态」为独立待复测观察**（与本次 v4 会话格式崩溃非同线；已记录于 plan-tracker 待办项）——待用户重装后复测取证；若复现将独立立案，本版修复不声称覆盖该观察。
+- **审查台账（非阻塞，随 FIX-054 入册）**：P2×2——① 5 个测试套件中的 `isProducerOwnedSource` 为宿主 admission 谓词的镜像（未 import 宿主真实模块；建议后续在 host-contract 增真实 admission 合约测试；已立项 FIX-055 承载：真实 admission 合约测试 + 插件名单源/锚守卫）；② `docs/**` 两处 FIX-054 文案不在 6 文件修复提交内，承载提交归属由 Coordinator 处置（不在本三件套范围）。P3×4（宿主行号锚无机器守卫 / 插件名三处字面量无相等守卫 / 测试标题历史措辞 / 5 套件常量副本有意独立 oracle）均为卫生项，不阻塞发布。
+
+### 版本说明
+
+- **版本号**：0.6.1 → **v0.6.2**（**PATCH 位**）。依据：纯缺陷修复（P0 热修）——无新增能力面、无破坏性变更、声明面零改动；按语义化版本取 PATCH 位。**发布链任务定版 PATCH 候选 0.6.2（2026-10-22），E-4 Release Reviewer 保留独立升降位建议权**。**日期口径**：本节日期 2026-10-22 = 发布候选定版与发布三件套（E-1）时点。
+- **发布范围**：v0.6.1（tag `a86883b`）以来 main 全部提交——E-1 时点实采 **3 个**（复核命令与产出：`git rev-list --count v0.6.1..HEAD`）：**产品 / 发布面提交 1 个** = FIX-054 热修 `4bed2d3`（`lib/prestep.js` + `tests/**` 5 文件，+112/−16，全修复面）；**治理提交 2 个** = `217f037`（REL-013 v0.6.1 发布收尾：EVD-5 机录 / RECO-REL-013 推荐快照 / tracker 终态与版本路线图 / session-snapshot）/ `c259751`（REL-013 收尾治理入仓：EVD-3 / EVD-4 / REVIEW-REL-013-R0·R1 机录 / DEC-35 / TRIAGE-FIX-053 等；另含 `docs/cold-install-gate.md` 第 5 节 ARCH-006 口径勘正——文档面，零产品行为）——两者不承载用户可见变更，不入用户面。**结论行：产品 1 + 治理 2 = 3 = E-1 时点实采；本 E-1 提交落地后 = 4（改动面为版本声明与文档，不承载产品行为）；产品提交在「修复」节语义全覆盖。**
+- **验证基线**：E-1 时点本地全量门控实测（Windows 真实基线口径 `cmd /c "chcp 65001>nul && node tests/run-all.mjs"`）= **ALL 23 SUITES + 4 RUNNER MODULES (via smoke.mjs) PASSED，`#SKIP 2 (smoke.mjs×2)`，exit 0（32.1s）**；skip 明细 = win32 `0o600` 权限位不可判定 1 条 + 无 sh / curl 时 POSIX 在线臂 1 条（**历史上 smoke 恰 2 条 sh 臂环境性失败本时点未复现，如实记录**）。**E-2 发布门控复跑 / E-3 隔离环境安装冒烟（环境变量重定向至临时目录）/ E-5 资产终验由发布链机录，本节不预填数字**（不写入 tarball 字节数 / sha256——资产由 tag 树重打，定值以 E-5 实测为准）。**E-4 发布审查结论不在本节预填**（由 `review-record` 机录承载）。
+
 ## v0.6.1 — 2026-10-20
 
 ### 摘要
