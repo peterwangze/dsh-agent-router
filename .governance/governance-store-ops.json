@@ -500,6 +500,44 @@
         "generation": 0,
         "backend": "md"
       }
+    },
+    "op-90a0245dff6d4feb8ea13e4674280064": {
+      "schema_version": 1,
+      "command": "evidence-append",
+      "task_id": "REL-014",
+      "input_fingerprint": "08cec03480acc3f92a45f9de58b2eaa2954d3b08f9ec83333dfa0e83e2be5914",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-90a0245dff6d4feb8ea13e4674280064",
+        "code": "ok",
+        "new_revision": 521937,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-22T15:23:05",
+      "updated_at": "2026-10-22T15:23:05"
+    },
+    "op-24e02990496f4548a0814f2823670417": {
+      "schema_version": 1,
+      "command": "evidence-append",
+      "task_id": "REL-014",
+      "input_fingerprint": "23318651daf67d2ea15cadce1312856b632a91c4d9a42dc428c95d4ec2bb5afe",
+      "status": "ok",
+      "result": {
+        "operation_id": "op-24e02990496f4548a0814f2823670417",
+        "code": "ok",
+        "new_revision": 523326,
+        "observed_revision": null,
+        "execution": "succeeded",
+        "detail": null
+      },
+      "pending_effects": null,
+      "baseline_effects": null,
+      "recorded_at": "2026-10-22T15:25:15",
+      "updated_at": "2026-10-22T15:25:15"
     }
   }
 }
