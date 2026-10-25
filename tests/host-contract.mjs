@@ -380,7 +380,7 @@ const FORWARDED_EVENT_BASELINE = [
 const CLIENT_PACKAGE_INJECT_BASELINE = ['@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-api-remotes']
 /** 客户端 fiber inject 九面基线（inject-manifest 域 FIBER_INJECT 镜像源 = lib/client.js inject 数组）。 */
 const FIBER_INJECT_BASELINE = ['slots', 'locale', 'remote', 'remote.llm', 'remote.settings', 'remote.credentials', 'remote.agentPresets', 'remote.session', 'modelDirectories']
-/** peerDeps 8 项宿主供给包（记录性声明口径 = 覆盖主基线的共同 ^ 范围——见上方 declaredRangeCovers，权威判据在 host-version-snapshot）。 */
+/** peerDeps 8 项特性面宿主供给包（记录性声明口径 = 覆盖主基线的共同 ^ 范围——见上方 declaredRangeCovers，权威判据在 host-version-snapshot）。 */
 const PEER_DEP_BASELINE = [
   '@deepseek-ai/dsh-attachment',
   '@deepseek-ai/dsh-agent',
@@ -390,6 +390,22 @@ const PEER_DEP_BASELINE = [
   '@deepseek-ai/dsh-subagent',
   '@deepseek-ai/dsh-system-prompt',
   '@deepseek-ai/dsh-credentials',
+]
+/**
+ * v0.7.0 起 3 个直接 import 的 dsh 运行时包也属 peerDependencies（此前误列
+ * `dependencies` —— 桌面端启动故障根因：profile 根提升出旧代副本 → 宿主装载门
+ * disable 核心 `tools` 行 → required `agent-loop` 永久 pending）。二者的共同声明
+ * 范围口径一致，故合并为一个「收敛」集合；分开列只为保留语义分组。
+ */
+const DSH_RUNTIME_DEP_BASELINE = [
+  '@deepseek-ai/dsh-llm',
+  '@deepseek-ai/dsh-tools',
+  '@deepseek-ai/dsh-typert-protocol',
+]
+/** 平台包 2 项（cordis / schemastery）——宿主供给，范围口径各自独立（非 dsh-* 共同口径）。 */
+const PLATFORM_DEP_BASELINE = [
+  '@deepseek-ai/cordis',
+  '@deepseek-ai/schemastery',
 ]
 /**
  * 声明面覆盖谓词（ARCH-006——F-2 / R0 承接的语义演进）：**文本提取**消费权威套件
@@ -924,13 +940,27 @@ console.log('S3 声明面比对（inject / peerDeps / fiber 面 / patch 条目�
   check('S3 声明面: dsh.client.platform === web（客户端装配面声明）', pkg.dsh?.client?.platform === 'web')
 
   const peerNames = Object.keys(pkg.peerDependencies ?? {}).sort()
-  check('S3 声明面: peerDependencies = 基线 8 项宿主供给包（集合相等）', deepEqual(peerNames, [...PEER_DEP_BASELINE].sort()), peerNames)
+  check('S3 声明面: peerDependencies = 基线 13 项宿主供给包（8 特性 + 3 运行时 + 2 平台，集合相等）',
+    deepEqual(peerNames, [...PEER_DEP_BASELINE, ...DSH_RUNTIME_DEP_BASELINE, ...PLATFORM_DEP_BASELINE].sort()), peerNames)
+  /**
+   * 声明面纯净性（v0.7.0，2026-10-25 桌面端启动故障的直接回归判据）：
+   * `@deepseek-ai/*` 一旦出现在 `dependencies`，pnpm（profile `nodeLinker:
+   * hoisted`）即把它提升到 profile 根 node_modules；宿主装载门 preflight 的
+   * 最近副本解析读到该副本 → 核心行 `tools` 代际不兼容被 disable → required
+   * `agent-loop` 永久 pending → 桌面端起不来。故此处断言的是「零出现」，
+   * 与版本是否相容无关。
+   */
+  const hostOwnedDepsS3 = Object.keys(pkg.dependencies ?? {}).filter((name) => name.startsWith('@deepseek-ai/'))
+  check('S3 声明面: dependencies 零 @deepseek-ai/* 宿主包（提升即遮蔽宿主核心行——桌面端启动故障形态，回归守卫）',
+    hostOwnedDepsS3.length === 0, hostOwnedDepsS3)
   check('S3 声明面: caretRangeContains 覆盖谓词自 host-version-snapshot.mjs 文本提取成功（ARCH-006 单源消费——提取失败即红，先例 HOST_BASELINE_REGISTRY 提取判据组）',
     typeof declaredRangeCovers === 'function')
-  const peerRangesS3 = PEER_DEP_BASELINE.map((name) => pkg.peerDependencies?.[name])
+  const peerRangesS3 = [...PEER_DEP_BASELINE, ...DSH_RUNTIME_DEP_BASELINE].map((name) => pkg.peerDependencies?.[name])
   const commonPeerRangeS3 = peerRangesS3[0] && peerRangesS3.every((range) => range === peerRangesS3[0]) ? peerRangesS3[0] : null
-  check(`S3 声明面: peerDeps 8 项版本范围收敛同一记录性口径 ${commonPeerRangeS3 ?? '<split/absent>'} 且覆盖主基线 ${primaryBaseline.dshPackages}（ARCH-006 覆盖语义——范围不再覆盖 primary（frozen 回退/假版本）即红，权威判据 = host-version-snapshot 声明面组）`,
+  check(`S3 声明面: peerDeps 11 项 dsh 运行时/特性面版本范围收敛同一记录性口径 ${commonPeerRangeS3 ?? '<split/absent>'} 且覆盖主基线 ${primaryBaseline.dshPackages}（ARCH-006 覆盖语义——范围不再覆盖 primary（frozen 回退/假版本）即红，权威判据 = host-version-snapshot 声明面组）`,
     typeof declaredRangeCovers === 'function' && commonPeerRangeS3 !== null && declaredRangeCovers(commonPeerRangeS3, primaryBaseline.dshPackages), peerRangesS3)
+  check(`S3 声明面: engines.dsh 与共同 peer 范围单一口径一致（宿主装载门以 engines.dsh 优先判定——两套范围静默分叉即红）`,
+    typeof commonPeerRangeS3 === 'string' && pkg.engines?.dsh === commonPeerRangeS3, [pkg.engines?.dsh, commonPeerRangeS3])
 
   check('S3 声明面: FIBER_INJECT === 基线九面（inject-manifest 单源）', deepEqual(FIBER_INJECT, FIBER_INJECT_BASELINE), FIBER_INJECT)
   const fiberRemoteFaces = FIBER_INJECT.filter((name) => name.startsWith('remote.')).map((name) => name.slice('remote.'.length))
@@ -1418,6 +1448,61 @@ console.log('S9 插件名单源守卫（FIX-055 P3-2）+ 宿主锚守卫（FIX-0
       const missing = anchor.patterns.filter((pattern) => !windowLines.some((line) => pattern.test(line)))
       check(`S9b 宿主锚: ${anchor.id}（${anchor.face}）命中 ${anchor.package}/${anchor.file} 行 ${start}-${end} 窗口（期望行 ${expectedLine}${anchor.symbol === undefined ? '（prestep 注释单源）' : '（符号级派生）'}；${anchor.patterns.length} 项内容模式全部在场——窗口外即锚漂移）`, missing.length === 0, { expectedLine, lineSource: anchor.symbol === undefined ? 'prestep-comment' : 'symbol', window: [start, end], fileLines: lines.length, missingPatterns: missing.map((pattern) => String(pattern)), actualWindow: windowLines.map((line, index) => `${start + index}: ${line.trim().slice(0, 160)}`) })
     }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+/**
+ * S10 宿主包 import 边界（v0.7.0，2026-10-25 桌面端启动故障的**结构性**回归守卫）。
+ *
+ * 故障链（一手机制，已实测）：宿主包写在 `dependencies` → profile 根被提升出
+ * 第二份副本 → 宿主装载门最近副本解析读到旧代 → 核心行 `tools` 被 disable →
+ * required `agent-loop` 永久 pending → 桌面端起不来。声明面纯净性由 S3 看护；
+ * 本组看护**代码侧**同一条纪律：
+ *   ① `lib/**` 中除 `host-abi/host-imports.js` 外零 `@deepseek-ai/…` import——
+ *      宿主耦合面单点化（P5：多入口 = 漂移面不可审计）；
+ *   ② `host-packages.js`（声明表 + 自检域）自身零宿主 import——保证探测在任何
+ *      宿主代际下都不会因宿主包缺失而崩栈（fail-safe 的结构前提）；
+ *   ③ `host-imports.js` 实际 import 的包集合 === 声明表 `usage='import'` 集合
+ *      （双向：表说哪几个就必须 import 哪几个；import 了未登记的包即红）。
+ */
+console.log('S10 宿主包 import 边界（宿主耦合面单点化 + 声明表/import 面双向锁定）:')
+{
+  const HOST_IMPORTS_FILE = 'host-abi/host-imports.js'
+  const importPattern = /(?:^|\n)\s*(?:import|export)\s[^\n]*?\bfrom\s*['"](@deepseek-ai\/[^'"]+)['"]|(?:^|\n)\s*import\s*['"](@deepseek-ai\/[^'"]+)['"]|import\(\s*['"](@deepseek-ai\/[^'"]+)['"]\s*\)/g
+  const specifiersOf = (source) => [...stripComments(source).matchAll(importPattern)]
+    .map((match) => match[1] ?? match[2] ?? match[3])
+    .filter((specifier) => typeof specifier === 'string')
+  const packageNameOf = (specifier) => specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0]
+
+  const libEntries = readdirSync(join(ROOT_DIR, 'lib')).filter((name) => name.endsWith('.js'))
+  const hostAbiEntries = readdirSync(join(ROOT_DIR, 'lib', 'host-abi')).filter((name) => name.endsWith('.js'))
+  const strayImports = []
+  for (const file of libEntries) {
+    const hits = specifiersOf(readLib(file))
+    if (hits.length > 0) strayImports.push(...hits.map((specifier) => `lib/${file}: ${specifier}`))
+  }
+  for (const file of hostAbiEntries) {
+    if (`host-abi/${file}` === HOST_IMPORTS_FILE) continue
+    const hits = specifiersOf(readHostAbi(file))
+    if (hits.length > 0) strayImports.push(...hits.map((specifier) => `lib/host-abi/${file}: ${specifier}`))
+  }
+  check(`S10 边界: 宿主包 import 仅存在于 lib/${HOST_IMPORTS_FILE}（其余 lib/** 零 @deepseek-ai/* 裸 import——耦合面单点，P5）`,
+    strayImports.length === 0, strayImports)
+  check('S10 边界: lib/host-abi/host-packages.js 自身零宿主 import（探测域代际无关——fail-safe 的结构前提）',
+    specifiersOf(readHostAbi('host-packages.js')).length === 0, specifiersOf(readHostAbi('host-packages.js')))
+
+  const importedPackages = [...new Set(specifiersOf(readHostAbi('host-imports.js')).map(packageNameOf))].sort()
+  check('S10 边界: lib/host-abi/host-imports.js 至少 import 一个宿主包（守卫自身不得空转）', importedPackages.length > 0, importedPackages)
+  const registryModule = await import(new URL('../lib/host-abi/host-packages.js', import.meta.url).href).catch(() => null)
+  check('S10 边界: 声明表 host-packages.js 可导入（注册表为代码侧唯一事实源）', registryModule !== null)
+  if (registryModule !== null) {
+    const declaredImportable = [...new Set(registryModule.HOST_IMPORTED_PACKAGE_NAMES)].sort()
+    check('S10 边界: host-imports.js 实际 import 包集合 === 声明表 usage=import 集合（双向锁定——表与代码任一侧漂移即红）',
+      deepEqual(importedPackages, declaredImportable), { imported: importedPackages, declared: declaredImportable })
+    check('S10 边界: 声明表包集合与 package.json peerDependencies 键集合相等（投影一致）',
+      deepEqual([...registryModule.HOST_PACKAGE_NAMES].sort(), Object.keys(pkg.peerDependencies ?? {}).sort()),
+      { registry: [...registryModule.HOST_PACKAGE_NAMES].sort(), peers: Object.keys(pkg.peerDependencies ?? {}).sort() })
   }
 }
 

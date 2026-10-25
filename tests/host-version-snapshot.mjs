@@ -108,7 +108,7 @@ const SELECTED_BASELINE = DSH_BASELINE_RAW === ''
 /** 记录性声明口径：^ + 实测基线值（D1-5：不做 enforcement 依赖）。 */
 const declaredRange = (version) => `^${version}`
 
-/** 基线在册的 8 个 peerDeps 宿主供给包（D1-5 W-2 修正计数）。 */
+/** 基线在册的 8 个 peerDeps 宿主供给包（D1-5 W-2 修正计数；optional 特性面）。 */
 const PEER_DEP_NAMES = [
   '@deepseek-ai/dsh-attachment',
   '@deepseek-ai/dsh-agent',
@@ -120,11 +120,26 @@ const PEER_DEP_NAMES = [
   '@deepseek-ai/dsh-credentials',
 ]
 
-/** 基线在册的 3 个 dsh-* 运行时依赖（直接 import 面，依赖清单 E 类）。 */
+/**
+ * 基线在册的 3 个 dsh-* 运行时依赖（直接 import 面，依赖清单 E 类）。
+ *
+ * v0.7.0 起重置（2026-10-25 桌面端启动故障）：这 3 包由 `dependencies` 迁入
+ * `peerDependencies`——它们**不是本包的依赖**，而是宿主供给的运行面。写成
+ * `dependencies` 会让 pnpm 在 profile 根提升出第二份副本，宿主装载门
+ * （`dsh-app-boot` preflight → `manifestOf` 走未拦截的最近副本解析）据此判定
+ * 核心行 `tools` 代际不兼容并 disable，`agent-loop`（required）永久 pending，
+ * 桌面端启动即失败。故本表自 v0.7.0 起从 peerDependencies 读取。
+ */
 const DSH_RUNTIME_DEPS = [
   '@deepseek-ai/dsh-llm',
   '@deepseek-ai/dsh-tools',
   '@deepseek-ai/dsh-typert-protocol',
+]
+
+/** 基线在册的 2 个平台包（cordis / schemastery）——同属宿主供给，禁入 dependencies。 */
+const PLATFORM_DEPS = [
+  '@deepseek-ai/cordis',
+  '@deepseek-ai/schemastery',
 ]
 
 /** 基线上存续的 3 个客户端注入包（dsh-client-runtime 0.1.5 起已消亡，D1-1 删）。 */
@@ -180,7 +195,7 @@ check('registry entry fields complete (dsh/dshPackages/cordis/schemastery)', HOS
  */
 const declaredRangeValues = [
   ...PEER_DEP_NAMES.map((name) => pkg.peerDependencies?.[name]),
-  ...DSH_RUNTIME_DEPS.map((name) => pkg.dependencies?.[name]),
+  ...DSH_RUNTIME_DEPS.map((name) => pkg.peerDependencies?.[name]),
 ]
 const commonDeclaredRange = declaredRangeValues[0] && declaredRangeValues.every((range) => range === declaredRangeValues[0]) ? declaredRangeValues[0] : null
 const declaredEntry = commonDeclaredRange ? HOST_BASELINE_REGISTRY.find((entry) => declaredRange(entry.dshPackages) === commonDeclaredRange) ?? null : null
@@ -221,25 +236,60 @@ check('inject declares exactly the 3 baseline-surviving packages in order', JSON
 check('inject no longer lists dead @deepseek-ai/dsh-client-runtime (gone since host 0.1.5)', !pkg.dsh?.client?.inject?.includes('@deepseek-ai/dsh-client-runtime'))
 check('dsh.client.platform stays web', pkg.dsh?.client?.platform === 'web')
 
-// ── 2. peerDeps 记录口径：恰为在册 8 项，每项 === 共同声明范围（覆盖主基线——F-1 语义演进）──
+// ── 2. peerDeps 记录口径：恰为在册 13 项（8 特性 + 3 运行时 + 2 平台），
+//      运行时/特性 11 项 === 共同声明范围（覆盖主基线——F-1 语义演进）──
 console.log('peerDependencies measured-baseline record:')
 const peerNames = Object.keys(pkg.peerDependencies ?? {})
-check('peerDependencies covers exactly the 8 baseline host packages', JSON.stringify([...peerNames].sort()) === JSON.stringify([...PEER_DEP_NAMES].sort()))
-for (const name of PEER_DEP_NAMES) {
+/**
+ * v0.7.0 声明面纯净性守卫（2026-10-25 桌面端启动故障的**直接回归判据**）。
+ *
+ * 故障一手机制：`@deepseek-ai/*` 出现在 `dependencies` → pnpm（profile 侧
+ * `nodeLinker: hoisted`）把它提升到 profile 根 `node_modules` → 宿主装载门
+ * `preflight`/`manifestOf` 的最近副本解析读到旧代副本 → 核心行 `tools` 被
+ * disable → required `agent-loop` 永久 pending → 桌面端启动失败，且重置
+ * bundle/补丁层无法恢复。因此**任何**宿主供给包进入 `dependencies` 即红，
+ * 不看版本是否「恰好相容」——新版也会遮蔽宿主自身，同属故障形态。
+ */
+const hostOwnedDeps = Object.keys(pkg.dependencies ?? {}).filter((name) => name.startsWith('@deepseek-ai/'))
+check('dependencies declares ZERO @deepseek-ai/* packages (host-supplied packages must be peerDependencies only — profile-root hoisting disables the host tools row and hard-fails desktop startup)',
+  hostOwnedDeps.length === 0, hostOwnedDeps)
+check('dependencies keeps only genuinely self-owned runtime deps (undici)', JSON.stringify(Object.keys(pkg.dependencies ?? {})) === JSON.stringify(['undici']), pkg.dependencies)
+check('peerDependencies covers exactly the 13 baseline host packages (8 feature + 3 runtime + 2 platform)', JSON.stringify([...peerNames].sort()) === JSON.stringify([...PEER_DEP_NAMES, ...DSH_RUNTIME_DEPS, ...PLATFORM_DEPS].sort()))
+check(`peerDependenciesMeta.optional is exactly the 8 feature peers (hard runtime/platform peers stay required)`,
+  JSON.stringify(Object.keys(pkg.peerDependenciesMeta ?? {}).filter((name) => pkg.peerDependenciesMeta[name]?.optional === true).sort()) === JSON.stringify([...PEER_DEP_NAMES].sort()))
+for (const name of [...PEER_DEP_NAMES, ...DSH_RUNTIME_DEPS]) {
   check(`peerDep ${name} records the common declared range (${commonDeclaredRange ?? '<split/absent>'}) covering PRIMARY ${HOST_BASELINE.dshPackages} (ARCH-006 coverage semantics — split/absent red)`, pkg.peerDependencies?.[name] === commonDeclaredRange)
 }
+/**
+ * engines.dsh 单字段运行时契约（v0.7.0）：宿主 `dsh-app-boot`
+ * `unmetRequirements` 语义是「自身 engines.dsh 存在则单独判定、忽略 peer 判定」，
+ * 即宿主装载门的**权威输入**。要求它与共同 peer 范围**逐字相同**（单一口径，
+ * 防两套范围静默分叉）。
+ */
+check(`engines.dsh === the common peer range (${commonDeclaredRange ?? '<split/absent>'}; host gate gives engines.dsh precedence over peers — two diverging ranges would silently split the contract)`,
+  typeof commonDeclaredRange === 'string' && pkg.engines?.dsh === commonDeclaredRange, pkg.engines)
 
-// ── 3. deps dsh 包记录口径：3 项 === 共同声明范围（覆盖主基线）──────────────────
-console.log('dsh runtime deps measured-baseline record:')
-for (const name of DSH_RUNTIME_DEPS) {
-  check(`dep ${name} records the common declared range (${commonDeclaredRange ?? '<split/absent>'}) covering PRIMARY ${HOST_BASELINE.dshPackages} (ARCH-006 coverage semantics — split/absent red)`, pkg.dependencies?.[name] === commonDeclaredRange)
+// ── 3. 平台包范围包含基线（cordis / schemastery 由宿主供给，同为 peer）───────
+console.log('platform peer packages range coverage:')
+check(`dep @deepseek-ai/cordis range covers primary baseline ${HOST_BASELINE.cordis}`, caretRangeContains(pkg.peerDependencies?.['@deepseek-ai/cordis'], HOST_BASELINE.cordis), pkg.peerDependencies?.['@deepseek-ai/cordis'])
+check(`dep @deepseek-ai/schemastery range covers primary baseline ${HOST_BASELINE.schemastery}`, caretRangeContains(pkg.peerDependencies?.['@deepseek-ai/schemastery'], HOST_BASELINE.schemastery), pkg.peerDependencies?.['@deepseek-ai/schemastery'])
+
+// ── 3b. 代码侧声明表（host-abi 域 8）与 package.json 投影值级锁定 ──────────────
+//      单源纪律：`HOST_PACKAGE_REGISTRY` 是代码侧唯一事实源，package.json 是其
+//      投影；两侧集合/范围任一漂移即红（防「表说 peer、清单写 dep」的静默分叉）。
+console.log('host-abi registry vs package.json projection:')
+const registryModule = await import(new URL('../lib/host-abi/host-packages.js', import.meta.url).href).catch(() => null)
+check('host-abi host-packages.js is importable (registry projection source)', registryModule !== null)
+if (registryModule !== null) {
+  const registryNames = [...registryModule.HOST_PACKAGE_NAMES].sort()
+  check('registry package set === package.json peerDependencies keys', JSON.stringify(registryNames) === JSON.stringify([...peerNames].sort()), registryNames)
+  for (const entry of registryModule.HOST_PACKAGE_REGISTRY) {
+    check(`registry ${entry.name} range === package.json peerDependencies range`, pkg.peerDependencies?.[entry.name] === entry.range, [pkg.peerDependencies?.[entry.name], entry.range])
+    check(`registry ${entry.name} optional flag === package.json peerDependenciesMeta.optional`, (pkg.peerDependenciesMeta?.[entry.name]?.optional === true) === entry.optional)
+  }
+  check('registry runtime-kind set === 11 dsh-* runtime peers', JSON.stringify([...registryModule.HOST_RUNTIME_PACKAGE_NAMES].sort()) === JSON.stringify([...DSH_RUNTIME_DEPS, ...PEER_DEP_NAMES].sort()))
+  check('registry platform-kind set === 2 platform peers', JSON.stringify([...registryModule.HOST_PLATFORM_PACKAGE_NAMES].sort()) === JSON.stringify([...PLATFORM_DEPS].sort()))
 }
-
-// ── 4. 非 dsh 范围包含基线（cordis / schemastery：历史范围未证伪，从简保持；
-//      断言「声明范围必须覆盖**主基线**」而非逐字锁定，合法 bump 不误伤）────
-console.log('non-dsh ranges cover baseline:')
-check(`dep @deepseek-ai/cordis range covers primary baseline ${HOST_BASELINE.cordis}`, caretRangeContains(pkg.dependencies?.['@deepseek-ai/cordis'], HOST_BASELINE.cordis))
-check(`dep @deepseek-ai/schemastery range covers primary baseline ${HOST_BASELINE.schemastery}`, caretRangeContains(pkg.dependencies?.['@deepseek-ai/schemastery'], HOST_BASELINE.schemastery))
 
 // ── 5. README 兼容矩阵同步（声明面锚定档案项 = declaredEntry 的实测基线 + 记录性语义 + 权威防护指针）──
 //      ARCH-006 起 declaredEntry = 声明范围逐字锚定的在册项（当前 0.2.0 frozen——本仓
@@ -251,7 +301,19 @@ check(`README records host CLI baseline dsh ${declaredEntry?.dsh}`, readme.inclu
 check(`README records dsh-* baseline ${declaredEntry?.dshPackages}`, readme.includes(declaredEntry?.dshPackages ?? '<no declared entry>'))
 check(`README records cordis baseline ${declaredEntry?.cordis}`, readme.includes(declaredEntry?.cordis ?? '<no declared entry>'))
 check(`README records schemastery baseline ${declaredEntry?.schemastery}`, readme.includes(declaredEntry?.schemastery ?? '<no declared entry>'))
-check('README declares peerDeps as 记录性 (record-only, no enforcement reliance)', readme.includes('记录性'))
+/**
+ * 声明面语义披露（v0.7.0 重写）：旧断言要求 README 声明「peerDeps 为**记录性**
+ * （record-only，不依赖 enforcement）」——该口径自 v0.7.0 起**已不成立**：宿主
+ * `dsh-app-boot` 的 `unmetRequirements` 以 `engines.dsh` 为权威输入（存在即单独
+ * 判定、忽略 peer），peer 范围退为安装期可观测性声明。守卫意图不变（声明面语义
+ * 必须在 README 如实披露），判据改为断言**新真相**：README 必须写明 ① `engines.dsh`
+ * 与宿主装载门的判定关系；② 「宿主包永不得写入 `dependencies`」的 P0 纪律
+ * （2026-10-25 桌面端启动故障的机制结论——不是提示，是硬纪律）。
+ */
+check('README discloses the new declaration semantics: engines.dsh is the host gate input + peer ranges no longer gate-only',
+  readme.includes('engines.dsh') && readme.includes('宿主装载门'))
+check('README states the P0 rule: host-supplied packages must never appear in dependencies (desktop startup outage mechanism)',
+  /永不得写入\s*`dependencies`/.test(readme) && /提升到\s*profile\s*根/.test(readme))
 check('README points authoritative guard to tests/host-version-snapshot.mjs', readme.includes('tests/host-version-snapshot.mjs'))
 
 // ── 5b. README 支持基线集表 primary 行（FIX-053，REVIEW-REL-013-R0 P2-1 收口）──

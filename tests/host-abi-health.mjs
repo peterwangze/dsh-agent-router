@@ -77,8 +77,9 @@
  *
  * 独立入口：node tests/host-abi-health.mjs（exit 0/1）。
  */
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import { ROUTER_DESCRIPTORS } from '../lib/rpc.js'
@@ -2048,5 +2049,110 @@ console.log('R2 capability negotiation tri-state (matched / compatible-unknown /
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+/**
+ * R3（ARCH-004 域 8）：宿主包代际自检的**判定语义**判别。
+ *
+ * 为什么需要本组：2026-10-25 桌面端启动故障的机制（profile 根被提升出宿主包旧
+ * 副本 → 装载门 disable 核心 tools 行）此前完全不可观测。域 8 补上观测面，而
+ * 观测面本身最容易犯的错是**误报**——「插件实际解析副本」必须取经宿主运行时
+ * 替换层路由后的结果；若改用裸路径序探测，会命中 profile 之上的
+ * `$DSH_HOME/profiles/node_modules`（脚本通道扁平宿主树），与桌面端宿主天然
+ * 不同代 ⇒ 每次启动误报遮蔽（实测：打包安装的插件裸路径序读到
+ * dsh-tools@0.2.1-rc.2，运行时实际却加载宿主 0.2.1-rc.3）。
+ *
+ * 本组以**构造性夹具**（临时锚 + 桩服务）判别三件事，任一反向实现都会红：
+ * ① 无替换层服务（老宿主/桩上下文）→ `routing='none'` 且**恰零** mismatch
+ *    （即使宿主锚侧版本与插件侧版本天然不同也不许报）——误报防线；
+ * ② 有服务且两侧一致 → 零 mismatch、零事件（健康时不制造噪声）；
+ * ③ 有服务且两侧不一致（= 遮蔽形态）→ 命中 mismatch 一条/包 + 精确诊断
+ *    `host-package-generation-mismatch`/`shadowed-host-package`——漏报防线。
+ */
+console.log('R3 host-package generation self-check (domain 8: routed-vs-anchor semantics):')
+{
+  const HP_ANCHOR_VERSION = '9.9.9'
+  const HP_SIDE_TMP = mkdtempSync(join(tmpdir(), 'dsh-router-hp-'))
+  try {
+    // 构造「宿主安装锚」：只放 dsh-tools 一个包，版本刻意远离本仓解析值 ⇒
+    // 任何「裸路径序比对」实现都会报 mismatch（= ① 的判别力来源）。
+    mkdirSync(join(HP_SIDE_TMP, 'node_modules', '@deepseek-ai', 'dsh-tools'), { recursive: true })
+    writeFileSync(join(HP_SIDE_TMP, 'node_modules', '@deepseek-ai', 'dsh-tools', 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-tools', version: HP_ANCHOR_VERSION }))
+    const anchorPath = join(HP_SIDE_TMP, 'package.json')
+    writeFileSync(anchorPath, JSON.stringify({ name: 'hp-fixture-host', version: '0.0.0' }))
+
+    /** 上下文桩：profileContext.installAnchor 可选；pluginPackages 服务可选。 */
+    const ctxStub = (anchor, service) => ({
+      get: (name) => name === 'profileContext'
+        ? (anchor === null ? undefined : { installAnchor: anchor })
+        : name === 'pluginPackages' ? service : undefined,
+    })
+    /** 路由桩：逐包返回给定版本（模拟宿主替换层把裸包名解析到某副本）。 */
+    const serviceOf = (versionOf) => ({ packageOf: (name) => (versionOf[name] === undefined ? undefined : { version: versionOf[name] }) })
+    const diagTail = () => {
+      const entries = hostAbi.hostDiagnostics().entries
+      return entries.length === 0 ? undefined : entries[entries.length - 1]
+    }
+
+    check('R3-a: 静态 import 面恰 4 包（代际比对集合 = 本插件真正 import 的宿主包，非全部 13 项声明）',
+      JSON.stringify([...hostAbi.HOST_IMPORTED_PACKAGE_NAMES].sort())
+      === JSON.stringify(['@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-typert-protocol', '@deepseek-ai/schemastery'].sort()),
+      hostAbi.HOST_IMPORTED_PACKAGE_NAMES)
+
+    // ① 无替换层服务 → 不给判定（误报防线）
+    const noServiceReport = hostAbi.hostGenerationReport(ctxStub(anchorPath, undefined))
+    check('R3-b: 无 pluginPackages 服务 → routing=none 且恰零 mismatch（宿主锚侧 9.9.9 与插件侧真值本就不同，仍不得报——裸路径序比对实现会在此红）',
+      noServiceReport.routing === hostAbi.HOST_ROUTING.none
+      && noServiceReport.mismatches.length === 0
+      && noServiceReport.anchorAvailable === true
+      && noServiceReport.host['@deepseek-ai/dsh-tools'] === HP_ANCHOR_VERSION,
+      { routing: noServiceReport.routing, mismatches: noServiceReport.mismatches, hostTools: noServiceReport.host['@deepseek-ai/dsh-tools'] })
+
+    // ①b 无 pluginPackages → noteHostGeneration 记「能力缺失」事件（P8 禁静默）
+    hostAbi.noteHostGeneration(ctxStub(anchorPath, undefined))
+    check('R3-c: 无替换层服务 → 诊断环形记 host-package-generation-unknown / no-plugin-packages（不静默、不误报为遮蔽）',
+      diagTail()?.kind === 'host-package-generation-unknown' && diagTail()?.code === 'no-plugin-packages',
+      diagTail())
+
+    // ② 服务两侧一致 → 零 mismatch、零事件（健康不制造噪声）
+    const aligned = hostAbi.hostGenerationReport(ctxStub(anchorPath, serviceOf({ '@deepseek-ai/dsh-tools': HP_ANCHOR_VERSION })))
+    check('R3-d: 服务两侧版本一致 → 零 mismatch（健康态零噪声）',
+      aligned.routing === hostAbi.HOST_ROUTING.intercept && aligned.mismatches.length === 0,
+      { routing: aligned.routing, mismatches: aligned.mismatches })
+
+    // ③ 服务两侧不一致（遮蔽形态）→ 命中 + 精确诊断
+    const shadowedVersions = { '@deepseek-ai/dsh-tools': '0.2.0-rc.2' }
+    const shadowed = hostAbi.hostGenerationReport(ctxStub(anchorPath, serviceOf(shadowedVersions)))
+    check('R3-e: 服务侧 0.2.0-rc.2 vs 宿主锚 9.9.9 → 命中恰 1 条 mismatch 且带双侧版本（漏报防线）',
+      shadowed.mismatches.length === 1
+      && shadowed.mismatches[0].name === '@deepseek-ai/dsh-tools'
+      && shadowed.mismatches[0].host === HP_ANCHOR_VERSION
+      && shadowed.mismatches[0].own === '0.2.0-rc.2',
+      shadowed.mismatches)
+    hostAbi.noteHostGeneration(ctxStub(anchorPath, serviceOf(shadowedVersions)))
+    check('R3-f: 遮蔽形态 → 诊断环形记 host-package-generation-mismatch / shadowed-host-package 且 detail 含双侧版本（可一键导出报障）',
+      diagTail()?.kind === 'host-package-generation-mismatch'
+      && diagTail()?.code === 'shadowed-host-package'
+      && typeof diagTail()?.detail === 'string'
+      && diagTail().detail.includes(HP_ANCHOR_VERSION) && diagTail().detail.includes('0.2.0-rc.2'),
+      diagTail())
+
+    // ④ 安装锚缺失 → 能力缺失事件（不是「一致」，也不是「遮蔽」）
+    hostAbi.noteHostGeneration(ctxStub(null, serviceOf({})))
+    check('R4: 无 profileContext（安装锚缺失）→ host-package-generation-unknown / no-install-anchor（不可判定 ≠ 一致）',
+      diagTail()?.kind === 'host-package-generation-unknown' && diagTail()?.code === 'no-install-anchor',
+      diagTail())
+
+    // ⑤ 诊断失败绝不外泄：畸形 ctx 不 throw
+    let survived = true
+    try {
+      hostAbi.noteHostGeneration({ get: () => { throw new Error('boom') } })
+    } catch { survived = false }
+    check('R5: 宿主上下文 read 抛错 → 自检绝不 throw（诊断失败绝不影响主链，health 域同款纪律）', survived)
+  } finally {
+    rmSync(HP_SIDE_TMP, { recursive: true, force: true })
+  }
+}
+
 console.log(failures === 0 ? `\nALL HOST ABI HEALTH TESTS PASSED (${passed} assertions)` : `\n${failures} FAILURE(S) (${passed} passed)`)
 process.exit(failures === 0 ? 0 : 1)
+
