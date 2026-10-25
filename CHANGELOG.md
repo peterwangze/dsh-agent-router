@@ -3,6 +3,42 @@
 > dsh-agent-router 的版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 > 内部注解（提交号 / EV 编号）供追溯，用户可忽略。
 
+## v0.7.1 — 2026-10-25
+
+### 摘要
+
+**v0.7.0 的审查非阻塞项收口（PATCH）**。核心变化一句话：v0.7.0 的桌面端启动故障修复与宿主包代际诊断经**独立 Code Reviewer** 审查为 `APPROVED_WITH_NOTES / unresolved_blockers=0`，本版把审查提出的 **5 项 P2 全部收口**（逐包不可判定可观测性、import 边界对多行/`require`/动态 `import()`/递归子目录的覆盖、`optional`/`bundled` 依赖旁路、宿主面桩锚定宿主源码、`apply` 接线守卫），并顺手修掉 5 项 P3。**产品对外行为、声明面与用户配置面与 v0.7.0 完全一致**——本版只增强看护强度与诊断完整性。
+
+### 修复（审查 P2 收口）
+
+- **P2-1｜逐包不可判定必须可观测（P8）**：v0.7.0 的 `noteHostGeneration` 对「某一侧读不到版本」的包**静默跳过**，与文件自述「不可判定 ≠ 一致」自相矛盾。本版在 mismatch 事件之外新增正交事件 `host-package-generation-unknown` / `unresolved-host-package`（detail 列出不可判定的包名），遮蔽与读不到同帧各自入 health 环形。
+- **P2-2｜S10 import 边界判别力（P4/P5）**：旧实现只匹配同一行 `import … from`，多行 import、`require()`、动态 `import()` 与更深子目录均可绕过——「新增裸 import 即红」属过度声称。本版改为 dotAll 容忍多行、显式覆盖 `require()`/`import()`、扫描面升级为 **`lib/` 递归全树**，并新增「扫描面非空且含 host-abi 子目录」的自证断言（守卫不得空转）。
+- **P2-3｜纯净性旁路通道**：v0.7.0 只断言 `dependencies` 零 `@deepseek-ai/*`；`optionalDependencies` 与 `bundledDependencies` 同样会被安装器装进 profile 根（同形故障、不同通路）。两套件（`host-version-snapshot` / `host-contract` S3）同时补锁这两条旁路，`dependencies` 的键序敏感断言改为集合比较。
+- **P2-4｜宿主面桩锚定宿主源码（P10-④）**：域 8 的代际自检依赖宿主两条**不同**的解析路径（宿主侧裸路径序 / 插件侧替换层路由）。v0.7.0 的测试桩没有锚定宿主源码，宿主重构后探测会静默退化为 unknown。本版在 `host-contract` S7 增补 5 条宿主源码锚：`packageDirFromAnchor` 的裸路径序、`manifestOf` 优先问 `pluginPackages.packageOf`、`PluginPackages.packageOf` 经 `interception.packageDir` 路由、`profileContext.installAnchor` 提供点（按 `profile-boot*` 前缀枚举定位，禁写死内容哈希）、`unmetRequirements` 的 `engines.dsh` 优先级。宿主不可达/部分树 → 可见 skip（BR-03 语义）。
+- **P2-5｜`apply` 接线守卫**：v0.7.0 无测试断言 `apply()` 真的调用了 `noteHostGeneration`——删掉接线三套件仍全绿。本版新增静态断言（`apply` 块内必须含 `noteHostGeneration(ctx)`）。
+
+### 变更（审查 P3 收口）
+
+- `lib/schemas.js` 改为直接 import `./host-abi/host-imports.js` 而非桶入口：公开子路径 `./schemas` 不再连带引入 `version`/`health`/`ctx-services` 等 Node-only 图（今天无浏览器消费者，但契约模块不应无谓扩大依赖图）。宿主包 import 单点出口（S10）不变。
+- `lib/host-abi/version.js` 注释同步（宿主包自 v0.7.0 起为 `peerDependencies`，不再称 `dependencies`）。
+- 措辞如实化：CI 段「与宿主装载门同构」的表述收窄为「宿主侧同构、插件侧经替换层路由」的准确说法。
+
+### 破坏性变更
+
+**无。** 分项依据：① 无任何用户配置项、存储格式、插件导出面或 RPC 契约变更（本版改动集中在诊断事件、测试断言与注释）；② 诊断事件是**新增**的事件种类，既有 `router/hostFaceDiagnostics` 载荷结构不变；③ 声明面零改动（13 项 peer + `engines.dsh` 与 v0.7.0 一致）。
+
+### 已知行为 / 口径披露
+
+- **诊断面会多出一条事件**：若某侧宿主包版本读不到（如部分树/权限受限），健康面板诊断环形会新增 `unresolved-host-package` 条目——这是诚实披露而非故障；它与此前静默跳过相比是行为增强。
+- **审查未覆盖项（如实登记）**：R0 审查为**有界**审查（时间盒 ≈8 min），明确 `NOT_RUN`：全量 `run-all`（本版发布前由 Coordinator 实跑绿）、A/B 装机复现、桌面端真机复跑（v0.7.0 已做，本版代码路径未触及启动面）。负控实验在本版由 Coordinator 补做并留证（见「验证」）。
+- **版本位**：0.7.0 → **0.7.1**（PATCH：纯看护/诊断增强，无功能面与声明面变更）。
+
+### 验证
+
+- 全量门控：`node tests/run-all.mjs` = **ALL 23 SUITES + 4 RUNNER MODULES PASSED，exit 0，`#SKIP 2`**（既有 win32 环境性 skip）。
+- 三套件断言数变化：`host-version-snapshot` 73 → **74**；`host-contract` 160 → **168**（新增 5 条宿主源码锚 + 2 条旁路/接线断言 + 1 条扫描面自证）；`host-abi-health` 223 → **224**（新增 R3-g）。
+- **负控（判别力实证，全部字节还原恒等）**：① 向 `lib/memory.js` 注入多行 `import { … } from '@deepseek-ai/dsh-tools'` → S10 恰 1 FAIL；② `package.json` 注入 `optionalDependencies: {"@deepseek-ai/dsh-tools": …}` → snapshot 恰 1 FAIL；③ 注释掉 `apply` 内 `noteHostGeneration(ctx)` → S10 恰 1 FAIL；三者还原后全套绿。
+
 ## v0.7.0 — 2026-10-25
 
 ### 摘要
