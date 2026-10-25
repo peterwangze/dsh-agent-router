@@ -953,6 +953,15 @@ console.log('S3 声明面比对（inject / peerDeps / fiber 面 / patch 条目�
   const hostOwnedDepsS3 = Object.keys(pkg.dependencies ?? {}).filter((name) => name.startsWith('@deepseek-ai/'))
   check('S3 声明面: dependencies 零 @deepseek-ai/* 宿主包（提升即遮蔽宿主核心行——桌面端启动故障形态，回归守卫）',
     hostOwnedDepsS3.length === 0, hostOwnedDepsS3)
+  // 旁路通道（R0 审查 P2-3）：optionalDependencies / bundledDependencies 同样会被装进
+  // profile 根，通路不同、故障同形——一并锁死。
+  const bundledNamesS3 = Array.isArray(pkg.bundleDependencies) ? pkg.bundleDependencies : Array.isArray(pkg.bundledDependencies) ? pkg.bundledDependencies : []
+  const hostOwnedBypassS3 = [
+    ...Object.keys(pkg.optionalDependencies ?? {}).map((name) => `optionalDependencies:${name}`),
+    ...bundledNamesS3.map((name) => `bundledDependencies:${name}`),
+  ].filter((entry) => entry.includes('@deepseek-ai/'))
+  check('S3 声明面: optionalDependencies / bundledDependencies 零 @deepseek-ai/* 宿主包（同一故障的旁路安装通道）',
+    hostOwnedBypassS3.length === 0, hostOwnedBypassS3)
   check('S3 声明面: caretRangeContains 覆盖谓词自 host-version-snapshot.mjs 文本提取成功（ARCH-006 单源消费——提取失败即红，先例 HOST_BASELINE_REGISTRY 提取判据组）',
     typeof declaredRangeCovers === 'function')
   const peerRangesS3 = [...PEER_DEP_BASELINE, ...DSH_RUNTIME_DEP_BASELINE].map((name) => pkg.peerDependencies?.[name])
@@ -1243,6 +1252,43 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
     const composerSlots = hostRead('dsh-client-ui-conversation', 'lib', 'types', 'client', 'contract', 'slots.d.ts')
     check("S7 增强: 宿主 ComposerAttachment kind 判别字段在位（FIX-048 kind 语义锚——kind: 'image' | kind: 'file'）",
       composerSlots.includes("kind: 'image'") && composerSlots.includes("kind: 'file'"))
+    /**
+     * 7e（FIX-057 / ARCH-004 域 8）：域 8 代际自检依赖宿主**两条不同的**解析路径——
+     * 宿主侧「裸 Node 路径序」读安装副本、插件侧「替换层路由」读实际加载副本。本组把
+     * 这两条机制的宿主源码锚逐字锁住（P10-④：桩形态锚定宿主源码，禁按心智模型伪造）；
+     * 宿主重构这两处 → 本组红，而不是让插件探测静默退化成 unknown（R0 审查 P2-4）。
+     * 同时锚定 `engines.dsh` 的优先级语义（域 8 声明面权威口径的事实来源）。
+     */
+    const appBootIndex = hostRead('dsh-app-boot', 'lib', 'index.js')
+    check('S7 增强: 宿主 packageDirFromAnchor 用裸 Node 路径序（createRequire(anchor).resolve.paths + existsSync——域 8「宿主侧」机制锚）',
+      /function packageDirFromAnchor\([^)]*\)\s*\{[\s\S]{0,700}?createRequire\(anchor\)\.resolve\.paths\(/.test(appBootIndex)
+      && /function packageDirFromAnchor\([^)]*\)\s*\{[\s\S]{0,700}?existsSync\(/.test(appBootIndex))
+    check('S7 增强: 宿主 manifestOf 先问 pluginPackages.packageOf(specifier, parentURL)（替换层路由优先——域 8「插件侧」机制锚）',
+      /function manifestOf\([^)]*\)\s*\{[\s\S]{0,800}?packages\?\.packageOf\(specifier, parentURL\)/.test(appBootIndex))
+    check('S7 增强: 宿主 PluginPackages.packageOf 经 interception.packageDir(name, parentURL) 路由（替换层实体在位）',
+      /packageOf\(specifier, parentURL\)\s*\{[\s\S]{0,900}?interception\.packageDir\(name, parentURL\)/.test(appBootIndex))
+    // profileContext.installAnchor 由**宿主 CLI 包**提供（dsh/lib/profile-boot-<hash>.js），
+    // 不在 dsh-app-boot 内 ⇒ 按前缀枚举定位（文件名带内容哈希，禁写死）。靶子可能是
+    // `<dsh>/node_modules/@deepseek-ai`（嵌套 scope）或 `<npm>/node_modules/@deepseek-ai`
+    // （扁平 scope）⇒ 两个候选都探。CI pinned 部分树不含 CLI 包 → 可见 skip（BR-03）。
+    const cliLibCandidates = [join(hostRoot, 'dsh', 'lib'), join(hostRoot, '..', '..', 'lib')]
+    let profileBootFiles = []
+    let profileBootDir = ''
+    for (const dir of cliLibCandidates) {
+      if (!existsSync(dir)) continue
+      const files = readdirSync(dir).filter((name) => /^profile-boot.*\.js$/.test(name))
+      if (files.length > 0) { profileBootFiles = files; profileBootDir = dir; break }
+    }
+    if (profileBootFiles.length === 0) {
+      note('S7 增强: 宿主树不含 CLI 包 dsh/lib/profile-boot（部分树）→ installAnchor 提供点锚记 skip（BR-03）')
+    } else {
+      const profileBootSource = readFileSync(join(profileBootDir, profileBootFiles[0]), 'utf8')
+      check('S7 增强: 宿主 profileContext 携带 installAnchor（域 8 宿主侧探测锚的唯一来源；profile-boot 枚举定位）',
+        /installAnchor:\s*options\.resolvedProfile\?\.installAnchor/.test(profileBootSource), { file: profileBootFiles[0] })
+    }
+    check('S7 增强: 宿主 unmetRequirements 以 engines.dsh 优先、存在即忽略 peer（域 8 声明面权威口径锚）',
+      /if \(Object\.hasOwn\(engines, "dsh"\)\)[\s\S]{0,500}?return satisfies\(runtimeVersion, range\) \? \{\} : \{ "engines\.dsh": range \}/.test(appBootIndex)
+      && /if \(!Object\.hasOwn\(fields, "peerDependencies"\)\) return \{\}/.test(appBootIndex))
   }
 }
 
@@ -1469,28 +1515,44 @@ console.log('S9 插件名单源守卫（FIX-055 P3-2）+ 宿主锚守卫（FIX-0
 console.log('S10 宿主包 import 边界（宿主耦合面单点化 + 声明表/import 面双向锁定）:')
 {
   const HOST_IMPORTS_FILE = 'host-abi/host-imports.js'
-  const importPattern = /(?:^|\n)\s*(?:import|export)\s[^\n]*?\bfrom\s*['"](@deepseek-ai\/[^'"]+)['"]|(?:^|\n)\s*import\s*['"](@deepseek-ai\/[^'"]+)['"]|import\(\s*['"](@deepseek-ai\/[^'"]+)['"]\s*\)/g
+  /**
+   * import 面匹配（R0 审查 P2-2 收口）：旧式逐行正则只看「同一行 import … from」，
+   * 多行 import、`require()`、动态 `import()` 与更深子目录都能绕过——「新增裸
+   * import 即红」就成了过度声称。现形态：
+   * - 用 `s`（dotAll）+ `[^'"\`]*?` 让 `import { … }\n from '…'` 形态命中，且因为
+   *   该区间不含引号，**不会**跨越到数据数组里的包名字面量（inject-manifest 的
+   *   CLIENT_PACKAGE_INJECT、host-packages 的注册表条目因此不误报）；
+   * - 显式覆盖 `require('@deepseek-ai/…')` 与 `import('@deepseek-ai/…')`；
+   * - 扫描面从「lib 顶层 + host-abi」升级为 **lib 递归全树**（新增子目录自动纳入）。
+   */
+  const importPattern = /(?:\bimport\s+(?:[^'"`]*?\bfrom\s+)?|\bexport\s+[^'"`]*?\bfrom\s+)['"](@deepseek-ai\/[^'"]+)['"]|\brequire\s*\(\s*['"](@deepseek-ai\/[^'"]+)['"]\s*\)|\bimport\s*\(\s*['"](@deepseek-ai\/[^'"]+)['"]\s*\)/gs
   const specifiersOf = (source) => [...stripComments(source).matchAll(importPattern)]
     .map((match) => match[1] ?? match[2] ?? match[3])
     .filter((specifier) => typeof specifier === 'string')
   const packageNameOf = (specifier) => specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0]
 
-  const libEntries = readdirSync(join(ROOT_DIR, 'lib')).filter((name) => name.endsWith('.js'))
-  const hostAbiEntries = readdirSync(join(ROOT_DIR, 'lib', 'host-abi')).filter((name) => name.endsWith('.js'))
+  /** lib/ 递归文件枚举（相对 POSIX 路径；新增子目录自动纳入扫描面）。 */
+  const walkLib = (dir = join(ROOT_DIR, 'lib'), prefix = '') => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.isDirectory()) return walkLib(join(dir, entry.name), `${prefix}${entry.name}/`)
+    return entry.isFile() && entry.name.endsWith('.js') ? [`${prefix}${entry.name}`] : []
+  })
+  const libFilesRecursive = walkLib()
+  const readLibRel = (relative) => readFileSync(join(ROOT_DIR, 'lib', ...relative.split('/')), 'utf8')
   const strayImports = []
-  for (const file of libEntries) {
-    const hits = specifiersOf(readLib(file))
-    if (hits.length > 0) strayImports.push(...hits.map((specifier) => `lib/${file}: ${specifier}`))
+  for (const relative of libFilesRecursive) {
+    if (relative === HOST_IMPORTS_FILE) continue
+    const hits = specifiersOf(readLibRel(relative))
+    if (hits.length > 0) strayImports.push(...hits.map((specifier) => `lib/${relative}: ${specifier}`))
   }
-  for (const file of hostAbiEntries) {
-    if (`host-abi/${file}` === HOST_IMPORTS_FILE) continue
-    const hits = specifiersOf(readHostAbi(file))
-    if (hits.length > 0) strayImports.push(...hits.map((specifier) => `lib/host-abi/${file}: ${specifier}`))
-  }
-  check(`S10 边界: 宿主包 import 仅存在于 lib/${HOST_IMPORTS_FILE}（其余 lib/** 零 @deepseek-ai/* 裸 import——耦合面单点，P5）`,
+  check(`S10 边界: lib/ 递归扫描面非空且含 host-abi 子目录（扫描器自身不得空转；files=${libFilesRecursive.length}）`,
+    libFilesRecursive.length > 10 && libFilesRecursive.includes('host-abi/health.js') && libFilesRecursive.includes(HOST_IMPORTS_FILE),
+    { files: libFilesRecursive.length })
+  check(`S10 边界: 宿主包 import 仅存在于 lib/${HOST_IMPORTS_FILE}（其余 lib/** 全树零 @deepseek-ai/* 裸 import——含多行 import / require() / 动态 import()）`,
     strayImports.length === 0, strayImports)
   check('S10 边界: lib/host-abi/host-packages.js 自身零宿主 import（探测域代际无关——fail-safe 的结构前提）',
     specifiersOf(readHostAbi('host-packages.js')).length === 0, specifiersOf(readHostAbi('host-packages.js')))
+  check('S10 边界: apply() 内有 noteHostGeneration 接线（删接线即红——R0 审查 P2-5：此前三套件全绿也发现不了）',
+    blockOf(stripComments(readLib('index.js')), 'export function apply(').includes('noteHostGeneration(ctx)'))
 
   const importedPackages = [...new Set(specifiersOf(readHostAbi('host-imports.js')).map(packageNameOf))].sort()
   check('S10 边界: lib/host-abi/host-imports.js 至少 import 一个宿主包（守卫自身不得空转）', importedPackages.length > 0, importedPackages)

@@ -2092,6 +2092,15 @@ console.log('R3 host-package generation self-check (domain 8: routed-vs-anchor s
       const entries = hostAbi.hostDiagnostics().entries
       return entries.length === 0 ? undefined : entries[entries.length - 1]
     }
+    /** 环形内最后一条匹配事件（mismatch 与 unresolved 正交同帧，不能用 tail 断言）。 */
+    const lastDiag = (kind, code) => {
+      const entries = hostAbi.hostDiagnostics().entries
+      for (let index = entries.length - 1; index >= 0; index -= 1) {
+        const entry = entries[index]
+        if (entry.kind === kind && (code === undefined || entry.code === code)) return entry
+      }
+      return undefined
+    }
 
     check('R3-a: 静态 import 面恰 4 包（代际比对集合 = 本插件真正 import 的宿主包，非全部 13 项声明）',
       JSON.stringify([...hostAbi.HOST_IMPORTED_PACKAGE_NAMES].sort())
@@ -2113,9 +2122,9 @@ console.log('R3 host-package generation self-check (domain 8: routed-vs-anchor s
       diagTail()?.kind === 'host-package-generation-unknown' && diagTail()?.code === 'no-plugin-packages',
       diagTail())
 
-    // ② 服务两侧一致 → 零 mismatch、零事件（健康不制造噪声）
+    // ② 服务两侧一致 → 零 mismatch（健康态零 mismatch）
     const aligned = hostAbi.hostGenerationReport(ctxStub(anchorPath, serviceOf({ '@deepseek-ai/dsh-tools': HP_ANCHOR_VERSION })))
-    check('R3-d: 服务两侧版本一致 → 零 mismatch（健康态零噪声）',
+    check('R3-d: 服务两侧版本一致 → 零 mismatch（健康态零遮蔽噪声）',
       aligned.routing === hostAbi.HOST_ROUTING.intercept && aligned.mismatches.length === 0,
       { routing: aligned.routing, mismatches: aligned.mismatches })
 
@@ -2129,12 +2138,24 @@ console.log('R3 host-package generation self-check (domain 8: routed-vs-anchor s
       && shadowed.mismatches[0].own === '0.2.0-rc.2',
       shadowed.mismatches)
     hostAbi.noteHostGeneration(ctxStub(anchorPath, serviceOf(shadowedVersions)))
+    const shadowEvent = lastDiag('host-package-generation-mismatch', 'shadowed-host-package')
     check('R3-f: 遮蔽形态 → 诊断环形记 host-package-generation-mismatch / shadowed-host-package 且 detail 含双侧版本（可一键导出报障）',
-      diagTail()?.kind === 'host-package-generation-mismatch'
-      && diagTail()?.code === 'shadowed-host-package'
-      && typeof diagTail()?.detail === 'string'
-      && diagTail().detail.includes(HP_ANCHOR_VERSION) && diagTail().detail.includes('0.2.0-rc.2'),
-      diagTail())
+      shadowEvent !== undefined
+      && typeof shadowEvent.detail === 'string'
+      && shadowEvent.detail.includes(HP_ANCHOR_VERSION) && shadowEvent.detail.includes('0.2.0-rc.2'),
+      shadowEvent)
+    /**
+     * ③b 逐包不可判定必须可观测（R0 审查 P2-1 / P8）：同一帧内 3 个包读不到版本
+     * （夹具锚只放了 dsh-tools），旧实现静默跳过 → 这里必须有 dedicated 事件且列包名。
+     * 断言用 lastDiag 而非 tail：mismatch 与 unresolved 正交同帧，各自入环形。
+     */
+    const unresolvedEvent = lastDiag('host-package-generation-unknown', 'unresolved-host-package')
+    check('R3-g: 某侧逐包不可判定 → 记 host-package-generation-unknown / unresolved-host-package 且 detail 列出包名（不可判定 ≠ 一致，禁静默跳过——R0 P2-1）',
+      unresolvedEvent !== undefined
+      && typeof unresolvedEvent.detail === 'string'
+      && unresolvedEvent.detail.includes('@deepseek-ai/dsh-llm')
+      && !unresolvedEvent.detail.includes('@deepseek-ai/dsh-tools'),
+      unresolvedEvent)
 
     // ④ 安装锚缺失 → 能力缺失事件（不是「一致」，也不是「遮蔽」）
     hostAbi.noteHostGeneration(ctxStub(null, serviceOf({})))

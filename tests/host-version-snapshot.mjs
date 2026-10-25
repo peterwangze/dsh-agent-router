@@ -253,7 +253,19 @@ const peerNames = Object.keys(pkg.peerDependencies ?? {})
 const hostOwnedDeps = Object.keys(pkg.dependencies ?? {}).filter((name) => name.startsWith('@deepseek-ai/'))
 check('dependencies declares ZERO @deepseek-ai/* packages (host-supplied packages must be peerDependencies only — profile-root hoisting disables the host tools row and hard-fails desktop startup)',
   hostOwnedDeps.length === 0, hostOwnedDeps)
-check('dependencies keeps only genuinely self-owned runtime deps (undici)', JSON.stringify(Object.keys(pkg.dependencies ?? {})) === JSON.stringify(['undici']), pkg.dependencies)
+/**
+ * 旁路通道（R0 审查 P2-3 收口）：纯净性此前只锁 `dependencies`——`optionalDependencies`
+ * 与 `bundledDependencies` 同样会被安装器装进 profile 根（前者按需装、后者随包发布），
+ * 均能重现提升遮蔽；`dependencies` 的键序敏感断言也一并改为集合比较。
+ */
+const bundledNames = Array.isArray(pkg.bundleDependencies) ? pkg.bundleDependencies : Array.isArray(pkg.bundledDependencies) ? pkg.bundledDependencies : []
+const hostOwnedBypass = [
+  ...Object.keys(pkg.optionalDependencies ?? {}).map((name) => `optionalDependencies:${name}`),
+  ...bundledNames.map((name) => `bundledDependencies:${name}`),
+].filter((entry) => entry.includes('@deepseek-ai/'))
+check('optionalDependencies / bundledDependencies declare ZERO @deepseek-ai/* packages (bypass channels for the same hoisting failure — P2-3)',
+  hostOwnedBypass.length === 0, hostOwnedBypass)
+check('dependencies keeps only genuinely self-owned runtime deps (undici; order-insensitive)', JSON.stringify(Object.keys(pkg.dependencies ?? {}).sort()) === JSON.stringify(['undici']), pkg.dependencies)
 check('peerDependencies covers exactly the 13 baseline host packages (8 feature + 3 runtime + 2 platform)', JSON.stringify([...peerNames].sort()) === JSON.stringify([...PEER_DEP_NAMES, ...DSH_RUNTIME_DEPS, ...PLATFORM_DEPS].sort()))
 check(`peerDependenciesMeta.optional is exactly the 8 feature peers (hard runtime/platform peers stay required)`,
   JSON.stringify(Object.keys(pkg.peerDependenciesMeta ?? {}).filter((name) => pkg.peerDependenciesMeta[name]?.optional === true).sort()) === JSON.stringify([...PEER_DEP_NAMES].sort()))
