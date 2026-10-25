@@ -38,6 +38,7 @@
 - 全量门控：`node tests/run-all.mjs` = **ALL 23 SUITES + 4 RUNNER MODULES PASSED，exit 0，`#SKIP 2`**（既有 win32 环境性 skip）。
 - 三套件断言数变化：`host-version-snapshot` 73 → **74**；`host-contract` 160 → **168**（新增 5 条宿主源码锚 + 2 条旁路/接线断言 + 1 条扫描面自证）；`host-abi-health` 223 → **224**（新增 R3-g）。
 - **负控（判别力实证，全部字节还原恒等）**：① 向 `lib/memory.js` 注入多行 `import { … } from '@deepseek-ai/dsh-tools'` → S10 恰 1 FAIL；② `package.json` 注入 `optionalDependencies: {"@deepseek-ai/dsh-tools": …}` → snapshot 恰 1 FAIL；③ 注释掉 `apply` 内 `noteHostGeneration(ctx)` → S10 恰 1 FAIL；三者还原后全套绿。
+- **CI 回归修复（发版前拦下，两次推送两轮定位）**：首推后三基线矩阵 job 全红——新增的域 8 宿主源码锚直接 `readFileSync` `dsh-app-boot`，而 CI pinned 宿主树 = `HOST_KEY_PACKAGES` 8 包、刻意不含该包 → 裸抛 `ENOENT` 击穿套件（本批自伤的 fail-safe 违约：仓库纪律是「部分树 = 可见 skip」）。修一：4 条 `dsh-app-boot` 锚加 `existsSync` 守卫 → 缺失记可见 skip。修二：`0.1.5` 矩阵仍红——`profile-boot` 在该代际尚无 `installAnchor`（机制定型于 0.2.x），锚未按基线分代 → 整套域 8 锚加 `baselineIncludes('0.2.0')` 分代门（低于该代际记可见 skip，禁把「机制尚未存在」误判成「机制漂移」，与 S8/S8b/S9b 既有分代纪律同构）。**三代复跑全绿**：完整树 168 断言 0 skip / CI 同形部分树（8 包 junction、无 `dsh-app-boot`）153 断言 + 4 可见 skip / `DSH_BASELINE=0.1.5` 145 断言 + 9 可见 skip。
 
 ## v0.7.0 — 2026-10-25
 

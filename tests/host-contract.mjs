@@ -1258,43 +1258,50 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
      * 这两条机制的宿主源码锚逐字锁住（P10-④：桩形态锚定宿主源码，禁按心智模型伪造）；
      * 宿主重构这两处 → 本组红，而不是让插件探测静默退化成 unknown（R0 审查 P2-4）。
      * 同时锚定 `engines.dsh` 的优先级语义（域 8 声明面权威口径的事实来源）。
+     * 分代：整套机制（profile 包管理面 + resolvedProfile/installAnchor + 运行时替换层）
+     * 定型于 0.2.x；0.1.5 树的 profile-boot 无 `installAnchor` ⇒ 低于 0.2.0 记可见
+     * skip（基线分代，禁把「机制尚未存在」误判成「机制漂移」）。
      */
-    const appBootEntry = join(hostRoot, 'dsh-app-boot', 'lib', 'index.js')
-    if (!existsSync(appBootEntry)) {
-      // 部分树（CI pinned = HOST_KEY_PACKAGES 8 包，刻意不含 dsh-app-boot）→ 可见 skip，
-      // 不裸抛 ENOENT（BR-03：静态守卫不依赖完整宿主树；本机完整 npm 全局树实跑覆盖）。
-      note('S7 增强: 靶子树不含 dsh-app-boot（部分树）= 域 8 的 4 条解析机制锚（裸路径序 / manifestOf 先问 pluginPackages / interception 路由 / engines.dsh 优先级）记 skip（BR-03；本机完整树实跑）')
+    if (!baselineIncludes('0.2.0')) {
+      note(`S7 增强: 所选基线 ${targetBaseline.id} < 0.2.0（域 8 的 profile 包管理面 / installAnchor / 运行时替换层定型于 0.2.x）→ 域 8 机制锚记 skip（基线分代）`)
     } else {
-      const appBootIndex = readFileSync(appBootEntry, 'utf8')
-      check('S7 增强: 宿主 packageDirFromAnchor 用裸 Node 路径序（createRequire(anchor).resolve.paths + existsSync——域 8「宿主侧」机制锚）',
-        /function packageDirFromAnchor\([^)]*\)\s*\{[\s\S]{0,700}?createRequire\(anchor\)\.resolve\.paths\(/.test(appBootIndex)
-        && /function packageDirFromAnchor\([^)]*\)\s*\{[\s\S]{0,700}?existsSync\(/.test(appBootIndex))
-      check('S7 增强: 宿主 manifestOf 先问 pluginPackages.packageOf(specifier, parentURL)（替换层路由优先——域 8「插件侧」机制锚）',
-        /function manifestOf\([^)]*\)\s*\{[\s\S]{0,800}?packages\?\.packageOf\(specifier, parentURL\)/.test(appBootIndex))
-      check('S7 增强: 宿主 PluginPackages.packageOf 经 interception.packageDir(name, parentURL) 路由（替换层实体在位）',
-        /packageOf\(specifier, parentURL\)\s*\{[\s\S]{0,900}?interception\.packageDir\(name, parentURL\)/.test(appBootIndex))
-      check('S7 增强: 宿主 unmetRequirements 以 engines.dsh 优先、存在即忽略 peer（域 8 声明面权威口径锚）',
-        /if \(Object\.hasOwn\(engines, "dsh"\)\)[\s\S]{0,500}?return satisfies\(runtimeVersion, range\) \? \{\} : \{ "engines\.dsh": range \}/.test(appBootIndex)
-        && /if \(!Object\.hasOwn\(fields, "peerDependencies"\)\) return \{\}/.test(appBootIndex))
-    }
-    // profileContext.installAnchor 由**宿主 CLI 包**提供（dsh/lib/profile-boot-<hash>.js），
-    // 不在 dsh-app-boot 内 ⇒ 按前缀枚举定位（文件名带内容哈希，禁写死）。靶子可能是
-    // `<dsh>/node_modules/@deepseek-ai`（嵌套 scope）或 `<npm>/node_modules/@deepseek-ai`
-    // （扁平 scope）⇒ 两个候选都探。CI pinned 部分树不含 CLI 包 → 可见 skip（BR-03）。
-    const cliLibCandidates = [join(hostRoot, 'dsh', 'lib'), join(hostRoot, '..', '..', 'lib')]
-    let profileBootFiles = []
-    let profileBootDir = ''
-    for (const dir of cliLibCandidates) {
-      if (!existsSync(dir)) continue
-      const files = readdirSync(dir).filter((name) => /^profile-boot.*\.js$/.test(name))
-      if (files.length > 0) { profileBootFiles = files; profileBootDir = dir; break }
-    }
-    if (profileBootFiles.length === 0) {
-      note('S7 增强: 宿主树不含 CLI 包 dsh/lib/profile-boot（部分树）→ installAnchor 提供点锚记 skip（BR-03）')
-    } else {
-      const profileBootSource = readFileSync(join(profileBootDir, profileBootFiles[0]), 'utf8')
-      check('S7 增强: 宿主 profileContext 携带 installAnchor（域 8 宿主侧探测锚的唯一来源；profile-boot 枚举定位）',
-        /installAnchor:\s*options\.resolvedProfile\?\.installAnchor/.test(profileBootSource), { file: profileBootFiles[0] })
+      const appBootEntry = join(hostRoot, 'dsh-app-boot', 'lib', 'index.js')
+      if (!existsSync(appBootEntry)) {
+        // 部分树（CI pinned = HOST_KEY_PACKAGES 8 包，刻意不含 dsh-app-boot）→ 可见 skip，
+        // 不裸抛 ENOENT（BR-03：静态守卫不依赖完整宿主树；本机完整 npm 全局树实跑覆盖）。
+        note('S7 增强: 靶子树不含 dsh-app-boot（部分树）= 域 8 的 4 条解析机制锚（裸路径序 / manifestOf 先问 pluginPackages / interception 路由 / engines.dsh 优先级）记 skip（BR-03；本机完整树实跑）')
+      } else {
+        const appBootIndex = readFileSync(appBootEntry, 'utf8')
+        check('S7 增强: 宿主 packageDirFromAnchor 用裸 Node 路径序（createRequire(anchor).resolve.paths + existsSync——域 8「宿主侧」机制锚）',
+          /function packageDirFromAnchor\([^)]*\)\s*\{[\s\S]{0,700}?createRequire\(anchor\)\.resolve\.paths\(/.test(appBootIndex)
+          && /function packageDirFromAnchor\([^)]*\)\s*\{[\s\S]{0,700}?existsSync\(/.test(appBootIndex))
+        check('S7 增强: 宿主 manifestOf 先问 pluginPackages.packageOf(specifier, parentURL)（替换层路由优先——域 8「插件侧」机制锚）',
+          /function manifestOf\([^)]*\)\s*\{[\s\S]{0,800}?packages\?\.packageOf\(specifier, parentURL\)/.test(appBootIndex))
+        check('S7 增强: 宿主 PluginPackages.packageOf 经 interception.packageDir(name, parentURL) 路由（替换层实体在位）',
+          /packageOf\(specifier, parentURL\)\s*\{[\s\S]{0,900}?interception\.packageDir\(name, parentURL\)/.test(appBootIndex))
+        check('S7 增强: 宿主 unmetRequirements 以 engines.dsh 优先、存在即忽略 peer（域 8 声明面权威口径锚）',
+          /if \(Object\.hasOwn\(engines, "dsh"\)\)[\s\S]{0,500}?return satisfies\(runtimeVersion, range\) \? \{\} : \{ "engines\.dsh": range \}/.test(appBootIndex)
+          && /if \(!Object\.hasOwn\(fields, "peerDependencies"\)\) return \{\}/.test(appBootIndex))
+      }
+      // profileContext.installAnchor 由**宿主 CLI 包**提供（dsh/lib/profile-boot-<hash>.js），
+      // 不在 dsh-app-boot 内 ⇒ 按前缀枚举定位（文件名带内容哈希，禁写死）。靶子可能是
+      // `<dsh>/node_modules/@deepseek-ai`（嵌套 scope）或 `<npm>/node_modules/@deepseek-ai`
+      // （扁平 scope）⇒ 两个候选都探。CI pinned 部分树不含 CLI 包 → 可见 skip（BR-03）。
+      const cliLibCandidates = [join(hostRoot, 'dsh', 'lib'), join(hostRoot, '..', '..', 'lib')]
+      let profileBootFiles = []
+      let profileBootDir = ''
+      for (const dir of cliLibCandidates) {
+        if (!existsSync(dir)) continue
+        const files = readdirSync(dir).filter((name) => /^profile-boot.*\.js$/.test(name))
+        if (files.length > 0) { profileBootFiles = files; profileBootDir = dir; break }
+      }
+      if (profileBootFiles.length === 0) {
+        note('S7 增强: 宿主树不含 CLI 包 dsh/lib/profile-boot（部分树）→ installAnchor 提供点锚记 skip（BR-03）')
+      } else {
+        const profileBootSource = readFileSync(join(profileBootDir, profileBootFiles[0]), 'utf8')
+        check('S7 增强: 宿主 profileContext 携带 installAnchor（域 8 宿主侧探测锚的唯一来源；profile-boot 枚举定位）',
+          /installAnchor:\s*options\.resolvedProfile\?\.installAnchor/.test(profileBootSource), { file: profileBootFiles[0] })
+      }
     }
   }
 }
