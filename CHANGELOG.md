@@ -3,6 +3,40 @@
 > dsh-agent-router 的版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 > 内部注解（提交号 / EV 编号）供追溯，用户可忽略。
 
+## v0.7.0 — 2026-10-25
+
+### 摘要
+
+**桌面端启动故障根因修复 + 宿主依赖面收敛（MINOR）**。核心变化一句话：**宿主包（`@deepseek-ai/dsh-tools` 等）此前被写在 `dependencies`，桌面端 profile 用 `nodeLinker: hoisted` 装插件时 pnpm 把它们提升到 profile 根 `node_modules`，宿主装载门据此把核心行 `tools` 判为「与运行宿主代际不兼容」并 disable，required 的 `agent-loop` 永久 pending ⇒ `startup failed: 1 required plugin did not activate`，桌面端完全无法启动；本版把 5 个宿主包从 `dependencies` 迁入 `peerDependencies`（另加 `engines.dsh` 单字段运行时契约），新增 host-abi 域 8 收敛宿主耦合面并让遮蔽类故障可观测**。声明面语义变更（安装形态），无用户配置/存储格式变更。
+
+### 修复
+
+- **FIX-057：桌面端安装插件后启动失败（P0，用户报障）**
+  - **症状**：桌面端（`@deepseek-ai/dsh-desktop 0.2.1-rc.3`）装上本插件后启动即弹「The application could not start or stopped unexpectedly」，错误详情为 `startup failed: 1 required plugin did not activate` + `agent-loop (required) → tools` / `cordis-inspect-providers → cordisInspect, tools` 等 8-9 行「等待服务」表；点「Disable third-party plugins, back up profile patch, and restart」**仍不恢复**（重启后 8 行等待表照旧）。
+  - **根因（一手机制，实测证据链）**：本插件把 `@deepseek-ai/{cordis,schemastery,dsh-llm,dsh-tools,dsh-typert-protocol}` 声明为 `dependencies`。桌面端 profile（`%USERPROFILE%/.dsh/profiles/desktop`）的 `pnpm-workspace.yaml` 为 `nodeLinker: hoisted`，pnpm 因此把这 5 包及其闭包（共 10 个 `@deepseek-ai/*` 目录）**提升到 profile 根 `node_modules`**；宿主 `dsh-app-boot` 的装载门链路 `prepareProfileEntries` → `preflight` → `manifestOf` 用 `createRequire(profile/cordis.yml).resolve.paths(...)` 做**未经运行时替换层拦截**的最近副本解析，于是核心行 `tools`（`@deepseek-ai/dsh-tools`）解析到 profile 里那份 `0.2.0-rc.2`，而运行宿主是 `0.2.1-rc.3` → `evaluatePluginCompatibility` 判不兼容 → 该行被 disable（宿主 stderr 原文：`dsh: disabling profile plugin row "tools": Plugin @deepseek-ai/dsh-tools@0.2.0-rc.2 is incompatible with dsh 0.2.1-rc.2 …`）→ `tools` 服务永不发布 → required `agent-loop` 永久 pending → 启动失败。桌面端崩溃报告只截取「等待表」，该 stderr 行不在报告内，因此症状表现为「核心插件莫名等待」。「禁用第三方插件」只重置 bundle 选择与用户补丁层，**不动依赖树**，故被提升的副本仍在、故障不解除。Web 端不受影响的原因：web profile 用 `link:D:/AI/.../router` 装插件，pnpm 不安装 link 依赖的依赖树，profile 根没有宿主包副本。
+  - **证据（A/B 隔离实测，v0.7.0 开发期）**：以 `DSH_HOME` 隔离复刻桌面端 profile 形态——① 保留被提升的 `@deepseek-ai/*` → 逐字复现 `disabling profile plugin row "tools"` + 同形 `startup failed` 8 行等待表，exit 1；② 移走该目录 → 同一 profile 正常 `dsh web: http://127.0.0.1:…` 起服。装配层面的机制证实后本版实施修复。
+  - **修复**：`package.json` 中 5 个宿主包全部由 `dependencies` 迁入 `peerDependencies`（`cordis` / `schemastery` 为平台包、`dsh-llm` / `dsh-tools` / `dsh-typert-protocol` 为运行时包），`dependencies` 仅保留真正自有的 `undici`；同 5 包改入 `devDependencies` 以维持本仓开发/测试树。**安装形态实测（生产形态复验）**：`npm pack` → `pnpm add <tgz>` 装入桌面端 profile 后，profile 根 `node_modules/@deepseek-ai` 为**空目录**（修复前 10 个包），`dsh.profile.bundles` 挂回 `dsh-agent-router` 后 `--dump-config` 显示 `tools` / `router` / `tool-router` 三行 `disabled=False`，宿主启动零 `disabling profile plugin row` 警告。
+  - **本机处置（已执行，可回退）**：profile 五件套（`package.json` / `cordis.patch.yml` / `cordis.yml` / `pnpm-lock.yaml` / `pnpm-workspace.yaml`）备份至 `~/.dsh/backups/desktop-profile-pre-0.7.0-<时间戳>/`；`pnpm remove dsh-agent-router` 清掉被提升的宿主包副本 → 桌面端形态恢复可启动；随后以 0.7.0 发行包重装并把 `dsh-agent-router` 挂回 `dsh.profile.bundles`；用户补丁层自 `cordis.patch.yml.bak-*` 原样还原（「禁用第三方插件」动作留下的备份，即该动作的撤销）。重装 spec 暂为本地 tarball（`file:`），GitHub 发行后可用 `dsh plugin --profile desktop remove/add` 归一为 `github:peterwangze/dsh-agent-router`。
+
+### 变更
+
+- **宿主依赖面收敛（host-abi 域 8，降耦合演进）**：
+  - 新增 `lib/host-abi/host-packages.js`：宿主供给包的**唯一代码侧事实源** `HOST_PACKAGE_REGISTRY`（13 项，逐项标注 `kind`（runtime / platform）、`usage`（import / service / structure）、`range`、`optional`）+ 宿主包**代际自检**（`hostGenerationReport` / `noteHostGeneration`：宿主侧用与宿主装载门同构的裸路径序探测读「安装副本」，插件侧取**经宿主运行时替换层路由后**的实际解析结果（`pluginPackages.packageOf` 优先、CJS `require('<pkg>/package.json')` 兜底）；两侧代际不一致 → `host-package-generation-mismatch`，安装锚缺失或无替换层服务 → 能力缺失事件；均入 health 环形经既有 `router/hostFaceDiagnostics` RPC 下发——P8：遮蔽类故障不再只能靠「起不来」暴露）。**两侧必须用不同探测机制**这一点是实测教训：插件侧若改用裸路径序，会命中 `$DSH_HOME/profiles/node_modules`（脚本通道扁平宿主树，0.2.1-rc.2），与桌面端宿主 0.2.1-rc.3 天然不同代，**每次启动误报遮蔽**；该语义由 `tests/host-abi-health.mjs` R3 组以构造性夹具双向锁定（无服务→恰零 mismatch 的误报防线 + 两侧不一致→命中并落诊断的漏报防线）。该域**零宿主 import**（只读 package.json 元数据），保证探测在任何宿主代际下都不会自身崩栈。
+  - 新增 `lib/host-abi/host-imports.js`：**本插件对宿主包的唯一静态 import 出口**（`defineTool` / `BlockAssembler` / `createUserMessage` / `createAssistantMessage` / `TypertRemoteService` / `z`）。`lib/tool.js`、`lib/prestep.js`、`lib/service.js`、`lib/schemas.js` 四处原本散落的 `@deepseek-ai/*` 裸 import 全部改为经 host-abi 桶导入——宿主 API 漂移/包改名/代际切换的改动面收敛到一处。
+  - `package.json` 新增 `engines.dsh = ^0.2.0-rc.2`：宿主 `dsh-app-boot` 的 `unmetRequirements` 语义为「自身 `engines.dsh` 存在则单独判定、忽略 peer 判定」，故这是装载门的**权威输入**；与 11 项 `@deepseek-ai/dsh*` peer 的共同范围**逐字相同**（两套范围分叉即被测试判红）。
+  - 版本面：0.6.2 → **0.7.0**（MINOR：安装形态/声明面语义变更 + 新增诊断能力面，非纯缺陷修复）。
+
+### 破坏性变更
+
+**结论：无破坏性变更（用户可见功能面与 v0.6.2 一致；变更为安装形态与声明面语义）。** 分项依据：① 无新增/删除/改名任何用户配置项与存储格式——统计 JSONL、凭据文件、`oauthAccounts` 结构、settings namespace `router` 字段全部不动；② 插件导出面（`main` / `./tool` / `./client` / `./schemas` / `./rpc`）与 RPC 契约 `/api/router/*` 零改动；③ 声明面变更方向是**收窄安装耦合**：宿主包由「插件自带副本」改为「宿主供给」，运行时代码不变，仅在宿主缺少对应包时由宿主装载门/服务注入面按既有语义降级；④ `engines.dsh` 与既有 peer 共同范围一致，支持的宿主代际不变（`^0.2.0-rc.2` 覆盖 0.2.0 / 0.2.1 系，含桌面端 0.2.1-rc.3）；⑤ 已装用户的升级路径 = 重装即自动清除被提升的宿主包副本（`pnpm remove/add` 触发 prune），无需手工删目录。
+
+### 已知行为 / 口径披露
+
+- **桌面端 profile 由 Electron 应用独占管理**：`dsh` CLI 对 `--profile desktop` 的 boot 与 `plugin` 命令显式拒绝（`error: profile "desktop" is managed exclusively by the Electron application`）。本机处置阶段对 profile 的依赖树操作因此直接调用宿主同版本 pnpm（`resources/runtime/primary-runtime/dependencies/pnpm`，v11.28.5），未走 CLI 转发路径；`dsh.profile.bundles` 与用户补丁层为直接编辑（与桌面端插件管理器写入同形）。
+- **`link:` 安装形态的宿主代际差异（开发场景，未变）**：本仓 `node_modules` 由 `devDependencies` 供给宿主包（当前 0.2.0-rc.2），故 web profile 的 `link:` 安装下插件解析到的是**开发树副本**而非宿主副本；这是开发形态而非发布形态（发布形态为零副本、经宿主运行时替换层路由）。新增的代际自检会把该差异如实记为 `host-package-generation-mismatch` 诊断事件——属**预期观测**，不是故障。
+- **`engines.dsh` 与 peer 判定的优先级**：宿主实现为「`engines.dsh` 存在则单独判定，peerDependencies 被忽略」。因此本版之后，支持面判定的权威输入是 `engines.dsh` 一处；11 项 peer 范围退为安装期可观测性声明（与本版前「peer 即门控钥匙」的语义不同，README 已同步改写）。
+- **审查台账（随本版入册，非阻塞）**：① 本版未新增「装包→boot」端到端自动化测试（需要 pnpm 与真实 profile，属发布链/真机验收范畴）；机制回归保障改为静态双守卫（`tests/host-version-snapshot.mjs` 断言 `dependencies` 零 `@deepseek-ai/*` + 注册表投影值级锁定；`tests/host-contract.mjs` S3/S10 断言声明面纯净性与 import 单点），并把「装配形态实测」留证于本 CHANGELOG 与发布验收。② 治理插件（`software-project-governance` skill）在本会话不可用（skill 目录未加载），本版条目编号（FIX-057 / REL-015）为会话内自定、**未经治理流程机录**——`plan-tracker` / `decision-log` / EVD 记录待治理环境可用时补齐。
+
 ## v0.6.2 — 2026-10-22
 
 ### 摘要
