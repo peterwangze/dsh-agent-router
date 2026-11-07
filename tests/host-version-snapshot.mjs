@@ -6,19 +6,21 @@
  * 必须与实测基线一致；任一侧漂移（宿主升级后忘改声明、手滑改回旧范围、
  * 复活已消亡包的注入死行）→ 本测试必红。
  *
- * 实测基线（ARCH-005 R0 起为**多基线档案**，见下方 HOST_BASELINE_REGISTRY；ARCH-006
- * 刷新至三档案）：
+ * 实测基线（ARCH-005 R0 起为**多基线档案**，见下方 HOST_BASELINE_REGISTRY；ARCH-007
+ * 刷新至四档案）：
  * - 0.1.5（frozen）：dsh 0.1.5-rc.1 / dsh-* 0.1.5-rc.2 / cordis 4.0.2 / schemastery 3.18.2
- *   （2026-09-12 机核；R1 安装同步后本仓树已不再保持该组合，见 0.2.0 行）
+ *   （2026-09-12 机核；仅作档案承载，低于声明范围下界，不参与声明面覆盖判据）
  * - 0.2.0（frozen）：dsh 与全部 dsh-* 0.2.0-rc.2 / cordis 4.0.5 / schemastery 3.18.5
- *   （npm 全局树实读 2026-10-17；ARCH-006 起降档 frozen——本仓 node_modules 树与
- *   package.json 声明面仍锚定该档案项〔^0.2.0-rc.2 ×11〕，见下方声明面覆盖判据）
- * - 0.2.1（primary）：dsh 与全部 dsh-* 0.2.1-rc.2 / cordis 4.0.5 / schemastery 3.18.5
- *   （npm 全局树实读 2026-10-20 实施时单点复读定谳——禁止照抄文档值；四类 diff 全
- *   additive：锚 0 漂移 / events +1 plugin-market/changed / llm.listConfigurableProviders
- *   schema 6→9 纯超集 / 包表 8 项 dsh 系版本号差，cordis 与 schemastery 未变。装载门
- *   cold-install-gate + apply 门 a3-apply-gate 双 GREEN 实证 ^0.2.0-rc.2 声明容纳
- *   0.2.1-rc.2）
+ *   （npm 全局树实读 2026-10-17；ARCH-007 起是逐代并集的**下界代际**，本仓
+ *   node_modules 树仍为该组合〔如实记录，不假设已升级〕）
+ * - 0.2.1（frozen）：dsh 与全部 dsh-* 0.2.1-rc.2 / cordis 4.0.5 / schemastery 3.18.5
+ *   （npm 全局树实读 2026-10-20；ARCH-006 的主基线，ARCH-007 起随 0.2.2 登记降档
+ *   frozen——并集里仍保留其独立区间，支持面不缩）
+ * - 0.2.2（primary）：dsh 与全部 dsh-* 0.2.2-rc.1 / cordis 4.1.0 / schemastery 3.19.0
+ *   （2026-11-07 桌面宿主 `D:\app\dsh\resources\app.asar` 实读：FileVersion
+ *   `0.2.2-rc.1`，内部 331 个 `@deepseek-ai` 包版本全为 `0.2.2-rc.1`；
+ *   声明面 diff：events 28→30 纯增量，其余为版本号加法；该分发形态的客户端
+ *   包零 `.d.ts`〔D3 另案，勿据此断言类型面可验〕）
  *
  * 依据（ARCH-004 §3 D1-5 / ADR-A；ARCH-005 R1 修订口径——旧「宿主 runner/cordis
  * 零 enforcement、安装器零告警」叙事被 0.2.0 装载门终结，见设计 §3-9 / HD-001）：
@@ -28,13 +30,13 @@
  * 即整层拒载，宿主 stderr 有可观测 skip 警告）；peerDependenciesMeta optional 仅
  * 影响安装器行为、不解除装载门。本快照测试 + README 兼容矩阵仍为声明面漂移的
  * 权威防护（防宿主升级后忘改声明 / 基线跳跃被无声回退 / 复活死行）。
- * 声明面 README 判据（§5）分两层：① declaredEntry（声明面逐字锚定的 frozen 项）
- * 全文记录判据；② **primary 行结构判据**（FIX-053，REVIEW-REL-013-R0 P2-1）——
- * 「支持基线集」表恰一 primary 行、行内 dsh CLI / 全系 dsh-* / cordis / schemastery
- * 四列逐格 === HOST_BASELINE_REGISTRY 的 primary 项（缺行 / 重复 / 漏改即红）。
+ * 声明面 README 判据（§5/§5b）分两层：① §5 要求 README 记录**每个**档案项的四值
+ * （dsh CLI / 全系 dsh-* / cordis / schemastery）；② §5b 按「宿主兼容性（实测基线）」
+ * 表格**行结构**逐档案项比对四列 + 恰一 primary 行（缺行 / 重复 / 漏改即红）。
  *
  * 判别性（红/绿演示）：把任一基线常量临时改成假版本号 → peerDeps/deps/README
- * 断言必红；package.json 范围改回 ^0.1.0-rc.* 或 inject 复活死行
+ * 断言必红；声明范围删掉任一已登记代际的区间 → §0 的覆盖/结构断言必红（stock
+ * semver 预发布门控）；package.json 范围改回 ^0.1.0-rc.* 或 inject 复活死行
  * @deepseek-ai/dsh-client-runtime（0.1.5 起宿主中不存在，加载器静默跳过的
  * 纯死重，D1-1 已删）→ 必红；复原后全绿。
  *
@@ -44,9 +46,11 @@
  *    version 字段（dsh CLI 包与 cordis / schemastery 单独核对——**禁止照抄文档
  *    值，实施时单点复读树态定谳**，ARCH-005 T-6 纪律）；
  * 2. 同步更新多处：本文件 HOST_BASELINE_REGISTRY（新增档案项：旧主基线降级
- *    frozen、新项 status primary）、package.json 对应版本范围（ARCH-006 起仅当现范围
- *    **不再覆盖**新 primary 时才需改——覆盖判据见 section 0）与 inject 清单
- *    （若有包消亡/新增）、README「宿主兼容性（实测基线）」小节（声明面锚定项随动）、
+ *    frozen、新项 status primary）、`DECLARED_DSH_RANGE`（**每登记一个宿主代际
+ *    必须追加一个同代区间**：下界取该代际首个 rc，上界取下一代际开区间
+ *    `<M.m+1-0`——成因见 §0 的 semver 预发布门控注释，勿"简化"为单区间）、
+ *    package.json 的 `engines.dsh` 与 11 个 dsh-* peer（逐字同串）与 inject 清单
+ *    （若有包消亡/新增）、README「宿主兼容性（实测基线）」小节（逐档案项表格行）、
  *    tests/host-contract.mjs（ARCH-005 R3 起经**文本提取**消费本注册表——无第二份
  *    版本常量可漏改，提取/选择失败即红；其靶子面判据按 DSH_BASELINE 所选档案项
  *    判定，声明面判据恒取 primary 项）；
@@ -73,21 +77,23 @@ import { fileURLToPath } from 'node:url'
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 // ── 实测宿主基线档案（ARCH-005 R0：单表 → 多基线；唯一事实源 = 宿主树实读；刷新步骤见文件头注释）──
-// 0.1.5（frozen）：历史实测基线，仅以档案常量承载（R1 安装同步前本仓树曾为该组合；
-//   R1 起 frozen 项不再被声明面接受——section 0 的 F-1 收紧，回退即红）。
-// 0.2.0（frozen）：ARCH-006 前的主基线——npm 全局树实读（%APPDATA%\npm\node_modules\
-//   @deepseek-ai\dsh 嵌套 scope，2026-10-17）；ARCH-006 起随 0.2.1 升格降档 frozen
-//   （本仓 node_modules 树与 package.json 声明面 ^0.2.0-rc.2 ×11 仍锚定本档案项——
-//   声明面零改动收编，见 section 0 覆盖判据；该范围覆盖新 primary 0.2.1-rc.2）。
-// 0.2.1（primary）：当前主基线——npm 全局树实读（同上路径，2026-10-20 实施时单点
-//   复读：dsh 主包与全部 dsh-* 包 0.2.1-rc.2；cordis/schemastery 未变——4.0.5 / 3.18.5）。
+// 0.1.5（frozen）：历史实测基线，仅以档案常量承载（低于声明范围下界，不支持声明）。
+// 0.2.0（frozen）：逐代并集的下界代际——npm 全局树实读（%APPDATA%\npm\node_modules\
+//   @deepseek-ai\dsh 嵌套 scope，2026-10-17）；ARCH-007 声明范围以 `>=0.2.0-rc.2` 起算。
+// 0.2.1（frozen）：ARCH-006 主基线（npm 全局树实读，2026-10-20；0.2.1-rc.2；
+//   cordis/schemastery 4.0.5 / 3.18.5），ARCH-007 随 0.2.2 升格降档 frozen；并集中
+//   保留其独立区间（支持面不因降档收缩）。
+// 0.2.2（primary）：桌面宿主 `D:\app\dsh\resources\app.asar` 实读（2026-11-07）——
+//   FileVersion 0.2.2-rc.1，内部 331 个 @deepseek-ai 包全为 0.2.2-rc.1，
+//   cordis/schemastery 4.1.0 / 3.19.0；客户端包零 .d.ts（D3 另案）。
 // 本档案 = 唯一事实源（ARCH-005 R3 起 tests/host-contract.mjs 亦经文本提取消费本注册表
 // ——无第二份版本常量，提取/选择失败即红；「双份常量机器锁定」纪律（F-J）随之退役为
 // 「单份常量 + 提取判据」）。
 const HOST_BASELINE_REGISTRY = Object.freeze([
   { id: '0.1.5', status: 'frozen', dsh: '0.1.5-rc.1', dshPackages: '0.1.5-rc.2', cordis: '4.0.2', schemastery: '3.18.2' },
   { id: '0.2.0', status: 'frozen', dsh: '0.2.0-rc.2', dshPackages: '0.2.0-rc.2', cordis: '4.0.5', schemastery: '3.18.5' },
-  { id: '0.2.1', status: 'primary', dsh: '0.2.1-rc.2', dshPackages: '0.2.1-rc.2', cordis: '4.0.5', schemastery: '3.18.5' },
+  { id: '0.2.1', status: 'frozen', dsh: '0.2.1-rc.2', dshPackages: '0.2.1-rc.2', cordis: '4.0.5', schemastery: '3.18.5' },
+  { id: '0.2.2', status: 'primary', dsh: '0.2.2-rc.1', dshPackages: '0.2.2-rc.1', cordis: '4.1.0', schemastery: '3.19.0' },
 ])
 /** 主基线项（唯一 primary；档案完整性断言在下方 section 0 锁定）。 */
 const HOST_BASELINE = Object.freeze(HOST_BASELINE_REGISTRY.find((entry) => entry.status === 'primary'))
@@ -105,8 +111,15 @@ const SELECTED_BASELINE = DSH_BASELINE_RAW === ''
   ? HOST_BASELINE
   : HOST_BASELINE_REGISTRY.find((entry) => entry.id === DSH_BASELINE_RAW || entry.status === DSH_BASELINE_RAW) ?? null
 
-/** 记录性声明口径：^ + 实测基线值（D1-5：不做 enforcement 依赖）。 */
-const declaredRange = (version) => `^${version}`
+/**
+ * 声明面 dsh 范围（ARCH-007 D5）：**显式逐代并集**，`engines.dsh` 与 11 个
+ * `dsh-*` peer 逐字相同。三个区间 = 三个支持代际（0.2.0 / 0.2.1 / 0.2.2）；
+ * 0.1.5 档案低于声明下界，不入范围。成因/维护规则见 §0 的结构断言注释。
+ */
+const DECLARED_DSH_RANGE = '>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0'
+
+/** 声明范围下界（= 首个被声明支持的代际的 dshPackages；新增代际不得低于此值）。 */
+const DECLARED_RANGE_FLOOR = '0.2.0-rc.2'
 
 /** 基线在册的 8 个 peerDeps 宿主供给包（D1-5 W-2 修正计数；optional 特性面）。 */
 const PEER_DEP_NAMES = [
@@ -150,13 +163,70 @@ const INJECT_BASELINE = [
 ]
 
 /**
- * caret 范围（^M.m.p 形态，可选 -rc.N 预发布后缀——本仓库声明面实际使用的唯一范围
- * 形态）是否包含实测基线版本（M.m.p 数值序，预发布后缀不参与——宿主装载门
- * satisfies(includePrerelease) 的镜像判据；ARCH-006 起兼承 dsh 系 rc 版本的覆盖判定）。
+ * 范围（`^M.m.p` caret 形态，或 ARCH-007 起的**逐代并集** `>=x <y || >=x <y` 形态）
+ * 是否包含实测基线版本。
+ *
+ * - caret 分支：M.m.p 数值序，预发布后缀不参与——宿主装载门
+ *   satisfies(includePrerelease) 的镜像判据（ARCH-006 起兼承 dsh 系 rc 版本覆盖判定）。
+ * - 并集分支（ARCH-007 D5）：按 **stock semver 语义**逐段准入——版本含预发布后缀时，
+ *   仅当该段某个比较器带**同 major.minor.patch** 的预发布才可能满足（semver 2.0.0
+ *   §预发布门槛）；无 includePrerelease 旁路。这正是 npm/pnpm/市场与装载门的口径差。
  * 范围改用其它形态 → 解析失败 → 红，强制走基线刷新流程而非静默放过。
+ *
+ * 注：本函数是**单源文本提取对象**（tests/host-contract.mjs S3 用 blockOf +
+ * new Function 复用它），因此体内不得引用本文件其它符号——全部实现自包含。
  */
 function caretRangeContains(range, version) {
-  const base = /^\^(\d+)\.(\d+)\.(\d+)(?:-rc\.\d+)?$/.exec(String(range))
+  const text = String(range)
+  const parseSemverLocal = (value) => {
+    const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(String(value))
+    if (match === null) return null
+    return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease: match[4] ? match[4].split('.') : [] }
+  }
+  const compareSemverLocal = (left, right) => {
+    for (const field of ['major', 'minor', 'patch']) {
+      if (left[field] !== right[field]) return left[field] < right[field] ? -1 : 1
+    }
+    if (left.prerelease.length === 0 && right.prerelease.length === 0) return 0
+    if (left.prerelease.length === 0) return 1
+    if (right.prerelease.length === 0) return -1
+    const length = Math.max(left.prerelease.length, right.prerelease.length)
+    for (let index = 0; index < length; index++) {
+      const a = left.prerelease[index]
+      const b = right.prerelease[index]
+      if (a === undefined) return -1
+      if (b === undefined) return 1
+      const aNumeric = /^\d+$/.test(a)
+      const bNumeric = /^\d+$/.test(b)
+      if (aNumeric && bNumeric) {
+        if (Number(a) !== Number(b)) return Number(a) < Number(b) ? -1 : 1
+        continue
+      }
+      if (aNumeric !== bNumeric) return aNumeric ? -1 : 1
+      if (a !== b) return a < b ? -1 : 1
+    }
+    return 0
+  }
+  if (text.includes('||')) {
+    const target = parseSemverLocal(version)
+    if (target === null) return false
+    return text.split('||').some((segment) => {
+      const comparators = segment.trim().split(/\s+/)
+      if (comparators.length !== 2) return false
+      const lower = /^>=(\S+)$/.exec(comparators[0])
+      const upper = /^<(\S+)$/.exec(comparators[1])
+      if (!lower || !upper) return false
+      const lowerVersion = parseSemverLocal(lower[1])
+      const upperVersion = parseSemverLocal(upper[1])
+      if (lowerVersion === null || upperVersion === null) return false
+      if (compareSemverLocal(target, lowerVersion) < 0 || compareSemverLocal(target, upperVersion) >= 0) return false
+      if (target.prerelease.length === 0) return true
+      // 预发布门槛：比较器必须带同 tuple 的预发布才放行该预发布版本（stock semver 规则）。
+      return [lowerVersion, upperVersion].some((comparator) => comparator.prerelease.length > 0
+        && comparator.major === target.major && comparator.minor === target.minor && comparator.patch === target.patch)
+    })
+  }
+  const base = /^\^(\d+)\.(\d+)\.(\d+)(?:-rc\.\d+)?$/.exec(text)
   const ver = /^(\d+)\.(\d+)\.(\d+)(?:-rc\.\d+)?$/.exec(String(version))
   if (!base || !ver) return false
   const [baseMajor, baseMinor, basePatch] = [Number(base[1]), Number(base[2]), Number(base[3])]
@@ -164,6 +234,89 @@ function caretRangeContains(range, version) {
   if (verMajor !== baseMajor) return false
   if (verMajor === 0 && verMinor !== baseMinor) return false
   return verMinor > baseMinor || (verMinor === baseMinor && verPatch >= basePatch)
+}
+
+/**
+ * 最小 semver 实现（ARCH-007 D5）：仅覆盖声明面实际使用的 `>=x <y` 比较器与
+ * 预发布语义，避免为一条断言给仓库引入 `semver` 依赖。语义按 semver 2.0.0
+ * 规范（数字标识按数值比较、非数字按字典序、预发布 < 正式版）——与 npm 内置
+ * semver 7.x 的 stock `satisfies` 逐例对拍见 §0 的自检断言。
+ */
+function parseSemver(value) {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(String(value))
+  if (match === null) return null
+  return Object.freeze({
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    prerelease: Object.freeze(match[4] ? match[4].split('.') : []),
+  })
+}
+
+function compareSemver(left, right) {
+  for (const field of ['major', 'minor', 'patch']) {
+    if (left[field] !== right[field]) return left[field] < right[field] ? -1 : 1
+  }
+  if (left.prerelease.length === 0 && right.prerelease.length === 0) return 0
+  if (left.prerelease.length === 0) return 1
+  if (right.prerelease.length === 0) return -1
+  const length = Math.max(left.prerelease.length, right.prerelease.length)
+  for (let index = 0; index < length; index++) {
+    const a = left.prerelease[index]
+    const b = right.prerelease[index]
+    if (a === undefined) return -1
+    if (b === undefined) return 1
+    const aNumeric = /^\d+$/.test(a)
+    const bNumeric = /^\d+$/.test(b)
+    if (aNumeric && bNumeric) {
+      if (Number(a) !== Number(b)) return Number(a) < Number(b) ? -1 : 1
+      continue
+    }
+    if (aNumeric !== bNumeric) return aNumeric ? -1 : 1
+    if (a !== b) return a < b ? -1 : 1
+  }
+  return 0
+}
+
+/** 把 `>=x <y` 解析为比较器对；任一区间非此形态 → null（判红）。 */
+function parseDeclaredSegments(range) {
+  return String(range).split('||').map((segment) => segment.trim()).filter(Boolean).map((segment) => {
+    const match = /^>=(\S+)\s+<(\S+)$/.exec(segment)
+    if (match === null) return null
+    const lower = parseSemver(match[1])
+    const upper = parseSemver(match[2])
+    return lower === null || upper === null ? null : { lower, upper }
+  })
+}
+
+/** 比较器对的规范字符串形态（结构锁逐字比对用）。 */
+function formatSegment(segment) {
+  const format = (version) => `${version.major}.${version.minor}.${version.patch}${version.prerelease.length > 0 ? `-${version.prerelease.join('.')}` : ''}`
+  return `>=${format(segment.lower)} <${format(segment.upper)}`
+}
+
+/**
+ * 单个 `>=x <y` 区间是否含 version（stock semver 语义，含预发布门控）。
+ * 门控：带 prerelease 的版本，只有「同一 major.minor.patch 元组、且自身带
+ * prerelease 的比较器」存在时才可能命中——即上界 `<0.2.1-0` 这类**下一代际
+ * 开区间哨兵**只为该元组的预发布版本开门，不为其正式版开门（正式版由比较器
+ * 大小关系另行排除）。
+ */
+function segmentSatisfies(segment, version) {
+  const parsed = parseSemver(version)
+  if (parsed === null || segment === null) return false
+  if (compareSemver(parsed, segment.lower) < 0) return false
+  if (compareSemver(parsed, segment.upper) >= 0) return false
+  if (parsed.prerelease.length === 0) return true
+  const sameTuple = (comparator) => comparator !== null && comparator.prerelease.length > 0
+    && comparator.major === parsed.major && comparator.minor === parsed.minor && comparator.patch === parsed.patch
+  return sameTuple(segment.lower) || sameTuple(segment.upper)
+}
+
+/** 并集语义：任一区间命中即满足（stock semver 无 includePrerelease）。 */
+function satisfiesDeclaredRange(range, version) {
+  const segments = parseDeclaredSegments(range)
+  return segments.length > 0 && segments.every((segment) => segment !== null) && segments.some((segment) => segmentSatisfies(segment, version))
 }
 
 let failures = 0
@@ -183,27 +336,79 @@ check('registry ids are unique', new Set(HOST_BASELINE_REGISTRY.map((entry) => e
 check('registry statuses are only frozen/primary', HOST_BASELINE_REGISTRY.every((entry) => entry.status === 'frozen' || entry.status === 'primary'))
 check('registry entry fields complete (dsh/dshPackages/cordis/schemastery)', HOST_BASELINE_REGISTRY.every((entry) => [entry.dsh, entry.dshPackages, entry.cordis, entry.schemastery].every((value) => typeof value === 'string' && /^\d+\.\d+\.\d+(-rc\.\d+)?$/.test(value))))
 /**
- * package.json 声明面对应的档案项：
- * - 8 peerDeps + 3 dsh deps 的声明范围 MUST 收敛到**同一个** ^ 范围（分裂即红）；
- * - 该范围 MUST **覆盖主基线项**（primary）的 dshPackages（ARCH-006 语义演进：范围型
- *   声明容纳主基线——装载门 satisfies(includePrerelease) 判据的镜像；^0.2.0-rc.2 ⊇
- *   0.2.1-rc.2 合法。R1 F-1 的守卫意图不降：回退到不覆盖主基线的范围——frozen 历史
- *   口径（^0.1.5-rc.2）或任何其它范围（假版本/漏登记基线）→ 判红，「基线跳跃被
- *   无声回退」守卫点延续）；
- * - declaredEntry（声明面逐字锚定的档案项——section 5 README 判据用）仅作记录面，
- *   ARCH-006 起允许为 in-registry 非 primary 项（本仓声明面锚 0.2.0 frozen 项）。
+ * package.json 声明面对应的档案项（ARCH-007 重写）：
+ * - 8 peerDeps + 3 dsh deps 的声明范围 MUST 收敛到**同一个**范围（分裂即红），
+ *   且逐字等于 `DECLARED_DSH_RANGE`；
+ * - 该范围 MUST 用 **stock semver（不传 includePrerelease）** 覆盖所有被声明支持
+ *   的代际（= 注册表中 dshPackages ≥ 声明下界 的项：0.2.0 / 0.2.1 / 0.2.2）；
+ * - 结构锁：区间数 === 被支持代际数，且每个区间逐字由对应代际推导——
+ *   忘给新代际加区间（或把区间"简化"掉）→ 红。
+ *
+ * 为什么必须是逐代并集而不是单区间（D5 根因，勿"优化"）：
+ * semver 的预发布门控规定——带 prerelease 的版本只有在「同一 major.minor.patch
+ * 元组、且自身带 prerelease 的比较器」存在时才可能命中。单区间
+ * `>=0.2.0-rc.2 <0.2.3-0` 只提供 0.2.0（预发布）与 0.2.3（预发布哨兵）两个元组的
+ * 比较器，因此 0.2.1-rc.2 / 0.2.2-rc.1 在 npm/pnpm/市场（stock）判定下
+ * **不满足**；宿主的装载门（includePrerelease: true）却放行——单区间等于原样
+ * 复现 D5。**维护规则：每登记一个新宿主代际，必须追加一个同代际区间**
+ * `>=<gen>-rc.1 <next-minor>-0`；§0 的结构断言与正反覆盖断言会同时变红兜底。
  */
 const declaredRangeValues = [
   ...PEER_DEP_NAMES.map((name) => pkg.peerDependencies?.[name]),
   ...DSH_RUNTIME_DEPS.map((name) => pkg.peerDependencies?.[name]),
 ]
 const commonDeclaredRange = declaredRangeValues[0] && declaredRangeValues.every((range) => range === declaredRangeValues[0]) ? declaredRangeValues[0] : null
-const declaredEntry = commonDeclaredRange ? HOST_BASELINE_REGISTRY.find((entry) => declaredRange(entry.dshPackages) === commonDeclaredRange) ?? null : null
-check(`declared dsh range ${commonDeclaredRange ?? '<split/absent>'} covers the PRIMARY registry baseline ${HOST_BASELINE !== undefined ? HOST_BASELINE.dshPackages : '<no primary>'} (ARCH-006: range-style declaration must contain the primary baseline — mirror of the host gate's satisfies(includePrerelease); a range that no longer covers primary, e.g. the frozen ${HOST_BASELINE_REGISTRY.find((entry) => entry.status !== 'primary')?.dshPackages ?? 'legacy'} form, stays red — F-1 tightening intent preserved)`,
-  HOST_BASELINE !== undefined && commonDeclaredRange !== null && caretRangeContains(commonDeclaredRange, HOST_BASELINE.dshPackages))
-if (declaredEntry === null && commonDeclaredRange !== null) {
-  console.log(`  --  declared range ${commonDeclaredRange} anchors no registry entry (fake/unregistered version — README 判据组将红；ARCH-006：声明面锚定项与主基线覆盖关系分离登记)`)
+check(`declared dsh range (${commonDeclaredRange ?? '<split/absent>'}) is exactly the ARCH-007 generation union (${DECLARED_DSH_RANGE}; split/absent/old single-range red — D5)`,
+  commonDeclaredRange === DECLARED_DSH_RANGE)
+
+/**
+ * 被声明支持的代际 = 注册表中 dshPackages 版本 ≥ 下界的项。0.1.5 低于下界，
+ * 不参与覆盖判据（且声明面不得回退到它——下面负例含 0.1.5-rc.2）。
+ */
+const supportedBaselineEntries = HOST_BASELINE_REGISTRY.filter((entry) => {
+  const parsed = parseSemver(entry.dshPackages)
+  return parsed !== null && compareSemver(parsed, parseSemver(DECLARED_RANGE_FLOOR)) >= 0
+})
+console.log(`declared range coverage (stock semver, includePrerelease=false): supported generations=${supportedBaselineEntries.map((entry) => entry.id).join('/')}`)
+
+// ── 0a. 自检：比较器必须复现 stock semver 的预发布门控（不是自说自话）────────
+check('semver self-check: single segment `>=0.2.0-rc.2 <0.2.3-0` accepts 0.2.0-rc.2 but rejects 0.2.1-rc.2 and 0.2.2-rc.1 (the D5 failure mode this union exists to close)',
+  satisfiesDeclaredRange('>=0.2.0-rc.2 <0.2.3-0', '0.2.0-rc.2') === true
+  && satisfiesDeclaredRange('>=0.2.0-rc.2 <0.2.3-0', '0.2.1-rc.2') === false
+  && satisfiesDeclaredRange('>=0.2.0-rc.2 <0.2.3-0', '0.2.2-rc.1') === false)
+check('semver self-check: prerelease sorts below the release of the same tuple and above the previous tuple (0.2.2-rc.1 < 0.2.2 < 0.2.3-0 gate)',
+  compareSemver(parseSemver('0.2.2-rc.1'), parseSemver('0.2.2')) === -1
+  && compareSemver(parseSemver('0.2.2'), parseSemver('0.2.3-0')) === -1
+  && compareSemver(parseSemver('0.2.2-rc.1'), parseSemver('0.2.1-rc.2')) === 1)
+
+// ── 0b. 正例：每个被支持基线的 dsh 版本都必须在 stock 语义下满足 ─────────────
+for (const entry of supportedBaselineEntries) {
+  check(`stock satisfies: supported baseline ${entry.id} dsh ${entry.dsh} ∈ declared union`, satisfiesDeclaredRange(DECLARED_DSH_RANGE, entry.dsh))
 }
+check(`stock satisfies: every peer/runtime declared range (${commonDeclaredRange ?? '<split/absent>'}) admits ALL supported baselines under stock semantics (no includePrerelease crutch)`,
+  supportedBaselineEntries.length > 0 && supportedBaselineEntries.every((entry) => satisfiesDeclaredRange(commonDeclaredRange, entry.dsh)))
+
+// ── 0c. 负例：范围外的代际/版本必须拒绝（防范围被放宽成"什么都满足"）───────
+for (const version of ['0.2.3-0', '0.2.3', '0.3.0', '0.1.5-rc.2', '0.2.1-alpha.5']) {
+  check(`stock satisfies: out-of-scope ${version} is NOT in the declared union`, satisfiesDeclaredRange(DECLARED_DSH_RANGE, version) === false)
+}
+
+// ── 0d. 结构锁：区间数 === 支持代际数，且每段下界由对应代际推导 ──────────────
+const declaredSegments = parseDeclaredSegments(DECLARED_DSH_RANGE)
+const expectedDeclaredSegments = supportedBaselineEntries.map((entry, index) => {
+  const [major, minor, patch] = entry.id.split('.').map(Number)
+  const lower = index === 0 ? DECLARED_RANGE_FLOOR : `${entry.id}-rc.1`
+  // 上界哨兵 = 同代际下一 patch 的开区间（`<0.2.1-0`）：该元组带预发布比较器，
+  // stock 语义下只为该代际的 `-rc.x` 开门，不替下一代际放行（见 §0 起因注释）。
+  return `>=${lower} <${major}.${minor}.${patch + 1}-0`
+})
+check(`declared range has exactly one segment per supported registry generation (segments=${declaredSegments.length}, supported=${supportedBaselineEntries.length}; appending a new generation without a same-generation segment goes red)`,
+  supportedBaselineEntries.length > 0 && declaredSegments.length === supportedBaselineEntries.length)
+check(`declared segments are derived 1:1 from supported generations (expected: ${expectedDeclaredSegments.join(' || ')})`,
+  declaredSegments.length === expectedDeclaredSegments.length
+  && expectedDeclaredSegments.every((expected, index) => declaredSegments[index] !== null && formatSegment(declaredSegments[index]) === expected))
+check(`each supported baseline's dshPackages is admitted by its own generation segment (no cross-generation leakage)`,
+  supportedBaselineEntries.every((entry, index) => segmentSatisfies(declaredSegments[index], entry.dshPackages)))
 
 // F-3（R0 审查承接）：注册表零 primary 项时 HOST_BASELINE 为 undefined——其后
 // section 4 的 HOST_BASELINE.cordis 等派生读数会 TypeError 崩栈、截断全部后续断言
@@ -227,7 +432,7 @@ if (SELECTED_BASELINE === null) {
   process.exit(1)
 }
 if (SELECTED_BASELINE !== HOST_BASELINE) {
-  console.log(`  --  DSH_BASELINE=${SELECTED_BASELINE.id}(${SELECTED_BASELINE.status}) selected — target-face parameterization (ARCH-005 R3); declaration-face sections 1-5 below stay PRIMARY-anchored (F-1 not relaxed by non-default selection)`)
+  console.log(`  ·   DSH_BASELINE=${SELECTED_BASELINE.id}(${SELECTED_BASELINE.status}) 已选定；本套件声明面断言恒以 primary 为锚，选择非主基线不改变任何断言`)
 }
 
 // ── 1. inject 静态比对（D1-1 死行守卫 + D3(c) 声明漂移静态校验，B0 即生效）──
@@ -270,7 +475,7 @@ check('peerDependencies covers exactly the 13 baseline host packages (8 feature 
 check(`peerDependenciesMeta.optional is exactly the 8 feature peers (hard runtime/platform peers stay required)`,
   JSON.stringify(Object.keys(pkg.peerDependenciesMeta ?? {}).filter((name) => pkg.peerDependenciesMeta[name]?.optional === true).sort()) === JSON.stringify([...PEER_DEP_NAMES].sort()))
 for (const name of [...PEER_DEP_NAMES, ...DSH_RUNTIME_DEPS]) {
-  check(`peerDep ${name} records the common declared range (${commonDeclaredRange ?? '<split/absent>'}) covering PRIMARY ${HOST_BASELINE.dshPackages} (ARCH-006 coverage semantics — split/absent red)`, pkg.peerDependencies?.[name] === commonDeclaredRange)
+  check(`peerDep ${name} records the ARCH-007 generation union (split/absent red)`, pkg.peerDependencies?.[name] === commonDeclaredRange)
 }
 /**
  * engines.dsh 单字段运行时契约（v0.7.0）：宿主 `dsh-app-boot`
@@ -303,16 +508,15 @@ if (registryModule !== null) {
   check('registry platform-kind set === 2 platform peers', JSON.stringify([...registryModule.HOST_PLATFORM_PACKAGE_NAMES].sort()) === JSON.stringify([...PLATFORM_DEPS].sort()))
 }
 
-// ── 5. README 兼容矩阵同步（声明面锚定档案项 = declaredEntry 的实测基线 + 记录性语义 + 权威防护指针）──
-//      ARCH-006 起 declaredEntry = 声明范围逐字锚定的在册项（当前 0.2.0 frozen——本仓
-//      声明面 ^0.2.0-rc.2 ×11 未随 0.2.1 主基线升格改动，覆盖关系由 section 0 判据看护），
-//      README 必须载有该档案项四值（支持基线集表的对应行）。
+// ── 5. README 兼容矩阵同步（ARCH-007：**逐档案项**记录判据，不再是单个 declaredEntry）──
+//      README 必须为注册表中的**每一项**（含 frozen 历史项）记录四值；缺项/漏值即红。
+//      行级结构判据（表格行、primary 唯一性）见 §5b。
 console.log('README compatibility matrix:')
 check('README has 宿主兼容性（实测基线） section', readme.includes('### 宿主兼容性（实测基线）'))
-check(`README records host CLI baseline dsh ${declaredEntry?.dsh}`, readme.includes(declaredEntry?.dsh ?? '<no declared entry>'))
-check(`README records dsh-* baseline ${declaredEntry?.dshPackages}`, readme.includes(declaredEntry?.dshPackages ?? '<no declared entry>'))
-check(`README records cordis baseline ${declaredEntry?.cordis}`, readme.includes(declaredEntry?.cordis ?? '<no declared entry>'))
-check(`README records schemastery baseline ${declaredEntry?.schemastery}`, readme.includes(declaredEntry?.schemastery ?? '<no declared entry>'))
+for (const entry of HOST_BASELINE_REGISTRY) {
+  check(`README records registry entry ${entry.id} four values (dsh ${entry.dsh} / dsh-* ${entry.dshPackages} / cordis ${entry.cordis} / schemastery ${entry.schemastery})`,
+    readme.includes(entry.dsh) && readme.includes(entry.dshPackages) && readme.includes(entry.cordis) && readme.includes(entry.schemastery))
+}
 /**
  * 声明面语义披露（v0.7.0 重写）：旧断言要求 README 声明「peerDeps 为**记录性**
  * （record-only，不依赖 enforcement）」——该口径自 v0.7.0 起**已不成立**：宿主
@@ -328,20 +532,32 @@ check('README states the P0 rule: host-supplied packages must never appear in de
   /永不得写入\s*`dependencies`/.test(readme) && /提升到\s*profile\s*根/.test(readme))
 check('README points authoritative guard to tests/host-version-snapshot.mjs', readme.includes('tests/host-version-snapshot.mjs'))
 
-// ── 5b. README 支持基线集表 primary 行（FIX-053，REVIEW-REL-013-R0 P2-1 收口）──
-//      背景：上方 §5 用 readme.includes() 对 declaredEntry（0.2.0 frozen）四值做
-//      全文宽松命中——primary（0.2.1）行若漏改 / 缺行 / 重复均不红（v0.6.1 基线
-//      刷新窗口）。本组按 README 表格**行结构**解析「宿主兼容性（实测基线）」小节，
-//      期望值单源取 HOST_BASELINE_REGISTRY 的 primary 项（无第二份版本字面量），
-//      并加「恰一 primary 行」计数。解析失配（小节缺失 / 无版本行）= 红（fail-closed：
-//      提示同步 README 或本解析器）。表格列为：
-//      | 基线 | 状态 | dsh CLI | 全系 dsh-* | cordis | schemastery | 实测时点 |
-console.log('README primary baseline row (FIX-053):')
+// ── 5b. README 支持基线集表**行级**判据（ARCH-007 重写；原 FIX-053 只锁 primary 行）──
+//      背景：§5 的 readme.includes() 是全文宽松命中——表格行漏改 / 缺行 / 重复 / 多出
+//      孤儿行均可能不红。本组解析「宿主兼容性（实测基线）」小节表格，按 HOST_BASELINE_REGISTRY
+//      **逐项**比对：每个档案项恰一行、四值逐格相等、状态格与档案一致、行数无多余；
+//      另加「恰一 primary 行（含 primary（当前）字样）」。期望值单源取注册表（无第二份
+//      版本字面量）。解析失配（小节缺失 / 无版本行）= 红（fail-closed）。
+//      表格列为：| 基线 | 状态 | dsh CLI | 全系 dsh-* | cordis | schemastery | 实测时点 |
+console.log('README baseline registry table (row-level, ARCH-007):')
 const compatSection = (readme.match(/### 宿主兼容性（实测基线）([\s\S]*?)(?=\n## )/) ?? [null, ''])[1]
 const compatRows = compatSection.split(/\r?\n/)
   .filter((line) => /^\|\s*\d+\.\d+\.\d+\s*\|/.test(line))
   .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim()))
 check(`README §5 table parses (section found=${compatSection !== ''}, baseline rows=${compatRows.length}, registry entries=${HOST_BASELINE_REGISTRY.length})`, compatSection !== '' && compatRows.length >= HOST_BASELINE_REGISTRY.length)
+check(`README §5: table has exactly one row per registry entry (rows=${compatRows.length}, entries=${HOST_BASELINE_REGISTRY.length}; missing/duplicate/orphan row red)`, compatRows.length === HOST_BASELINE_REGISTRY.length)
+for (const entry of HOST_BASELINE_REGISTRY) {
+  const rows = compatRows.filter((cells) => cells[0] === entry.id)
+  check(`README §5: registry entry ${entry.id} has exactly one table row (got ${rows.length})`, rows.length === 1)
+  const row = rows.length === 1 ? rows[0] : null
+  check(`README §5: row ${entry.id} mirrors registry (status=${entry.status}, dsh=${entry.dsh}, dsh-*=${entry.dshPackages}, cordis=${entry.cordis}, schemastery=${entry.schemastery})`,
+    row !== null
+    && (row[1] ?? '').includes(entry.status)
+    && row[2] === '`' + entry.dsh + '`'
+    && row[3] === '`' + entry.dshPackages + '`'
+    && row[4] === '`' + entry.cordis + '`'
+    && row[5] === '`' + entry.schemastery + '`')
+}
 const readmePrimaryRows = compatRows.filter((cells) => (cells[1] ?? '').includes('primary'))
 check(`README §5: exactly one primary baseline row (got ${readmePrimaryRows.length}; 0 = missing row, >1 = duplicate — FIX-053)`, readmePrimaryRows.length === 1)
 const readmePrimaryRow = readmePrimaryRows.length === 1 ? readmePrimaryRows[0] : null
@@ -357,6 +573,6 @@ for (const [label, value, column] of README_PRIMARY_COLUMNS) {
   check(`README §5: primary row column ${column} (${label}) === \`${value}\` from registry primary (got ${JSON.stringify(readmePrimaryRow?.[column] ?? null)})`, readmePrimaryRow !== null && readmePrimaryRow[column] === '`' + value + '`')
 }
 
-console.log(`baseline registry: ${HOST_BASELINE_REGISTRY.map((entry) => `${entry.id}(${entry.status}: dsh=${entry.dsh} dsh-*=${entry.dshPackages} cordis=${entry.cordis} schemastery=${entry.schemastery})`).join(' | ')} | declared=${commonDeclaredRange ?? '<split/absent>'} -> ${declaredEntry?.id ?? '<none>'} | selected(DSH_BASELINE)=${DSH_BASELINE_RAW || '<unset>'} -> ${SELECTED_BASELINE.id}(${SELECTED_BASELINE.status})`)
+console.log(`baseline registry: ${HOST_BASELINE_REGISTRY.map((entry) => `${entry.id}(${entry.status}: dsh=${entry.dsh} dsh-*=${entry.dshPackages} cordis=${entry.cordis} schemastery=${entry.schemastery})`).join(' | ')} | declared=${commonDeclaredRange ?? '<split/absent>'} segments=${declaredSegments.length}/${supportedBaselineEntries.length} | selected(DSH_BASELINE)=${DSH_BASELINE_RAW || '<unset>'} -> ${SELECTED_BASELINE.id}(${SELECTED_BASELINE.status})`)
 console.log(failures === 0 ? `\nALL HOST VERSION SNAPSHOT TESTS PASSED (${passed} assertions)` : `\n${failures} FAILURE(S) (${passed} passed)`)
 process.exit(failures === 0 ? 0 : 1)

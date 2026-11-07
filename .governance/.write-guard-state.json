@@ -136,6 +136,15 @@
         "EVD-16": [
           "6856b285d69f287b98be8e5e16ce3215"
         ],
+        "EVD-17": [
+          "d4ecfdb573f7f646705d48626e9a63b8"
+        ],
+        "EVD-18": [
+          "747696e4e46b9c21b71770779bdcf4be"
+        ],
+        "EVD-19": [
+          "2d4e510d54a24ce279afbe18886d9bd9"
+        ],
         "EVD-2": [
           "9819143d4a024d49cdf394bac68d46d0"
         ],
@@ -535,6 +544,9 @@
         "REVIEW-FIX-056-R0-CODE-REVIEWER": [
           "12e7bd21700ce06d90e5d956060c9bc2"
         ],
+        "REVIEW-FIX-057-R0-CODE-REVIEWER": [
+          "d4527c40847442c72f127318075c1590"
+        ],
         "REVIEW-REL-002-R0": [
           "97922ffea4e199eea747e7c0d91cd1ee",
           "9b51527fbb5eccc3be9c294080f75749"
@@ -607,7 +619,7 @@
           "5d3528f22e85ff475f708dcc5e89da50"
         ]
       },
-      "sha256": "4559d8469da692a88ca475c77f4a897ffe5afd6a9f5659b49d5813d489d947ba"
+      "sha256": "24a8cb52ce2e0c6f300a308cead1915341101a78424c7e274546cf14f19e7405"
     },
     "plan-tracker.md": {
       "rows": {
@@ -816,6 +828,9 @@
         "FIX-056": [
           "a08f09c00dce724a162fd22b33a826a1"
         ],
+        "FIX-057": [
+          "06f8825960c4f335e486546cfa32ce2f"
+        ],
         "GOV-001": [
           "53be57896bb73b3ab53b12c7f1ec8edc"
         ],
@@ -894,6 +909,12 @@
           "185cc1036aedd96a1221cefb5864a0d8",
           "99ec2e2fff285570488e0793a28fb520"
         ],
+        "REL-015": [
+          "62c22797689dcf88d6d24eba3e6b6a8a"
+        ],
+        "REL-016": [
+          "2f4f9b648954287b06467362e5c44668"
+        ],
         "REQ-001": [
           "9aaf5daac017b93737b0ea6937c2a508"
         ],
@@ -913,10 +934,10 @@
           "58c672f52926fbf91e75a9e983387b10"
         ]
       },
-      "sha256": "cd299d23e8f33933e85266f7fbc7a88a2aba49383d10aa5a9a5e276a6462f054"
+      "sha256": "3f01e754efc7625d7358984f8053c07b3e40a308b71baa57df74ce30bccc100e"
     }
   },
   "schema_version": 1,
   "tool": "governance-write-guard/row-family-reconciliation",
-  "updated_at": "2026-10-22T18:46:41"
+  "updated_at": "2026-10-25T08:21:55"
 }

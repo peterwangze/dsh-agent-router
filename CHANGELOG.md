@@ -3,6 +3,44 @@
 > dsh-agent-router 的版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 > 内部注解（提交号 / EV 编号）供追溯，用户可忽略。
 
+## v0.8.0 — 2026-11-07
+
+### 摘要
+
+**宿主代际升级（0.2.2-rc.1 主基线登记）与声明面/依赖面/客户端面的单源收口（MINOR）**。核心变化一句话：宿主桌面端已跑到 `0.2.2-rc.1`（asar 分发，331 个 `@deepseek-ai` 包全为该代际，cordis `4.1.0`、schemastery `3.19.0`），本版登记该代际并把声明面从「单区间 + 装载门 `includePrerelease` 镜像」改为**按代际并集的 stock semver 口径**（D5），把转发事件镜像补齐到 `0.2.2` 实读的 30 项并接上 `llm/models-updated` 的模型目录刷新（D1），新增**依赖台账**把「用了宿主什么、缺了会怎样、哪条既有断言会红／确无红测的缺口是什么」收敛为单点审计表（D2）。无用户配置项 / 存储格式 / RPC 契约变更。
+
+### 变更
+
+- **D5｜声明面改为逐代并集（stock semver 语义）**
+  - `package.json` 的 `engines.dsh` 与 11 项 `@deepseek-ai/dsh-*` 运行时/特性 peer 声明统一为：
+    `>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0`。
+  - 起因（实测定性）：单区间 `>=0.2.0-rc.2 <0.2.3-0` 在 **stock semver**（npm / pnpm / 插件市场）下只接纳 `0.2.0-rc.2`，拒绝 `0.2.1-rc.2` / `0.2.2-rc.1`——只有宿主装载门 `semver.satisfies(..., {includePrerelease:true})` 会放行。即「桌面端装得上、包管理器与市场判定失配」，声明面必须逐代各写一段（预发布门槛：仅当比较器与版本同 major.minor.patch 且带预发布时才准入）。`^4.0.1`（cordis）/ `^3.18.5`（schemastery）不变。
+  - `lib/host-abi/version.js`：登记 `0.2.2` 档案项（`dsh`/`dshPackages` = `0.2.2-rc.1`，cordis `4.1.0`，schemastery `3.19.0`，`status: primary`），`0.2.1` 由 primary 降为 frozen；免于「新代际未登记即误判」的探测口径不变。
+  - `lib/host-abi/host-packages.js`：11 项 dsh `range` 同步为并集字面量，文件头补「每次登记新宿主代际必须追加同代际段」维护规则与 D5 机理说明。
+  - `README.md`：基线集表新增 `0.2.2 primary` 行；声明面段落改写为并集字面量 + stock 语义解释 + 维护规则 + `engines.dsh` 与 peer 逐字一致的要求；漂移示例改为 `0.2.2` 正式版。
+  - `docs/cold-install-gate.md`：§5 三方一致凭据改写为并集/结构锁/行级 README 断言族；如实登记两处宿主事实（本机 PATH `dsh --version` = `0.2.1-rc.2`；桌面宿主实测 `0.2.2-rc.1`）。
+  - `tests/host-version-snapshot.mjs`：新增 stock 语义最小 semver 实现（`parseSemver`/`compareSemver`/`satisfiesDeclaredRange`）与 §0 自检；正例（3 个支持代际全部满足）+ 负例（`0.2.3-0`/`0.2.3`/`0.3.0`/`0.1.5-rc.2`/`0.2.1-alpha.5` 均不满足）+ **结构锁**（并集段数 === 支持代际数、每段下界由该代际档案项推导、每段准入自身 `dshPackages`）+ README 行级四值比对。
+- **D1｜客户端转发事件镜像与模型目录刷新对齐 0.2.2**
+  - `lib/host-abi/events.js`：`FORWARDED_EVENT_ALLOWLIST` 由 28 项补到 **30 项**，新增 `llm/models-updated`、`plugin-manager/update-state`（0.2.2 宿主 `dsh-api-remotes/lib/types/remote-events.js` 实读新增；`dsh-llm/lib/typert.host.js` 同步出现双签名）。
+  - `lib/client.js`：浏览器镜像 `FORWARDED_EVENT_ALLOWLIST` 同步 30 项；`settings-page-models` 消费者新增 `llm/models-updated` 订阅——模型目录变更即刷新设置页模型列表（此前只在打开页面/30s 兜底轮询时刷新）；`tests/served-client.js` 逐字副本同步（SHA256 一致性由客户端 parity 断言锁定）。
+  - 事件代际注记（`since`）逐项在位，`tests/host-contract.mjs` S7 7a 按所选基线派生期望集，`0.2.1` 以下不会把新增事件计入期望。
+- **D2｜依赖台账（新增模块，单点审计面）**
+  - 新增 `lib/host-abi/dependency-ledger.js`：`DEPENDENCY_LEDGER` 为 **36 条**冻结记录（13 宿主供给包 + 11 ctx 服务 + 9 fiber 注入面 + 3 客户端注入包），每条含 `kind` / `level`（`required`|`optional`）/ `evidence`（消费者文件 + 缺失/降级后果 + 红测断言名／缺口登记）/ `since`；**12 条 `required` 中 7 条点名了既有断言名（逐字核对存在），`llm` / `settings` / `fs` / `remote` / `slots` 5 条经缺面夹具实读 + 全绿实测确认：既有用例只断言降级信封 / 形状门控 / 探针记 missing，在该面缺失时仍绿（无一变红），故显式登记 `redTest: null` + `redTestGap`（原因 + 补测方向），并冻结进 `RED_TEST_GAPS`**；文件头记录 4 个来源清单、level 语义、「新增宿主面必须同步台账」「红测缺口只许显式登记/补测后同批删除」维护规则。`lib/host-abi/index.js` 桶导出 `DEPENDENCY_LEDGER` 与 `RED_TEST_GAPS`。
+  - `tests/host-abi-health.mjs` 新增 §6g `B1-a`…`B1-m` 看护：条目数量与集合（对 4 个来源清单取并集恰 36）、`kind` 分布（13/11/9/3）、**B1-k1 对全部 36 条要求 `evidence` 含 `lib/*.js` / `package.json` 消费者路径与 `→` 后果；B1-k 对 12 条 `required` 再要求「点名 `tests/*.mjs` 且文件存在」或「`redTestGap` 非空」或「`RED_TEST_GAPS` 登记」三选一（缺一即判红并点名越界 id，无静默空档）；B1-k2 锁 `since` 必须命中 `HOST_BASELINE_REGISTRY` 代际；B1-k3 冻结缺口清单（5 项、双向核对 `redTest: null` + 非空 `redTestGap`，补测后漏删即红）**、required/optional 分级锁定（`llm`/`settings`/`fs` ctx、`slots`/`remote` fiber、`dsh-client-ui-settings`/`dsh-api-remotes` 客户端包必须 `required`）。
+  - `tests/host-abi-health.mjs` 9h 锚清单登记该文件（`stale: []` + 代表性 evidence 锚串），新增含行号证据锚的文件不会在被 9h-5 覆盖率判据红。
+
+### 破坏性变更
+
+**声明面 MINOR（0.8.0）**：`engines.dsh` 与 11 项 dsh peer 的范围形态由单区间改为并集；这是**放宽**（新增 `0.2.1`/`0.2.2` 代际准入），不是收窄——`0.2.0-rc.2` 仍在范围内。`peerDependenciesMeta`（8 项 optional）与 `dependencies`（仅 `undici`）零改动；无配置项 / 存储格式 / RPC 导出面变更。
+
+### 验证
+
+- 全量门控（默认不设 `DSH_BASELINE`，主基线 = `0.2.2`；本机默认靶子 = npm-global `0.2.1-rc.2`）：`node tests/run-all.mjs` = **ALL 24 SUITES + 4 RUNNER MODULES (via smoke.mjs) PASSED, 50.0s, exit 0, `#SKIP 5`（`host-contract`×3、`smoke`×2）**。
+  - `host-contract` 168 assertions + 3 skip；`host-version-snapshot` 97 assertions（含 stock 正/负例与结构锁）；`host-abi-health` 242 assertions（含 `B1-k1`/`B1-k`/`B1-k2`/`B1-k3` 四条台账判据）。
+- 目标树边界（如实登记）：本机 PATH/npm-global 宿主树仍是 `0.2.1-rc.2`（28 项事件），与主基线 `0.2.2` 不一致；`host-contract` S3/S7 按**靶子树 package.json 实读版本**派生期望，故 target≠baseline 告警与 2 项 `0.2.2` 新事件（`llm/models-updated`、`plugin-manager/update-state`）以 `#SKIP` 可见跳过，不静默判过。**三靶均已实跑（Coordinator 亲跑，2026-11-07）**：① npm 形态 `0.2.2` 树（`.inspect-host/npm-0.2.2-rc.1`）→ `node tests/run-all.mjs` = ALL 24 SUITES + 4 RUNNER MODULES PASSED，50.5s，`#SKIP 2`（仅 `smoke`×2），exit 0（类型锚真验，`host-contract` 零 skip）；② 桌面 asar 真机依赖图 `0.2.2`（`--prefix dsh/node_modules` 抽取，331 包 + 裸依赖完整）→ 同上全绿，50.2s，`#SKIP 9`（`host-contract`×7 = bundled 形态 `.d.ts` 面可见跳过 + `smoke`×2），exit 0；③ 默认靶子（npm-global `0.2.1-rc.2`）同轮复跑亦全绿（50.0s，`#SKIP 5`）。桌面 `0.2.2-rc.1` 为 asar 分发（整树无 `.d.ts`），其声明面符号在该形态下不可验。`DSH_BASELINE=0.2.1` 复跑同为 24 套件 + 4 runner 全绿（`host-contract` 2 skip）；无效基线 `DSH_BASELINE=0.9.9` fail-closed（`1 FAILURE(S) (19 passed)`，exit 1）。
+- 声明面判别力：`0.2.3-0` / `0.2.3` / `0.3.0` / `0.1.5-rc.2` / `0.2.1-alpha.5` 全部判不满足；`0.2.0-rc.2` / `0.2.1-rc.2` / `0.2.2-rc.1` 全部判满足（stock 语义，无 `includePrerelease`）。
+- 结构锁判别力：并集段数 = 支持代际数（3）；新增代际漏追加段、段下界与档案项不符、段数漂移任一即红（`tests/host-version-snapshot.mjs` §0d）。
+
 ## v0.7.1 — 2026-10-25
 
 ### 摘要

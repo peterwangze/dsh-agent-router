@@ -9,7 +9,8 @@
 
 在 $TEMP 沙箱（DSH_HOME 重定向）内对仓库做**冷装**（`dsh plugin --profile <name> add <repo>`，
 link: 形态——manifest 实时读自仓库树），再以 headless `--dump-config` 启动**同一宿主运行时**
-（npm 全局树 dsh，本机 0.2.0-rc.2），断言宿主 app-boot 装载门对 `dsh-agent-router` 放行。
+（npm 全局树 dsh，本机 PATH 实读 `0.2.1-rc.2`；桌面宿主实测主基线 `0.2.2-rc.1`——两者均在
+声明面逐代并集内），断言宿主 app-boot 装载门对 `dsh-agent-router` 放行。
 
 | 面 | 绿（放行） | 红（拒载） |
 |---|---|---|
@@ -34,7 +35,8 @@ node scripts/cold-install-gate.mjs --expect-skip  # 红演示（判别力自证�
 `--revert-pkg <pkg>`（默认 `@deepseek-ai/dsh-settings`）/ `--revert-range <range>`
 （默认 `^0.1.5-rc.2`）/ `--dsh <command>`（默认走 PATH）。
 
-前置：PATH 上有 `dsh`（0.2.0 系宿主运行时）与 pnpm（宿主 plugin-manager 拉起安装用）。
+前置：PATH 上有 `dsh`（本机实读 `0.2.1-rc.2`，属声明并集中段；桌面主基线 `0.2.2-rc.1`
+为另一段，两代均由并集准入）与 pnpm（宿主 plugin-manager 拉起安装用）。
 缺 dsh / 冷装失败 / profile 未生成 / 启动超时 → 明确错误 + exit 1（P8 可观测，不静默）。
 
 **输出与留证**：结构化结论（`COLD-INSTALL-GATE-RESULT {…}` JSON 行 + exit
@@ -72,29 +74,39 @@ node scripts/cold-install-gate.mjs --expect-skip  # 红演示（判别力自证�
 ## 5. HD-001 声明面收口：三方一致核对凭据（既有断言引用）
 
 HD-001 收口要求 package.json（11 项声明）× `HOST_BASELINE_REGISTRY` × README 基线集表
-**逐项一致**。**ARCH-006 语义演进**：声明面范围以**覆盖判据**容纳主基线
-（`declaredRangeCovers`，镜像宿主装载门 `semver.satisfies(..., {includePrerelease:true})`）；
-声明面逐字锚定项（`declaredEntry`，当前 0.2.0 frozen）与主基线（primary 0.2.1）分离登记。
-该口径**已由 `tests/host-version-snapshot.mjs` 既有断言机器覆盖**（不重复造轮子）；
-核对凭据 = 以下断言名（跑 `node tests/host-version-snapshot.mjs`，绿 = 一致）：
+**逐项一致**。**ARCH-007 语义演进**：声明面从 ARCH-006 的「单区间 + 覆盖判据
+（`declaredRangeCovers`，镜像宿主装载门 `semver.satisfies(..., {includePrerelease:true})`）」
+改为**逐代并集**——`>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0`，
+按 **stock semver 语义**（npm / pnpm / 插件市场判定口径，无 `includePrerelease`）逐段准入；
+`tests/host-contract.mjs` 的覆盖判据 `declaredRangeCovers` 仍经文本提取消费
+`tests/host-version-snapshot.mjs` 的同一 `caretRangeContains`，ARCH-007 起该谓词兼承
+并集/stock 语义，S3「范围收敛且覆盖 primary」判据继续有效；
+每个被支持代际一段，主基线 = 注册表 primary `0.2.2`，frozen 项 `0.2.0` / `0.2.1` 由各自的
+同代际段准入；`0.1.5` 为历史冻结项、低于声明面下限，**不在并集内**（注册表保留该档案项，
+但声明面不承诺准入）。**D5 起因**：单区间 `>=0.2.0-rc.2 <0.2.3-0` 在 stock 语义下只接纳
+`0.2.0-rc.2`，拒绝 `0.2.1-rc.2` / `0.2.2-rc.1`（仅装载门的 `includePrerelease` 放行），
+即「宿主装得上、包管理器/市场判定失配」——故必须逐代并集。该口径**已由
+`tests/host-version-snapshot.mjs` 既有断言机器覆盖**（不重复造轮子）；
+核对凭据 = 以下断言族（跑 `node tests/host-version-snapshot.mjs`，绿 = 一致）：
 
-| 三方边 | 断言（`ok` 行文本，ARCH-006 后口径） | 数量 |
+| 三方边 | 断言（`ok` 行文本，ARCH-007 后口径） | 数量 |
 |---|---|---|
-| package.json → 注册表 primary（覆盖判据） | `declared dsh range ^0.2.0-rc.2 covers the PRIMARY registry baseline 0.2.1-rc.2 (ARCH-006: range-style declaration must contain the primary baseline …)` | 1 |
-| package.json → 注册表（逐项） | `peerDep @deepseek-ai/<pkg> records the common declared range (^0.2.0-rc.2) covering PRIMARY 0.2.1-rc.2 (ARCH-006 coverage semantics — split/absent red)` | 8 |
-| package.json → 注册表（逐项） | `dep @deepseek-ai/<pkg> records the common declared range (^0.2.0-rc.2) covering PRIMARY 0.2.1-rc.2 (ARCH-006 coverage semantics — split/absent red)` | 3 |
-| 注册表 declaredEntry → README | `README records host CLI baseline dsh 0.2.0-rc.2` / `README records dsh-* baseline 0.2.0-rc.2` / `README records cordis baseline 4.0.5` / `README records schemastery baseline 3.18.5`（= declaredEntry 四值在场；v0.6.1 起 README 基线集表同步列 0.2.1 primary / 0.2.0 frozen / 0.1.5 frozen 三行） | 4 |
+| 并集 → 支持代际（stock 正例） | `stock satisfies: every peer/runtime declared range (<并集>) admits ALL supported baselines under stock semantics (no includePrerelease crutch)`；逐项 `stock satisfies: baseline <id> …` | 1 + 3 |
+| 并集 → 代际外版本（负例） | `stock satisfies: out-of-scope <ver> is NOT in the declared union`（`0.2.3-0` / `0.2.3` / `0.3.0` / `0.1.5-rc.2` / `0.2.1-alpha.5`） | 5 |
+| 并集 → 结构锁（防漏代际） | `declared range has exactly one segment per supported registry generation …` + `declared segments are derived 1:1 from supported generations …` + 每段准入自身 `dshPackages` | 3 |
+| package.json → 注册表（逐项） | `peerDep/dep @deepseek-ai/<pkg> records the common declared range (<并集>)`（8 项 optional peer + 3 项运行时 peer；平台 2 项 `^` 范围另判） | 11 |
+| 注册表 → README（行级） | 每项 `README §5: registry entry <id> has exactly one table row` + `README §5: row <id> mirrors registry (status=…, dsh=…, dsh-*=…, cordis=…, schemastery=…)`；`exactly one primary baseline row`；primary 行 `baseline id` / `status cell declares primary（当前）` / 四值列（dsh、dsh-*、cordis、schemastery）逐列相等 | 16 |
 
-三方由传递性闭合（pkg ↔ 声明面锚定项逐项相等；锚定项 ↔ README 四值在场；覆盖判据保证
-primary 在声明范围内）。A1 批核对证据：2026-10-17 跑 `node tests/host-version-snapshot.mjs`
-= **29/29 绿，exit 0**（ARCH-006 后断言数更增，以当次运行输出为准）。
+三方由传递性闭合（pkg 声明范围 ↔ 注册表逐项相等；注册表每代际 ↔ README 行级四值一致；
+并集正/负例 + 结构锁保证恰好覆盖被支持代际、既不漏代际也不放宽越界）。ARCH-007 批核对
+证据：2026-11-07 跑 `node tests/host-version-snapshot.mjs` = **97/97 绿，exit 0**
+（断言数随刷新变化，以当次运行输出为准）。
 
-**覆盖面如实声明（边界）**：README 侧断言为**文件级包含判定**（`declaredEntry` 四值在
-README 全文在场），未解析基线集表行结构——即「值写错位置但别处出现」不会被该断言抓出；
-**primary 行（0.2.1）在 README 的在场性当前无机器断言**（REL-013 E-4 P2-1，独立任务
-跟进扩断言）。11 项声明侧为**覆盖判据 + 逐项收敛**（ARCH-006：范围不覆盖 primary /
-分裂 / 假版本即红——F-1 收紧意图保持）。若后续需要表行级锁定，属看护矩阵判据增强面，
-不在本批造第二套核对。
+**覆盖面如实声明（边界）**：README 侧断言为**行级 + 列值字面量比对**（ARCH-007 起解析
+基线集表并逐行比对 status / 四值列），不再依赖「全文别处出现」；剩余边界 = 列序固定
+（列换位需同步刷新解析器），以及不校验措辞/备注列。声明面 = **逐代并集结构锁**
+（段数 === 支持代际数、每段下界由档案项推导——新增代际漏追加同代际段即红）+ 正负例；
+不覆盖「宿主装载门自身实现变更」（那由 §1 冷装行为判据承载，两者互补）。
 
 ## 6. 判别红演示（判据非恒绿的自证）
 

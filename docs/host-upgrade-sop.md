@@ -110,6 +110,77 @@ node tests/host-version-snapshot.mjs     # 声明面 × 档案 × README 三方�
 npm view @deepseek-ai/dsh dist-tags --json
 ```
 
+### 2a-2. 桌面 asar 分发体：抽取 → 判形态 → 三向判定（ARCH-007）
+
+桌面用户装的是 **asar 打包宿主**（本机实测 `D:\app\dsh\resources\app.asar`，
+213,202,918 B），`app.asar/dsh/...` 不是可遍历路径，必须先抽成真实磁盘树才能
+被 `--host-source` / 契约套件瞄准。**按序复制执行**（Windows PowerShell）：
+
+```powershell
+# ① 抽取：完整 scope 先看清单（只读、不写盘；确认包数 / unpacked 统计 / 缺件）
+node scripts/host-asar-extract.mjs --archive "D:\app\dsh\resources\app.asar" --prefix dsh/node_modules/@deepseek-ai --list
+
+# ② 抽取：只取核验所需包（--out 产物 = 可直接喂 --host-source 的 @deepseek-ai scope 目录）
+node scripts/host-asar-extract.mjs --archive "D:\app\dsh\resources\app.asar" `
+  --prefix dsh/node_modules/@deepseek-ai --out .inspect-host/host-asar-0.2.2 `
+  --packages dsh,dsh-api-remotes,dsh-api-session-controller,dsh-client-ui-model-selection,dsh-client-ui-conversation,dsh-llm,dsh-client-ui-settings,dsh-client-locale,dsh-session-log-export
+
+# ③ 判形态 + 升级代价矩阵（探测不门控：差异多少都 exit 0；抽取器自身故障才非 0）
+node scripts/host-radar-probe.mjs --host-source .inspect-host/host-asar-0.2.2 --distribution auto --matrix
+
+# ④ 对照面：同版本 npm 解包树（类型声明面完整——「不可验」与「真位移」靠它分离）
+node scripts/host-radar-probe.mjs --host-source <npm 全局 @deepseek-ai scope 目录> --distribution auto --matrix
+```
+
+- `--distribution auto|npm|bundled` 的形态判定是**内容判据**（抽样包 `lib/types`
+  下 `.d.ts` 计数），不是路径猜测；`auto` = 按实测定标签，forced 只覆盖标签、
+  `byContent`/`typeAnchors` 仍留实测值供两形态对照。桌面 asar 树实测整树 0 个
+  `.d.ts` ⇒ `typeAnchors: unavailable`。
+- `unpacked` 条目从 `<archive>.unpacked/` 读回并计入报告 `unpackedFiles`（本机实测
+  756 个，其中 `libreoffice-kit-win32-x64` 735 个；抽取子集 `dsh-session-log-export`
+  含 12 个）；声明存在但磁盘缺件/大小不符 → 抽取器**非 0 退出**（P8：不产出残缺树）。
+  头部 magic / 长度 / JSON 损坏与内部路径含 `..` 同样非 0。
+- 抽取子集不包含 scope 外的 `cordis` / `schemastery` ⇒ 矩阵把这两项记为
+  `package.absent`（建议改：补全抽取范围），**不是**版本漂移。
+
+**三向判定表**（`--matrix` 三桶 → 动作；判据点与「不可验 ≠ 缺失」的语义边界）：
+
+| 矩阵/报告信号 | 结论 | 动作 |
+|---|---|---|
+| `distribution.detected=bundled` + `typeAnchors=unavailable`，矩阵「建议改」=[distribution]/[anchor.unavailable] | **分发形态不可验**——`.d.ts` 整树缺席，不是 ABI 位移，不得按 `missing` 改代码 | 换同版本 npm 解包树复核（④）或按运行时 `.js` 面重锚；仅当矩阵同时给出 `[anchor.symbol]` 必须改项时才改代码 |
+| 矩阵「必须改」含 `[anchor.symbol]` / `[anchor.file]`（`anchorMisses > 0`）且该锚的**全部**候选落点均不命中 | **真 ABI 位移**——符号/文件在新宿主被改名或移走（0.2.2 实例：`selectionFor`/`stateOf` 已不在 `dsh-api-session-controller/lib/types/agent.js`；模型选择契约落 `lib/types/commands.js` 的 `selectModel`，投影面落 `dsh-agent/lib/types/model-selection.js` 的 `modelSelectionProjectionDefinition`/`state.pending`/`recordedSelection()`。旧文档所记 `lib/types/session/list.js` 经 npm 与 bundled 两形态实读**不存在**；此判定对 asar 树同样成立，因为扫描面是运行时 `.js`） | 按矩阵给出的新落点重锚 + 更新 `since`（第④步先例族） |
+| 矩阵「无需改」含 `[anchor.drift]` / 契约套件打印「位置漂移」 | **宿主内部布局变化、契约面未变**——D4 有序候选落点中非首位命中（旧位置在前）；`anchorMisses` 不计、`totalDiffs` 不计 | 无需改码；如要收敛，把候选顺序/位置注记刷新为实读落点（保留旧候选作反向回归） |
+| 矩阵「必须改」含 `[event.hostOnly]` / `[schema.baselineOnly]` / 面不可读 | **契约面收缩** | 进适配批；不可读面板点名后修复读取面再判 |
+| 矩阵「建议改」含 `[package.mismatch]` / `[package.absent]` | **版本代差/证据缺口** | 补全树 / 对齐版本；`absent` 先确认是否抽取子集（scope 外依赖） |
+| 矩阵「无需改」（事件/ schema / 包表零差异） | **零差异面** | 留痕即可，无适配动作 |
+
+**失败可观测面（P8）**：抽取器对自身故障（归档不可读 / 头损坏 / unpacked 缺件 /
+路径越界 / 未知包）明确非 0 退出；探针对差异恒 exit 0，两套退出语义不可混用。
+`--out` **没有隐式默认值**：省略时（或 `--list`）只打印统计/包清单、不写盘；只有显式
+给出目录才落盘（本 SOP 示例统一写 `.inspect-host/<tree>`，该目录已在 `.gitignore`）。
+
+**锚位置候选（ARCH-007 D4，2026-11-07 补）**：S2/S7 的模型选择锚与 S9b 持久化内联
+判据不再锁死单个宿主文件/单行。每个锚声明**有序候选落点组**（旧位置在前，新位置按
+npm + bundled 两形态实读登记）；判定规则：
+
+- 符号/内容在**任一**候选落点命中 ⇒ 绿；非首位命中打印可见
+  `位置漂移：old → new（宿主内部布局变化，契约面未变）`（契约套件 `--` note 行；
+  probe `anchor position drift` 日志 + `matrix [anchor.drift]` 无需改条目），
+  不记 `anchorMisses`、不记 `totalDiffs`。
+- **全部**候选落点不命中 ⇒ 仍红：契约套件精确 FAIL 并逐项点名文件/符号；probe
+  `missingFiles`/`missingSymbols` 同时列出全部候选，矩阵进「必须改」。候选放松
+  不吞真删除（反向回归见 `tests/host-radar.mjs` 的 guard D4 反向用例）。
+- 不做包级符号扫描，不改结构断言；`since` 语义不变。
+
+**计数口径（`anchorMisses` vs `matrix.must`）**：`anchorMisses` 是**原始差项数**
+（逐锚面的 `missingFiles.length + missingSymbols.length`，同一符号被两个锚面共同
+声明会重复计 2）；矩阵按 `bucket|category|location` 去重，同一符号只留一条。故
+D4 修复前的 npm `0.2.2` 探针为 `anchorMisses=4`（`selectionFor`/`stateOf` 两项 ×
+两个锚面，`stateOf` 重复）而矩阵 `must=3`（`selectionFor` / `stateOf` /
+`projectionState.pending` 三个不同 location）。D4 后同一树 `anchorMisses=0`、
+`matrix.must=0`，两条位置漂移只进 `[anchor.drift]`（无需改），并另由契约套件的
+S7 增强 note 报第三条 `selectionFor` 锚漂移。
+
 ### 2b. 人工面（机器报告不可替代的半边）
 
 Analyst 依赖 / 契约全量 diff——**模板先例 = `.governance/arch-005-host-diff-inventory.md`**
@@ -321,3 +392,6 @@ a3-apply-gate abort 形态（dsh-unusable / cold-install-failed / 探针超时�
 - **维护义务**：SOP 引用的程序 / 套件 / 判据文案变更时同步本文件（行号式宿主锚一律
   引用 `docs/cold-install-gate.md` 等判据文档承载，不在本文件复制行号——降低锚漂移面）；
   新升级走完一遍 SOP 后，按实际偏差增补本文件（SOP 自身也是 retrospective 产物）。
+- **ARCH-007 增补**：§2a-2 的 asar 抽取链 / 分发形态三向判定 / 升级代价矩阵
+  （`scripts/host-asar-extract.mjs`、`scripts/host-radar-probe.mjs --distribution auto --matrix`、
+  `lib/host-abi/distribution.js`、`tests/host-distribution.mjs`）随「可调测性 / 校验层」批落地。

@@ -2346,11 +2346,19 @@ export async function runClientRender(check) {
     const deadSubs = pageSubs.filter((entry) => entry.event === 'credentials/updated')
     const refSubs = pageSubs.filter((entry) => entry.event === 'credentials/reference-updated')
     check('B5 D-2: 设置页订阅正名 credentials/reference-updated（白名单锚 API_REMOTE_FORWARDED_EVENTS）——死名 credentials/updated 零订阅', deadSubs.length === 0 && refSubs.length === 1)
-    check('B5 D-2: 页面其余转发订阅在位（settings/document-updated + llm/adapters-updated——域管事件清单内）', pageSubs.some((entry) => entry.event === 'settings/document-updated') && pageSubs.some((entry) => entry.event === 'llm/adapters-updated'))
+    const modelsSubs = pageSubs.filter((entry) => entry.event === 'llm/models-updated')
+    check('B5 D-2: 页面其余转发订阅在位（settings/document-updated + llm/adapters-updated——域管事件清单内；ARCH-007 增补 llm/models-updated 恰一站）', pageSubs.some((entry) => entry.event === 'settings/document-updated') && pageSubs.some((entry) => entry.event === 'llm/adapters-updated') && modelsSubs.length === 1)
     const catalogBeforeCred = catalogCalls
     for (const entry of refSubs) entry.listener()
     await new Promise((resolve) => setImmediate(resolve))
     check('B5 D-2 判别: 正名事件派发 → 账号卡刷新链路触发（load() 重跑 → catalog RPC；旧死名订阅在此必不触发 = RED）', catalogCalls > catalogBeforeCred)
+    // ARCH-007（D1 宿主 0.2.2 事件面）：llm/models-updated 与 llm/adapters-updated 分列
+    // 于 typert 双签名（models-updated(provider) 单独广播模型清单变化）⇒ 设置页模型面板
+    // 必须同样刷新（旧代码只订 adapters-updated 会漏掉纯模型变化，模型下拉陈旧）。
+    const catalogBeforeModels = catalogCalls
+    for (const entry of modelsSubs) entry.listener()
+    await new Promise((resolve) => setImmediate(resolve))
+    check('B5 D-2 ARCH-007 判别: llm/models-updated 派发 → 模型刷新链路触发（catalog RPC；旧代码不订此名在此必不触发 = RED）', modelsSubs.length === 1 && catalogCalls > catalogBeforeModels)
 
     // 轮询治理（D1-10）：单 2s timer 承载双 RPC 同拍；隐藏态零 RPC。
     const b5Timers = captured.timers.slice(timerMark)

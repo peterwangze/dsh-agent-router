@@ -22,7 +22,7 @@
  * 五守卫（设计 §5.1 第 1-5 条）：
  *  S1 契约快照四类面：llm 适配器契约（含 twin + oauth-llm 枚举，复用
  *     adapter-parity F2 动态枚举模式）/ 宿主协议对象导出面 / remote 面方法形状
- *     （CLIENT_REMOTE_FACES）/ ctx 服务面（CTX_SERVICES）/ 转发事件白名单（28 项）
+ *     （CLIENT_REMOTE_FACES）/ ctx 服务面（CTX_SERVICES）/ 转发事件白名单（30 项）
  *  S2 宿主源码形状锚点（P10-④：桩形态锚定宿主源码；高风险非导出面以形状
  *     签名断言，宿主漂移即红）
  *  S3 声明面比对：package.json `dsh.client.inject` + peerDeps 8 项 vs
@@ -114,8 +114,11 @@
  *    **可见 skip**（非静默——如 frozen 基线下 agentPresets.list 的 {presets} 白名单
  *    形态〔0.2.0 收缩定型〕对 0.1.5 树合法不同），静态/插件面判据不受影响恒跑；
  *  - S7 7a 的期望集按**逐事件 since**（lib/host-abi/events.js 镜像数组行内注记——R0
- *    登记形态）分代过滤：所选基线低于事件 since 时该事件不入期望集（0.1.5 表 19 项 ⊂
- *    镜像 28 项在 frozen 基线下判 19 ⊆ 19）；宿主侧超集照旧绿 + 打印增量，消费项除名即红。
+ *    登记形态）分代过滤；ARCH-007 A 修正参照：skip 看**靶子宿主树 package.json 实读版本**
+ *    （非所选基线）——基线 0.2.2 / 靶子 0.2.1 时 2 条 since 0.2.2-rc.1 事件逐项可见 skip
+ *    （文案含 since/靶子版本/事件名），基线 0.1.5 / 靶子 0.1.5 时判 19 ⊆ 19；靶子 0.2.2
+ *    时全量期望强制在场（缺失即红）；靶子版本不可读 ⇒ fail-closed 全量（不拿基线顶替）。
+ *    宿主侧超集照旧绿 + 打印增量，消费项除名即红。
  *
  * 独立入口：node tests/host-contract.mjs（exit 0/1）。
  */
@@ -134,6 +137,7 @@ import { CLIENT_REMOTE_FACES, createClientRemotes } from '../lib/host-abi/client
 import { CTX_SERVICES, ctxServiceFaceProbes } from '../lib/host-abi/ctx-services.js'
 import { FORWARDED_EVENT_ALLOWLIST, isForwardedEvent, MANAGED_EVENTS } from '../lib/host-abi/events.js'
 import { CLIENT_PACKAGE_INJECT, FIBER_INJECT } from '../lib/host-abi/inject-manifest.js'
+import { detectHostDistribution, isTypeDeclarationFile, typeAnchorsUnavailable } from '../lib/host-abi/distribution.js'
 import { buildReminderMessage, PLUGIN_NAME } from '../lib/prestep.js'
 
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -150,6 +154,10 @@ const check = (label, condition, detail) => {
   }
 }
 const note = (label) => { skipped++; console.log(`  --  ${label}`) }
+// 位置漂移 note：候选落点非首命中时可见，但对应的断言是 ok（契约面仍成立），故不得计入
+// `skipped`——否则 run-all 的 `#SKIP` 汇总（SKIP_LINE = `  skip`/`  --`）会把「漂移已可见」
+// 误读成「覆盖被跳过」。前缀用套件既有的 `  ·  ` 信息行形态（不打 SKIP_LINE）。
+const driftNote = (label) => { console.log(`  ·  ${label}`) }
 const deepEqual = (left, right) => JSON.stringify(left) === JSON.stringify(right)
 
 const readLib = (name) => readFileSync(join(ROOT_DIR, 'lib', name), 'utf8')
@@ -207,12 +215,59 @@ const fieldsIn = (block, pattern) => [...new Set([...block.matchAll(pattern)].ma
  */
 const declarationGapsOf = (spec) => {
   const gaps = []
-  if (typeof spec.expectPackage !== 'string' || spec.expectPackage.trim() === '') gaps.push('expectPackage')
+  // ARCH-007 D4：契约面可跨宿主包迁移（0.2.2 的 model-selection 面由
+  //   dsh-api-session-controller 迁到 dsh-agent）——`expectPackage` 允许单包字符串
+  //   或有序包名数组；空数组/空串仍判红（声明面缺失不得平凡满足）。
+  const packages = typeof spec.expectPackage === 'string'
+    ? [spec.expectPackage]
+    : (Array.isArray(spec.expectPackage) ? spec.expectPackage : [])
+  if (packages.length === 0 || packages.some((name) => typeof name !== 'string' || name.trim() === '')) gaps.push('expectPackage')
   for (const field of ['expectFile', 'expectSymbol']) {
     const value = spec[field]
     if (!Array.isArray(value) || value.length === 0 || value.some((token) => typeof token !== 'string' || token.trim() === '')) gaps.push(field)
   }
   return gaps
+}
+
+/** ARCH-007 D4：锚声明的包名统一归一为有序数组（单包字符串 = 一元数组）。 */
+const anchorPackageNamesOf = (spec) => (typeof spec.expectPackage === 'string'
+  ? [spec.expectPackage]
+  : (Array.isArray(spec.expectPackage) ? spec.expectPackage.filter((name) => typeof name === 'string' && name.trim() !== '') : []))
+
+/** ARCH-007 D4：候选位置条目 -> 有序文件列表（新形态 `files`，旧形态单 `file` 兼容）。 */
+const anchorEntryFilesOf = (entry) => {
+  if (Array.isArray(entry?.files)) return entry.files.filter((file) => typeof file === 'string' && file.trim() !== '')
+  return typeof entry?.file === 'string' && entry.file.trim() !== '' ? [entry.file] : []
+}
+
+/** ARCH-007 D4：候选位置条目所属包（条目 `package` 优先；单包锚可省略）。 */
+const anchorEntryPackageOf = (entry, spec) => {
+  if (typeof entry?.package === 'string' && entry.package.trim() !== '') return entry.package
+  const packages = anchorPackageNamesOf(spec)
+  return packages.length === 1 ? packages[0] : null
+}
+
+/**
+ * ARCH-007 D4：锚的「对象归属声明」可由**有序候选位置组**组成。
+ *  - 无 `group` 的条目 = 必须命中的独立声明（旧行为，全部为 required）；
+ *  - 同 `group` 的条目 = 同一契约面的有序候选落点（旧位置在前；首个命中即绿，
+ *    非首命中打印位置漂移 note；全不命中仍红——真删除不被候选放宽吞掉）。
+ * 每个条目可声明自己的 `symbols`，故跨代符号改名也可作为候选落点表达；
+ * `expectSymbol` = 所有候选符号的并集（声明完备性据此核验）。
+ */
+const anchorHostGroupsOf = (spec) => {
+  const entries = (Array.isArray(spec.expectSymbolHost) ? spec.expectSymbolHost : []).filter((entry) => entry !== null && typeof entry === 'object')
+  const required = []
+  const groups = new Map()
+  for (const entry of entries) {
+    const group = typeof entry.group === 'string' && entry.group.trim() !== '' ? entry.group : null
+    if (group === null) required.push(entry)
+    else {
+      if (!groups.has(group)) groups.set(group, [])
+      groups.get(group).push(entry)
+    }
+  }
+  return { entries, required, groups: [...groups.entries()].map(([name, candidates]) => ({ name, candidates })) }
 }
 
 /**
@@ -224,12 +279,18 @@ const declarationGapsOf = (spec) => {
 const symbolHostGapsOf = (spec) => {
   const gaps = []
   const hostMap = spec.expectSymbolHost
+  const packages = anchorPackageNamesOf(spec)
   const malformed = !Array.isArray(hostMap) || hostMap.length === 0
-    || hostMap.some((entry) => typeof entry?.file !== 'string' || entry.file.trim() === ''
+    || hostMap.some((entry) => anchorEntryPackageOf(entry, spec) === null
+      || anchorEntryFilesOf(entry).length === 0
+      || (typeof entry.group === 'string' && entry.group.trim() === '')
       || !Array.isArray(entry.symbols) || entry.symbols.length === 0
       || entry.symbols.some((token) => typeof token !== 'string' || token.trim() === ''))
   if (malformed) return ['expectSymbolHost']
-  if (hostMap.some((entry) => !(spec.expectFile ?? []).includes(entry.file))) gaps.push('expectSymbolHost.file∉expectFile')
+  if (hostMap.some((entry) => !packages.includes(anchorEntryPackageOf(entry, spec)))) gaps.push('expectSymbolHost.package∉expectPackage')
+  if (hostMap.some((entry) => anchorEntryFilesOf(entry).some((file) => !(spec.expectFile ?? []).includes(file)))) gaps.push('expectSymbolHost.file∉expectFile')
+  const groups = anchorHostGroupsOf(spec)
+  if (groups.required.length === 0 && groups.groups.length === 0) gaps.push('expectSymbolHost.no-requirement')
   const mapped = [...new Set(hostMap.flatMap((entry) => entry.symbols))].sort()
   const declared = [...new Set(spec.expectSymbol ?? [])].sort()
   if (mapped.join('|') !== declared.join('|')) gaps.push('expectSymbolHost.symbols≠expectSymbol')
@@ -303,10 +364,12 @@ const versionTripleOf = (version) => {
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version))
   return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : [0, 0, 0]
 }
-const baselineIncludes = (since) => {
-  const [a, b] = [versionTripleOf(since), versionTripleOf(targetBaseline.id)]
+/** `since` ≤ `version`（major.minor.patch 数值序，预发布后缀不参与）。单点谓词（P5）。 */
+const versionAtLeast = (since, version) => {
+  const [a, b] = [versionTripleOf(since), versionTripleOf(version)]
   return a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] <= b[2])))
 }
+const baselineIncludes = (since) => versionAtLeast(since, targetBaseline.id)
 /**
  * 版本一致性判据的关键包 = `dsh` CLI + **S7 直读包**（`dsh-api-remotes` /
  * `dsh-api-session-controller` / `dsh-client-ui-model-selection` / `dsh-llm` /
@@ -340,9 +403,10 @@ const CTX_SERVICES_BASELINE = {
   agentPresets: ['composedPreset'],
 }
 /**
- * 宿主转发事件白名单（宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表 28 项，逐字逐序；
+ * 宿主转发事件白名单（宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表 30 项，逐字逐序；
  * ARCH-005 R0 随 0.2.0-rc.2 主基线登记刷新——19→27 纯增量；ARCH-006 随 0.2.1-rc.2 主基线
- * 登记刷新——27→28 纯增量（新增 plugin-market/changed），新增项与 lib/host-abi/events.js
+ * 登记刷新——27→28（新增 plugin-market/changed）；ARCH-007 随 0.2.2-rc.1 主基线登记刷新——
+ * 28→30 纯增量（llm/models-updated / plugin-manager/update-state），新增项与 lib/host-abi/events.js
  * 镜像同步（每项 since 注记在镜像侧）；S7 增强组经 API_REMOTE_FORWARDED_EVENTS 单向消费断言核验：
  * 镜像 ⊆ 宿主实读表，宿主侧超集绿 + 打印增量清单，宿主侧除名消费项即红）。
  */
@@ -367,10 +431,12 @@ const FORWARDED_EVENT_BASELINE = [
   'cordis/inspect-query',
   'cordis/inspect-query-resolved',
   'llm/adapters-updated',
+  'llm/models-updated',
   'permission-presets/catalog-changed',
   'plugin-manager/changed',
   'plugin-manager/install-log',
   'plugin-manager/install-state',
+  'plugin-manager/update-state',
   'plugin-market/changed',
   'settings/document-updated',
   'schedule/changed',
@@ -481,13 +547,16 @@ const HOST_SHAPE_ANCHORS = [
   {
     face: 'sessionController.selectModel',
     since: '0.1.5',
-    anchor: "dsh-api-session-controller 的 lib/index.js 的 selectModel(request) 面；语义锚 lib/types/agent.js 的 selectionFor(agent) → stateOf(session, 'modelSelection') → projectionState.pending（S7 增强组核验 selectionFor(agent) / stateOf(agent.session, 'modelSelection') / projectionState.pending 三项；selectModel 面不在 S7 判据内——由 lib/host-abi/llm-selection.js 消费面判据覆盖）",
+    anchor: "dsh-api-session-controller 的 lib/index.js 的 selectModel(request) 面；语义锚旧落点 lib/types/agent.js 的 selectionFor(agent) → stateOf(session, 'modelSelection') → projectionState.pending；0.2.2 起语义由 lib/types/commands.js 的 agent.model.select(selected) / serializeImageAdmission(agent / resolveAgent(request.sessionId) 承接（S7 增强组按命中的候选落点逐项核验；selectModel 面不在 S7 判据内——由 lib/host-abi/llm-selection.js 消费面判据覆盖）",
     expectPackage: 'dsh-api-session-controller',
-    expectFile: ['lib/index.js', 'lib/types/agent.js'],
-    expectSymbol: ['selectModel(', 'selectionFor(', 'stateOf('],
+    expectFile: ['lib/index.js', 'lib/types/agent.js', 'lib/types/commands.js'],
+    expectSymbol: ['selectModel(', 'selectionFor(', 'stateOf(', 'agent.model.select(selected)', 'serializeImageAdmission(agent', 'resolveAgent(request.sessionId)'],
     expectSymbolHost: [
       { file: 'lib/index.js', symbols: ['selectModel('] },
-      { file: 'lib/types/agent.js', symbols: ['selectionFor(', 'stateOf('] },
+      // ARCH-007 D4：同一契约面的**有序候选落点组**（旧位置在前）。
+      // 首个命中即绿；非首命中打印位置漂移 note；全不命中仍红（真删除不被放宽）。
+      { group: 'selectModel-selection', file: 'lib/types/agent.js', symbols: ['selectionFor(', 'stateOf('] },
+      { group: 'selectModel-selection', file: 'lib/types/commands.js', symbols: ['agent.model.select(selected)', 'serializeImageAdmission(agent', 'resolveAgent(request.sessionId)'] },
     ],
     consumer: ['lib/host-abi/llm-selection.js'],
     signatures: ['controller.selectModel({ ...selection })', "get('sessionController')"],
@@ -495,11 +564,14 @@ const HOST_SHAPE_ANCHORS = [
   {
     face: 'sessionProjections.stateOf(session, "modelSelection") → {lastUsed, pending}',
     since: '0.1.5',
-    anchor: "dsh-api-session-controller 的 lib/types/agent.js：stateOf(session, 'modelSelection') → projectionState.pending（S7 增强组逐字核验）",
-    expectPackage: 'dsh-api-session-controller',
-    expectFile: ['lib/types/agent.js'],
-    expectSymbol: ['stateOf(', 'projectionState.pending'],
-    expectSymbolHost: [{ file: 'lib/types/agent.js', symbols: ['stateOf(', 'projectionState.pending'] }],
+    anchor: "dsh-api-session-controller 的 lib/types/agent.js：stateOf(session, 'modelSelection') → projectionState.pending（旧落点）；0.2.2 起该投影面迁至 dsh-agent 的 lib/types/model-selection.js：modelSelectionProjectionDefinition → state.pending → recordedSelection()（S7 增强组按命中的候选落点逐项核验）",
+    expectPackage: ['dsh-api-session-controller', 'dsh-agent'],
+    expectFile: ['lib/types/agent.js', 'lib/types/model-selection.js'],
+    expectSymbol: ['stateOf(', 'projectionState.pending', 'modelSelectionProjectionDefinition', 'state.pending', 'recordedSelection()'],
+    expectSymbolHost: [
+      { group: 'modelSelection-projection', package: 'dsh-api-session-controller', file: 'lib/types/agent.js', symbols: ['stateOf(', 'projectionState.pending'] },
+      { group: 'modelSelection-projection', package: 'dsh-agent', file: 'lib/types/model-selection.js', symbols: ['modelSelectionProjectionDefinition', 'state.pending', 'recordedSelection()'] },
+    ],
     consumer: ['lib/prestep.js'],
     signatures: ["stateOf(agent?.session, 'modelSelection')", 'state.pending'],
     // FIX-043 批 F（`:270` 保留项的逐处判定 → **维持保留**，理由如下；原址 `175d3e1:tests/host-contract.mjs` 的
@@ -717,11 +789,21 @@ const hostTarget = (() => {
   const mismatches = versions
     ? HOST_KEY_PACKAGES.filter((name) => versions[name] !== expectedOf(name)).map((name) => `${name}@${versions[name] ?? 'absent'} ≠ ${expectedOf(name)}`)
     : []
+  // ARCH-007 A：S7 7a 分代判定的参照 = **靶子宿主树实读版本**（非所选基线）。
+  // 单点来源 = 靶子树 `dsh/package.json`（npm-global 树的 dsh 主包在 scope 外两层，经
+  // dshRoot 只读读取）；读到哪个文件一并记录供诊断打印。缺失/坏 JSON ⇒ null（不拿基线顶替）。
+  const hostVersionPathsOf = (candidate) => [
+    join(candidate.root, 'dsh', 'package.json'),
+    ...(candidate.dshRoot ? [join(candidate.dshRoot, 'package.json')] : []),
+  ]
+  const hostVersionPath = hit ? hostVersionPathsOf(hit).find((path) => existsSync(path)) ?? null : null
   return {
     root: hit?.root ?? null,
     origin: hit?.origin ?? null,
     candidates,
     versions,
+    hostVersion: versions?.dsh ?? null,
+    hostVersionPath,
     versionsOf: (root) => versionsOf(candidates.find((candidate) => candidate.root === root) ?? { root }),
     mismatches,
   }
@@ -731,6 +813,10 @@ if (hostTarget.root) {
   const others = hostTarget.candidates.filter(({ root }) => root !== hostTarget.root).map(({ origin }) => origin)
   console.log(`      · 靶子 = ${hostTarget.root}（来源 ${hostTarget.origin}；候选 ${hostTarget.candidates.length} 个${others.length > 0 ? `，降序取首命中，未选：${others.join(' / ')}` : ''}）`)
   console.log(`      · 靶子关键包版本: ${versionLine(hostTarget.versions)}（基线[${targetBaseline.id}/${targetBaseline.status}] dsh ${targetBaseline.dsh} / dsh-* ${targetBaseline.dshPackages}）`)
+  // ARCH-007 A：分代判定的靶子版本来源单点化——只认靶子树 package.json 实读，不拿基线值顶替。
+  console.log(hostTarget.hostVersion === null
+    ? '      · 靶子宿主版本: 不可读（靶子树缺 dsh/package.json 或 JSON 坏）→ S7 7a 分代判定 fail-closed：全量期望，不按基线代际放宽'
+    : `      · 靶子宿主版本（靶子树 package.json 实读）: ${hostTarget.hostVersion} ← ${hostTarget.hostVersionPath}（S7 7a 分代 skip 的参照；非所选基线 ${targetBaseline.id}）`)
   for (const candidate of hostTarget.candidates) {
     if (candidate.root === hostTarget.root) continue
     console.log(`      · 未选候选 ${candidate.origin}: ${versionLine(hostTarget.versionsOf(candidate.root))}`)
@@ -743,6 +829,22 @@ if (hostTarget.root) {
   }
 } else {
   console.log('      · 不可达（DSH_HOST_SOURCE 未设且本地无 _npx 缓存）→ S3 宿主侧半边与 S7 组均记 skip（BR-03：静态守卫不依赖宿主）')
+}
+
+// ── ARCH-007 B4 / R-1：分发形态判别（**内容判据**单一实现 lib/host-abi/distribution.js）──
+// 背景：桌面分发是 asar 打包树，整树 **0 个 `.d.ts`**（0.2.2-rc.1 实测），而 npm 解包树
+// 7458 个；`.d.ts` 锚缺席因此分两种性质——分发形态「不可验」vs 真 ABI 位移「missing」。
+// 旧行为把二者混算，且在桌面树直接 ENOENT 崩栈（P8 违反：无结构化 FAIL、无诊断）。
+// 判据只读内容（抽样包 `lib/types/**/*.d.ts` 计数），不看路径/文件名（禁 `app.asar` 启发式）。
+// 消费面：S2（文件/符号锚分型）、S7（7c/7d 声明面读取）、S9b（message.d.ts 锚）——三处
+// 共用同一 predicate，禁各自组合条件（P5）。
+const distribution = hostTarget.root === null ? null : detectHostDistribution(hostTarget.root)
+const typeAnchorUnverifiable = distribution !== null && typeAnchorsUnavailable(distribution)
+if (distribution !== null) {
+  console.log(`      · 分发形态（内容判据）: ${distribution.detected} / 类型声明面 ${distribution.typeAnchors} —— ${distribution.source}`)
+  if (typeAnchorUnverifiable) {
+    note(`S2/S7/S9b 类型声明面: ${distribution.detected} 分发形态（${distribution.source}）→ 类型声明锚改记「不可验（分发形态所致）」而非失败；声明面核验靶子 = npm 形态树（ARCH-007 双形态判别，禁把分发形态当 ABI 位移）`)
+  }
 }
 
 /**
@@ -774,6 +876,86 @@ const hostSourceOf = (() => {
     return cache.get(key)
   }
 })()
+
+/**
+ * ARCH-007 D4：形状锚的宿主侧解析（S2/S7 单一实现路径）。
+ *
+ * 语义 = 「对象归属声明」：
+ *  - 无 `group` 的条目是独立 required 声明，必须全部命中；
+ *  - 同 `group` 的条目是同一契约面的**有序候选落点**，首个命中即绿；
+ *    非首命中 → 位置漂移（P8 note，不判红）；全候选不命中 → 逐项缺失（真删除仍红）。
+ * 候选条目可有自己的 `package` / `files` / `symbols`，故跨包迁移 + 符号改名也能
+ * 表达为“位置候选”，而不是把旧符号硬套到新代码上（P1：以宿主实读为准）。
+ * `.d.ts` 在 bundled 分发形态整体缺席时仍记「不可验」，不混入 missing（ARCH-007 分型）。
+ */
+const resolveAnchorHost = (spec) => {
+  const packages = anchorPackageNamesOf(spec)
+  const fallbackPackage = packages.length === 1 ? packages[0] : null
+  const evaluate = (entry) => {
+    const packageName = anchorEntryPackageOf(entry, spec) ?? '<expectPackage 未声明>'
+    const files = anchorEntryFilesOf(entry)
+    const absent = files.filter((file) => !hostTarget.root || !existsSync(join(hostTarget.root, packageName, file)))
+    const unavailable = absent.length === files.length && files.length > 0
+      && typeAnchorUnverifiable && files.every((file) => isTypeDeclarationFile(file))
+    const symbols = Array.isArray(entry.symbols) ? entry.symbols : []
+    const missingSymbols = absent.length === 0
+      ? symbols.filter((symbol) => !files.some((file) => (hostSourceOf(packageName, file) ?? '').includes(symbol)))
+      : []
+    return {
+      entry, packageName, files, symbols,
+      absent, unavailable, missingSymbols,
+      location: `${packageName}/${files.join(' + ') || '<未声明文件>'}`,
+      hit: absent.length === 0 && missingSymbols.length === 0,
+    }
+  }
+  const groups = anchorHostGroupsOf(spec)
+  const required = groups.required.map(evaluate)
+  const candidateGroups = groups.groups.map(({ name, candidates }) => {
+    const evaluated = candidates.map(evaluate)
+    const hitIndex = evaluated.findIndex((candidate) => candidate.hit)
+    return { name, evaluated, hitIndex, hit: hitIndex >= 0 ? evaluated[hitIndex] : null }
+  })
+  const missingFiles = []
+  const unavailableFiles = []
+  const absentSymbols = []
+  const unavailableSymbols = []
+  for (const entry of required) {
+    if (entry.unavailable) unavailableFiles.push(entry.location)
+    else if (entry.absent.length > 0) missingFiles.push(entry.location)
+    else absentSymbols.push(...entry.missingSymbols.map((symbol) => `${entry.location} :: ${symbol}`))
+  }
+  for (const group of candidateGroups) {
+    if (group.hit !== null) continue
+    const allUnavailable = group.evaluated.every((candidate) => candidate.unavailable)
+    if (allUnavailable) {
+      unavailableFiles.push(...group.evaluated.map((candidate) => candidate.location))
+      unavailableSymbols.push(...group.evaluated.flatMap((candidate) => candidate.symbols.map((symbol) => `${candidate.location} :: ${symbol}`)))
+      continue
+    }
+    for (const candidate of group.evaluated) {
+      if (candidate.absent.length > 0) missingFiles.push(candidate.location)
+      else absentSymbols.push(...candidate.missingSymbols.map((symbol) => `${candidate.location} :: ${symbol}`))
+    }
+  }
+  const drifts = candidateGroups
+    .filter((group) => group.hitIndex > 0)
+    .map((group) => ({ group: group.name, from: group.evaluated[0], to: group.hit }))
+  return {
+    required, groups: candidateGroups, missingFiles, unavailableFiles,
+    absentSymbols, unavailableSymbols, drifts,
+    checkCount: required.length + candidateGroups.length,
+    candidateCount: required.length + candidateGroups.reduce((sum, group) => sum + group.evaluated.length, 0),
+  }
+}
+
+/** ARCH-007 D4：位置漂移的可读说明（P8——非首命中必须可见，但不得判红）。 */
+const anchorDriftNotesOf = (resolution, face) => resolution.drifts.map(({ group, from, to }) => {
+  const sameSymbols = from.symbols.length === to.symbols.length && from.symbols.every((symbol) => to.symbols.includes(symbol))
+  if (sameSymbols) {
+    return `S2 形状锚点: ${face}（${group}）\`${from.symbols.join(', ')}\` 位置漂移：\`${from.location}\` → \`${to.location}\`（宿主内部布局变化，契约面未变）`
+  }
+  return `S2 形状锚点: ${face}（${group}）位置漂移：\`${from.location}\` → \`${to.location}\`（宿主内部布局/符号名变化：\`${from.symbols.join(', ')}\` → \`${to.symbols.join(', ')}\`；契约面由新落点承接）`
+})
 
 // ── 基线档案单源消费说明（ARCH-005 R3）────────────────────────────────────────
 // R0 批此处曾持「基线副本机器一致性守卫」（HOST_VERSION_BASELINE 副本 vs 权威文件
@@ -845,11 +1027,12 @@ console.log('S1 契约快照四类面（宿主面形状漂移即红；宿主新�
     && probes.map((item) => item.name.slice(4)).sort().join(',') === Object.keys(CTX_SERVICES).sort().join(','))
 }
 
-// S1e 转发事件白名单（28 项 + 镜像 parity + 判定函数；ARCH-005 R0 随 0.2.0-rc.2 基线登记刷新，
-//     ARCH-006 随 0.2.1-rc.2 基线登记刷新——27→28 吸收 plugin-market/changed）
+// S1e 转发事件白名单（30 项 + 镜像 parity + 判定函数；ARCH-005 R0 随 0.2.0-rc.2 基线登记刷新，
+//     ARCH-006 随 0.2.1-rc.2 基线登记刷新——27→28 吸收 plugin-market/changed；
+//     ARCH-007 随 0.2.2-rc.1 基线登记刷新——28→30 吸收 llm/models-updated + plugin-manager/update-state）
 {
-  check('S1e 契约快照: FORWARDED_EVENT_ALLOWLIST === 宿主 28 项基线（逐字逐序——锚宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表，0.2.1-rc.2 主基线）',
-    FORWARDED_EVENT_ALLOWLIST.length === 28 && deepEqual(FORWARDED_EVENT_ALLOWLIST, FORWARDED_EVENT_BASELINE), FORWARDED_EVENT_ALLOWLIST)
+  check(`S1e 契约快照: FORWARDED_EVENT_ALLOWLIST === 宿主 ${FORWARDED_EVENT_BASELINE.length} 项基线（逐字逐序——锚宿主 dsh-api-remotes 的 lib/types/remote-events.js 事件表，0.2.2-rc.1 主基线）`,
+    FORWARDED_EVENT_ALLOWLIST.length === FORWARDED_EVENT_BASELINE.length && deepEqual(FORWARDED_EVENT_ALLOWLIST, FORWARDED_EVENT_BASELINE), FORWARDED_EVENT_ALLOWLIST)
   const mirrorLiteral = arrayOf(clientStripped, 'FORWARDED_EVENT_ALLOWLIST = [')
   let mirror = null
   if (mirrorLiteral) {
@@ -875,7 +1058,7 @@ console.log('S2 宿主源码形状锚点（P10-④：形状签名 + 宿主源码
 //   **可诊断性**：声明面缺口与宿主缺失清单均结构化输出（P8，不静默吞错）。
 {
   const anchorFieldsOf = (spec) => ({
-    pkg: typeof spec.expectPackage === 'string' ? [spec.expectPackage] : (spec.expectPackage ?? []),
+    pkg: anchorPackageNamesOf(spec),
     files: spec.expectFile ?? [],
     symbols: spec.expectSymbol ?? [],
   })
@@ -891,22 +1074,21 @@ console.log('S2 宿主源码形状锚点（P10-④：形状签名 + 宿主源码
     check(`S2 形状锚点: ${anchorCase.face} 锚文本含其声明的对象归属（expectPackage/expectFile/expectSymbol 逐项逐字在位——字段与锚脱钩即红）`,
       undeclared.length === 0, { undeclared, anchor: anchorCase.anchor })
     if (hostTarget.root && baselineIncludes(anchorCase.since)) {
-      const absent = declared.pkg.flatMap((name) => declared.files.filter((file) => !existsSync(join(hostTarget.root, name, file))).map((file) => `${name}/${file}`))
-      check(`S2 形状锚点: ${anchorCase.face} 声明的宿主包×文件在宿主靶子中存在（捏造包/文件即红；靶子 ${hostTarget.origin}）`,
-        absent.length === 0, { absent, hostRoot: hostTarget.root })
-      // 符号宿主可达性（FIX-043 批 E / R1 P1-2 取处置 a；M-B4 同形：真包真文件 + 捏造符号曾 exit 0）。
-      // 声明面不完备时包名可能非字符串 ⇒ 用安全标签（上方完备性判据已判红，此处不裸抛、可诊断）。
-      const declaredPackage = typeof anchorCase.expectPackage === 'string' ? anchorCase.expectPackage : '<expectPackage 未声明>'
-      // FIX-043 批 F / R2 P2-1 收口：`expectSymbolHost` **省略/畸形**时先归一为空表，再 `.flatMap`——
-      //   否则运行时裸抛 TypeError 并**截断其后全部诊断输出**（判据仍 fail-closed：对偶的
-      //   `symbolHostGapsOf` 完备性判据已在上方判红，故本处只承担「不崩栈 + 诊断完整」的 P8 义务）。
-      //   `entry.symbols` 同法兜底（畸形条目不得击穿诊断面）；`hostSourceOf` 对非字符串 file 已返 null。
-      const symbolHostMap = Array.isArray(anchorCase.expectSymbolHost) ? anchorCase.expectSymbolHost : []
-      const absentSymbols = symbolHostMap.flatMap((entry) => (Array.isArray(entry?.symbols) ? entry.symbols : [])
-        .filter((symbol) => !(hostSourceOf(declaredPackage, entry.file) ?? '').includes(symbol))
-        .map((symbol) => `${declaredPackage}/${entry.file} :: ${symbol}`))
-      check(`S2 形状锚点: ${anchorCase.face} 声明的宿主符号逐字在宿主源码内（捏造符号即红；靶子 ${hostTarget.origin}）`,
-        absentSymbols.length === 0, { absentSymbols, hostRoot: hostTarget.root })
+      // ARCH-007 D4：按“有序候选落点组”解析（旧位置在前；首个命中即绿；全不命中仍红）。
+      const resolution = resolveAnchorHost(anchorCase)
+      check(`S2 形状锚点: ${anchorCase.face} 声明的宿主包×文件在宿主靶子中存在（候选落点组：旧位置在前；全候选缺失才红；靶子 ${hostTarget.origin}；分发形态 ${distribution === null ? 'unknown' : distribution.detected}）`,
+        resolution.missingFiles.length === 0, { absent: resolution.missingFiles, unavailableFiles: resolution.unavailableFiles, hostRoot: hostTarget.root })
+      if (resolution.unavailableFiles.length > 0) {
+        note(`S2 形状锚点: ${anchorCase.face} 的 ${resolution.unavailableFiles.length} 个类型声明候选（${resolution.unavailableFiles.join(', ')}）在 ${distribution.detected} 分发形态下整体缺席 → 记「不可验」而非缺失（ARCH-007 分发形态判据；真位移请对 npm 形态树核验）`)
+      }
+      // 符号宿主可达性：逐候选条目核验；组内首个命中即绿，全不命中才把各候选的
+      // 缺失符号逐项报出（候选放宽不得吞掉真删除——反向回归夹具覆盖）。
+      check(`S2 形状锚点: ${anchorCase.face} 声明的宿主符号逐字在宿主源码内（捏造符号即红；候选落点组 ${resolution.checkCount} 组 / ${resolution.candidateCount} 个候选；靶子 ${hostTarget.origin}）`,
+        resolution.absentSymbols.length === 0, { absentSymbols: resolution.absentSymbols, unavailableSymbols: resolution.unavailableSymbols, hostRoot: hostTarget.root })
+      for (const drift of anchorDriftNotesOf(resolution, anchorCase.face)) driftNote(drift)
+      if (resolution.unavailableSymbols.length > 0) {
+        note(`S2 形状锚点: ${anchorCase.face} 的符号宿主面在 ${distribution.detected} 分发形态下全为不可验类型声明（${resolution.unavailableSymbols.join(', ')}）→ 符号级核验记「不可验」（ARCH-007；npm 形态树核验）`)
+      }
     } else if (hostTarget.root) {
       // ARCH-005 R3 分代：锚形态定型于更高代际——对所选基线的宿主侧核验记可见 skip
       // （静态判据——锚形态/声明完备性/消费签名——不受影响恒跑；非静默降级）。
@@ -1163,28 +1345,59 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
     note('S7 增强靶子: 宿主 checkout 不可达（见上方「宿主靶子解析」行）→ 跳过（静态守卫不依赖宿主；CI 第①步同理）')
   } else {
     const hostRoot = hostTarget.root
-    const hostRead = (...parts) => readFileSync(join(hostRoot, ...parts), 'utf8')
+    // **不崩栈**（ARCH-007 P8 修复）：旧实现 `readFileSync(join(...))` 在 asar 分发树（整树
+    // 无 `.d.ts`）首个声明面读取即 ENOENT 裸抛，5 条 FAIL 后栈溢出、其后全部诊断丢失。
+    // 返回 null = 该面不在靶子树内 ⇒ 由 readFace 按其性质记「不可验」或结构化 FAIL。
+    const hostRead = (...parts) => {
+      const path = join(hostRoot, ...parts)
+      return existsSync(path) ? readFileSync(path, 'utf8') : null
+    }
+    /** 面读取分型（S2 同 predicate）：`.d.ts` + bundled ⇒ 不可验 note；其余缺席 ⇒ 显式 FAIL。 */
+    const readFace = (label, packageName, ...parts) => {
+      const text = hostRead(packageName, ...parts)
+      if (text !== null) return text
+      const file = parts.join('/')
+      if (typeAnchorUnverifiable && isTypeDeclarationFile(file)) {
+        note(`S7 增强: ${label} 的类型声明文件 ${packageName}/${file} 在 ${distribution.detected} 分发形态下整体缺席 → 「不可验」（ARCH-007 分发形态判据；非契约漂移，声明面核验靶子 = npm 形态树）`)
+      } else {
+        check(`S7 增强: ${label} 宿主文件可读（${packageName}/${file}——包存在而文件消失 = 契约漂移）`, false,
+          { packageName, file, distribution: distribution === null ? 'unknown' : distribution.detected, hostRoot })
+      }
+      return null
+    }
     // 7a 转发事件白名单宿主声明源（ARCH-005 R0：全等 → **单向消费断言**——设计 §2-B 四维-c / F-D：
     //   判据 = 镜像 ⊆ 宿主实读表（宿主侧除名消费事件即红）；宿主侧超集（additive 增量）为绿 +
     //   打印增量清单（吸收留痕——基线登记义务的可见提示，不制造人工刷新红）。引号形态以靶子
     //   实读为准（0.2.0 树该文件为单引号面——复审 R1 P3-3 仲裁，现行正则可命中）。
     //   ARCH-005 R3：期望集按**逐事件 since** 分代（注记面 = lib/host-abi/events.js 镜像数组行内
-    //   注记，R0 登记形态；解析完备性由「锚分代」判据组锁定）——所选基线低于事件 since 时该事件
-    //   不入期望集（frozen 基线下 0.2.0 新增 8 项不期望存在于 0.1.5 宿主表 ⇒ 判 19 ⊆ 19），
-    //   宿主侧超集照旧绿 + 打印增量，消费项除名即红。
-    const eventsSource = hostRead('dsh-api-remotes', 'lib', 'types', 'remote-events.js')
-    const hostEvents = [...eventsSource.matchAll(/event:\s*'([^']+)'/g)].map((match) => match[1])
-    const expectedMirror = FORWARDED_EVENT_ALLOWLIST.filter((event) => baselineIncludes(FORWARDED_EVENT_SINCE.get(event)))
-    const futureMirror = FORWARDED_EVENT_ALLOWLIST.filter((event) => !baselineIncludes(FORWARDED_EVENT_SINCE.get(event)))
-    const mirrorMissing = expectedMirror.filter((event) => !hostEvents.includes(event))
-    check(`S7 增强: 白名单镜像 ⊆ 宿主 API_REMOTE_FORWARDED_EVENTS（单向消费断言——所选基线 ${targetBaseline.id} 期望 ${expectedMirror.length} 项全部在宿主 ${hostEvents.length} 项实读表内；宿主除名消费事件即红）`, mirrorMissing.length === 0, mirrorMissing)
-    if (futureMirror.length > 0) {
-      note(`S7 增强: 镜像 ${futureMirror.length} 项 since > 所选基线 ${targetBaseline.id}，不入本基线期望集（ARCH-005 R3 分代判定——期望集按所选基线的 since 注记面派生，不对宿主 ${hostEvents.length} 项实读表的代际作判定）: [${futureMirror.join(', ')}]`)
+    //   注记，R0 登记形态；解析完备性由「锚分代」判据组锁定）。
+    //   ARCH-007 A（P1 事实修正）：分代 skip 的参照必须是**靶子宿主树实读版本**，不是所选基线——
+    //   本判据问的是「这份宿主树声明了什么」。基线 0.2.2 比 0.2.1 靶子新时若按基线分代，会把
+    //   0.2.2 才有的两项当成 0.2.1 靶子必需项 ⇒ 把真实靶子代际差误报成 D1 回归（假红）。
+    //   靶子 0.2.1 + 镜像 30 ⇒ 两条 since 0.2.2-rc.1 逐项可见 skip（文案含 since/靶子版本/事件名，
+    //   P8 禁静默）；靶子 0.2.2 ⇒ 两条强制在场，缺失即红；靶子版本不可读 ⇒ fail-closed 全量期望。
+    const eventsSource = readFace('转发事件白名单宿主声明源', 'dsh-api-remotes', 'lib', 'types', 'remote-events.js')
+    if (eventsSource !== null) {
+      const hostEvents = [...eventsSource.matchAll(/event:\s*'([^']+)'/g)].map((match) => match[1])
+      const targetHostVersion = hostTarget.hostVersion
+      const targetSkips = targetHostVersion === null
+        ? []
+        : FORWARDED_EVENT_ALLOWLIST.filter((event) => !versionAtLeast(FORWARDED_EVENT_SINCE.get(event), targetHostVersion))
+      const expectedMirror = FORWARDED_EVENT_ALLOWLIST.filter((event) => !targetSkips.includes(event))
+      const mirrorMissing = expectedMirror.filter((event) => !hostEvents.includes(event))
+      if (targetHostVersion === null) {
+        note('S7 增强 7a: 靶子宿主版本不可读（靶子树 package.json 缺失/损坏）→ 分代判定 fail-closed：按镜像全量期望，不按所选基线代际放宽（ARCH-007 A；P8 可见诊断）')
+      }
+      for (const event of targetSkips) {
+        note(`S7 增强 7a: 事件 ${event}（since ${FORWARDED_EVENT_SINCE.get(event)}）> 靶子宿主版本 ${targetHostVersion}（靶子树 package.json 实读，非基线 ${targetBaseline.id}）→ 不入期望集（可见 skip，P8）`)
+      }
+      check(`S7 增强: 白名单镜像 ⊆ 宿主 API_REMOTE_FORWARDED_EVENTS（单向消费断言——baseline ${targetBaseline.id} / target ${targetHostVersion ?? 'unreadable'} 期望 ${expectedMirror.length}/${FORWARDED_EVENT_ALLOWLIST.length} 项全部在宿主 ${hostEvents.length} 项实读表内；宿主除名消费事件即红）`, mirrorMissing.length === 0, mirrorMissing)
+      const hostExtras = hostEvents.filter((event) => !FORWARDED_EVENT_ALLOWLIST.includes(event))
+      console.log(`      · 宿主侧超集增量（单向断言消化面——待登记进镜像基线）: ${hostExtras.length} 项${hostExtras.length > 0 ? ` [${hostExtras.join(', ')}]` : ''}`)
     }
-    const hostExtras = hostEvents.filter((event) => !FORWARDED_EVENT_ALLOWLIST.includes(event))
-    console.log(`      · 宿主侧超集增量（单向断言消化面——待登记进镜像基线）: ${hostExtras.length} 项${hostExtras.length > 0 ? ` [${hostExtras.join(', ')}]` : ''}`)
     // 7b 字段级 wire schema 宿主声明源（逐面取值级字段表）
-    const hostClientLines = hostRead('dsh-api-remotes', 'lib', 'client.js').split(/\r?\n/)
+    const hostClientSource = readFace('wire schema 宿主声明源', 'dsh-api-remotes', 'lib', 'client.js')
+    const hostClientLines = hostClientSource === null ? [] : hostClientSource.split(/\r?\n/)
     const schemaBlockOf = (fileName) => {
       const line = hostClientLines.findIndex((text) => text.includes(`${fileName}$schema = `))
       if (line < 0) return ''
@@ -1209,7 +1422,8 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
     }
     // FIX-043 批 A：schemaCases 与 S5 锚点符号同源单点派生（约定 = 面键去点 + `_result`，与
     //   S5 的 `anchorHostForm` 判据同一表达式）——消除两处手抄映射的漂移面（P5 单点化）。
-    const schemaCases = Object.keys(WIRE_SCHEMA_WHITELIST).map((face) => [`${face.replace('.', '_')}_result`, face])
+    // 宿主 client.js 缺席已由 readFace 记结构化 FAIL ⇒ 本组零字段判据（避免 6 面空数组刷屏失败）。
+    const schemaCases = hostClientLines.length === 0 ? [] : Object.keys(WIRE_SCHEMA_WHITELIST).map((face) => [`${face.replace('.', '_')}_result`, face])
     for (const [schemaName, face] of schemaCases) {
       if (!baselineIncludes(WIRE_SCHEMA_WHITELIST[face].since)) {
         // ARCH-005 R3 分代：白名单形态定型于更高代际（agentPresets.list 的 {presets} 收缩
@@ -1222,15 +1436,53 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
       const expected = WIRE_SCHEMA_WHITELIST[face].schema
       check(`S7 增强: 宿主 schema ${face} 顶层字段 === 白名单（${fields.join(',')}）`, deepEqual(fields, expected), fields)
     }
-    // 7c 形状锚点源码在位（selectionFor / directoryFor / LlmAdapter 方法行）
-    const agentTypes = hostRead('dsh-api-session-controller', 'lib', 'types', 'agent.js')
-    check("S7 增强: 宿主 selectionFor 锚在位（types/agent.js + stateOf(session, 'modelSelection') + projectionState.pending）",
-      agentTypes.includes('selectionFor(agent)') && agentTypes.includes("stateOf(agent.session, 'modelSelection')") && agentTypes.includes('projectionState.pending'))
-    const directoryTypes = hostRead('dsh-client-ui-model-selection', 'lib', 'types', 'client', 'service.d.ts')
-    check('S7 增强: 宿主 modelDirectories 锚在位（directoryFor(sessionId: SessionId): ModelDirectory）', directoryTypes.includes('directoryFor(sessionId: SessionId): ModelDirectory'))
-    const llmIndex = hostRead('dsh-llm', 'lib', 'index.js')
-    const llmMissing = LLM_ADAPTER_PROTO_BASELINE.filter((method) => !new RegExp(`\\b${method}\\(`).test(llmIndex))
-    check('S7 增强: 宿主 LlmAdapter 契约方法源码在位（6 方法声明——快照基线可溯源）', llmMissing.length === 0, llmMissing)
+    // 7c 形状锚点源码在位（model-selection 面 / directoryFor / LlmAdapter 方法行）——ARCH-007 D4：
+    //    候选落点旧位置在前；命中旧落点核验旧符号链，命中新落点核验 0.2.2 承接符号链。
+    //    `.d.ts` 面（directoryFor 所在 service.d.ts）在 bundled 形态下「不可验」（note），
+    //    运行时 `.js` 面候选（agent.js / commands.js / model-selection.js）全不命中仍结构化 FAIL（真位移）。
+    const selectionAnchor = HOST_SHAPE_ANCHORS.find((spec) => spec.face === 'sessionController.selectModel')
+    const projectionAnchor = HOST_SHAPE_ANCHORS.find((spec) => spec.face?.startsWith('sessionProjections.stateOf'))
+    const selectionGroup = selectionAnchor ? resolveAnchorHost(selectionAnchor).groups.find((group) => group.name === 'selectModel-selection') : undefined
+    const projectionGroup = projectionAnchor ? resolveAnchorHost(projectionAnchor).groups.find((group) => group.name === 'modelSelection-projection') : undefined
+    const selectionHit = selectionGroup?.hit ?? null
+    const projectionHit = projectionGroup?.hit ?? null
+    const anchorMissing = []
+    const anchorLocations = []
+    if (selectionHit === null) {
+      anchorMissing.push(...(selectionGroup?.evaluated ?? []).flatMap((candidate) => candidate.missingSymbols.map((symbol) => `${candidate.location} :: ${symbol}`)))
+    } else {
+      anchorLocations.push(selectionHit.location)
+      const source = hostSourceOf(selectionHit.packageName, selectionHit.files[0]) ?? ''
+      const expected = selectionHit.files.includes('lib/types/agent.js')
+        ? ['selectionFor(agent)', "stateOf(agent.session, 'modelSelection')", 'projectionState.pending']
+        : ['agent.model.select(selected)', 'serializeImageAdmission(agent', 'resolveAgent(request.sessionId)']
+      anchorMissing.push(...expected.filter((token) => !source.includes(token)).map((token) => `${selectionHit.location} :: ${token}`))
+    }
+    if (projectionHit === null) {
+      anchorMissing.push(...(projectionGroup?.evaluated ?? []).flatMap((candidate) => candidate.missingSymbols.map((symbol) => `${candidate.location} :: ${symbol}`)))
+    } else {
+      anchorLocations.push(projectionHit.location)
+      const source = hostSourceOf(projectionHit.packageName, projectionHit.files[0]) ?? ''
+      const expected = projectionHit.files.includes('lib/types/agent.js')
+        ? ["stateOf(agent.session, 'modelSelection')", 'projectionState.pending']
+        : ['modelSelectionProjectionDefinition', 'state.pending', 'recordedSelection()']
+      anchorMissing.push(...expected.filter((token) => !source.includes(token)).map((token) => `${projectionHit.location} :: ${token}`))
+    }
+    check(`S7 增强: 宿主 model-selection 锚在候选落点组内逐项在位（选择面 + 投影面；命中 ${anchorLocations.join(' / ') || '<无候选命中>'}）`,
+      anchorMissing.length === 0, anchorMissing)
+    if (selectionHit !== null && !selectionHit.files.includes('lib/types/agent.js')) {
+      const from = selectionGroup?.evaluated[0]?.location ?? 'dsh-api-session-controller/lib/types/agent.js'
+      driftNote(`S7 增强: selectionFor 锚位置漂移：\`${from}\` → \`${selectionHit.location}\`（宿主内部布局变化，契约面未变；符号名 selectionFor( → agent.model.select(selected)）`)
+    }
+    const directoryTypes = readFace('modelDirectories 锚（client/service.d.ts）', 'dsh-client-ui-model-selection', 'lib', 'types', 'client', 'service.d.ts')
+    if (directoryTypes !== null) {
+      check('S7 增强: 宿主 modelDirectories 锚在位（directoryFor(sessionId: SessionId): ModelDirectory）', directoryTypes.includes('directoryFor(sessionId: SessionId): ModelDirectory'))
+    }
+    const llmIndex = readFace('LlmAdapter 契约方法源码', 'dsh-llm', 'lib', 'index.js')
+    if (llmIndex !== null) {
+      const llmMissing = LLM_ADAPTER_PROTO_BASELINE.filter((method) => !new RegExp(`\\b${method}\\(`).test(llmIndex))
+      check('S7 增强: 宿主 LlmAdapter 契约方法源码在位（6 方法声明——快照基线可溯源）', llmMissing.length === 0, llmMissing)
+    }
     // 7d（FIX-048）InputState 形状锚（P10-④ 的静态半边：客户端输入快照桩形态
     //  锚定宿主源码）。FIX-048 根因 = 宿主 0.1.5-rc.1 M2 附件统一编址后
     //  InputState 以 attachmentIds 承载附件（image/file 统一），插件只读旧
@@ -1240,18 +1492,24 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
     //  形态回落策略，非机械改码）。kind 解析面（方案 A 依赖）与 kind 判别字段
     //  一并锚定，与服务面消费（lib/client.js 的 conversation.resolveDraftAttachments）
     //  构成同源证据链。
-    const inputContract = hostRead('dsh-client-ui-conversation', 'lib', 'types', 'client', 'contract', 'input.d.ts')
-    const inputStateBlock = (inputContract.match(/export interface InputState \{[\s\S]*?\n\}/) ?? [''])[0]
-    check('S7 增强: 宿主 InputState 含 attachmentIds 字段声明（FIX-048 正向锚——M2 统一编址形态）',
-      inputStateBlock.includes('readonly attachmentIds: readonly DraftAttachmentId[]'))
-    check('S7 增强: 宿主 InputState 契约文件零 imageIds 字段声明（FIX-048 负向锚——重现即红，契约再漂移需人工评估）',
-      inputStateBlock !== '' && !/readonly imageIds\s*:/.test(inputContract))
-    const conversationService = hostRead('dsh-client-ui-conversation', 'lib', 'types', 'client', 'service.d.ts')
-    check('S7 增强: 宿主 conversation 服务声明 resolveDraftAttachments kind 解析面（FIX-048 方案 A 面锚）',
-      conversationService.includes('resolveDraftAttachments(ids: readonly DraftAttachmentId[]): readonly ComposerAttachment[]'))
-    const composerSlots = hostRead('dsh-client-ui-conversation', 'lib', 'types', 'client', 'contract', 'slots.d.ts')
-    check("S7 增强: 宿主 ComposerAttachment kind 判别字段在位（FIX-048 kind 语义锚——kind: 'image' | kind: 'file'）",
-      composerSlots.includes("kind: 'image'") && composerSlots.includes("kind: 'file'"))
+    const inputContract = readFace('InputState 正向/负向锚', 'dsh-client-ui-conversation', 'lib', 'types', 'client', 'contract', 'input.d.ts')
+    if (inputContract !== null) {
+      const inputStateBlock = (inputContract.match(/export interface InputState \{[\s\S]*?\n\}/) ?? [''])[0]
+      check('S7 增强: 宿主 InputState 含 attachmentIds 字段声明（FIX-048 正向锚——M2 统一编址形态）',
+        inputStateBlock.includes('readonly attachmentIds: readonly DraftAttachmentId[]'))
+      check('S7 增强: 宿主 InputState 契约文件零 imageIds 字段声明（FIX-048 负向锚——重现即红，契约再漂移需人工评估）',
+        inputStateBlock !== '' && !/readonly imageIds\s*:/.test(inputContract))
+    }
+    const conversationService = readFace('conversation 服务声明 resolveDraftAttachments', 'dsh-client-ui-conversation', 'lib', 'types', 'client', 'service.d.ts')
+    if (conversationService !== null) {
+      check('S7 增强: 宿主 conversation 服务声明 resolveDraftAttachments kind 解析面（FIX-048 方案 A 面锚）',
+        conversationService.includes('resolveDraftAttachments(ids: readonly DraftAttachmentId[]): readonly ComposerAttachment[]'))
+    }
+    const composerSlots = readFace('ComposerAttachment kind 判别字段', 'dsh-client-ui-conversation', 'lib', 'types', 'client', 'contract', 'slots.d.ts')
+    if (composerSlots !== null) {
+      check("S7 增强: 宿主 ComposerAttachment kind 判别字段在位（FIX-048 kind 语义锚——kind: 'image' | kind: 'file'）",
+        composerSlots.includes("kind: 'image'") && composerSlots.includes("kind: 'file'"))
+    }
     /**
      * 7e（FIX-057 / ARCH-004 域 8）：域 8 代际自检依赖宿主**两条不同的**解析路径——
      * 宿主侧「裸 Node 路径序」读安装副本、插件侧「替换层路由」读实际加载副本。本组把
@@ -1464,7 +1722,11 @@ console.log('S9 插件名单源守卫（FIX-055 P3-2）+ 宿主锚守卫（FIX-0
     { id: 'admission-source', package: 'dsh-session-format-v3-to-v4', file: 'lib/index.js', line: prestepAnchorLines.admissionSource, window: 6, face: 'v4 source 准入拒收串（source()）', patterns: [/producer-owned source kind/, /value\["kind"\] === "plugin"/] },
     { id: 'producer-kind-fallback', package: 'dsh-session-format-v3-to-v4', file: 'lib/index.js', line: prestepAnchorLines.producerKind, window: 6, face: 'producerKind 未登记插件回落口径', patterns: [/function producerKind\(plugin, role\)/, /plugin:\$\{plugin\}/] },
     { id: 'rewrite-plugin-source', package: 'dsh-session-format-v3-to-v4', file: 'lib/index.js', line: null, symbol: /function rewritePluginSource/, window: 8, face: '迁移丢弃 plugin 字段（rewritePluginSource，符号级锚）', patterns: [/function rewritePluginSource/, /key !== "plugin"/] },
-    { id: 'persistence-inline-admission', package: 'dsh-session-persistence-jsonl', file: 'lib/worker.cjs', line: prestepAnchorLines.persistenceInline, window: 6, face: '持久化内联同一 admission 判据', patterns: [/producer-owned source kind/, /value\["kind"\] === "plugin"/] },
+    { id: 'persistence-inline-admission', package: 'dsh-session-persistence-jsonl', file: 'lib/worker.cjs', line: prestepAnchorLines.persistenceInline, window: 6, face: '持久化内联同一 admission 判据', patterns: [/producer-owned source kind/, /value\["kind"\] === "plugin"/],
+      // ARCH-007 D4 同族（S9b 锚位置更新，不改判据）：0.2.2 把该内联判据整体下移，
+      // prestep 注释单源行是 0.2.1 实读；宿主内部布局变化时按**内容符号**定位候选窗口。
+      // 仍要求同一 `function source(message)` 内两项内容模式逐字在位；符号/模式缺失照旧红。
+      fallbackSymbol: /^function source\(message\)/ },
     { id: 'message-source-no-catch-all', package: 'dsh-llm', file: 'lib/types/message.d.ts', line: prestepAnchorLines.messageSource, window: 6, face: 'MessageSourceMap 无 catch-all plugin kind 声明', patterns: [/no shared catch-all/, /`plugin` kind/] },
   ]
   const ANCHOR_SINCE = '0.2.1'
@@ -1487,26 +1749,64 @@ console.log('S9 插件名单源守卫（FIX-055 P3-2）+ 宿主锚守卫（FIX-0
       if (!existsSync(packageDir)) continue // 已按包记 skip（CI pinned 树形态）
       const anchorFile = join(packageDir, anchor.file)
       if (!existsSync(anchorFile)) {
-        check(`S9b 宿主锚: ${anchor.id} 宿主文件在位（${anchor.package}/${anchor.file}——包存在而文件消失 = 契约漂移）`, false, { expected: anchorFile })
+        // ARCH-007：类型声明锚（message.d.ts）在 bundled 分发形态下整体缺席 = 分发形态
+        // 所致「不可验」，不是契约漂移（旧行为此处判红，与真位移混算）。npm 形态树 /
+        // 强制 npm 标签下缺席照旧 = 真位移，判红。
+        if (typeAnchorUnverifiable && isTypeDeclarationFile(anchor.file)) {
+          note(`S9b 宿主锚: ${anchor.id} 的类型声明文件 ${anchor.package}/${anchor.file} 在 ${distribution.detected} 分发形态下整体缺席 → 「不可验」（ARCH-007 分发形态判据；npm 形态树核验声明面）`)
+          continue
+        }
+        check(`S9b 宿主锚: ${anchor.id} 宿主文件在位（${anchor.package}/${anchor.file}——包存在而文件消失 = 契约漂移）`, false, { expected: anchorFile, distribution: distribution === null ? 'unknown' : distribution.detected })
         continue
       }
       const lines = readFileSync(anchorFile, 'utf8').split(/\r?\n/)
-      let expectedLine = anchor.line
+      // ARCH-007 D4 同族：锚位置候选（首个为既有单源；`fallbackSymbol` 为宿主布局漂移时的
+      // 内容符号候选）。首个内容模式全命中的候选胜出；非首候选命中 → 可见漂移 note；
+      // 全候选不命中 → 结构化 FAIL 并列出各候选窗口（真删除/真改名不被吞）。
+      const lineCandidates = []
       if (anchor.symbol !== undefined) {
         const symbolIndex = lines.findIndex((line) => anchor.symbol.test(line))
         if (symbolIndex < 0) {
           check(`S9b 宿主锚: ${anchor.id} 符号级锚在位（${anchor.package}/${anchor.file} 未命中 ${String(anchor.symbol)}）`, false, { symbol: String(anchor.symbol) })
           continue
         }
-        expectedLine = symbolIndex + 1
-      } else if (expectedLine === null) {
-        continue // 单源解析失败已在上方判红（避免二次噪声）
+        lineCandidates.push({ line: symbolIndex + 1, source: 'symbol' })
+      } else if (anchor.line !== null) {
+        lineCandidates.push({ line: anchor.line, source: 'prestep-comment' })
       }
-      const start = Math.max(1, expectedLine - anchor.window)
-      const end = Math.min(lines.length, expectedLine + anchor.window)
-      const windowLines = lines.slice(start - 1, end)
-      const missing = anchor.patterns.filter((pattern) => !windowLines.some((line) => pattern.test(line)))
-      check(`S9b 宿主锚: ${anchor.id}（${anchor.face}）命中 ${anchor.package}/${anchor.file} 行 ${start}-${end} 窗口（期望行 ${expectedLine}${anchor.symbol === undefined ? '（prestep 注释单源）' : '（符号级派生）'}；${anchor.patterns.length} 项内容模式全部在场——窗口外即锚漂移）`, missing.length === 0, { expectedLine, lineSource: anchor.symbol === undefined ? 'prestep-comment' : 'symbol', window: [start, end], fileLines: lines.length, missingPatterns: missing.map((pattern) => String(pattern)), actualWindow: windowLines.map((line, index) => `${start + index}: ${line.trim().slice(0, 160)}`) })
+      if (anchor.fallbackSymbol !== undefined) {
+        const fallbackIndex = lines.findIndex((line) => anchor.fallbackSymbol.test(line))
+        if (fallbackIndex >= 0) lineCandidates.push({ line: fallbackIndex + 1, source: 'content-symbol' })
+      }
+      if (lineCandidates.length === 0) continue // 单源解析失败已在上方判红（避免二次噪声）
+      let selected = null
+      const candidateDetails = []
+      for (const candidate of lineCandidates) {
+        const start = Math.max(1, candidate.line - anchor.window)
+        const end = Math.min(lines.length, candidate.line + anchor.window)
+        const windowLines = lines.slice(start - 1, end)
+        const missing = anchor.patterns.filter((pattern) => !windowLines.some((line) => pattern.test(line)))
+        candidateDetails.push({
+          expectedLine: candidate.line, lineSource: candidate.source, window: [start, end],
+          missingPatterns: missing.map((pattern) => String(pattern)),
+          actualWindow: windowLines.map((line, index) => `${start + index}: ${line.trim().slice(0, 160)}`),
+        })
+        if (missing.length === 0) {
+          selected = { ...candidate, start, end }
+          break
+        }
+      }
+      if (selected === null) {
+        check(`S9b 宿主锚: ${anchor.id}（${anchor.face}）在 ${lineCandidates.length} 个位置候选中均未命中（${anchor.package}/${anchor.file}；${anchor.patterns.length} 项内容模式须在同一窗口全部在场——全候选失败即红）`,
+          false, { candidates: candidateDetails, fileLines: lines.length })
+        continue
+      }
+      const driftFrom = lineCandidates[0]
+      if (selected.source !== driftFrom.source) {
+        driftNote(`S9b 宿主锚: ${anchor.id}（${anchor.face}）位置漂移：行 ${driftFrom.line}（${driftFrom.source}）→ 行 ${selected.line}（${selected.source}）（宿主内部布局变化，契约判据未变）`)
+      }
+      check(`S9b 宿主锚: ${anchor.id}（${anchor.face}）命中 ${anchor.package}/${anchor.file} 行 ${selected.start}-${selected.end} 窗口（期望行 ${selected.line}（${selected.source}）；${anchor.patterns.length} 项内容模式全部在场——候选窗口外即锚漂移）`,
+        true, { expectedLine: selected.line, lineSource: selected.source, window: [selected.start, selected.end], fileLines: lines.length })
     }
   }
 }

@@ -46,6 +46,17 @@
  *    未知 --baseline / 非法 --last-seen → 全部 exit 1（雷达自身故障可观测，
  *    不静默）。
  *
+ * ARCH-007（可调测性 / 校验层）：①分发形态维度 —— `--distribution auto|npm|bundled`
+ * 按**内容判据**（抽样包 lib/types 下 .d.ts 计数）识别宿主树形态；bundled 树整树无
+ * `.d.ts` 时类型声明锚记 `unavailable`（分发形态所致、单列、不计入 totalDiffs），真
+ * 位移仍记 `missing`；②`--matrix` 升级代价矩阵（必须改 / 建议改 / 无需改，逐项定位到
+ * package + file + symbol/event）；③**夹具版本零硬编码**：绿色/冻结树版本从 probe
+ * dist-tags 报告的 `registry` 面派生（基线换代 0.2.1→0.2.2 时夹具自动跟随，禁把套件
+ * 测成旧基线假绿）；④双形态夹具：同一绿树 `declarations:false` 变体 = bundled 形态，
+ * 断言「不可验」而非「缺失」，强制 `--distribution npm` 时回到诚实 missing；
+ * ⑤guard 崩溃守卫（ARCH-007 P8）：spawn tests/host-contract.mjs 对 bundled 夹具，
+ * 断言结构化结论 + 显式「不可验」+ 零栈逃逸；真符号位移仍精确 FAIL。
+ *
  * 独立入口：node tests/host-radar.mjs（exit 0/1）。
  */
 import { spawnSync } from 'node:child_process'
@@ -88,11 +99,45 @@ const runRadar = (args, env = {}) => {
   return { status: result.status, stdout: result.stdout, stderr: result.stderr, json }
 }
 
-// ── 合成宿主树（绿树 = 0.2.1-rc.2 主基线形态；mutate 单点突变）────────────────
-// schema 顶层字段 / LlmAdapter 方法 / 锚符号 / 7d 针：按主基线常量手写——绿树
-// 零 diff 断言 = 夹具与权威常量的机器锁（见文件头「判别夹具」段；ARCH-006 随
-// 0.2.1-rc.2 主基线刷新：包表版本 0.2.0-rc.2→0.2.1-rc.2 + llm_listConfigurable
-// Providers schema 6→9 字段 + 事件表随镜像 import 自动 +1）。
+// ── 基线档案面派生（ARCH-007：测试内零版本常量）───────────────────────────────
+// probe dist-tags 报告的 `registry` 面 = HOST_BASELINE_REGISTRY 全量（与 probe 同一
+// 文本提取路径）。绿树/冻结树版本与断言全部由此派生：注册表换代（如 0.2.1→0.2.2）
+// 后夹具自动跟随新主基线；硬编码版本常量只会把套件变成「测旧基线」的假绿。
+const registryRun = runRadar(['--dist-tags', '{}'])
+const REGISTRY = Array.isArray(registryRun.json?.registry) ? registryRun.json.registry : []
+const PRIMARY = REGISTRY.find((entry) => entry?.status === 'primary') ?? null
+const FROZEN = REGISTRY.find((entry) => entry?.status !== 'primary') ?? null
+if (PRIMARY === null || FROZEN === null) {
+  console.error(`host-radar: 无法从 probe dist-tags 报告派生基线档案面（registry=${JSON.stringify(REGISTRY)}；stderr=${registryRun.stderr}）——夹具版本派生失败，fail-closed`)
+  process.exit(1)
+}
+/** 漂移版本（semver build metadata 合法：包表比对是字符串相等，`+drift` 必 mismatch）。 */
+const driftVersion = (version) => `${version}+drift`
+/** 镜像事件 since 注记（与 host-contract 同读 lib/host-abi/events.js 单源；测试侧不硬编码 28/30）。 */
+const EVENT_SINCE = new Map([...readFileSync(join(ROOT_DIR, 'lib', 'host-abi', 'events.js'), 'utf8')
+  .matchAll(/^\s*'([^']+)',\s*\/\/\s*since\s+([^\s（]+)/gm)].map((match) => [match[1], match[2]]))
+/** S9b 行候选族锚行（与 host-contract 同读 lib/prestep.js 注释单源；测试侧不硬编码行号）。 */
+const s9bAnchorLineOf = (regex) => {
+  const match = regex.exec(readFileSync(join(ROOT_DIR, 'lib', 'prestep.js'), 'utf8'))
+  return match === null ? Number.NaN : Number(match[1])
+}
+const S9B_MESSAGE_LINE = s9bAnchorLineOf(/`lib\/types\/message\.d\.ts:(\d+)/)
+const versionTripleOf = (version) => {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version))
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : [0, 0, 0]
+}
+const includesSince = (since, version) => {
+  const [a, b] = [versionTripleOf(since), versionTripleOf(version)]
+  return a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] <= b[2])))
+}
+/** 最高冻结档案项（当前 = 0.2.1；不硬编码 id——注册表换代后夹具自动跟随）。 */
+const FROZEN_HIGHEST = REGISTRY.filter((entry) => entry?.status !== 'primary')
+  .sort((left, right) => left.id.localeCompare(right.id, 'en', { numeric: true })).at(-1) ?? null
+
+// ── 合成宿主树（绿树 = 主基线档案形态；mutate 单点突变）────────────────────────
+// 版本面全部来自 `PRIMARY`/`FROZEN`（probe 报告派生，见上）——基线换代时夹具自动跟随；
+// schema 顶层字段 / LlmAdapter 方法 / 锚符号 / 7d 针：按主基线常量手写——绿树零 diff
+// 断言 = 夹具与权威常量的机器锁（见文件头「判别夹具」段）。
 const KEY_DSH_PACKAGES = [
   'dsh', 'dsh-api-remotes', 'dsh-api-session-controller', 'dsh-client-ui-model-selection',
   'dsh-client-ui-conversation', 'dsh-llm', 'dsh-client-ui-settings', 'dsh-client-locale',
@@ -122,7 +167,14 @@ const NEEDLE_RESOLVE_DRAFT = 'resolveDraftAttachments(ids: readonly DraftAttachm
  *  - dropFiles: [scope 相对路径]：锚/判据面文件缺失（锚 miss）
  *  - dropAgentSymbols: [needle]：锚符号缺失（捏造符号 miss 形态）
  *  - llmMethods: n：LlmAdapter 方法声明数（< 6 → 方法 miss）
+ *  - s9bPersistWorker: true：写合成 dsh-session-persistence-jsonl/lib/worker.cjs（S9b 行候选
+ *    夹具；两项内容模式落在 `function source(message)` 符号窗口内）+ dsh-llm/lib/types/message.d.ts
+ *    （S9b 另一条锚的绿色面；否则绿树会因该文件缺席而多一条无关 FAIL，掩盖单点突变口径）
+ *  - stripS9bPatterns: ['persistence-inline-admission']：把该锚两项内容模式整体改写
+ *    （行号候选 + 内容符号候选全部不命中——S9b「全候选失败 → FAIL」分支的夹具形态）
  *  - inputState: 'green' | 'imageIds'：InputState 7d 针形态（负向锚命中）
+ *  - base: PRIMARY|FROZEN：整树版本面取哪份基线档案项（默认主基线；冻结树用例）
+ *  - declarations: false：整树不写任何 `.d.ts`（bundled 分发形态——类型锚不可验）
  */
 function buildTree(dir, mutate = {}) {
   const scope = join(dir, '@deepseek-ai')
@@ -132,14 +184,16 @@ function buildTree(dir, mutate = {}) {
     writeFileSync(path, content)
   }
   const pkgJson = (name, version) => JSON.stringify({ name: `@deepseek-ai/${name}`, version }, null, 2)
-  const mainVersion = mutate.dshVersion ?? '0.2.1-rc.2'
-  const packagesVersion = mutate.dshPackagesVersion ?? '0.2.1-rc.2'
+  const base = mutate.base ?? PRIMARY
+  const mainVersion = mutate.dshVersion ?? base.dsh
+  const packagesVersion = mutate.dshPackagesVersion ?? base.dshPackages
+  const declarations = mutate.declarations !== false // false = bundled 分发形态（整树无 .d.ts）
   const dropPackages = new Set(mutate.dropPackages ?? [])
   for (const name of KEY_DSH_PACKAGES) {
     if (dropPackages.has(name)) continue
     write(`${name}/package.json`, pkgJson(name, name === 'dsh' ? mainVersion : packagesVersion))
   }
-  for (const [name, version] of [['cordis', mutate.cordis ?? '4.0.5'], ['schemastery', mutate.schemastery ?? '3.18.5']]) {
+  for (const [name, version] of [['cordis', mutate.cordis ?? base.cordis], ['schemastery', mutate.schemastery ?? base.schemastery]]) {
     if (dropPackages.has(name)) continue
     write(`${name}/package.json`, pkgJson(name, version))
   }
@@ -158,14 +212,48 @@ function buildTree(dir, mutate = {}) {
   // S2/S7 锚面（dsh-api-session-controller / dsh-client-ui-model-selection）
   write('dsh-api-session-controller/lib/index.js', `  ${NEEDLE_SELECT_MODEL} {}\n`)
   write('dsh-api-session-controller/lib/types/agent.js', `${NEEDLE_AGENT.filter((needle) => !(mutate.dropAgentSymbols ?? []).includes(needle)).join('\n')}\n`)
-  write('dsh-client-ui-model-selection/lib/types/client/service.d.ts', `  ${NEEDLE_DIRECTORY_FOR}\n`)
-  write('dsh-client-ui-model-selection/lib/types/client/directory.d.ts', '  load()\n')
-  // S7 7d 面（dsh-client-ui-conversation 契约文件）
-  write('dsh-client-ui-conversation/lib/types/client/contract/input.d.ts', mutate.inputState === 'imageIds'
-    ? 'export interface InputState {\n  readonly imageIds: readonly string[];\n}\n'
-    : `export interface InputState {\n  ${NEEDLE_ATTACHMENT_IDS};\n}\n`)
-  write('dsh-client-ui-conversation/lib/types/client/service.d.ts', `  ${NEEDLE_RESOLVE_DRAFT}\n`)
-  write('dsh-client-ui-conversation/lib/types/client/contract/slots.d.ts', "  kind: 'image'\n  kind: 'file'\n")
+  if (declarations) {
+    write('dsh-client-ui-model-selection/lib/types/client/service.d.ts', `  ${NEEDLE_DIRECTORY_FOR}\n`)
+    write('dsh-client-ui-model-selection/lib/types/client/directory.d.ts', '  load()\n')
+    // S7 7d 面（dsh-client-ui-conversation 契约文件）
+    write('dsh-client-ui-conversation/lib/types/client/contract/input.d.ts', mutate.inputState === 'imageIds'
+      ? 'export interface InputState {\n  readonly imageIds: readonly string[];\n}\n'
+      : `export interface InputState {\n  ${NEEDLE_ATTACHMENT_IDS};\n}\n`)
+    write('dsh-client-ui-conversation/lib/types/client/service.d.ts', `  ${NEEDLE_RESOLVE_DRAFT}\n`)
+    write('dsh-client-ui-conversation/lib/types/client/contract/slots.d.ts', "  kind: 'image'\n  kind: 'file'\n")
+  }
+  // S9b 行候选族夹具（ARCH-007 D4 同族；tests/host-contract.mjs HOST_V4_ANCHORS）：合成
+  // dsh-session-persistence-jsonl/lib/worker.cjs——锚 `persistence-inline-admission` 的行号
+  // 候选来自 lib/prestep.js 注释（worker.cjs:11641，本合成树远短于该行号 ⇒ 该候选窗口结构上
+  // 为空），内容符号候选 = `function source(message)`。`stripS9bPatterns` 把两项内容模式整体
+  // 改写 ⇒ 行号候选 + 符号候选全部不命中；宿主真删除/真改名不得被候选放宽吞掉。
+  if (mutate.s9bPersistWorker || (mutate.stripS9bPatterns ?? []).includes('persistence-inline-admission')) {
+    const stripped = (mutate.stripS9bPatterns ?? []).includes('persistence-inline-admission')
+    const admissionPatterns = stripped
+      ? ['producer-owned-source-kind', "value['kind'] === 'plugin'"]
+      : ['producer-owned source kind', 'value["kind"] === "plugin"']
+    write('dsh-session-persistence-jsonl/package.json', pkgJson('dsh-session-persistence-jsonl', packagesVersion))
+    write('dsh-session-persistence-jsonl/lib/worker.cjs', [
+      "'use strict'",
+      '// 合成夹具（tests/host-radar.mjs buildTree）：S9b 内联 admission 判据窗口。',
+      'function source(message) {',
+      `  // 内联同一判据：${admissionPatterns[0]} 且 ${admissionPatterns[1]} → 拒收`,
+      '  return refuse(message)',
+      '}',
+      '',
+      'function refuse() { return { ok: false } }',
+      '',
+    ].join('\n'))
+    // S9b 另一条锚 `message-source-no-catch-all` 的绿色面：行号取自同一 prestep 注释
+    // （lib/types/message.d.ts:94-99），两项内容模式落在 ±window 内——缺此文件绿树会多一条
+    // 与本突变无关的「宿主文件在位」FAIL，掩盖单点突变（只留 persistence 锚红）的判别口径。
+    const messageLines = Array.from({ length: S9B_MESSAGE_LINE + 6 }, () => '')
+    messageLines[0] = 'export interface MessageSourceMap {'
+    messageLines[S9B_MESSAGE_LINE - 1] = '  // no shared catch-all — each producer declares its own kind'
+    messageLines[S9B_MESSAGE_LINE] = '  // `plugin` kind stays adapter-local'
+    messageLines[S9B_MESSAGE_LINE + 5] = '}'
+    write('dsh-llm/lib/types/message.d.ts', `${messageLines.join('\n')}\n`)
+  }
   for (const relpath of mutate.dropFiles ?? []) {
     rmSync(join(scope, relpath), { force: true, recursive: true })
   }
@@ -184,33 +272,35 @@ console.log('R4 雷达 probe 模式（四类 diff 报告 + 探测不门控 + 判
   // 该断言同时是「夹具 × 权威常量」机器锁：注册表/白名单/schema/锚任一漂移 ⇒ 红。
   const green = buildTree(mkdtemp('green'))
   const greenRun = runRadar(['--host-source', green])
-  check('probe: 绿树（0.2.1-rc.2 形态）四类零 diff + exit 0（负控 + 夹具机器锁）',
+  check(`probe: 绿树（${PRIMARY.dshPackages} 主基线形态）四类零 diff + exit 0（负控 + 夹具机器锁）`,
     greenRun.status === 0 && greenRun.json?.summary?.totalDiffs === 0, { status: greenRun.status, summary: greenRun.json?.summary, stderr: greenRun.stderr })
   check('probe: 绿树包表 10 项全部 match（8 关键包 + cordis + schemastery）',
     greenRun.json?.packageTable && Object.values(greenRun.json.packageTable).length === 10
       && Object.values(greenRun.json.packageTable).every((entry) => entry?.status === 'match'),
     greenRun.json?.packageTable)
-  check('probe: 报告载基线档案项（primary 0.2.1 单源提取——无版本常量副本）',
-    greenRun.json?.baseline?.id === '0.2.1' && greenRun.json?.baseline?.status === 'primary'
-      && greenRun.json?.baseline?.dsh === '0.2.1-rc.2' && greenRun.json?.baseline?.schemastery === '3.18.5',
+  check('probe: 报告载基线档案项（primary 单源提取——无版本常量副本）',
+    greenRun.json?.baseline?.id === PRIMARY.id && greenRun.json?.baseline?.status === 'primary'
+      && greenRun.json?.baseline?.dsh === PRIMARY.dsh && greenRun.json?.baseline?.schemastery === PRIMARY.schemastery,
     greenRun.json?.baseline)
 
   // T-6 形态判别（NEW-1 MUST）：dsh 主版本不变、schemastery 范围内漂移 → 恰 1 包表 mismatch。
-  const t6 = buildTree(mkdtemp('t6'), { schemastery: '3.18.6' })
+  const t6Drift = driftVersion(PRIMARY.schemastery)
+  const t6 = buildTree(mkdtemp('t6'), { schemastery: t6Drift })
   const t6Run = runRadar(['--host-source', t6])
-  check('probe: T-6 形态（dsh 主版本不变 + schemastery 3.18.5→3.18.6 树漂移）被检测——恰 1 项包表 mismatch 且精确点名 schemastery（NEW-1 吸收判别）',
+  check(`probe: T-6 形态（dsh 主版本不变 + schemastery ${PRIMARY.schemastery}→${t6Drift} 树漂移）被检测——恰 1 项包表 mismatch 且精确点名 schemastery（NEW-1 吸收判别）`,
     t6Run.status === 0 && t6Run.json?.summary?.packageMismatches === 1 && t6Run.json?.summary?.totalDiffs === 1
-      && t6Run.json?.packageTable?.schemastery?.status === 'mismatch' && t6Run.json?.packageTable?.schemastery?.version === '3.18.6',
+      && t6Run.json?.packageTable?.schemastery?.status === 'mismatch' && t6Run.json?.packageTable?.schemastery?.version === t6Drift,
     { status: t6Run.status, summary: t6Run.json?.summary, schemastery: t6Run.json?.packageTable?.schemastery })
   check('probe: T-6 形态其余三类零 diff（判别力——不靠超集计数蒙混）',
     t6Run.json?.summary?.anchorMisses === 0 && t6Run.json?.summary?.eventHostOnly === 0
       && t6Run.json?.summary?.eventMirrorOnly === 0 && t6Run.json?.summary?.schemaFacesWithDiff === 0,
     t6Run.json?.summary)
   // T-6b：dsh-* 漂移形态（主包不变、子包换代）
-  const t6b = buildTree(mkdtemp('t6b'), { dshPackagesVersion: '0.2.1-alpha.5' })
-  const t6bRun = runRadar(['--host-source', t6b])
-  check('probe: T-6b 形态（dsh 主包不变 + dsh-* 0.2.1-alpha.5 漂移）7 项包表 mismatch 精确点名（dsh 主包 match）',
-    t6bRun.status === 0 && t6bRun.json?.summary?.packageMismatches === 7 && t6bRun.json?.packageTable?.dsh?.status === 'match',
+  const t6bDrift = driftVersion(PRIMARY.dshPackages)
+  const t6bRun = runRadar(['--host-source', buildTree(mkdtemp('t6b'), { dshPackagesVersion: t6bDrift })])
+  const t6bExpected = KEY_DSH_PACKAGES.filter((name) => name !== 'dsh').length
+  check(`probe: T-6b 形态（dsh 主包不变 + dsh-* ${t6bDrift} 漂移）${t6bExpected} 项包表 mismatch 精确点名（dsh 主包 match）`,
+    t6bRun.status === 0 && t6bRun.json?.summary?.packageMismatches === t6bExpected && t6bRun.json?.packageTable?.dsh?.status === 'match',
     { summary: t6bRun.json?.summary, dsh: t6bRun.json?.packageTable?.dsh })
 
   // 白名单增删（F-D 形态）：宿主侧除名 1 项 + 新增 1 项 → 双向精确点名。
@@ -236,11 +326,15 @@ console.log('R4 雷达 probe 模式（四类 diff 报告 + 探测不门控 + 判
     inputState: 'imageIds',
   })
   const anRun = runRadar(['--host-source', anchorTree])
-  const agentFaces = (anRun.json?.anchors?.shapeAnchors ?? []).filter((face) => face.expectPackage === 'dsh-api-session-controller' && face.missingFiles.some((file) => file.includes('agent.js')))
-  check('probe: 锚 miss 点名（agent.js 缺失 → 该包两条形状锚记 missingFiles，agent.js 内符号 miss 逐项点名）',
+  const agentFaces = (anRun.json?.anchors?.shapeAnchors ?? []).filter((face) => {
+    const packages = Array.isArray(face.expectPackage) ? face.expectPackage : [face.expectPackage]
+    return packages.includes('dsh-api-session-controller')
+  })
+  check('probe: 锚 miss 点名（agent.js 缺失 → 两条形状锚按 D4 有序候选逐落点记 missingFiles，不静默吞候选）',
     agentFaces.length === 2
-      && agentFaces.some((face) => face.missingSymbols.includes('dsh-api-session-controller/lib/types/agent.js :: selectionFor('))
-      && agentFaces.some((face) => face.missingSymbols.includes('dsh-api-session-controller/lib/types/agent.js :: stateOf(')),
+      && agentFaces.every((face) => face.missingFiles.some((file) => file.endsWith('/lib/types/agent.js')))
+      && agentFaces.some((face) => face.missingFiles.some((file) => file.endsWith('/lib/types/commands.js')))
+      && agentFaces.some((face) => face.missingFiles.some((file) => file.endsWith('dsh-agent/lib/types/model-selection.js'))),
     anRun.json?.anchors?.shapeAnchors)
   check('probe: LlmAdapter 方法 miss 点名（5/6 声明 → missing=[prepareCall]）',
     anRun.json?.anchors?.llmAdapter?.missing?.length === 1 && anRun.json.anchors.llmAdapter.missing[0] === 'prepareCall',
@@ -251,7 +345,7 @@ console.log('R4 雷达 probe 模式（四类 diff 报告 + 探测不门控 + 判
 
   // 探测不门控（硬门槛）：四类全突变 → 仍 exit 0（差异只产报告；非零 = 自身故障）。
   const allRun = runRadar(['--host-source', buildTree(mkdtemp('alldiff'), {
-    schemastery: '3.18.6', dropEvents: [dropped], addEvents: ['host/new-event'],
+    schemastery: t6Drift, dropEvents: [dropped], addEvents: ['host/new-event'],
     schemaOverrides: { agentPresets_list_result: ['authorable'] }, llmMethods: 4, inputState: 'imageIds',
   })])
   check('probe: 全突变树 exit 0 + 四类 diff 全非零（探测不门控——probe 永不因差异开门控红）',
@@ -271,47 +365,234 @@ console.log('R4 雷达 probe 模式（四类 diff 报告 + 探测不门控 + 判
   const outRun = runRadar(['--host-source', green, '--out', outFile])
   const written = existsSync(outFile) ? JSON.parse(readFileSync(outFile, 'utf8')) : null
   check('probe: --out 报告工件落盘且与 stdout JSON 同构（workflow artifact 形态）',
-    outRun.status === 0 && written !== null && written.summary?.totalDiffs === 0 && written.baseline?.id === '0.2.1',
+    outRun.status === 0 && written !== null && written.summary?.totalDiffs === 0 && written.baseline?.id === PRIMARY.id,
     { exists: existsSync(outFile) })
 
   // DSH_HOST_SOURCE / DSH_BASELINE 环境变量机制（R3 同语义复用）
   const envRun = runRadar([], { DSH_HOST_SOURCE: green })
   check('probe: DSH_HOST_SOURCE 环境变量与 --host-source 同效（R3 机制复用——workflow/本地共用同一形态）',
     envRun.status === 0 && envRun.json?.summary?.totalDiffs === 0, { status: envRun.status, stderr: envRun.stderr })
-  const frozenTree = buildTree(mkdtemp('frozen'), { dshVersion: '0.1.5-rc.1', dshPackagesVersion: '0.1.5-rc.2', cordis: '4.0.2', schemastery: '3.18.2' })
-  const frozenEnvRun = runRadar(['--host-source', frozenTree], { DSH_BASELINE: '0.1.5' })
+  // 冻结树 = FROZEN 档案项版本形态（版本面零硬编码；0.1.5 只是当前 frozen 实例）
+  const frozenTree = buildTree(mkdtemp('frozen'), { base: FROZEN })
+  const frozenEnvRun = runRadar(['--host-source', frozenTree], { DSH_BASELINE: FROZEN.id })
   const frozenPrimaryRun = runRadar(['--host-source', frozenTree])
-  check('probe: DSH_BASELINE=0.1.5（frozen）→ 包表按 frozen 档案项判零 mismatch（R3 参数化语义复用）',
-    frozenEnvRun.status === 0 && frozenEnvRun.json?.summary?.packageMismatches === 0 && frozenEnvRun.json?.baseline?.id === '0.1.5',
+  const frozenPrimaryExpected = (FROZEN.dsh !== PRIMARY.dsh ? 1 : 0)
+    + (FROZEN.dshPackages !== PRIMARY.dshPackages ? KEY_DSH_PACKAGES.length - 1 : 0)
+    + (FROZEN.cordis !== PRIMARY.cordis ? 1 : 0) + (FROZEN.schemastery !== PRIMARY.schemastery ? 1 : 0)
+  check(`probe: DSH_BASELINE=${FROZEN.id}（frozen）→ 包表按 frozen 档案项判零 mismatch（R3 参数化语义复用）`,
+    frozenEnvRun.status === 0 && frozenEnvRun.json?.summary?.packageMismatches === 0 && frozenEnvRun.json?.baseline?.id === FROZEN.id,
     { summary: frozenEnvRun.json?.summary, baseline: frozenEnvRun.json?.baseline })
-  check('probe: 同 frozen 树默认 primary → 包表 10 项 mismatch（基线选择判别——不因环境变量缺省而失判）',
-    frozenPrimaryRun.json?.summary?.packageMismatches === 10, frozenPrimaryRun.json?.summary)
+  check(`probe: 同 frozen 树默认 primary → 包表 ${frozenPrimaryExpected} 项 mismatch（基线选择判别——不因环境变量缺省而失判）`,
+    frozenPrimaryRun.json?.summary?.packageMismatches === frozenPrimaryExpected
+      && frozenPrimaryRun.json?.baseline?.id === PRIMARY.id, frozenPrimaryRun.json?.summary)
   check('probe: 未知 --baseline → exit 1 fail-closed（P8：基线切换失败可观测，不静默回退——R3 §0b 同语义）',
     runRadar(['--host-source', green, '--baseline', 'bogus']).status === 1)
 }
 
+console.log('ARCH-007 分发形态判别（内容判据 × 不可验/缺失 × 升级代价矩阵 × guard 崩溃守卫）:')
+{
+  // ① npm 形态（含 .d.ts）：类型锚可验证——真漂移会以 missing 暴露（对照组）。
+  const npmTree = buildTree(mkdtemp('dist-npm'))
+  const npmRun = runRadar(['--host-source', npmTree])
+  check('distribution: auto 内容判据 → npm / typeAnchors=available（.d.ts 在位 ⇒ 类型锚可验）',
+    npmRun.status === 0 && npmRun.json?.distribution?.detected === 'npm'
+      && npmRun.json.distribution.byContent === 'npm' && npmRun.json.distribution.typeAnchors === 'available'
+      && npmRun.json.summary.anchorUnavailable === 0 && (npmRun.json.anchors.unavailable ?? []).length === 0,
+    npmRun.json?.distribution)
+
+  // ② bundled 形态（同一棵树不写任何 .d.ts = 桌面 asar 分发形状）：类型锚整树缺席 ⇒
+  //    unavailable（单列、不计 totalDiffs）；JS/事件/schema/包表面零差异 ⇒ totalDiffs 仍 0。
+  const bundledTree = buildTree(mkdtemp('dist-bundled'), { declarations: false })
+  const bundledRun = runRadar(['--host-source', bundledTree])
+  const bundledReport = bundledRun.json
+  check('distribution: auto 内容判据 → bundled / typeAnchors=unavailable（0 个 .d.ts ⇒ 分发形态判据生效）',
+    bundledRun.status === 0 && bundledReport?.distribution?.detected === 'bundled'
+      && bundledReport.distribution.byContent === 'bundled' && bundledReport.distribution.typeAnchors === 'unavailable',
+    bundledReport?.distribution)
+  check('distribution: bundled 类型锚记 unavailable 而非 missing（不计入 totalDiffs；shapeAnchors 零缺失）',
+    bundledReport?.summary?.anchorMisses === 0 && bundledReport.summary.totalDiffs === 0
+      && bundledReport.summary.anchorUnavailable > 0
+      && (bundledReport.anchors.shapeAnchors ?? []).every((face) => (face.missingFiles ?? []).length === 0 && (face.missingSymbols ?? []).length === 0),
+    { summary: bundledReport?.summary })
+  check('distribution: anchorUnavailable 单列且定位到 package+file+symbol（不可验面可追溯，非静默吞）',
+    bundledReport?.anchors?.unavailable?.length === 1
+      && bundledReport.anchors.unavailable[0].files.length === 2
+      && bundledReport.anchors.unavailable[0].files.every((file) => file.startsWith('dsh-client-ui-model-selection/'))
+      && bundledReport.anchors.unavailable[0].symbols.length === 2
+      && /distribution bundled/i.test(bundledReport.anchors.unavailable[0].reason ?? '')
+      && /content criterion/i.test(bundledReport.anchors.unavailable[0].reason ?? ''),
+    bundledReport?.anchors?.unavailable)
+  check('distribution: InputState 4 面 bundled 判不可验（verifiable=false + 3 个缺席声明文件点名）',
+    bundledReport?.anchors?.inputState?.verifiable === false
+      && bundledReport.anchors.inputState.unavailableFiles.length === 3,
+    bundledReport?.anchors?.inputState)
+
+  // ③ 强制标签只改「判读口径命名」，不改实测（byContent 恒为内容实测）：强制 npm 时
+  //    bundled 树的 .d.ts 锚回落诚实 missing（取证需要；分发形态不是静默豁免）。
+  const forcedNpm = runRadar(['--host-source', bundledTree, '--distribution', 'npm'])
+  check('distribution: --distribution npm 强制标签作用于 bundled 树 → 类型锚回落诚实 missing（byContent 仍 bundled 实测）',
+    forcedNpm.status === 0 && forcedNpm.json?.distribution?.detected === 'npm'
+      && forcedNpm.json.distribution.byContent === 'bundled' && forcedNpm.json.distribution.typeAnchors === 'unavailable'
+      && forcedNpm.json.summary.anchorMisses > 0 && forcedNpm.json.summary.anchorUnavailable === 0,
+    { distribution: forcedNpm.json?.distribution, summary: forcedNpm.json?.summary })
+  const forcedBundled = runRadar(['--host-source', npmTree, '--distribution', 'bundled'])
+  check('distribution: --distribution bundled 强制标签作用于 npm 树 → 文件实测仍在位 ⇒ typeAnchors=available（不按标签撒谎）',
+    forcedBundled.status === 0 && forcedBundled.json?.distribution?.detected === 'bundled'
+      && forcedBundled.json.distribution.byContent === 'npm' && forcedBundled.json.distribution.typeAnchors === 'available'
+      && forcedBundled.json.summary.anchorUnavailable === 0 && forcedBundled.json.summary.totalDiffs === 0,
+    { distribution: forcedBundled.json?.distribution, summary: forcedBundled.json?.summary })
+
+  // ④ 两事实并行（同一 bundled 树 + agent.js 真符号位移）⇒ unavailable（声明面）与
+  //    missing（JS 符号面）同时成立，互不掩盖：分发形态不得吞掉真 ABI 位移。
+  const bundledDriftTree = buildTree(mkdtemp('dist-bundled-drift'), { declarations: false, dropAgentSymbols: NEEDLE_AGENT })
+  const bundledDriftRun = runRadar(['--host-source', bundledDriftTree])
+  check('distribution: bundled 树 + 真符号位移 → missing 与 unavailable 并行（分发形态不吞真 ABI 位移）',
+    bundledDriftRun.status === 0 && bundledDriftRun.json?.summary?.anchorMisses > 0
+      && bundledDriftRun.json.summary.anchorUnavailable > 0
+      && bundledDriftRun.json.anchors.shapeAnchors.some((face) => (face.missingSymbols ?? []).some((entry) => entry.includes('agent.js :: selectionFor('))),
+    { summary: bundledDriftRun.json?.summary })
+
+  // ⑤ --matrix：默认可读文本（人读面），--out 同时产结构化工件（机器面）；两者同源。
+  const matrixRun = runRadar(['--host-source', bundledTree, '--matrix'])
+  check('matrix: bundled 树 → 可读矩阵（必须改 0 = 无真位移；建议改 ≥2 = 分发形态不可验；无需改面逐条）',
+    matrixRun.status === 0 && matrixRun.json === null
+      && /升级代价矩阵/.test(matrixRun.stdout) && /必须改/.test(matrixRun.stdout)
+      && /建议改/.test(matrixRun.stdout) && /无需改/.test(matrixRun.stdout),
+    matrixRun.stdout.slice(0, 1200))
+  const matrixOut = join(mkdtemp('dist-matrix-out'), 'matrix.json')
+  const matrixOutRun = runRadar(['--host-source', bundledTree, '--matrix', '--out', matrixOut])
+  const matrixWritten = existsSync(matrixOut) ? JSON.parse(readFileSync(matrixOut, 'utf8')) : null
+  check('matrix: --matrix --out 结构化工件（counts + 三桶 + 逐项定位；可读 stdout 不替代工件）',
+    matrixOutRun.status === 0 && matrixWritten?.matrix?.counts?.must === 0
+      && matrixWritten.matrix.counts.suggest >= 2 && matrixWritten.matrix.counts.none >= 2
+      && matrixWritten.matrix.suggest.every((item) => item.category && item.location && item.detail && item.action)
+      && matrixWritten.matrix.suggest.some((item) => item.category === 'distribution')
+      && matrixWritten.matrix.suggest.some((item) => item.category === 'anchor.unavailable')
+      && matrixWritten.matrix.none.every((item) => item.action === '无需动作'),
+    matrixWritten?.matrix?.counts)
+  check('matrix: 报告仍含 matrix + distribution 面（可读输出与工件单实现路径，无第二份矩阵）',
+    matrixWritten?.distribution?.detected === 'bundled' && Array.isArray(matrixWritten.matrix.must)
+      && /内容判据/.test(matrixWritten.distribution.source))
+
+  // ⑥ guard 崩溃守卫（P8）：spawn tests/host-contract.mjs 对同一 bundled 夹具——
+  //    声明面整体缺席必须走「不可验」结构化分支（显式 note + 汇总行），不得抛栈。
+  const guardEnv = (hostSource) => {
+    const env = { ...process.env }
+    delete env.DSH_HOST_SOURCE; delete env.DSH_BASELINE; delete env.DSH_HOST_PACKAGES
+    return { ...env, DSH_HOST_SOURCE: hostSource }
+  }
+  const runGuard = (hostSource) => {
+    const result = spawnSync(process.execPath, [join(ROOT_DIR, 'tests', 'host-contract.mjs')], {
+      encoding: 'utf8', timeout: 240_000, env: guardEnv(hostSource),
+    })
+    return { status: result.status, output: `${result.stdout ?? ''}${result.stderr ?? ''}` }
+  }
+  const stackMarkers = /(?:^|\n)\s+at [^\n]*:\d+:\d+/
+  const guardClean = runGuard(bundledTree)
+  check('guard P8: bundled 树（声明面整体缺席）→ 结构化结论 + 显式「不可验」+ 零栈逃逸（不崩溃、不静默）',
+    guardClean.status !== null && !stackMarkers.test(guardClean.output) && !/ENOENT/.test(guardClean.output)
+      && !/node:internal/.test(guardClean.output)
+      && /不可验/.test(guardClean.output) && /(?:FAILURE\(S\)|ALL HOST CONTRACT)/.test(guardClean.output),
+    guardClean.output.slice(-1500))
+  const guardDrift = runGuard(bundledDriftTree)
+  check('guard P8: bundled 树 + 真符号位移 → 精确 FAIL 点名（真 ABI 位移 ≠ 分发形态不可验；仍零栈逃逸）',
+    guardDrift.status === 1 && /FAIL\s+S2 形状锚点/.test(guardDrift.output)
+      && /selectionFor\(/.test(guardDrift.output) && !stackMarkers.test(guardDrift.output),
+    guardDrift.output.slice(-1500))
+  // ⑥a-2 ARCH-007 D4 反向回归：候选落点放松不得吞真删除——旧位置符号被清空、新位置文件
+  //   也不存在（合成树无 commands.js/model-selection.js）⇒ 全部候选不命中，S2 必须精确 FAIL
+  //    并同时点名旧符号与新候选文件；若把「候选任一命中」误写成「候选存在即命中」这里会绿。
+  const guardAllCandidatesMissing = runGuard(buildTree(mkdtemp('d4-all-candidates-missing'), { dropAgentSymbols: NEEDLE_AGENT }))
+  check('guard D4 反向: selectionFor/stateOf 从全部候选落点消失 → S2 精确 FAIL（候选放松不吞真删除）',
+    guardAllCandidatesMissing.status === 1 && /FAIL\s+S2 形状锚点: sessionController\.selectModel/.test(guardAllCandidatesMissing.output)
+      && /dsh-api-session-controller\/lib\/types\/agent\.js :: selectionFor\(/.test(guardAllCandidatesMissing.output)
+      && /dsh-api-session-controller\/lib\/types\/agent\.js :: stateOf\(/.test(guardAllCandidatesMissing.output)
+      && /dsh-api-session-controller\/lib\/types\/commands\.js/.test(guardAllCandidatesMissing.output)
+      && !/位置漂移/.test(guardAllCandidatesMissing.output) && !stackMarkers.test(guardAllCandidatesMissing.output),
+    guardAllCandidatesMissing.output.slice(-1800))
+  // ⑥b ARCH-007 A（P1 事实修正回归网）：S7 7a 分代 skip 的参照 = **靶子树实读版本**（非所选基线）。
+  //   最高冻结靶子（当前 0.2.1）+ 镜像 30 ⇒ since 更高的事件逐项可见 skip（含 since/靶子版本/
+  //   事件名），不红。期望计数由镜像源 since 注记派生（禁硬编码 28/30）。
+  const guardOldTarget = runGuard(buildTree(mkdtemp('s7-old-target'), { base: FROZEN_HIGHEST, declarations: false }))
+  const oldTargetSkips = FROZEN_HIGHEST === null ? [] : FORWARDED_EVENT_ALLOWLIST
+    .filter((event) => !includesSince(EVENT_SINCE.get(event), FROZEN_HIGHEST.dsh))
+  const oldTargetExpected = FORWARDED_EVENT_ALLOWLIST.length - oldTargetSkips.length
+  check('guard S7 7a 分代: 高代冻结靶子早于镜像事件 since → 逐项可见 skip（含 since/靶子版本/事件名）且不误红',
+    FROZEN_HIGHEST !== null && EVENT_SINCE.size === FORWARDED_EVENT_ALLOWLIST.length
+      && oldTargetSkips.length > 0 && guardOldTarget.status === 0
+      && oldTargetSkips.every((event) => guardOldTarget.output.includes(
+        `事件 ${event}（since ${EVENT_SINCE.get(event)}）> 靶子宿主版本 ${FROZEN_HIGHEST.dsh}`))
+      && guardOldTarget.output.includes(
+        `baseline ${PRIMARY.id} / target ${FROZEN_HIGHEST.dsh} 期望 ${oldTargetExpected}/${FORWARDED_EVENT_ALLOWLIST.length}`),
+    { skips: oldTargetSkips, tail: guardOldTarget.output.slice(-1200) })
+  //   靶子 0.2.2 + 镜像缺项 ⇒ 精确 FAIL（D1 回归信号）：分代 skip 只能因**靶子代际**成立，
+  //   不能因分发形态/基线新而吞掉真实缺项。
+  const guardMissingEvent = runGuard(buildTree(mkdtemp('s7-drop-event'), { dropEvents: ['llm/models-updated'] }))
+  check('guard S7 7a 反向: 靶子 0.2.2 + 镜像事件缺项 → 精确 FAIL（D1 回归信号；不因分发形态不可验而吞项）',
+    guardMissingEvent.status === 1 && /FAIL\s+S7 增强: 白名单镜像/.test(guardMissingEvent.output)
+      && /llm\/models-updated/.test(guardMissingEvent.output),
+    guardMissingEvent.output.slice(-1500))
+  // ⑥c ARCH-007 S9b 行候选族反向回归（D4 同族）：锚 `persistence-inline-admission` 的候选 =
+  //    行号候选（lib/prestep.js 注释的 worker.cjs:NN，合成树远短于该行号 ⇒ 该候选窗口为空）+
+  //    内容符号候选（`function source(message)`）。同树绿形态只走符号候选命中（可见漂移 note）；
+  //    `stripS9bPatterns` 把两项内容模式整体改写 ⇒ **全部候选**不命中，S9b 必须结构化 FAIL 并
+  //    点名锚 id 与各候选窗口明细。若把「任一候选命中」误写成「候选存在即命中」，这里会变绿。
+  const s9bGreen = runGuard(buildTree(mkdtemp('s9b-candidates-green'), { s9bPersistWorker: true }))
+  const s9bStripped = runGuard(buildTree(mkdtemp('s9b-candidates-stripped'), { s9bPersistWorker: true, stripS9bPatterns: ['persistence-inline-admission'] }))
+  check('guard S9b 反向: 行号候选中 prestep 行号窗口空 + 内容符号候选窗口内两模式被整体改写 → S9b 精确 FAIL 点名 persistence-inline-admission（全候选不命中不被吞）',
+    s9bGreen.status === 0 && /ALL HOST CONTRACT GUARD TESTS PASSED/.test(s9bGreen.output)
+      && /ok\s+S9b 宿主锚: persistence-inline-admission[^\n]*命中[^\n]*行 \d+-\d+ 窗口/.test(s9bGreen.output)
+      && /persistence-inline-admission[^\n]*位置漂移/.test(s9bGreen.output)
+      && !/FAIL\s+S9b 宿主锚: persistence-inline-admission/.test(s9bGreen.output)
+      && s9bStripped.status === 1
+      && (s9bStripped.output.match(/^FAIL\b/gm) ?? []).length === 1
+      && /FAIL\s+S9b 宿主锚: persistence-inline-admission/.test(s9bStripped.output)
+      && /在 2 个位置候选中均未命中/.test(s9bStripped.output)
+      && /"lineSource":"prestep-comment"/.test(s9bStripped.output)
+      && /"lineSource":"content-symbol"/.test(s9bStripped.output)
+      && /"window":\[\d+,\d+\]/.test(s9bStripped.output)
+      && /"actualWindow":\[/.test(s9bStripped.output)
+      && /missingPatterns":\["\/(?:producer-owned source kind|value)\//.test(s9bStripped.output)
+      && !/persistence-inline-admission[^\n]*位置漂移/.test(s9bStripped.output)
+      && !stackMarkers.test(s9bGreen.output) && !stackMarkers.test(s9bStripped.output),
+    { green: s9bGreen.output.slice(-900), stripped: s9bStripped.output.slice(-2000) })
+
+  // ⑦ 参数面 fail-loud（P8）：非法分发标签 / 非 probe 模式用矩阵 ⇒ exit 1 + 枚举点名。
+  check('distribution: 非法 --distribution 值 → exit 1 + auto|npm|bundled 枚举点名（不静默回退 auto）',
+    (() => { const r = runRadar(['--host-source', npmTree, '--distribution', 'foo']); return r.status === 1 && /auto\|npm\|bundled/.test(r.stderr) })())
+  check('matrix: 非 probe 模式使用 --matrix/--distribution → exit 1 + probe-mode 明确诊断（不静默忽略）',
+    (() => { const r = runRadar(['--dist-tags', '{}', '--matrix']); return r.status === 1 && /probe-mode/.test(r.stderr) })())
+}
+
 console.log('R4 雷达 dist-tags 模式（全枚举——F-5：预发布通道不失明）:')
 {
-  // 实测形态 stub（2026-10-17 registry 实跑捕获：next/latest=0.2.0-rc.2 + alpha=0.2.1-alpha.5；
-  // ARCH-006 后 primary 已 0.2.1-rc.2 在册——alpha 通道 0.2.1-alpha.5 仍 ∉ 档案 dsh 值集）
-  const liveForm = '{"next":"0.2.0-rc.2","latest":"0.2.0-rc.2","alpha":"0.2.1-alpha.5"}'
+  // 形态 stub 由档案面派生（ARCH-007：测试零版本常量——next/latest 指向 frozen 值 =
+  // 档案在册 → 不算新版本；alpha 指向 primary.dsh+drift = 不在册 → 必判新版本）。
+  // 判别语义不变：latest-only 查询会漏掉 alpha 通道（F-5 原缺陷形态）。
+  const alphaDrift = driftVersion(PRIMARY.dsh)
+  const liveForm = JSON.stringify({ next: FROZEN.dsh, latest: FROZEN.dsh, alpha: alphaDrift })
   const live = runRadar(['--dist-tags', liveForm])
-  check('dist-tags: 实测形态全枚举（next/latest/alpha 三 tag 并集）→ alpha 通道 0.2.1-alpha.5 判为新版本（latest-only 查询将失明——F-5 判别）',
-    live.status === 0 && live.json?.newVersions?.length === 1 && live.json.newVersions[0] === '0.2.1-alpha.5'
-      && live.json?.tags?.alpha === '0.2.1-alpha.5' && live.json?.primary?.dsh === '0.2.1-rc.2',
+  check(`dist-tags: 实测形态全枚举（next/latest/alpha 三 tag 并集）→ alpha 通道 ${alphaDrift} 判为新版本（latest-only 查询将失明——F-5 判别）`,
+    live.status === 0 && live.json?.newVersions?.length === 1 && live.json.newVersions[0] === alphaDrift
+      && live.json?.tags?.alpha === alphaDrift && live.json?.primary?.dsh === PRIMARY.dsh,
     { status: live.status, json: live.json })
   check('dist-tags: 已告警版本经 --seen 抑制（防周频重复 issue）',
-    (() => { const r = runRadar(['--dist-tags', liveForm, '--seen', '["0.2.1-alpha.5"]']); return r.status === 0 && r.json?.newVersions?.length === 0 })(),
-    { json: runRadar(['--dist-tags', liveForm, '--seen', '["0.2.1-alpha.5"]']).json })
+    (() => { const r = runRadar(['--dist-tags', liveForm, '--seen', JSON.stringify([alphaDrift])]); return r.status === 0 && r.json?.newVersions?.length === 0 })(),
+    { json: runRadar(['--dist-tags', liveForm, '--seen', JSON.stringify([alphaDrift])]).json })
   check('dist-tags: 档案在册版本（frozen 重挂 tag）不算新版本',
-    (() => { const r = runRadar(['--dist-tags', '{"legacy":"0.1.5-rc.1"}']); return r.status === 0 && r.json?.newVersions?.length === 0 })())
+    (() => { const r = runRadar(['--dist-tags', JSON.stringify({ legacy: FROZEN.dsh })]); return r.status === 0 && r.json?.newVersions?.length === 0 })())
   check('dist-tags: --dist-tags-file 文件形态与内联同效（workflow 落盘消费面）',
     (() => {
       const file = join(mkdtemp('dtags'), 'dist-tags.json')
       writeFileSync(file, liveForm)
       const r = runRadar(['--dist-tags-file', file])
-      return r.status === 0 && r.json?.newVersions?.length === 1 && r.json.newVersions[0] === '0.2.1-alpha.5'
+      return r.status === 0 && r.json?.newVersions?.length === 1 && r.json.newVersions[0] === alphaDrift
     })())
+  check('dist-tags: 报告 registry 面 = HOST_BASELINE_REGISTRY 全量（测试派生夹具版本的唯一来源；单 primary 在场）',
+    live.json?.registry?.length === REGISTRY.length
+      && live.json.registry.filter((entry) => entry.status === 'primary').length === 1
+      && live.json.registry.some((entry) => entry.id === FROZEN.id && entry.status === FROZEN.status),
+    live.json?.registry)
   check('dist-tags: 非 JSON 输入 → exit 1（P8：npm 不可达/坏数据自身故障可观测，不静默）',
     runRadar(['--dist-tags', 'not-json']).status === 1)
 }

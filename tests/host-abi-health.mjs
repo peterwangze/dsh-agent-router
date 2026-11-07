@@ -77,7 +77,7 @@
  *
  * 独立入口：node tests/host-abi-health.mjs（exit 0/1）。
  */
-import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -99,6 +99,7 @@ const {
   serviceFaceOf, agentsRegistryOf, llmOf, ctxServiceFaceProbes,
   FORWARDED_EVENT_ALLOWLIST, MANAGED_EVENTS, isForwardedEvent, subscribeEvents, armEventGate,
   FIBER_INJECT, CLIENT_PACKAGE_INJECT, probeFiberInjectFaces, noteInjectFaceGaps,
+  DEPENDENCY_LEDGER, RED_TEST_GAPS, CTX_SERVICES, HOST_PACKAGE_NAMES, HOST_PACKAGE_REGISTRY,
 } = hostAbi
 
 let failures = 0
@@ -252,7 +253,8 @@ console.log('domain skeleton probes (real probing behavior):')
   check('disarmed gate resumes dispatch', aCalls === 2 && bCalls === 3)
   disposeAll()
   check('disposeAll removes the shared listeners', (listeners.get('settings/document-updated') ?? []).length === 0)
-  check('FORWARDED_EVENT_ALLOWLIST mirrors host API_REMOTE_FORWARDED_EVENTS (D-2 anchor: reference-updated in, dead name out; ARCH-006: 28 items at 0.2.1-rc.2 primary baseline — plugin-market/changed absorbed)', FORWARDED_EVENT_ALLOWLIST.includes('credentials/reference-updated') && !FORWARDED_EVENT_ALLOWLIST.includes('credentials/updated') && FORWARDED_EVENT_ALLOWLIST.length === 28)
+  check('FORWARDED_EVENT_ALLOWLIST mirrors host API_REMOTE_FORWARDED_EVENTS (D-2 anchor: reference-updated in, dead name out; ARCH-007: 30 items at 0.2.2-rc.1 primary baseline — llm/models-updated + plugin-manager/update-state absorbed)', FORWARDED_EVENT_ALLOWLIST.includes('credentials/reference-updated') && !FORWARDED_EVENT_ALLOWLIST.includes('credentials/updated') && FORWARDED_EVENT_ALLOWLIST.length === 30)
+  check('FORWARDED_EVENT_ALLOWLIST ARCH-007 additions in place (llm/models-updated: llm face adapter/model list changes; plugin-manager/update-state: market update progress)', FORWARDED_EVENT_ALLOWLIST.includes('llm/models-updated') && FORWARDED_EVENT_ALLOWLIST.includes('plugin-manager/update-state') && FORWARDED_EVENT_ALLOWLIST.includes('llm/adapters-updated'))
   // 6e. inject-manifest：单一事实源 + fiber 面探测（§4.3 域 5）。
   check('FIBER_INJECT is the client.js fiber inject mirror (single source, B2/B6 static comparison)', (() => {
     const declared = readFileSync(join(ROOT_DIR, 'lib', 'client.js'), 'utf8').match(/const inject = \[([^\]]+)\]/)
@@ -265,6 +267,90 @@ console.log('domain skeleton probes (real probing behavior):')
   check('probeFiberInjectFaces probes every FIBER_INJECT face (ok/missing per resolution)', fiberHealth.length === FIBER_INJECT.length && fiberHealth.find((face) => face.name === 'remote.llm').state === 'ok' && fiberHealth.find((face) => face.name === 'modelDirectories').state === 'missing')
   // 6f. 桶：消费者统一入口可达（空桶零逻辑，§4.1）。
   check('host-abi barrel re-exports the domain surface (single consumer entry)', typeof noteHostDiag === 'function' && typeof hostVersionsOf === 'function' && typeof probeRemoteFace === 'function' && typeof subscribeEvents === 'function' && typeof serviceFaceOf === 'function' && Array.isArray(FIBER_INJECT))
+}
+
+// ── 6g. B1 依赖台账（ARCH-007 D2）：36 条宿主依赖义务的显式冻结清单 ─────────
+//   ARCH-007 前依赖义务只隐式存在于四份源码清单（HOST_PACKAGE_REGISTRY / CTX_SERVICES /
+//   FIBER_INJECT / CLIENT_PACKAGE_INJECT）与散落注释里，「用了宿主什么、缺了会怎样」无法
+//   在单点审计、也无机器判据防止漏项。本组把台账锁到上述四源：集合任一漂移、条数不对、
+//   级别与 optional 面不一致、证据/since 缺失 → 红（台账是登记面，不是运行时判定面）。
+console.log('B1 dependency ledger (explicit host dependency obligations):')
+{
+  const pkgB1 = JSON.parse(readFileSync(join(ROOT_DIR, 'package.json'), 'utf8'))
+  const sortedSet = (values) => JSON.stringify([...new Set(values)].sort())
+  check('B1-a: DEPENDENCY_LEDGER is a frozen array of exactly 36 records (13 package + 11 ctx-service + 9 fiber-face + 3 client-package — the four source lists, exact union)',
+    Array.isArray(DEPENDENCY_LEDGER) && Object.isFrozen(DEPENDENCY_LEDGER) && DEPENDENCY_LEDGER.length === 36
+    && DEPENDENCY_LEDGER.every((record) => record !== null && typeof record === 'object' && Object.isFrozen(record)))
+  const idsOfKind = (kind) => DEPENDENCY_LEDGER.filter((record) => record.kind === kind).map((record) => record.id)
+  const kindCounts = Object.fromEntries(['package', 'ctx-service', 'fiber-face', 'client-package'].map((kind) => [kind, idsOfKind(kind).length]))
+  check(`B1-b: per-kind counts are 13/11/9/3 (got ${JSON.stringify(kindCounts)})`,
+    kindCounts.package === 13 && kindCounts['ctx-service'] === 11 && kindCounts['fiber-face'] === 9 && kindCounts['client-package'] === 3)
+  check('B1-c: (kind,id) pairs are unique — no duplicated obligation',
+    new Set(DEPENDENCY_LEDGER.map((record) => `${record.kind}:${record.id}`)).size === DEPENDENCY_LEDGER.length)
+  check('B1-d: package entries === HOST_PACKAGE_NAMES (13) — ledger cannot silently drop or invent a declared host package',
+    sortedSet(idsOfKind('package')) === sortedSet(HOST_PACKAGE_NAMES))
+  check('B1-e: ctx-service entries === CTX_SERVICES keys (11) — ledger mirrors the service-face probe list verbatim',
+    sortedSet(idsOfKind('ctx-service')) === sortedSet(Object.keys(CTX_SERVICES)))
+  check('B1-f: fiber-face entries === FIBER_INJECT (9) — ledger mirrors the fiber inject mirror',
+    sortedSet(idsOfKind('fiber-face')) === sortedSet(FIBER_INJECT))
+  check('B1-g: client-package entries === CLIENT_PACKAGE_INJECT (3) — ledger mirrors the client bundle inject list',
+    sortedSet(idsOfKind('client-package')) === sortedSet(CLIENT_PACKAGE_INJECT))
+  const optionalNamesB1 = HOST_PACKAGE_REGISTRY.filter((entry) => entry.optional === true).map((entry) => entry.name)
+  check('B1-h: package level mirrors HOST_PACKAGE_REGISTRY.optional exactly (8 optional / 5 required)',
+    optionalNamesB1.length === 8
+    && sortedSet(DEPENDENCY_LEDGER.filter((record) => record.kind === 'package' && record.level === 'optional').map((record) => record.id)) === sortedSet(optionalNamesB1)
+    && sortedSet(DEPENDENCY_LEDGER.filter((record) => record.kind === 'package' && record.level === 'required').map((record) => record.id))
+      === sortedSet(HOST_PACKAGE_NAMES.filter((name) => !optionalNamesB1.includes(name))))
+  check('B1-i: package level also mirrors package.json peerDependenciesMeta.optional (same 8 names — two projections, one truth)',
+    sortedSet(optionalNamesB1) === sortedSet(Object.keys(pkgB1.peerDependenciesMeta ?? {}).filter((name) => pkgB1.peerDependenciesMeta[name]?.optional === true)))
+  check('B1-j: every record level is required|optional', DEPENDENCY_LEDGER.every((record) => record.level === 'required' || record.level === 'optional'))
+  const registryVersionsB1 = new Set(hostAbi.HOST_BASELINE_REGISTRY.map((entry) => entry.dshPackages))
+  const consumerPathReB1 = /lib\/[\w./-]+\.js|package\.json/
+  const recordKeyB1 = (record) => `${record.kind}:${record.id}`
+  const hasNamedRedTestB1 = (record) => {
+    const files = [...record.evidence.matchAll(/tests\/[\w.-]+\.mjs/g)].map((match) => match[0])
+    return files.length > 0 && files.every((file) => existsSync(join(ROOT_DIR, file)))
+  }
+  const hasGapB1 = (record) =>
+    (typeof record.redTestGap === 'string' && record.redTestGap.trim().length > 0)
+    || RED_TEST_GAPS.includes(recordKeyB1(record))
+  const requiredB1 = DEPENDENCY_LEDGER.filter((record) => record.level === 'required')
+  // 三判据各自把越界条目 id 打进 label（P1：红要能直接定位到哪一条，不能只说
+  // 「有一处不合规」）——offenders 为空才绿。
+  const offendersOfB1 = (records) => JSON.stringify(records.map(recordKeyB1))
+  const missingConsumerB1 = DEPENDENCY_LEDGER.filter((record) => typeof record.evidence !== 'string'
+    || !consumerPathReB1.test(record.evidence) || !/→\s*\S/.test(record.evidence))
+  check(`B1-k1: every record names a consumer file (lib/*.js or package.json key) and states a consequence (→ …) — empty or hollow evidence is forbidden; offenders=${offendersOfB1(missingConsumerB1)}`,
+    missingConsumerB1.length === 0)
+  const silentRedB1 = requiredB1.filter((record) => !hasNamedRedTestB1(record) && !hasGapB1(record))
+  check(`B1-k: every required record carries red-test info — one of (a) evidence names an existing tests/*.mjs suite, (b) non-empty redTestGap, (c) id in RED_TEST_GAPS; a required entry with none of the three is a silent gap and is named here; offenders=${offendersOfB1(silentRedB1)}`,
+    silentRedB1.length === 0)
+  const sinceOffendersB1 = DEPENDENCY_LEDGER.filter((record) => !registryVersionsB1.has(record.since))
+  check(`B1-k2: every record since is a registered host generation (HOST_BASELINE_REGISTRY dshPackages) — offenders=${JSON.stringify(sinceOffendersB1.map((record) => `${recordKeyB1(record)}@${record.since}`))}`,
+    sinceOffendersB1.length === 0)
+  const gapOffendersB1 = [
+    // ① 登记项必须在台账上有对得上的 required 记录 + redTest:null + 非空 redTestGap（无陈旧 id）
+    ...RED_TEST_GAPS.filter((key) => !DEPENDENCY_LEDGER.some((record) => recordKeyB1(record) === key
+      && record.level === 'required' && record.redTest === null
+      && typeof record.redTestGap === 'string' && record.redTestGap.trim().length > 0)),
+    // ② 反向：带 redTest:null 的记录必须登记（无孤儿缺口）
+    ...DEPENDENCY_LEDGER.filter((record) => record.redTest === null && !RED_TEST_GAPS.includes(recordKeyB1(record))),
+  ]
+  check(`B1-k3: RED_TEST_GAPS (${RED_TEST_GAPS.length}) is frozen, duplicate-free and exactly the required records carrying redTest:null + non-empty redTestGap — bidirectional, no stale id, no unregistered gap; gaps=${JSON.stringify([...RED_TEST_GAPS])}; offenders=${offendersOfB1(gapOffendersB1)}`,
+    Array.isArray(RED_TEST_GAPS) && Object.isFrozen(RED_TEST_GAPS)
+    && new Set(RED_TEST_GAPS).size === RED_TEST_GAPS.length
+    && DEPENDENCY_LEDGER.filter((record) => record.redTest === null).length === RED_TEST_GAPS.length
+    && gapOffendersB1.length === 0)
+  check('B1-l: ledger kinds are only the four audited axes (no ad-hoc fifth cluster)',
+    DEPENDENCY_LEDGER.every((record) => ['package', 'ctx-service', 'fiber-face', 'client-package'].includes(record.kind)))
+  // 非 package 轴的级别是语义判定（required ⇒ 缺失即核心不可用；optional ⇒ 缺失降级且
+  // 有可见诊断，见台账头部注释）。核心面若被静默降为 optional，降级判据就会整体失灵——
+  // 这里锁住三类核心最小集（不是全量清单，全量由上面四源等值判据看护）。
+  const levelOfB1 = (kind, id) => DEPENDENCY_LEDGER.find((record) => record.kind === kind && record.id === id)?.level
+  check('B1-m: semantic-required core faces stay required (ctx llm/settings/fs, fiber slots/remote, client ui-settings/api-remotes) — downgrading the core to optional goes red',
+    ['llm', 'settings', 'fs'].every((id) => levelOfB1('ctx-service', id) === 'required')
+    && ['slots', 'remote'].every((id) => levelOfB1('fiber-face', id) === 'required')
+    && ['@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-api-remotes'].every((id) => levelOfB1('client-package', id) === 'required'))
 }
 
 // ── 7. EVO-020 B2：createClientRemotes 降级语义 + 浏览器镜像 parity（§4.3 域 1）──
@@ -744,7 +830,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   改为「常量名 + 条目内」式（批 C 逐处判定：宿主 `remote-events.js` 全表 19 项，原行号区间
     //   为本表定义段 ⇒ 现值准确，改形态以降漂移面）。裸锚登记带**同句上下文**（R3 六项要求 ①；
     //   裸 `:NNN` 单写必歧义）。对象不可本仓核验（宿主面）⇒ 本条目只判位于本仓文本内的锚串形态。
-    { file: ['lib', 'host-abi', 'events.js'], stale: ['host-route.js:263-270', 'remote-events.js:12-32', '在表（:21）'], fresh: ['syncHostRoute', '`API_REMOTE_FORWARDED_EVENTS` 实读 28 项', '在该表条目内'] },
+    { file: ['lib', 'host-abi', 'events.js'], stale: ['host-route.js:263-270', 'remote-events.js:12-32', '在表（:21）', '实读 28 项'], fresh: ['syncHostRoute', '`API_REMOTE_FORWARDED_EVENTS` 实读 30 项', '在该表条目内'] },
     // FIX-041 R0 F-2：同族在仓漂移锚收口——lib/stats.js 引 `lib/oauth-llm.js` 的 `:43`，该行现已
     //   漂移为无关注释（`export const OAUTH_PROVIDER` 实在该文件内）⇒ 按 FIX-041 W2 同形去行号
     //   改**符号名式**；本条目一并扩 stale/fresh（原条目只覆盖 `host-route.js` 的 `:55` 一串）。
@@ -937,12 +1023,14 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   （基线登记与人工复检义务见上方注释）；本批新增的宿主可达面机器判据在
     //   `tests/host-contract.mjs` S2/S5（`expectPackage`/`expectFile`/`expectSymbol` + 靶子文件
     //   存在性核验——R0 P1-1 收口，宿主可达时生效）。
-    { file: ['lib', 'client.js'], stale: ['lib/oauth-llm.js:43', 'presetDiagnostics :2109', 'health.js:35-48', 'OAUTH_ROUTE_PROVIDER :36', '权威单点 :124-125', 'lib/client.js:4754-4825', 'lib/index.js:2596-2630', ':2749-2760', 'dsh-llm-pi-ai index.js:1721', 'lib/client.js:889-911', 'remote-events.js:12-32', 'lib/client.js:581', 'lib/client.js:2842-2848', 'lib/client.js:4493-4499', 'lib/client.js:175-179', 'lib/index.js:19', 'lib/client.js:170', 'lib/client.js:752', 'lib/client.js:193', ':991-992/:2556-2588', '（同表 :21，凭据引用变化转发事件）', 'ui-conversation :16041-16056', '声明门控，:313-314/:342', '（generation 守卫，宿主 :47/:53）', '订阅该 store（宿主 :292）'], fresh: ['lib/oauth-llm.js `export const', 'presetDiagnostics 方法存在性先例', 'lib/host-abi/health.js noteHostDiag', 'HOST_FACE_ERROR_CODES 三错误码', 'connection handle 面只有 isLoopback', 'joinProviderDirectory 同构镜像', 'API_REMOTE_FORWARDED_EVENTS（28 项转发事件', 'waitingFor 记录按 fiber.inject 过滤', '的 static inject（remote.credentials/llm/settings）', '的 inject 数组声明', '的 ctx.remote.$on 订阅', '的 directoryFor 面）的 directoryFor(sessionId).load()', 'scope.modelDirectories 属性面', 'directoryFor「resolved no scope」', 'dsh-llm-pi-ai 的 streamWithSnapshot()', 'session.selectModel 面）：session.selectModel 仅 resolveCallConfig', '的 prompt 侧准入', '其对**同批三命名', '`createModelsOperations(ctx)` 绑定的', '（FIX-043 批 C 按 R1 P2-2 裁定取'] },
-    //   **宿主锚核验基线登记**（FIX-042 W3.2，落于本注释处；ARCH-005 R1/A1 刷新口径）：
-    //     基线 = 依赖声明 `^0.2.0-rc.2`（package.json dependencies/peerDependencies 的
-    //     `@deepseek-ai/dsh-*` 面；R1 安装同步后本仓实装抽样 = **0.2.0-rc.2**〔随主基线；
-    //     cordis/schemastery 按插件自持范围解析 4.0.1/3.18.1〕，宿主基线权威源 =
-    //     tests/host-version-snapshot.mjs 的 HOST_BASELINE_REGISTRY）。
+    { file: ['lib', 'client.js'], stale: ['lib/oauth-llm.js:43', 'presetDiagnostics :2109', 'health.js:35-48', 'OAUTH_ROUTE_PROVIDER :36', '权威单点 :124-125', 'lib/client.js:4754-4825', 'lib/index.js:2596-2630', ':2749-2760', 'dsh-llm-pi-ai index.js:1721', 'lib/client.js:889-911', 'remote-events.js:12-32', 'lib/client.js:581', 'lib/client.js:2842-2848', 'lib/client.js:4493-4499', 'lib/client.js:175-179', 'lib/index.js:19', 'lib/client.js:170', 'lib/client.js:752', 'lib/client.js:193', ':991-992/:2556-2588', '（同表 :21，凭据引用变化转发事件）', 'ui-conversation :16041-16056', '声明门控，:313-314/:342', '（generation 守卫，宿主 :47/:53）', '订阅该 store（宿主 :292）', 'API_REMOTE_FORWARDED_EVENTS（28 项转发事件'], fresh: ['lib/oauth-llm.js `export const', 'presetDiagnostics 方法存在性先例', 'lib/host-abi/health.js noteHostDiag', 'HOST_FACE_ERROR_CODES 三错误码', 'connection handle 面只有 isLoopback', 'joinProviderDirectory 同构镜像', 'API_REMOTE_FORWARDED_EVENTS（30 项转发事件', 'waitingFor 记录按 fiber.inject 过滤', '的 static inject（remote.credentials/llm/settings）', '的 inject 数组声明', '的 ctx.remote.$on 订阅', '的 directoryFor 面）的 directoryFor(sessionId).load()', 'scope.modelDirectories 属性面', 'directoryFor「resolved no scope」', 'dsh-llm-pi-ai 的 streamWithSnapshot()', 'session.selectModel 面）：session.selectModel 仅 resolveCallConfig', '的 prompt 侧准入', '其对**同批三命名', '`createModelsOperations(ctx)` 绑定的', '（FIX-043 批 C 按 R1 P2-2 裁定取'] },
+    //   **宿主锚核验基线登记**（FIX-042 W3.2，落于本注释处；ARCH-005 R1/A1 刷新口径，
+    //     ARCH-007 刷新）：基线 = 声明面逐代并集（`>=0.2.0-rc.2 <0.2.1-0 ||
+    //     >=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.2.3-0`，package.json engines.dsh 与 11 个
+    //     `@deepseek-ai/dsh-*` peer 同值；R1 安装同步后本仓实装抽样 = **0.2.0-rc.2**
+    //     〔历史树未随 0.2.2 主基线升级；cordis/schemastery 按插件自持范围解析 4.0.1/3.18.5〕，
+    //     宿主基线权威源 = tests/host-version-snapshot.mjs 的 HOST_BASELINE_REGISTRY，
+    //     主基线 = 0.2.2-rc.1）。
     //     **仓库级守卫不可解析宿主树 ⇒ 本清单不覆盖宿主锚、不声称机器覆盖**（宿主锚的数量与
     //     对象符号只由 W3 清点表登记，机器判据仅覆盖「本仓文本内的锚串形态」）。
     //     **人工复检义务**：宿主升级后 MUST 按 `tests/host-contract.mjs` 头部
@@ -1162,7 +1250,7 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
         'assembler.push/usage/finish/blocks 消费块',
         'API_REMOTE_FORWARDED_EVENTS 单向消费断言核验',
         'selectionFor(agent) → stateOf(session, \'modelSelection\') → projectionState.pending',
-        'stateOf(session, \'modelSelection\') → projectionState.pending（S7 增强组逐字核验）',
+        'stateOf(session, \'modelSelection\') → projectionState.pending',
         'llm_listConfigurableProviders_result schema',
         'llm_listProviders_result schema',
         'session_modelCatalog_result schema',
@@ -1364,6 +1452,11 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   由 tests/settings-config-migration.mjs 的真树实跑判据承载，非本表职责）。
     { file: ['lib', 'schemas.js'], stale: [], fresh: ['dsh-settings :506-508', 'dsh-llm-pi-ai/lib/index.js:1051', '（dsh-settings :538-541）'] },
     { file: ['tests', 'settings-config-migration.mjs'], stale: [], fresh: ['dsh-config-editor lib/index.js:69-127 的净效应', 'cordis-plugin-loader _commitVolatile（lib/index.js:401-427）', 'lib/types/volatile.js:83', 'Config field "frozen" is not volatile'] },
+    // ARCH-007 D2：新建依赖台账（lib/host-abi/dependency-ledger.js）首含行号式锚——evidence
+    //   字段**刻意**指向消费者行号（台账语义 = 单点审计「用了宿主什么、缺了会怎样」），
+    //   故无旧锚可清；fresh = 代表性证据锚串在场（台账若删证据/改指即红）。台账内部
+    //   行号漂移不解除其义务，由刷新批次统一复核（同 §R3 宿主锚核验纪律）。
+    { file: ['lib', 'host-abi', 'dependency-ledger.js'], stale: [], fresh: ['lib/service.js:1489 subagentsOf', 'lib/prestep.js:224', 'lib/preset-defaults.js:402', 'lib/tool.js:30 inject 声明'] },
   ]
   for (const anchorCase of ANCHOR_CASES) {
     const filePath = join(ROOT_DIR, ...anchorCase.file)
@@ -1565,11 +1658,13 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
       anchorCoverageExtGroup?.[1] === ANCHOR_COVERAGE_EXT_ALTERNATION
       && ANCHOR_COVERAGE_FORMS[0].source === ANCHOR_COVERAGE_FORM_1_SOURCE,
       { extAlternation: ANCHOR_COVERAGE_EXT_ALTERNATION, form1ExtGroup: anchorCoverageExtGroup?.[1] ?? null, form1Source: ANCHOR_COVERAGE_FORMS[0].source })
-    // 豁免面（显式、带理由、可复核；三类各有依据）：镜像侧 + 本地快照对象 + 版本冻结文档。
+    // 豁免面（显式、带理由、可复核；四类各有依据）：镜像侧 + 本地快照对象 + 版本冻结文档 + 合成夹具
+    //   （合成行号字面量复制自行号锚注释、用于构造候选窗口为空的突变树——非宿主/本仓真实源码锚）。
     const ANCHOR_COVERAGE_EXEMPTS = [
       { file: ['tests', 'served-client.js'], kind: 'mirror', reason: '镜像侧不重复登记（载体 §一 notes 4）：`served-client mirror stays byte-identical to lib/client.js` 的字节恒等判据是更强的保证（逐字节相等 ⇒ 内容判据自动传递）。' },
       { file: ['tests', 'oauth-credentials.mjs'], kind: 'snapshot-object', reason: '该处锚的对象 = `.router-files/` 的一手快照（版本控制外的一手来源，非本仓 tracked 面、非宿主包）⇒ 与 `.tmp-research` 同类的对象参考面限制，属「无实读对象」的登记面。' },
       { file: ['tests', 'oauth-promotion.mjs'], kind: 'frozen-doc', reason: '该处锚的对象 = `rollback-plan v0.3.0` 版本冻结文档（历史快照）⇒ 与既有 ⑥ 段落「`docs/release` 历史发布文档锚刻意不清扫」同口径。' },
+      { file: ['tests', 'host-radar.mjs'], kind: 'synthetic-fixture', reason: '该处行号字面量是 S9b 反向夹具的**合成**锚——复制自 `lib/prestep.js` 注释锚的行号，仅用于构造「行号候选窗口结构性为空」的突变树（合成树远短于该行号）；非对宿主/本仓真实源码的行号锚。真实锚的看护在 `tests/host-contract.mjs` 的 `HOST_V4_ANCHORS` 锚表，以及 `tests/host-radar.mjs` 自身的 `guard S9b 反向` 断言（合成树 × 精确 FAIL 点名）。' },
     ]
     const coverageFiles = []
     const walkCoverageFace = (absoluteDir, relativeDir) => {
@@ -1964,7 +2059,7 @@ console.log('R2 capability negotiation tri-state (matched / compatible-unknown /
     })())
     const liveEntryR2 = HOST_BASELINE_REGISTRY.find((entry) => entry.dshPackages === payloadR2.hostVersions.llm
       && entry.dshPackages === payloadR2.hostVersions.tools && entry.dshPackages === payloadR2.hostVersions.typertProtocol)
-    check('R2-g 真实锚: 本仓实装版本组合 ∈ 基线档案 → RPC 协商态 matched（baselineId = 命中档案项 id；ARCH-006：本仓树锚 0.2.0 frozen 项，主基线 0.2.1 由声明范围 ^0.2.0-rc.2 覆盖）',
+    check('R2-g 真实锚: 本仓实装版本组合 ∈ 基线档案 → RPC 协商态 matched（baselineId = 命中档案项 id；ARCH-007：主基线升 0.2.2-rc.1，本仓 node_modules 树仍 0.2.0-rc.2 ⇒ 命中 0.2.0 frozen 项——声明面逐代并集覆盖全部支持代际）',
       liveEntryR2 !== undefined
       && payloadR2.capabilityProfile.state === 'matched'
       && payloadR2.capabilityProfile.baselineId === liveEntryR2.id,

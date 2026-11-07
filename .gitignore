@@ -26,6 +26,7 @@ node_modules/
 
 # 检查工具目录
 .inspect-vision-router/
+.inspect-host/
 
 # 治理运行时锁状态（会话级瞬态，不入库；其余 .governance/ 治理记录入库）
 .governance/agent-locks.json

@@ -166,10 +166,22 @@ if (!hostHit) {
     let editChain = Promise.resolve()
     const makeEntry = (id, name, Config, rawConfig, fiberUid) => {
       const runtime = { Config }
+      // 宿主形状锚（实读 dsh-settings 0.2.2）：describe 的 presentations 键 =
+      // `entry.fiber.ctx.fiber`（lib/index.js:426），真机 fiber 恒有该回引；0.2.0/0.2.1
+      // 的 describe 不读该面，多余属性惰性（旧代际零影响）。故按真机形态自引用，
+      // 不改下列 resolveConfig 的时序（fiber 建好后再解析 config）。
+      const fiber = { uid: fiberUid, state: 2, runtime, config: null, ctx: null }
+      fiber.ctx = { fiber }
+      // 宿主形状锚（0.2.2 value 面）：describe 改读 `entry.fiber.effectiveConfig`
+      // （lib/index.js:436；cordis Fiber `get effectiveConfig()` = `_effectiveConfig`，
+      // 即 resolveConfig 后的有效配置），0.2.0/0.2.1 读 `fiber.config`。夹具的
+      // fiber.config 即本 harness 的有效配置（live ref 面），故以同值 getter 镜像——
+      // 测试内对 fiber.config 的重解析（老形态 section）随之反映，旧代际惰性。
+      Object.defineProperty(fiber, 'effectiveConfig', { get: () => fiber.config, enumerable: false })
       const entry = {
         id,
         options: { id, name, config: rawConfig === undefined ? {} : structuredClone(rawConfig) },
-        fiber: { uid: fiberUid, state: 2, runtime, config: null, ctx: null },
+        fiber,
       }
       entry.fiber.config = realCordis.resolveConfig(runtime, structuredClone(entry.options.config))
       return entry
