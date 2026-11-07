@@ -576,9 +576,11 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   const eventsSourceB5 = readFileSync(join(ROOT_DIR, 'lib', 'host-abi', 'events.js'), 'utf8')
 
   // 9a. 域管事件清单（§4.3 域 4 ① / W-3 收窄口径；ARCH-005 A3 后 settings/updated
-  //     除名——0.2.0 宿主该事件已消失，四订阅点全部换代 settings/document-updated）。
-  const MANAGED_EXPECTED = ['llm/adapters-updated', 'settings/document-updated', 'agent-preset/selected', 'credentials/reference-updated']
-  check('B5 9a: MANAGED_EVENTS = 域管四事件清单（A3 后旧事件名零残留，P5）',
+  //     除名——0.2.0 宿主该事件已消失，四订阅点全部换代 settings/document-updated；
+  //     FIX-058 后 agent-preset/selected 除名——preset-defaults 播种迁
+  //     ctx.on('session/event', …, {global:true}) 直订，域管双参订阅形态退役）。
+  const MANAGED_EXPECTED = ['llm/adapters-updated', 'settings/document-updated', 'credentials/reference-updated']
+  check('B5 9a: MANAGED_EVENTS = 域管三事件清单（FIX-058 后 preset 播种迁直订；A3 后旧事件名零残留，P5）',
     Array.isArray(MANAGED_EVENTS) && JSON.stringify([...MANAGED_EVENTS].sort()) === JSON.stringify([...MANAGED_EXPECTED].sort()) && !MANAGED_EVENTS.includes('settings/updated'), MANAGED_EVENTS)
   check('B5 9a: W-3 收窄——scoped 生命周期钩子（agent/pre-step、agent/created、agent/request）不在域管清单（veto 语义/热路径零介入）',
     ['agent/pre-step', 'agent/created', 'agent/request'].every((name) => !MANAGED_EVENTS.includes(name)))
@@ -602,8 +604,9 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     /subscribeEvents\(ctx,/.test(readLibB5('index.js')) && /subscribeEvents\(this\.ctx,/.test(readLibB5('service.js'))
     && /event: 'settings\/document-updated'/.test(readLibB5('index.js')) && /event: 'settings\/document-updated'/.test(readLibB5('service.js'))
     && !/ctx\.on\('settings\/updated'/.test(readLibB5('index.js')) && !/this\.ctx\.on\('settings\/updated'/.test(readLibB5('service.js')))
-  check('B5 9b 迁移: preset-defaults 的 agent-preset/selected（域管事件）经域；agent/created 保留直订（W-3）',
-    /subscribeEvents\(ctx,/.test(readLibB5('preset-defaults.js'))
+  check('FIX-058 迁移: preset-defaults 播种改 session/event global 直订（旧域管订阅零残留）；agent/created 保留直订（W-3）',
+    /ctx\.on\('session\/event'[\s\S]*?\{ global: true \}\)/.test(readLibB5('preset-defaults.js'))
+    && !/subscribeEvents\(ctx,/.test(readLibB5('preset-defaults.js'))
     && !/ctx\.on\('agent-preset\/selected'/.test(readLibB5('preset-defaults.js'))
     && /ctx\.on\('agent\/created'/.test(readLibB5('preset-defaults.js')))
 
@@ -660,8 +663,9 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
   disposeConsumerB()
   check('B5 9d 聚合: 全量卸载后共享 listener 归零（无残留泄漏）', (hostListeners.get('settings/document-updated') ?? []).length === 0)
   // 9d-2. 异步 consumer 的 await 语义（域分发不得降级为 fire-and-forget——
-  //   preset-defaults 播种串行队列测试与消费链均依赖 `await handler(...)` 与
-  //   直订等价；多 consumer 时合并 Promise.all）。
+  //   多 consumer 域事件的消费链依赖 `await handler(...)` 与直订等价；多 consumer
+  //   时合并 Promise.all。FIX-058 后 preset-defaults 播种已迁 session/event
+  //   global 直订不经域，本条为域自身的分发契约守卫）。
   {
     const asyncListeners = []
     const asyncTarget = { on: (event, handler) => { asyncListeners.push(handler); return () => {} } }

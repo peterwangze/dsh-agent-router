@@ -256,3 +256,4 @@
 4. **版本范围更新**（本文件路线图行同步）
 
 **快速通道**：仅限治理记录类修改（`.governance/**`），可跳过 Agent Team spawn，由 Coordinator 直接执行（M1.2）。
+| FIX-058 | 2026-11-07 | 预设播种 0.2.2 断代修复：改订 `session/event`（global）+ 跨代际真树行为臂 + v0.8.1 | P10-①④；P9 | 用户报障（14:26 预设 Agent 配置未生效）。事实链：播种在 0.2.1 事件层面精确生效（11-04 会话日志 agent-preset/selected→model/selection=glm-5.3 紧随）→ 宿主 11-04 17:30 升 0.2.2 → 复现会话 15 次选预设零写入。根因：0.2.2（cordis 4.1.0）下 registry 的 `agent-preset/selected` 重发射依赖其非 global 的 `session/event` 监听（受 Scoped containment 限制，空会话载体不在其子树→不触发）；全树服务端消费者仅本插件；0.2.1（cordis 4.0.5）投递可达。修法=插件直订 `session/event` `{global:true}`（宿主 session-controller state/listener 一等先例）过滤 `agent-preset/selected` 汇入现有处理器，删旧订阅（P5 单路径）。行为臂=真树（0.2.0/0.2.1/0.2.2）cordis+dsh-session 实跑 append→断言 handler 触发（红→绿）。附带：客户端 directoryFor 刷新同源断（转发面源=同一 cordis 事件）→ R 项登记。 | 进行中——Dev-D 修复中 | Coordinator 机录（skill 不在会话目录，降级披露：不构成独立审查通过） |

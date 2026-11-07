@@ -4,7 +4,7 @@
 >
 > DeepSeek Harness（DSH）多模型路由插件：为任意 DSH 主 agent 挂载专业 agent 目录——**Agent 预设与 subagent 默认模型**、**专业 Agent 配置与自动路由**、**ChatGPT 订阅登录 + 主模型调用**三大主要功能，按任务自动路由到带独立模型的视觉、图片生成、翻译、语音、子代理等专业 agent，扩展主 agent 的能力边界。
 
-[![version](https://img.shields.io/badge/version-v0.8.0-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
+[![version](https://img.shields.io/badge/version-v0.8.1-blue)](https://github.com/peterwangze/dsh-agent-router/releases)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## 项目目标
@@ -38,19 +38,19 @@
 
 **离线安装**（发行包为 npm pack 形态——解压出 `package/` 目录）：
 
-1. 下载发行包：[dsh-agent-router-0.8.0.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.8.0/dsh-agent-router-0.8.0.tar.gz)
+1. 下载发行包：[dsh-agent-router-0.8.1.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.8.1/dsh-agent-router-0.8.1.tar.gz)
 2. 解压并进入包目录：
 
 ```powershell
 # Windows（PowerShell）
-tar -xzf dsh-agent-router-0.8.0.tar.gz
+tar -xzf dsh-agent-router-0.8.1.tar.gz
 cd package
 dsh plugin --profile web add file:./
 ```
 
 ```sh
 # macOS / Linux
-tar -xzf dsh-agent-router-0.8.0.tar.gz
+tar -xzf dsh-agent-router-0.8.1.tar.gz
 cd package
 npx @deepseek-ai/dsh plugin --profile web add file:./
 ```
@@ -79,23 +79,23 @@ npx @deepseek-ai/dsh plugin --profile web add file:./
 
 安装脚本自动完成：克隆源码 → 链接到 `~/.dsh/profiles/node_modules/` → 在 `profiles/web/cordis.patch.yml` 写入宿主行（幂等，可重复执行）。完成后**重启 DSH** 即可。
 
-固定版本：把命令中的 `main` 换成版本号，如 `v0.8.0`。
+固定版本：把命令中的 `main` 换成版本号，如 `v0.8.1`。
 
 #### 离线安装
 
-1. 下载发行包：[dsh-agent-router-0.8.0.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.8.0/dsh-agent-router-0.8.0.tar.gz)
+1. 下载发行包：[dsh-agent-router-0.8.1.tar.gz](https://github.com/peterwangze/dsh-agent-router/releases/download/v0.8.1/dsh-agent-router-0.8.1.tar.gz)
 2. 解压并进入包目录（npm pack 形态，目录名为 `package`）：
 
 ```powershell
 # Windows
-tar -xzf dsh-agent-router-0.8.0.tar.gz
+tar -xzf dsh-agent-router-0.8.1.tar.gz
 cd package
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -LocalPath .
 ```
 
 ```sh
 # macOS / Linux
-tar -xzf dsh-agent-router-0.8.0.tar.gz
+tar -xzf dsh-agent-router-0.8.1.tar.gz
 cd package
 ./install.sh --local .
 ```
@@ -184,6 +184,7 @@ cd package
   - **subagent 默认模型**：该预设派生的 subagent 的默认模型；未设置时 subagent 跟随主 Agent 当前实际模型（含会话内手动切换后的模型，不固化为预设配置时的值）；显式指定模型的子代理（如插件专业 agent 委派、workflow 指定模型）不受影响
 - **实现机制**：模型跟随两个预设事件（agent 创建 / 空白切换），**不介入会话过程**（无请求流拦截，会话进行中零插件开销）；主会话显示播种借用宿主会话模型选择通路，其附带的全局默认写入**立即自动写回恢复**（瞬态毫秒级，通常不可感知）——恢复失败时自动重试一次，仍失败则在日志高声告警并提示手动改回原全局默认；多个播种事件并发到达时（宿主不等待事件监听器完成）按内部**串行化队列**依次执行，并发交错不会污染全局默认的写回恢复
 - **已知行为披露**：重启后重新打开**从未发过消息的空白预设会话**，同样会触发显示播种（宿主在恢复会话时也发出 agent 创建事件）——与「打开即显示」语义一致；已发过消息的会话不受影响（日志锚定）。全局默认模型（「设置 → 模型」）在播种成功且恢复正常的情况下保持不变；保存后热生效，无需重启。宿主发出预设事件后**不等待播种完成**（fire-and-forget）——播种按内部串行化队列依次处理（极小窗口内并发创建的多个会话各自正确播种、全局默认仍恢复正确），但会话创建后到播种完成前的毫秒级窗口内，首个请求可能短暂路由到全局默认模型，显示与实际路由随后自动一致（人手操作通常不可感知）
+- **已知行为披露（宿主 0.2.2 客户端面，v0.8.1）**：预设切换后**模型选择器目录的主动刷新**在 0.2.2 宿主上会延迟（宿主 0.2.2 的预设事件转发链对其客户端面停发；`session/event` 不在宿主转发白名单内，插件客户端无法直订）。影响仅限刷新时机——**打开模型选择器时目录仍会加载最新**，预设默认模型播种（本插件服务端，v0.8.1 已修复 0.2.2 断代）不受影响；宿主上游恢复该事件转发后自动恢复实时刷新
 
 ### 3. 专业 Agent 配置
 

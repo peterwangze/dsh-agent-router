@@ -12,8 +12,13 @@
 // dsh-agent-loop/dsh-agent-presets）：
 //   - agent/created：Scoped 事件，payload {agent}；resume 路径同样经
 //     setupAndPublish→announce 发出（重启恢复的会话也会触发）；
-//   - agent-preset/selected(sessionId, agentPreset)：非 scoped 双参事件，
-//     仅空白会话切换预设时触发（宿主 agent-preset-locked 保证）；
+//   - agent-preset/selected(sessionId, agentPreset)：会话事件流事实
+//     {type:'agent-preset/selected', data:{agentPreset}}（仅空白会话切换预设时
+//     追加——宿主 agent-preset-locked 保证）；FIX-058 起订阅面 =
+//     ctx.on('session/event', …, {global:true}) 直订（回调参数 (session, event)），
+//     不再依赖宿主 registry 重发射的双参 cordis 事件（0.2.2/cordis 4.1.0 下
+//     该重发射链受 Scoped containment 收紧断裂——根因取证见 lib/preset-defaults.js
+//     文件头宿主契约段）；
 //   - selectModel 进程内形态：sessions.selectModel({ payload: { sessionId,
 //     provider, model, reasoningEffort? } }) → { result: { ok: true, value:
 //     { selected } } } | { result: { ok: false, error } }；内部副作用 =
@@ -190,6 +195,7 @@ function makeApiProxy({ defaults, unavailable = () => false } = {}) {
  */
 function makeCtx({ defaults, apiProxy, agents, agentPresets, sessionController } = {}) {
   const listeners = {}
+  const listenerOptions = {}
   const emitted = []
   const logger = {
     infoCalls: [], warnCalls: [],
@@ -198,10 +204,12 @@ function makeCtx({ defaults, apiProxy, agents, agentPresets, sessionController }
   }
   return {
     listeners,
+    listenerOptions,
     logger,
     emitted,
-    on(event, handler) {
+    on(event, handler, options) {
       ;(listeners[event] ??= []).push(handler)
+      ;(listenerOptions[event] ??= []).push(options)
       return () => { listeners[event] = (listeners[event] ?? []).filter((entry) => entry !== handler) }
     },
     emit(event, ...args) {
@@ -286,12 +294,16 @@ async function fireCreated(ctx, service, agent) {
   return true
 }
 
-/** 驱动一次 agent-preset/selected（双参非 scoped 事件）。监听缺失 → false。 */
+/** 驱动一次 agent-preset/selected（FIX-058：经 session/event 直订——真实载荷形态
+ *  {type:'agent-preset/selected', data:{agentPreset}}，回调参数 (session, event)；
+ *  wrapper 对内为 fire-and-forget（onPresetSelected 的 promise 不透传），排空微任务
+ *  后断言）。监听缺失 → false（RED 判据）。 */
 async function firePresetSelected(ctx, service, sessionId, preset) {
   setup(ctx, service)
-  const handler = (ctx.listeners['agent-preset/selected'] ?? [])[0]
+  const handler = (ctx.listeners['session/event'] ?? [])[0]
   if (typeof handler !== 'function') return false
-  await handler(sessionId, preset)
+  handler({ id: sessionId }, { type: 'agent-preset/selected', data: { agentPreset: preset } })
+  for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve))
   return true
 }
 
@@ -535,13 +547,14 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
 
 // ── D. 主权结构 / fail-safe / 开关 / 热更新 / 观测 ───────────────────────
 {
-  await dcheck('D1 主权结构断言：播种模块只注册 agent/created + agent-preset/selected 两个监听，无 agent/request（回归守卫——EVO-017 请求遥测是独立函数 installRequestTelemetry 的用户授权豁免，不在本模块）', () => {
+  await dcheck('D1 主权结构断言：播种模块只注册 agent/created + session/event 两个监听（session/event 带 {global:true}——FIX-058 直订事件流，两代 cordis dispatch 的 hook.global || 短路 Scoped 过滤），无 agent/request（回归守卫——EVO-017 请求遥测是独立函数 installRequestTelemetry 的用户授权豁免，不在本模块）', () => {
     const ctx = makeCtx({})
     setup(ctx, makeService({}))
     const events = Object.keys(ctx.listeners)
-    return events.length === 2 && events.includes('agent/created') && events.includes('agent-preset/selected')
+    return events.length === 2 && events.includes('agent/created') && events.includes('session/event')
       && !Object.keys(ctx.listeners).includes('agent/request')
-      && (ctx.listeners['agent/created'] ?? []).length === 1 && (ctx.listeners['agent-preset/selected'] ?? []).length === 1
+      && (ctx.listeners['agent/created'] ?? []).length === 1 && (ctx.listeners['session/event'] ?? []).length === 1
+      && (ctx.listenerOptions['session/event'] ?? [])[0]?.global === true
   })
   await dcheck('D2 卸载器移除全部两个监听（随宿主行 fiber 卸载）', () => {
     const ctx = makeCtx({})
@@ -665,10 +678,13 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     const ctx = makeCtx({ defaults, sessionController: controller, agents: { get: (id) => (id === 'sess-e2b' ? agent2 : undefined) } })
     setup(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }))
     const created = (ctx.listeners['agent/created'] ?? [])[0]
-    const selected = (ctx.listeners['agent-preset/selected'] ?? [])[0]
+    const selected = (ctx.listeners['session/event'] ?? [])[0]
     const first = created({ agent: agent1 })
-    const second = selected('sess-e2b', PRESET_ID)
+    // FIX-058：session/event wrapper 同步返回（onPresetSelected fire-and-forget）——
+    // 与 created 面并发同窗，同一队列串行化判据不变。
+    const second = selected({ id: 'sess-e2b' }, { type: 'agent-preset/selected', data: { agentPreset: PRESET_ID } })
     await Promise.all([first, second])
+    for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve))
     return controller.calls.length === 2
       && agent1.options.provider === MAIN_MODEL.provider && agent1.options.model === MAIN_MODEL.model
       && agent2.options.provider === MAIN_MODEL.provider && agent2.options.model === MAIN_MODEL.model
@@ -740,7 +756,7 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     const agent = mainBlankAgent({ id: 'sess-g1', header: { origin: 'main' } })
     const ctx = makeCtx({ defaults, agents: { get: (id) => (id === 'sess-g1' ? agent : undefined) } })
     setup(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }))
-    const handler = (ctx.listeners['agent-preset/selected'] ?? [])[0]
+    const handler = (ctx.listeners['session/event'] ?? [])[0]
     // 拒绝注入：仅 ctx.get('sessionController') 抛错（其余键原样放行——liveDefaultSelection 等不受影响）。
     const realGet = ctx.get
     ctx.get = (key) => {
@@ -752,9 +768,10 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
     const onUnhandled = (reason) => captured.push(reason)
     process.on('unhandledRejection', onUnhandled)
     try {
-      // 复刻宿主 cordis emit fire-and-forget（S4）：不 await、丢弃返回值——
-      // 只有外泄的 handler 拒绝才会成为 unhandledRejection。
-      handler('sess-g1', PRESET_ID)
+      // 复刻宿主 session/event 派发 fire-and-forget（FIX-058：global 直订 wrapper
+      // 同步返回，内部 onPresetSelected 的 promise 不透传）——只有外泄的 handler
+      // 拒绝才会成为 unhandledRejection。
+      handler({ id: 'sess-g1' }, { type: 'agent-preset/selected', data: { agentPreset: PRESET_ID } })
       // 排空微任务 + 跨 setImmediate 轮次（Node 在 turn 末检测 unhandled rejection）。
       for (let i = 0; i < 3; i++) await new Promise((resolve) => setImmediate(resolve))
       if (captured.length > 0) console.error(`  (G1 诊断: process 级捕获 unhandledRejection ×${captured.length}: ${captured[0]?.message ?? String(captured[0])})`)

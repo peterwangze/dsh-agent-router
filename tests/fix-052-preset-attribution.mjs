@@ -142,8 +142,16 @@ function makeRig({ compassPreset = '', stats } = {}) {
     state,
     /** agent/created（payload {agent}——宿主 dsh-agent announce 面）。 */
     created: async (agent) => handlerOf('agent/created')({ agent }),
-    /** agent-preset/selected(sessionId, agentPreset)——双参非 scoped（宿主 `session/event` 转发点）。 */
-    selected: async (sessionId, agentPreset) => handlerOf('agent-preset/selected')(sessionId, agentPreset),
+    /**
+     * agent-preset/selected(sessionId, agentPreset)——FIX-058 后经 session/event
+     * 直订（宿主真实载荷形态：追加 `{type:'agent-preset/selected', data:{agentPreset}}`
+     * 事实；回调参数 (session, event)）。wrapper 内部 fire-and-forget——排空微任务
+     * 后身份映射已建立（noteSessionPresetIdentity 在首个 await 前同步执行）。
+     */
+    selected: async (sessionId, agentPreset) => {
+      handlerOf('session/event')({ id: sessionId }, { type: 'agent-preset/selected', data: { agentPreset } })
+      for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve))
+    },
     /** agent/request（只读旁路——next() 交付实际路由）。 */
     request: async (agent, config = { ...ROUTE }) => handlerOf('agent/request')({ agent }, async () => config),
     diag: (sessionId, kind) => presetDiagnostics().entries.filter((entry) => entry.session === sessionId && (kind === undefined || entry.kind === kind)),

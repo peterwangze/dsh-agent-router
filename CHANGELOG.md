@@ -3,6 +3,37 @@
 > dsh-agent-router 的版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 > 内部注解（提交号 / EV 编号）供追溯，用户可忽略。
 
+## v0.8.1 — 2026-11-07
+
+### 摘要
+
+**预设默认模型播种在宿主 0.2.2 上的断代修复（PATCH）**。核心变化一句话：宿主 0.2.2（cordis 4.1.0）收紧了带 Scoped 过滤的事件投递，`dsh-agent-preset-registry` 对 `agent-preset/selected` 的 cordis 重发射对空会话不再发生（其 `session/event` 监听未带 `{global:true}`，收不到子树外会话载体的事件），插件原依赖该重发射触发的「空白会话切换预设 → 播种默认模型」随之静默失效（0.2.1 / cordis 4.0.5 投递可达，故旧代际正常）。本版把订阅改为与宿主一等消费者同款的 `ctx.on('session/event', …, { global: true })` 直订事件流并按事件类型过滤（P5 单路径，旧订阅删除），并新增**跨代际真树行为臂**测试（真 cordis + 真 dsh-session，append 真事件断言播种全链）防复发。无用户配置项 / 存储格式变更。
+
+### 变更
+
+- **FIX-058｜预设播种订阅换代（session/event global 直订）**
+  - `lib/preset-defaults.js`：`agent-preset/selected` 触发源由 cordis 重发射（0.2.1 可达 / 0.2.2 断）改为 `ctx.on('session/event', …, {global:true})` 直订 + `event.type` 过滤，汇入零改动的 `onPresetSelected` 处理器；播种处理器、sessionBlank 判据、序列化队列、异常纪律全部不动。宿主先例：`dsh-api-session-controller/lib/types/state/listener.js`（0.2.2-rc.1 L33，`{global:true}` 直订）。
+  - `lib/host-abi/events.js`：`MANAGED_EVENTS` 除名 `agent-preset/selected`（服务端唯一消费者已迁走）；客户端转发白名单镜像 `FORWARDED_EVENT_ALLOWLIST` 保留该条目（客户端 `$on` 面与本案分离）。
+- **FIX-058｜跨代际真树行为臂（新增 `tests/host-event-chain.mjs`，第 25 套件）**
+  - 目标树真包动态导入 cordis + dsh-session，真 `root.plugin(SessionStore)` → 载体 fiber → 会话 append `{type:'agent-preset/selected', data:{agentPreset}}` → 断言播种全链（global 直订收到 → onPresetSelected → selectModel 收到预设配置模型）+ options 突变 / 全局默认净零 / 负向过滤 / dispose 四组守卫。
+  - 红绿两态三树实证：0.2.0-rc.2（cordis 4.0.1）/ 0.2.1-rc.2（4.0.5，npm 全局嵌套树）/ 0.2.2-rc.1（4.1.0）——旧订阅形态三树各 6 FAIL，新形态三树各 11/11 PASS。「预设播种事件链」由此进入断代即红的看护面（此前仅 fixture 桩世界覆盖，P10-④ 缺口由此补上）。
+- **FIX-058｜既有看护网适配**：`tests/preset-defaults.mjs`（fixture 载荷改 session/event 形态 + `{global:true}` options 断言）、`tests/host-abi-health.mjs`（9a 三事件清单 + 迁移判据）、`tests/host-contract.mjs`（DIRECT_STREAM_EVENTS 白名单类目 + S4 ≥1 处 global 直订正向守卫）、`tests/smoke.mjs`（census 换键并透传第三参——原包装剥 options 的缺陷一并修复）、`tests/fix-052-preset-attribution.mjs`（rig 换形态）。
+
+### 破坏性变更
+
+- 无（`session/event` 直订在 0.2.0 / 0.2.1 / 0.2.2 三代宿主上均为可达面，`{global:true}` 过滤短路在 cordis 4.0.x / 4.1.0 源码逐字同款）。
+
+### 已知行为 / 口径披露
+
+- **客户端预设切换目录刷新在 0.2.2 上延迟**（同根因、插件侧不可独立修复）：`lib/client.js` 的 `preset-switch-directory-refresh` 消费 `$on('agent-preset/selected')` 转发面，其宿主侧事件源即上述已停发的重发射；`session/event` 不在宿主转发白名单内，客户端无法直订。影响 = 模型选择器目录在预设切换后不主动刷新（打开选择器时仍加载最新目录）；服务端播种（本版修复面）不受影响。登记为治理 R 项，宿主上游恢复重发射后自动恢复。
+
+### 验证
+
+- 全量门控 `node tests/run-all.mjs`：**25 套件 + 4 运行器模块全绿**（32.9s，#SKIP 5）。
+- 行为臂三树：0.2.2（`.inspect-host/npm-0.2.2-rc.1`）与 0.2.1（npm 全局嵌套树）由协调者独立复跑 11/11 PASS；默认树（0.2.0-rc.2）在全量门控内通过。
+- 真机证据链：0.2.1 时代会话日志 `agent-preset/selected` 后紧跟 `model/selection=配置值`（播种生效）↔ 0.2.2 复现会话 15 次选预设零写入（失效）；行为臂以同一 append 形态断言恢复。
+- 独立复审：APPROVED_WITH_NOTES（3 处措辞级微瑕已回炉修正；2 项注记分别以本节披露与治理 R 项收口）。
+
 ## v0.8.0 — 2026-11-07
 
 ### 摘要

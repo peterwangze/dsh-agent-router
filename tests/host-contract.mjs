@@ -511,6 +511,14 @@ const CONSUMER_BARE_CTX_GET_ALLOWLIST = {
 }
 /** scoped 生命周期钩子（W-3 收窄口径：veto 语义 / 热路径零介入——直订合法，不在域管清单）。 */
 const SCOPED_HOOK_EVENTS = ['agent/pre-step', 'agent/created', 'agent/request']
+/**
+ * 宿主会话事件流直订事件（FIX-058）：跨面环境事件但订阅形态 = global 直订——
+ * preset-defaults 播种经 `ctx.on('session/event', …, {global:true})` 消费
+ * `agent-preset/selected` 事实（不依赖宿主 registry 重发射链：0.2.2/cordis 4.1.0
+ * 下该链受 Scoped containment 收紧断裂）。先例 = 宿主 dsh-api-session-controller
+ * lib/types/state/listener.js 的 `ctx.on('session/event', cb, { global: true })`。
+ */
+const DIRECT_STREAM_EVENTS = ['session/event']
 
 /**
  * S2 宿主源码形状锚点（P10-④）：高风险非导出面以「形状签名不一致即红」的
@@ -1236,7 +1244,7 @@ console.log('S4 消费点黑名单（高危面禁裸 ctx.get + 域管事件禁�
       if (bare.test(source)) bareManaged.push(`${file}:${event}`)
     }
   }
-  check('S4 域管事件: MANAGED_EVENTS 域外零裸 ctx.on（五事件全部经 events 域 subscribeEvents——B5/B6 订阅收敛终态）', bareManaged.length === 0, bareManaged)
+  check('S4 域管事件: MANAGED_EVENTS 域外零裸 ctx.on（三事件全部经 events 域 subscribeEvents——B5/B6 订阅收敛终态；FIX-058 后 agent-preset/selected 除名迁 session/event 直订）', bareManaged.length === 0, bareManaged)
   const scopedDirect = SCOPED_HOOK_EVENTS.filter((event) => libFiles.some((file) => stripComments(readLib(file)).includes(`ctx.on('${event}'`)))
   check('S4 域管事件: scoped 生命周期钩子保留直订经域外（W-3 收窄口径：agent/pre-step + agent/created + agent/request 三面）',
     deepEqual(scopedDirect.sort(), [...SCOPED_HOOK_EVENTS].sort()), scopedDirect)
@@ -1245,7 +1253,13 @@ console.log('S4 消费点黑名单（高危面禁裸 ctx.get + 域管事件禁�
     return [...source.matchAll(/event:\s*'([^']+)'/g)].map((match) => ({ file, event: match[1] }))
   })
   const unhomed = MANAGED_EVENTS.filter((event) => !subscribeSites.some((site) => site.event === event))
-  check('S4 域管事件: 五事件各有 ≥1 域订阅站点（事件面单点无遗漏——收敛不丢消费者）', unhomed.length === 0, unhomed)
+  check('S4 域管事件: 三事件各有 ≥1 域订阅站点（事件面单点无遗漏——收敛不丢消费者）', unhomed.length === 0, unhomed)
+  // FIX-058：session/event 直订站点守卫——DIRECT_STREAM_EVENTS 每事件各有 ≥1 处
+  // global 直订（preset-defaults 播种链；0.2.2/cordis 4.1.0 下 registry 重发射链
+  // 断裂，插件自身订阅 MUST 不依赖它）。
+  const directStreamSites = DIRECT_STREAM_EVENTS.filter((event) => libFiles.some((file) => new RegExp(`ctx\\.on\\('${event.replace(/\//g, '\\/')}'[\\s\\S]*?\\{ global: true \\}\\)`).test(stripComments(readLib(file)))))
+  check('S4 直订事件流: session/event 各有 ≥1 处 {global:true} 直订（FIX-058：global 是两代 cordis dispatch 的 Scoped 过滤短路键——缺即红）',
+    directStreamSites.length === DIRECT_STREAM_EVENTS.length, { directStreamSites, expected: DIRECT_STREAM_EVENTS })
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1332,9 +1346,9 @@ console.log('S6 转发事件白名单静态比对（W-4）：客户端转发面 
     const source = stripComments(readLib(file))
     for (const match of source.matchAll(/(?:ctx|this\.ctx)\.on\(\s*'([^']+)'/g)) nodeOnSites.push({ file, event: match[1] })
   }
-  const allowedNodeEvents = [...MANAGED_EVENTS, ...SCOPED_HOOK_EVENTS]
+  const allowedNodeEvents = [...MANAGED_EVENTS, ...SCOPED_HOOK_EVENTS, ...DIRECT_STREAM_EVENTS]
   const illegalNode = nodeOnSites.filter((site) => !allowedNodeEvents.includes(site.event))
-  check('S6 白名单: Node 面裸 ctx.on 事件名 ⊆ {域管事件（经域后本应零裸点）, scoped 钩子}（域外新增事件名即红）',
+  check('S6 白名单: Node 面裸 ctx.on 事件名 ⊆ {域管事件（经域后本应零裸点）, scoped 钩子, session/event 直订流（FIX-058 global 直订）}（域外新增事件名即红）',
     illegalNode.length === 0, illegalNode)
 }
 

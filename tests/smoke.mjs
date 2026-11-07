@@ -3030,22 +3030,27 @@ console.log('admission wrapper (L1):')
 // 迁移前基线（B5 批前实读 census，面齐备的 index apply——本文件同 harness）：
 // settings 事件 4（index 统计持久化 + service 宿主路由维护 + wrapper 热同步
 // + oauth-llm 状态同步）/ llm/adapters-updated 2（wrapper + oauth-llm）/
-// agent/pre-step 1 / agent/created 1 / agent-preset/selected 1 / agent/request 1
+// agent/pre-step 1 / agent/created 1 / agent-request 播种事件 1 / agent/request 1
 // = 10。B5 收敛 4→3；EVO-024 B6 归口收口（四模块同根 ctx 共享**单**宿主
 // listener）实测 settings 事件 3→1、adapters 2→1、总量 9→6。**ARCH-005 A3
 // （HD-002）事件换代**：settings/updated 消失，四订阅点全部迁
 // settings/document-updated（同目标共享单 listener 形态不变）——census 键名
 // 换代、计数不变（断言口径 = 收敛后实测精确值；BR-01②「只减不增」不回退）。
+// **FIX-058 事件换代**：预设播种订阅 agent-preset/selected（域管双参事件）→
+// session/event（{global:true} 直订事件流——不依赖宿主 registry 重发射链）；
+// census 键名换代、计数不变（1 处）。
 {
   const b5IndexModule = await import('../lib/index.js')
   const root = new Context()
   const census = {}
   const listenersByEvent = {}
   const origOn = root.on.bind(root)
-  root.on = (event, handler) => {
+  // FIX-058：透传第三参 options——播种订阅带 {global:true}（census 包装剥离
+  // options 会 silently 改变被测行为面）。
+  root.on = (event, handler, options) => {
     census[event] = (census[event] ?? 0) + 1
     listenersByEvent[event] = [...(listenersByEvent[event] ?? []), handler]
-    return origOn(event, handler)
+    return origOn(event, handler, options)
   }
   // A3 声明制：settings 面无 register（apply 不再做运行时注册；describe/mutate
   // 为 service.config()/save() 与 host-route 的消费面）。
@@ -3070,7 +3075,7 @@ console.log('admission wrapper (L1):')
   check('A3 census: 旧事件名 settings/updated 零订阅（HD-002 换代后死事件零残留，P5）', census['settings/updated'] === undefined, census)
   check('B6 census: settings/document-updated 收敛 3→1（index 统计持久化 + service 宿主路由维护 + wrapper 热同步 + oauth-llm 状态同步四消费者共享单宿主 listener）', census['settings/document-updated'] === 1, census)
   check('B6 census: llm/adapters-updated 收敛 2→1（wrapper + oauth-llm 经 events 域共享单 listener——B6 归口收口）', census['llm/adapters-updated'] === 1, census)
-  check('B5 census: agent-preset/selected 经 events 域（域管事件 Node 面单 listener）', census['agent-preset/selected'] === 1)
+  check('FIX-058 census: 播种订阅 session/event global 直订 1（旧域管事件 agent-preset/selected 零订阅——不依赖宿主 registry 重发射链）', census['session/event'] === 1 && census['agent-preset/selected'] === undefined, census)
   check('B5 census: scoped 钩子保留直订（agent/pre-step 1 + agent/created 1 + agent/request 1——W-3 口径）', census['agent/pre-step'] === 1 && census['agent/created'] === 1 && census['agent/request'] === 1)
   check('B5 census: 全量订阅注册数 ≤ 迁移前基线 10（BR-01② 订阅总数只减不增）', Object.values(census).reduce((sum, count) => sum + count, 0) <= 10, census)
 
