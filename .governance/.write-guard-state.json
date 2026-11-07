@@ -148,6 +148,9 @@
         "EVD-2": [
           "9819143d4a024d49cdf394bac68d46d0"
         ],
+        "EVD-20": [
+          "9226879178e73ee8542a48eb2ba68a00"
+        ],
         "EVD-3": [
           "5ace990a6fe0eee4913603e01539d9b0"
         ],
@@ -619,7 +622,7 @@
           "5d3528f22e85ff475f708dcc5e89da50"
         ]
       },
-      "sha256": "24a8cb52ce2e0c6f300a308cead1915341101a78424c7e274546cf14f19e7405"
+      "sha256": "a94b44d24c39508c2a410f6100504c6be4c04a5edef840084d252421c7a1eb8c"
     },
     "plan-tracker.md": {
       "rows": {
@@ -637,6 +640,9 @@
         ],
         "ARCH-006": [
           "e1d66cc45eb8f06ad2edad6265fc1b96"
+        ],
+        "ARCH-007": [
+          "609de17331602dacc734efc1a671b1eb"
         ],
         "DEV-001": [
           "82ba5d9ef02d330e076f6bbb1604188c"
@@ -915,6 +921,9 @@
         "REL-016": [
           "2f4f9b648954287b06467362e5c44668"
         ],
+        "REL-017": [
+          "5df38854667bc97704fe39e03ba57e2f"
+        ],
         "REQ-001": [
           "9aaf5daac017b93737b0ea6937c2a508"
         ],
@@ -934,10 +943,10 @@
           "58c672f52926fbf91e75a9e983387b10"
         ]
       },
-      "sha256": "3f01e754efc7625d7358984f8053c07b3e40a308b71baa57df74ce30bccc100e"
+      "sha256": "19213adc14ca49c65f278bae57f9e7e93508a2aee89bd844fcad1523d1fdcbb4"
     }
   },
   "schema_version": 1,
   "tool": "governance-write-guard/row-family-reconciliation",
-  "updated_at": "2026-10-25T08:21:55"
+  "updated_at": "2026-11-07T13:03:24"
 }
