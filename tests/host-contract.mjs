@@ -65,7 +65,7 @@
  *     移出窗口即红 → 人工复核注释/基线后刷新）。
  *
  * **CI 覆盖口径（FIX-055-R0 P2-2；FIX-056-4 复核确认）**：guard-matrix pinned 宿主树
- * = 恰好 HOST_KEY_PACKAGES 8 包，**不 pin v4/persistence**。registry 证据补录
+ * = 恰好 HOST_KEY_PACKAGES 9 包，**不 pin v4/persistence**。registry 证据补录
  * （FIX-056-3，`npm view @deepseek-ai/dsh-session-format-v3-to-v4 versions --json`
  * 只读查询 2026-10-22）：`0.1.7-alpha.1 / 0.1.7-alpha.2 / 0.1.7-rc.1 / 0.1.7-rc.2 /
  * 0.2.0-rc.1 / 0.2.0-rc.2 / 0.2.1-alpha.1 … 0.2.1-rc.2`——**无 0.1.5-rc.2**（而
@@ -378,7 +378,7 @@ const baselineIncludes = (since) => versionAtLeast(since, targetBaseline.id)
  * R0 P2-2 点名场景「早于 `dsh-client-ui-settings` 的旧缓存副本使 S3 半边报红而版本判据
  * 仍打绿」由此同源可判（FIX-037 R0 P2-2 收口）。
  */
-const HOST_KEY_PACKAGES = ['dsh', 'dsh-api-remotes', 'dsh-api-session-controller', 'dsh-client-ui-model-selection', 'dsh-client-ui-conversation', 'dsh-llm', 'dsh-client-ui-settings', 'dsh-client-locale']
+const HOST_KEY_PACKAGES = ['dsh', 'dsh-api-remotes', 'dsh-api-session-controller', 'dsh-agent', 'dsh-client-ui-model-selection', 'dsh-client-ui-conversation', 'dsh-llm', 'dsh-client-ui-settings', 'dsh-client-locale']
 
 /** remote.* 面方法形状基线（宿主 dsh-api-remotes TYPERT_REMOTE 描述符实读；域内 CLIENT_REMOTE_FACES 为代码侧权威）。 */
 const CLIENT_REMOTE_FACES_BASELINE = {
@@ -851,7 +851,7 @@ if (distribution !== null) {
  * FIX-055-R0 P2-2：宿主树完整度判定（S8/S8b/S9b 共用单点）。
  * 完整安装 = 本机 npm 全局树（origin='npm-global(...)'；v4/persistence 随宿主发行）
  * ⇒ 缺包判红（完整安装不应缺）；DSH_HOST_SOURCE / DSH_HOST_PACKAGES / _npx 为
- * 显式或部分树（CI guard-matrix pinned 树 = 恰好 HOST_KEY_PACKAGES 8 包，刻意不
+ * 显式或部分树（CI guard-matrix pinned 树 = 恰好 HOST_KEY_PACKAGES 9 包，刻意不
  * pin v4/persistence——v4 包无 0.1.5-rc.2 发行版，纯增量 pin 会打断 0.1.5 矩阵 job）
  * ⇒ 缺包记可见 skip 带原因（包缺失 ≠ 契约漂移）。
  */
@@ -1525,7 +1525,7 @@ console.log('S7 增强靶子（宿主 checkout 可达时直读源码核验常量
     } else {
       const appBootEntry = join(hostRoot, 'dsh-app-boot', 'lib', 'index.js')
       if (!existsSync(appBootEntry)) {
-        // 部分树（CI pinned = HOST_KEY_PACKAGES 8 包，刻意不含 dsh-app-boot）→ 可见 skip，
+        // 部分树（CI pinned = HOST_KEY_PACKAGES 9 包，刻意不含 dsh-app-boot）→ 可见 skip，
         // 不裸抛 ENOENT（BR-03：静态守卫不依赖完整宿主树；本机完整 npm 全局树实跑覆盖）。
         note('S7 增强: 靶子树不含 dsh-app-boot（部分树）= 域 8 的 4 条解析机制锚（裸路径序 / manifestOf 先问 pluginPackages / interception 路由 / engines.dsh 优先级）记 skip（BR-03；本机完整树实跑）')
       } else {
@@ -1584,7 +1584,7 @@ const hostV4Contract = await (async () => {
     if (hostTreeIsComplete) {
       check(`S8/S8b 宿主 v4 合约: 完整宿主树（${hostTarget.origin}）缺 ${V4_PACKAGE} → 红（FIX-055-R0 P2-2：本机完整 npm 全局树应含该包）`, false, { root: hostTarget.root, origin: hostTarget.origin })
     } else {
-      note(`S8/S8b 宿主 v4 合约: 靶子树不含 ${V4_PACKAGE}（${hostTarget.origin} = 显式/部分树；CI pinned 树 = 恰好 HOST_KEY_PACKAGES 8 包，刻意不含该包）→ 两组记 skip（包缺失 ≠ 契约漂移；本机完整树实跑）`)
+      note(`S8/S8b 宿主 v4 合约: 靶子树不含 ${V4_PACKAGE}（${hostTarget.origin} = 显式/部分树；CI pinned 树 = 恰好 HOST_KEY_PACKAGES 9 包，刻意不含该包）→ 两组记 skip（包缺失 ≠ 契约漂移；本机完整树实跑）`)
     }
     return { status: 'skip' }
   }
@@ -1741,7 +1741,7 @@ console.log('S9 插件名单源守卫（FIX-055 P3-2）+ 宿主锚守卫（FIX-0
       if (hostTreeIsComplete) {
         check(`S9b 宿主锚: 完整宿主树（${hostTarget.origin}）缺 ${packageName} → 红（FIX-055-R0 P2-2：本机完整 npm 全局树应含该包；${affected.join(' / ')}）`, false, { packageName, root: hostTarget.root, affected })
       } else {
-        note(`S9b 宿主锚: 靶子树不含 ${packageName}（${hostTarget.origin} = 显式/部分树；CI pinned 树 = 恰好 HOST_KEY_PACKAGES 8 包，刻意不含该包）→ ${affected.join(' / ')} 记 skip（本机完整 npm 全局树实跑；包缺失 ≠ 锚漂移）`)
+        note(`S9b 宿主锚: 靶子树不含 ${packageName}（${hostTarget.origin} = 显式/部分树；CI pinned 树 = 恰好 HOST_KEY_PACKAGES 9 包，刻意不含该包）→ ${affected.join(' / ')} 记 skip（本机完整 npm 全局树实跑；包缺失 ≠ 锚漂移）`)
       }
     }
     for (const anchor of HOST_V4_ANCHORS) {

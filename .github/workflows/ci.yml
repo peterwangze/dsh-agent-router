@@ -104,14 +104,14 @@
 #   `node tests/run-all.mjs`；基线选择经 `DSH_BASELINE` 环境变量（两测试套件按 R3 机制
 #   消费：靶子面判据按所选基线档案项判定，声明面恒判 primary）。
 # - pinned 宿主安装（供应链纪律 = 精确版本 pin + registry 拉取）：npm pack
-#   HOST_KEY_PACKAGES（dsh 主包 + 7 个 dsh-* 判据包）到 job 环境（$RUNNER_TEMP）+
+#   HOST_KEY_PACKAGES（dsh 主包 + 8 个 dsh-* 判据包）到 job 环境（$RUNNER_TEMP）+
 #   `DSH_HOST_SOURCE` 指向 → host-contract 的 S3 宿主侧半边 / S7 增强组在 CI
 #   不再 skip（guard job 无宿主树，两面恒 skip——R3 目标由本 job 承载）。
 # - **版本单源（P5）**：matrix 的基线 id 列表与各 job 的 pinned 版本**不写 yaml 字面量**
 #   ——一律由 `tests/host-version-snapshot.mjs` 的 HOST_BASELINE_REGISTRY 运行时解析
 #   （resolve-baselines job 产出 id 集 → matrix 消费；guard-matrix 内每 job 再按
 #   DSH_BASELINE 解析 dsh / dshPackages 两值）。
-# - **树形态 = 恰好 HOST_KEY_PACKAGES 8 包**（刻意不含 dsh-typert-registry /
+# - **树形态 = 恰好 HOST_KEY_PACKAGES 9 包**（刻意不含 dsh-typert-registry /
 #   dsh-settings）：rpc-shadow-guard §6 与 settings-config-migration §3 的真树判据是
 #   0.2.0 专属**行为**断言（A2/A3 批：validateCodec create() 强制 / settings Config
 #   volatile 面），对 0.1.5 树必然红且不可按 DSH_BASELINE 分代（其判据面无 since 档案）
@@ -249,7 +249,7 @@ jobs:
           '
 
       # pinned 宿主树（npm registry 精确版本拉取）：恰好 host-contract 的
-      # HOST_KEY_PACKAGES 8 包（形态依据见文件头「树形态」注记——刻意不含
+      # HOST_KEY_PACKAGES 9 包（形态依据见文件头「树形态」注记——刻意不含
       # dsh-typert-registry / dsh-settings，避免 0.2.0 专属行为判据在旧基线树上报红）。
       - name: pinned host tree (npm pack HOST_KEY_PACKAGES to $RUNNER_TEMP)
         run: |
@@ -257,7 +257,7 @@ jobs:
           TREE="$RUNNER_TEMP/host-baseline-tree/@deepseek-ai"
           mkdir -p "$TREE"
           cd "$RUNNER_TEMP"
-          for name in dsh-api-remotes dsh-api-session-controller dsh-client-ui-model-selection dsh-client-ui-conversation dsh-llm dsh-client-ui-settings dsh-client-locale; do
+          for name in dsh-api-remotes dsh-api-session-controller dsh-agent dsh-client-ui-model-selection dsh-client-ui-conversation dsh-llm dsh-client-ui-settings dsh-client-locale; do
             npm pack --silent "@deepseek-ai/$name@${DSH_PACKAGES_VERSION}"
             mkdir -p "$TREE/$name"
             tar -xzf "deepseek-ai-$name-${DSH_PACKAGES_VERSION}.tgz" -C "$TREE/$name" --strip-components=1

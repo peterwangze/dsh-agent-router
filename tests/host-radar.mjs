@@ -139,7 +139,7 @@ const FROZEN_HIGHEST = REGISTRY.filter((entry) => entry?.status !== 'primary')
 // schema 顶层字段 / LlmAdapter 方法 / 锚符号 / 7d 针：按主基线常量手写——绿树零 diff
 // 断言 = 夹具与权威常量的机器锁（见文件头「判别夹具」段）。
 const KEY_DSH_PACKAGES = [
-  'dsh', 'dsh-api-remotes', 'dsh-api-session-controller', 'dsh-client-ui-model-selection',
+  'dsh', 'dsh-api-remotes', 'dsh-api-session-controller', 'dsh-agent', 'dsh-client-ui-model-selection',
   'dsh-client-ui-conversation', 'dsh-llm', 'dsh-client-ui-settings', 'dsh-client-locale',
 ]
 const LLM_ADAPTER_METHODS = ['providerInfo', 'providerRetryPolicy', 'imageRequestPricing', 'listModels', 'resolveModel', 'prepareCall']
@@ -274,8 +274,10 @@ console.log('R4 雷达 probe 模式（四类 diff 报告 + 探测不门控 + 判
   const greenRun = runRadar(['--host-source', green])
   check(`probe: 绿树（${PRIMARY.dshPackages} 主基线形态）四类零 diff + exit 0（负控 + 夹具机器锁）`,
     greenRun.status === 0 && greenRun.json?.summary?.totalDiffs === 0, { status: greenRun.status, summary: greenRun.json?.summary, stderr: greenRun.stderr })
-  check('probe: 绿树包表 10 项全部 match（8 关键包 + cordis + schemastery）',
-    greenRun.json?.packageTable && Object.values(greenRun.json.packageTable).length === 10
+  // 计数随夹具清单派生（不手写数字——清单增删时机器锁不漂移）。
+  const packageTableExpected = KEY_DSH_PACKAGES.length + 2 // 关键包 + cordis + schemastery
+  check(`probe: 绿树包表 ${packageTableExpected} 项全部 match（${KEY_DSH_PACKAGES.length} 关键包 + cordis + schemastery）`,
+    greenRun.json?.packageTable && Object.values(greenRun.json.packageTable).length === packageTableExpected
       && Object.values(greenRun.json.packageTable).every((entry) => entry?.status === 'match'),
     greenRun.json?.packageTable)
   check('probe: 报告载基线档案项（primary 单源提取——无版本常量副本）',
