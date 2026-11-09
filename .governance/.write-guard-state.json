@@ -154,6 +154,9 @@
         "EVD-21": [
           "872f0e917ca40c8caf1fba41419d06ab"
         ],
+        "EVD-22": [
+          "fc5e81086c18ad4e60abe2d241a32883"
+        ],
         "EVD-3": [
           "5ace990a6fe0eee4913603e01539d9b0"
         ],
@@ -625,7 +628,7 @@
           "5d3528f22e85ff475f708dcc5e89da50"
         ]
       },
-      "sha256": "e703bb64378cabccef7873a479b547b8c6f1433cd2b700fcacead7563dab26ae"
+      "sha256": "8201ace035bbf854345387d4483f8a88addf8de4744293416ace6adf5f6deb77"
     },
     "plan-tracker.md": {
       "rows": {
@@ -841,7 +844,10 @@
           "06f8825960c4f335e486546cfa32ce2f"
         ],
         "FIX-058": [
-          "1e415966da749800e93364e4f4c4ab86"
+          "87ea2c1baa141e750e3bba980db093ef"
+        ],
+        "FIX-059": [
+          "f4fbbac4a88d23b4dc14e29544779946"
         ],
         "GOV-001": [
           "53be57896bb73b3ab53b12c7f1ec8edc"
@@ -949,10 +955,10 @@
           "58c672f52926fbf91e75a9e983387b10"
         ]
       },
-      "sha256": "7b789656b836e1ec66016528286f48288979f11ff44f116eaeead831240cd6f3"
+      "sha256": "10c7157894c123071f2641ceb37122644f13a4f51f5a82aa0e03388ce6f3a44b"
     }
   },
   "schema_version": 1,
   "tool": "governance-write-guard/row-family-reconciliation",
-  "updated_at": "2026-11-07T20:19:51"
+  "updated_at": "2026-11-09T10:23:39"
 }
