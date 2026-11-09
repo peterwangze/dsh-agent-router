@@ -3,6 +3,25 @@
 > dsh-agent-router 的版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 > 内部注解（提交号 / EV 编号）供追溯，用户可忽略。
 
+## v0.8.2 — 2026-11-09
+
+### 摘要
+
+**预设播种写入面在宿主 0.2.2 上的断代修复（PATCH，FIX-059）**。核心变化一句话：宿主 0.2.2 把 `agentOptions()` 改为 getter-only 活视图（无 setter），插件播种第一步「突变 options」在新代抛 TypeError 而旧代码将其当致命错误提前退出，导致正式写入面 `selectModel`（0.2.2 上唯一且充分——投影优先于 options）根本不执行。本版把第一步重排为能力探测分支：options 可变（≤0.2.1）走原链零变化；不可变（0.2.2）跳过辅助突变直走投影写入路径，诊断条目新增 `route` 字段（`options+select` | `projection-only`）。无用户配置项 / 存储格式变更。
+
+### 变更
+
+- **FIX-059｜预设播种 0.2.2 写入面断代（not-mutable 提前断链）**
+  - 根因：宿主 0.2.2 起 `agentOptions()` 改为 getter-only 活视图（`dsh-api-session-controller` lib/index.js L440-453 `get provider/model` 无 setter）→ 严格模式 `agent.options.provider = x` 抛 TypeError；旧 `seed()` 把①突变失败当致命（`skip:'not-mutable'` 提前 return）→ ②`selectModel` 正式写入面根本不执行，0.2.2 播种全断（用户诊断卡 09:36-09:38 八条 ✗ (not-mutable) 实录）。0.2.1 及以下同函数返回普通快照对象——突变可行（历史行为基础）。
+  - 修复（`lib/preset-defaults.js`）：`seed()` ① 重排为**能力探测 → 分支**——新增模块内 `tryMutateOptions(agent, target)`（严格模式 try 赋值，不改 getter 形态）；**可变（≤0.2.1）**走现状完整链（突变 → ②selectModel → ③写回恢复，失败回滚①，语义零变化）；**不可变（0.2.2）**跳过①直接 ②③（projection-only：0.2.2 路由事实 = `AgentModel.current()` 的投影（durable model/selection 事件）优先于 options，selectModel 写入即请求路由），info 一条可观测 + 诊断 `route:'projection-only'` 标注，`revertOptions` 显式 no-op。③全局写回恢复两分支不变（saveSelection 副作用仍在）。`subagentFixup` 同步对齐：突变失败 = 能力降级而非错误（0.2.2 child options 仍为普通对象，分支不可达；warn + skip 保持）。
+  - 观测面扩展：诊断条目新增可选 `route` 字段（`'options+select' | 'projection-only'`）——`lib/schemas.js` codec + `lib/client.js` 浏览器镜像 codec + 设置页诊断卡渲染（`[route]` 标注 + 中英 hint 文案）+ `tests/served-client.js` 字节镜像。
+- **FIX-059｜行为臂扩展（`tests/host-event-chain.mjs` +4 断言 → 15）**：新增 getter-only options 臂（0.2.2 形态 harness——`agent.options` 换 getter-only 活视图 → append 真事件 → 断言 selectModel 仍被调用 + 诊断 projection-only + 全局写回恢复 + getter 视图未被改写）；plain options 臂（0.2.1 形态）现有断言保持。红绿两态实证：旧 lib 下 getter-only 臂恰 3 FAIL（零 selectModel / `skip:not-mutable` / 零恢复），新 lib 15/15；三树（0.2.0-rc.2 / 0.2.1-rc.2 嵌套 / 0.2.2-rc.1）全 15/15。
+- **FIX-059｜fixture 适配**：`tests/preset-defaults.mjs` 新增 O 节四断言（O1 getter-only 主链播种 + route 标注 / O2 拒绝分支无可回滚 + skip=select-rejected 不再 not-mutable / O3 plain 语义零变化 + route=options+select / O4 切换面同分支）；全仓 `not-mutable` 引用核对（lib 两处语义已对齐，无其他测试依赖旧断链行为）；`tests/host-abi-health.mjs` ANCHOR_CASES 登记行为臂新宿主锚（L440-453）。
+
+### 验证
+
+- `node tests/preset-defaults.mjs` 全绿；`node tests/host-event-chain.mjs` 三树各 15/15；`node tests/host-abi-health.mjs` 243/243；`node tests/smoke.mjs` 全绿（1 skip）；`node tests/fix-052-preset-attribution.mjs` 全绿；`node tests/host-contract.mjs` 169 断言全绿（3 skip）；`node tests/rpc-shadow-guard.mjs` 39/39。
+
 ## v0.8.1 — 2026-11-07
 
 ### 摘要

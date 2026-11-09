@@ -369,7 +369,7 @@ window.__ModuleLoader__.load({
       at: wv.number(), kind: wv.string(), applied: wv.boolean(),
       preset: wv.string(), session: wv.string(),
       target: wv.object({ provider: wv.string(), model: wv.string() }, true),
-      skip: wv.string(true), detail: wv.string(true),
+      skip: wv.string(true), route: wv.string(true), detail: wv.string(true),
     })
     const wPresetDiagnosticsResult = wv.object({ entries: wv.array(wPresetDiagEntry) })
     const wFaceHealth = wv.object({ name: wv.string(), state: wv.string(), detail: wv.string(true) })
@@ -679,7 +679,7 @@ window.__ModuleLoader__.load({
       presetsTitle: '预设 Agent',
       presetsSummary: (n) => `已配置 ${n} 个预设`,
       presetDiagTitle: '预设生效诊断（最近事件）',
-      presetDiagHint: '✓ = 已应用；✗ = 跳过（括号内为原因：not-configured 未配置 / produced 会话已运行 / explicit-override 显式覆盖 / face-unavailable 选择面缺失 / select-rejected 模型不可用等）',
+      presetDiagHint: '✓ = 已应用；✗ = 跳过（括号内为原因：not-configured 未配置 / produced 会话已运行 / explicit-override 显式覆盖 / face-unavailable 选择面缺失 / select-rejected 模型不可用等）；方括号内为写入路径（projection-only = 0.2.2+ 投影写入面，options+select = 突变+选择面双写）',
       // ARCH-004 B1（§6.1）：宿主面健康徽章 + 面板（一次性快照数据源）。
       hostHealthTitle: '宿主面健康',
       hostHealthOk: '✓ 宿主面正常',
@@ -1015,7 +1015,7 @@ window.__ModuleLoader__.load({
       presetsTitle: 'Preset Agents',
       presetsSummary: (n) => `${n} preset(s) configured`,
       presetDiagTitle: 'Preset effectiveness diagnostics (recent events)',
-      presetDiagHint: '✓ = applied; ✗ = skipped (reason in parentheses: not-configured / produced / explicit-override / face-unavailable / select-rejected …)',
+      presetDiagHint: '✓ = applied; ✗ = skipped (reason in parentheses: not-configured / produced / explicit-override / face-unavailable / select-rejected …); brackets show write path (projection-only = 0.2.2+ projection write face, options+select = mutation + select face)',
       // ARCH-004 B1 (§6.1): host face health badge + panel (one-shot snapshot source).
       hostHealthTitle: 'Host face health',
       hostHealthOk: '✓ host faces healthy',
@@ -3788,7 +3788,7 @@ window.__ModuleLoader__.load({
           el('summary', { style: { cursor: 'pointer', fontSize: '12px' } }, t('presetDiagTitle')),
           el('div', { style: { fontSize: '12px', lineHeight: 1.7, marginTop: '6px', wordBreak: 'break-all' } },
             ...presetDiag.map((entry, index) => el('div', { key: `diag-${index}-${entry.at}` },
-              `${new Date(entry.at).toLocaleTimeString()} ${entry.applied ? '✓' : '✗'} ${entry.preset || '—'} → ${entry.target ? `${entry.target.provider}/${entry.target.model}` : '—'}${entry.skip ? ` (${entry.skip})` : ''}`)),
+              `${new Date(entry.at).toLocaleTimeString()} ${entry.applied ? '✓' : '✗'} ${entry.preset || '—'} → ${entry.target ? `${entry.target.provider}/${entry.target.model}` : '—'}${entry.skip ? ` (${entry.skip})` : ''}${entry.route ? ` [${entry.route}]` : ''}`)),
             el('div', { style: { opacity: 0.6, marginTop: '4px' } }, t('presetDiagHint')))) : null,
         presetRoster.status === 'error' ? el('p', { className: 'dshrouter-error' }, `${t('presetsRosterError')}${presetRoster.failure ? `：${presetRoster.failure}` : ''}`) : null,
         presetIds.length === 0 ? el('p', { className: 'dshrouter-hint' }, t('presetsEmpty')) : null,

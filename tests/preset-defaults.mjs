@@ -1370,5 +1370,78 @@ console.log('EVO-014 preset default model — event-driven (RED until refactored
   })())
 }
 
+// ── O. FIX-059 判别：options 突变能力探测 → 代际分支（0.2.2 getter-only 视图）──
+// 事实链（宿主源码实读）：0.2.2 起 agentOptions() 为 getter-only 活视图
+//（dsh-api-session-controller lib/index.js L440-453 get provider/model 无
+// setter）→ 严格模式赋值抛 TypeError；旧实现 ① 突变失败即 skip='not-mutable'
+// 提前 return——② selectModel 正式写入面根本不执行（用户诊断卡 09:36-09:38
+// 八条 ✗ (not-mutable) 实录）。0.2.2 路由事实：AgentModel.current() =
+// recordedSelection() ?? this.options（dsh-agent L190-195）——投影（durable
+// model/selection 事件）优先于 options，selectModel 写入即请求路由 ⇒ 不可变
+// 分支跳过 ① 直接 ②③（projection-only）。判别：O1/O2 旧实现必败（RED）；
+// O3 plain 形态语义零变化回归守卫。
+{
+  // getter-only 活视图夹具（0.2.2 agentOptions 形态——无 setter，读为活源）。
+  const getterOnlyAgent = ({ id, header } = {}) => {
+    const agent = mainBlankAgent({ id, events: [], ...(header ? { header } : {}) })
+    const liveView = { provider: NATIVE.provider, model: NATIVE.model }
+    Object.defineProperty(agent, 'options', {
+      configurable: true,
+      get: () => ({
+        get provider() { return liveView.provider },
+        get model() { return liveView.model },
+      }),
+    })
+    agent.liveView = liveView
+    return agent
+  }
+
+  await dcheck('O1 getter-only options（0.2.2 形态）→ selectModel 仍执行（旧实现 not-mutable 提前断链必败 RED）+ 诊断 route=projection-only + 降级 info', async () => {
+    const defaults = makeDefaults()
+    const controller = makeSessionController({ defaults })
+    const agent = getterOnlyAgent({ id: 'sess-o1' })
+    const ctx = makeCtx({ defaults, sessionController: controller })
+    await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    const hit = presetDiagnostics().entries.find((entry) => entry.session === 'sess-o1' && entry.kind === 'seed-main')
+    return controller.calls.length === 1 && controller.calls[0].provider === MAIN_MODEL.provider
+      && !!hit && hit.applied === true && hit.route === 'projection-only'
+      && ctx.logger.infoCalls.some((line) => line.includes('projection-only'))
+      && !ctx.logger.warnCalls.some((line) => line.includes('not applied'))
+  })
+  await dcheck('O2 getter-only + selectModel 拒绝 → 无可回滚（getter 视图原值保持）+ skip=select-rejected，不再产生 not-mutable', async () => {
+    const defaults = makeDefaults()
+    const controller = makeSessionController({ defaults, unavailable: () => true })
+    const agent = getterOnlyAgent({ id: 'sess-o2' })
+    const ctx = makeCtx({ defaults, sessionController: controller })
+    await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    const entries = presetDiagnostics().entries.filter((entry) => entry.session === 'sess-o2')
+    return controller.calls.length === 1
+      && agent.options.provider === NATIVE.provider && agent.options.model === NATIVE.model // 活视图原值（全局默认）
+      && entries.some((entry) => entry.skip === 'select-rejected')
+      && !entries.some((entry) => entry.skip === 'not-mutable')
+  })
+  await dcheck('O3 plain options（0.2.1 及以下形态）→ 语义零变化：突变 + selectModel 双路径 + 诊断 route=options+select', async () => {
+    const defaults = makeDefaults()
+    const controller = makeSessionController({ defaults })
+    const agent = mainBlankAgent({ id: 'sess-o3' })
+    const ctx = makeCtx({ defaults, sessionController: controller })
+    await fireCreated(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), agent)
+    const hit = presetDiagnostics().entries.find((entry) => entry.session === 'sess-o3' && entry.applied === true)
+    return controller.calls.length === 1
+      && agent.options.provider === MAIN_MODEL.provider && agent.options.model === MAIN_MODEL.model
+      && !!hit && hit.route === 'options+select'
+  })
+  await dcheck('O4 getter-only（切换面 agent-preset/selected）→ 同分支：selectModel 仍执行 + 全局写回恢复', async () => {
+    const defaults = makeDefaults()
+    const controller = makeSessionController({ defaults })
+    const agent = getterOnlyAgent({ id: 'sess-o4', header: { origin: 'main' } })
+    const ctx = makeCtx({ defaults, sessionController: controller, agents: { get: (id) => (id === 'sess-o4' ? agent : undefined) } })
+    await firePresetSelected(ctx, makeService({ governance: presetConfig({ main: MAIN_MODEL }) }), 'sess-o4', PRESET_ID)
+    return controller.calls.length === 1 && controller.calls[0].provider === MAIN_MODEL.provider
+      && defaults.state.current.provider === NATIVE.provider
+      && presetDiagnostics().entries.some((entry) => entry.session === 'sess-o4' && entry.route === 'projection-only')
+  })
+}
+
 console.log(failures === 0 ? '\nALL EVO-014 DISCRIMINANT TESTS PASSED' : `\n${failures} EVO-014 ASSERTION(S) FAILED`)
 process.exit(failures === 0 ? 0 : 1)

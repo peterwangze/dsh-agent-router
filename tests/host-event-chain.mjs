@@ -38,6 +38,19 @@
  * 实跑验证）；修复后 global 直订经真投递面送达 → 绿。三树各跑：默认 0.2.0-rc.2 /
  * DSH_HOST_SOURCE=0.2.1-rc.2 嵌套布局 / DSH_HOST_SOURCE=0.2.2-rc.1。
  *
+ * FIX-059 行为臂扩展（宿主代际写入面判别）：
+ *  3. 0.2.2 起 `agentOptions()` 为 **getter-only 活视图**
+ *     （dsh-api-session-controller lib/index.js L440-453 `get provider/model`
+ *     无 setter）→ 严格模式 `agent.options.provider = x` 抛 TypeError。旧实现
+ *     ① 突变失败即 skip='not-mutable' 提前 return——② selectModel 正式写入面
+ *     根本不执行 → 0.2.2 播种全断（用户诊断卡 09:36-09:38 八条 ✗ (not-mutable)
+ *     实录）。修复 = ① 改为能力探测（tryMutateOptions）→ 不可变分支跳过突变
+ *     直接 ② selectModel（0.2.2 路由事实：AgentModel.current() = recordedSelection()
+ *     ?? this.options——投影优先，model/selection 事件即请求路由）→ ③ 写回恢复。
+ *  4. getter-only 臂（0.2.2 形态）对旧代码必红（① 抛错提前 return → 零
+ *     selectModel）——红绿两态都实跑报告；plain options 臂（0.2.1 形态）
+ *     现有断言保持（突变 + selectModel 双路径）。
+ *
  * 缺包语义：显式 DSH_HOST_SOURCE 树缺 cordis/dsh-session → 可见 skip + exit 0
  * （部分树 ≠ 契约漂移，host-contract 同语义）；默认树缺包 → 红（本仓完整树应含）。
  * 独立入口：node tests/host-event-chain.mjs（exit 0/1）。
@@ -196,6 +209,80 @@ check('全局默认瞬态写 + 写回恢复（净变化为零）',
 session.append('session/title', { title: 'fix-058' })
 await drain()
 check('负向：非 agent-preset/selected 的 session 事件不触发播种（selectCalls 仍为 1）', selectCalls.length === 1)
+
+// ── FIX-059 getter-only options 臂（0.2.2 形态——写入面断代判别）────────────
+// 0.2.2 的 agentOptions() 为 getter-only 活视图（源码 L440-453）：把 harness 的
+// agent.options 换成同形态（getter 无 setter）→ 旧代码 ① 突变抛 TypeError 即
+// skip='not-mutable' 提前 return（② selectModel 不执行）→ 本臂必红；修复后
+// 能力探测分支跳过突变直接 selectModel（投影写入面）→ 绿 + 诊断 route 标注。
+{
+  const SESSION_ID2 = 'sess-fix059'
+  const session2 = store.create(SESSION_ID2)
+  await drain(2)
+  const liveView = { provider: NATIVE.provider, model: NATIVE.model } // 模拟 defaults.currentSelection() 活源
+  const getterAgent = {
+    get options() {
+      // getter-only 活视图（无 setter——对齐 0.2.2 agentOptions 形态；严格模式
+      // 赋值 agent.options.provider = x 抛 TypeError）
+      return {
+        get provider() { return liveView.provider },
+        get model() { return liveView.model },
+      }
+    },
+    session: session2,
+  }
+  const agentsRegistry2 = { get: (id) => (id === SESSION_ID2 ? getterAgent : undefined) }
+  const selectCalls2 = []
+  const defaultsState2 = { current: { ...NATIVE }, saveCalls: [] }
+  const sessionController2 = { // 同 sessionController 桩（saveSelection 副作用镜像）
+    async selectModel(request) {
+      selectCalls2.push(request)
+      const selected = { provider: request.provider, model: request.model }
+      defaultsState2.saveCalls.push(selected)
+      defaultsState2.current = { ...selected }
+      return { selected }
+    },
+  }
+  const agentDefaultModel2 = {
+    currentSelection: () => defaultsState2.current,
+    saveSelection: async (selection) => { defaultsState2.saveCalls.push(selection); defaultsState2.current = { ...selection } },
+  }
+  const infoLines2 = []
+  const hybridCtx2 = {
+    on(event, listener, options) { return pluginCtx.on(event, listener, options) },
+    get(key) {
+      if (key === 'agents') return agentsRegistry2
+      if (key === 'sessionController') return sessionController2
+      if (key === 'agentDefaultModel') return agentDefaultModel2
+      return undefined
+    },
+    logger: { warn: (m) => warnLines.push(String(m)), info: (m) => infoLines2.push(String(m)) },
+  }
+  const { presetDiagnostics } = await import(pathToFileURL(join(REPO_ROOT, 'lib', 'preset-defaults.js')).href)
+  const dispose2 = installPresetDefaults(hybridCtx2, service)
+  session2.append('agent-preset/selected', { agentPreset: PRESET_ID })
+  await drain()
+  check('FIX-059 getter-only options 臂：append → selectModel 仍被调用（播种不因 not-mutable 断链；旧代码此处零调用必红）',
+    selectCalls2.length === 1 && selectCalls2[0].sessionId === SESSION_ID2
+      && selectCalls2[0].provider === MAIN_MODEL.provider && selectCalls2[0].model === MAIN_MODEL.model,
+    selectCalls2)
+  check('FIX-059 getter-only options 臂：诊断记录 projection-only 路径（成功条目 route 标注）+ 降级 info 可观测',
+    (() => {
+      const hit = presetDiagnostics().entries.find((entry) => entry.session === SESSION_ID2 && entry.applied === true)
+      return !!hit && hit.route === 'projection-only'
+        && infoLines2.some((line) => line.includes('projection-only'))
+    })(),
+    presetDiagnostics().entries.filter((entry) => entry.session === SESSION_ID2))
+  check('FIX-059 getter-only options 臂：全局默认写回恢复照常（净变化为零）',
+    defaultsState2.saveCalls.length === 2
+      && defaultsState2.saveCalls[0].provider === MAIN_MODEL.provider
+      && defaultsState2.saveCalls[1].provider === NATIVE.provider
+      && defaultsState2.current.provider === NATIVE.provider && defaultsState2.current.model === NATIVE.model,
+    defaultsState2.saveCalls)
+  check('FIX-059 getter-only options 臂：getter 视图未被改写（liveView 源保持全局默认值）',
+    getterAgent.options.provider === NATIVE.provider && getterAgent.options.model === NATIVE.model)
+  dispose2()
+}
 
 // 卸载器：移除 session/event 监听（dispose 聚合语义保持）。
 dispose()

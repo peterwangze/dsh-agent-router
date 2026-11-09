@@ -1461,6 +1461,11 @@ console.log('B5 events domain batch (managed events + forwarded whitelist double
     //   故无旧锚可清；fresh = 代表性证据锚串在场（台账若删证据/改指即红）。台账内部
     //   行号漂移不解除其义务，由刷新批次统一复核（同 §R3 宿主锚核验纪律）。
     { file: ['lib', 'host-abi', 'dependency-ledger.js'], stale: [], fresh: ['lib/service.js:1489 subagentsOf', 'lib/prestep.js:224', 'lib/preset-defaults.js:402', 'lib/tool.js:30 inject 声明'] },
+    // FIX-059：tests/host-event-chain.mjs 首含行号式锚（FIX-059 行为臂头注的宿主 getter-only
+    //   事实锚 L440-453——对象 = 宿主 dsh-api-session-controller 的 agentOptions() getter-only
+    //   活视图区间，钉死事实 1）。stale 空 = 首含锚、无旧锚可清；fresh = 锚串在场（锚失即红
+    //   ——该锚承载「getter-only 形态」事实指认，是行为臂第 3/4 判别的语义前提）。
+    { file: ['tests', 'host-event-chain.mjs'], stale: [], fresh: ['L440-453'] },
   ]
   for (const anchorCase of ANCHOR_CASES) {
     const filePath = join(ROOT_DIR, ...anchorCase.file)
